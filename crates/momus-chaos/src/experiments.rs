@@ -69,7 +69,7 @@ async fn run_network_latency(endpoint: &str, delay_ms: u64, duration_secs: u64) 
         // Send a request to the target
         let result = client.get(endpoint).send().await;
         affected += 1;
-        if result.is_err() || result.map_or(false, |r| !r.status().is_success()) {
+        if result.is_err() || result.is_ok_and(|r| !r.status().is_success()) {
             failures += 1;
         }
     }
