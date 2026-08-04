@@ -15,10 +15,7 @@ use std::time::Instant;
 pub async fn run_guard(plan: &TestPlan, config: &GuardConfig) -> Result<GuardReport> {
     let start = Instant::now();
 
-    let base_url = config
-        .base_url
-        .as_deref()
-        .unwrap_or(&plan.base_url);
+    let base_url = config.base_url.as_deref().unwrap_or(&plan.base_url);
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(config.timeout_secs))
@@ -28,7 +25,11 @@ pub async fn run_guard(plan: &TestPlan, config: &GuardConfig) -> Result<GuardRep
     let mut passed = 0u64;
     let mut failed = 0u64;
 
-    tracing::info!("Running security scan on '{}' against {}", plan.name, base_url);
+    tracing::info!(
+        "Running security scan on '{}' against {}",
+        plan.name,
+        base_url
+    );
 
     // Collect all unique URLs from the plan
     let urls = collect_plan_urls(plan, base_url);
@@ -120,10 +121,16 @@ struct CheckResult {
 
 impl CheckResult {
     fn pass() -> Self {
-        Self { issues: vec![], passed: true }
+        Self {
+            issues: vec![],
+            passed: true,
+        }
     }
     fn fail(issue: GuardIssue) -> Self {
-        Self { issues: vec![issue], passed: false }
+        Self {
+            issues: vec![issue],
+            passed: false,
+        }
     }
 }
 
@@ -171,7 +178,8 @@ async fn check_security_headers(client: &reqwest::Client, url: &str) -> CheckRes
             category: "headers".to_string(),
             severity: "medium".to_string(),
             description: "Missing Strict-Transport-Security header".to_string(),
-            recommendation: "Add 'Strict-Transport-Security: max-age=31536000; includeSubDomains'".to_string(),
+            recommendation: "Add 'Strict-Transport-Security: max-age=31536000; includeSubDomains'"
+                .to_string(),
         });
     }
 
@@ -182,7 +190,8 @@ async fn check_security_headers(client: &reqwest::Client, url: &str) -> CheckRes
             category: "headers".to_string(),
             severity: "medium".to_string(),
             description: "Missing Content-Security-Policy header".to_string(),
-            recommendation: "Add a Content-Security-Policy header to prevent XSS attacks".to_string(),
+            recommendation: "Add a Content-Security-Policy header to prevent XSS attacks"
+                .to_string(),
         });
     }
 
@@ -211,7 +220,10 @@ async fn check_security_headers(client: &reqwest::Client, url: &str) -> CheckRes
     if issues.is_empty() {
         CheckResult::pass()
     } else {
-        CheckResult { issues, passed: false }
+        CheckResult {
+            issues,
+            passed: false,
+        }
     }
 }
 
@@ -240,7 +252,8 @@ async fn check_cors(client: &reqwest::Client, url: &str) -> CheckResult {
                 category: "cors".to_string(),
                 severity: "high".to_string(),
                 description: "CORS allows all origins (*)".to_string(),
-                recommendation: "Restrict Access-Control-Allow-Origin to specific trusted origins".to_string(),
+                recommendation: "Restrict Access-Control-Allow-Origin to specific trusted origins"
+                    .to_string(),
             });
         }
         if origin_str == "*" && headers.get("access-control-allow-credentials").is_some() {
@@ -249,7 +262,9 @@ async fn check_cors(client: &reqwest::Client, url: &str) -> CheckResult {
                 category: "cors".to_string(),
                 severity: "critical".to_string(),
                 description: "CORS allows all origins with credentials (security risk)".to_string(),
-                recommendation: "Cannot use wildcard origin with credentials. Specify exact origins.".to_string(),
+                recommendation:
+                    "Cannot use wildcard origin with credentials. Specify exact origins."
+                        .to_string(),
             });
         }
     }
@@ -257,7 +272,10 @@ async fn check_cors(client: &reqwest::Client, url: &str) -> CheckResult {
     if issues.is_empty() {
         CheckResult::pass()
     } else {
-        CheckResult { issues, passed: false }
+        CheckResult {
+            issues,
+            passed: false,
+        }
     }
 }
 
@@ -282,17 +300,53 @@ async fn check_info_leaks(client: &reqwest::Client, url: &str) -> CheckResult {
     let mut issues = Vec::new();
 
     let leak_patterns: &[(&str, &str, &str)] = &[
-        ("stack trace", "leak", "Response contains a stack trace, potentially revealing internal code paths"),
+        (
+            "stack trace",
+            "leak",
+            "Response contains a stack trace, potentially revealing internal code paths",
+        ),
         ("exception", "leak", "Response contains exception details"),
-        ("syntaxerror", "leak", "Response contains a syntax error message"),
-        ("sql syntax", "leak", "Response contains SQL syntax information, potential SQL injection vector"),
-        ("fatal error", "leak", "Response contains a fatal error message"),
-        ("internal server error", "leak", "Generic internal server error (may be acceptable)"),
+        (
+            "syntaxerror",
+            "leak",
+            "Response contains a syntax error message",
+        ),
+        (
+            "sql syntax",
+            "leak",
+            "Response contains SQL syntax information, potential SQL injection vector",
+        ),
+        (
+            "fatal error",
+            "leak",
+            "Response contains a fatal error message",
+        ),
+        (
+            "internal server error",
+            "leak",
+            "Generic internal server error (may be acceptable)",
+        ),
         ("traceback", "leak", "Response contains a Python traceback"),
-        ("root:x:", "leak", "Response contains password file data (/etc/passwd)"),
-        ("/etc/passwd", "leak", "Response references /etc/passwd, potential path traversal"),
-        ("select * from", "leak", "Response contains SQL query, potential SQL injection"),
-        ("insert into", "leak", "Response contains SQL query, potential SQL injection"),
+        (
+            "root:x:",
+            "leak",
+            "Response contains password file data (/etc/passwd)",
+        ),
+        (
+            "/etc/passwd",
+            "leak",
+            "Response references /etc/passwd, potential path traversal",
+        ),
+        (
+            "select * from",
+            "leak",
+            "Response contains SQL query, potential SQL injection",
+        ),
+        (
+            "insert into",
+            "leak",
+            "Response contains SQL query, potential SQL injection",
+        ),
     ];
 
     for (pattern, _category, description) in leak_patterns {
@@ -302,7 +356,8 @@ async fn check_info_leaks(client: &reqwest::Client, url: &str) -> CheckResult {
                 category: "leak".to_string(),
                 severity: "high".to_string(),
                 description: description.to_string(),
-                recommendation: "Sanitize error responses to avoid leaking internal information".to_string(),
+                recommendation: "Sanitize error responses to avoid leaking internal information"
+                    .to_string(),
             });
             break; // One leak per endpoint is enough
         }
@@ -311,18 +366,38 @@ async fn check_info_leaks(client: &reqwest::Client, url: &str) -> CheckResult {
     if issues.is_empty() {
         CheckResult::pass()
     } else {
-        CheckResult { issues, passed: false }
+        CheckResult {
+            issues,
+            passed: false,
+        }
     }
 }
 
 /// Check for exposed internal endpoints.
 async fn check_exposed_endpoints(client: &reqwest::Client, base_url: &str) -> CheckResult {
     let common_paths = &[
-        "/.env", "/.git/config", "/admin", "/api-docs", "/api/v1",
-        "/backup", "/config", "/console", "/debug", "/health",
-        "/info", "/metrics", "/monitor", "/phpinfo.php", "/robots.txt",
-        "/sitemap.xml", "/status", "/swagger", "/swagger.json",
-        "/swagger-ui", "/test", "/.well-known/security.txt",
+        "/.env",
+        "/.git/config",
+        "/admin",
+        "/api-docs",
+        "/api/v1",
+        "/backup",
+        "/config",
+        "/console",
+        "/debug",
+        "/health",
+        "/info",
+        "/metrics",
+        "/monitor",
+        "/phpinfo.php",
+        "/robots.txt",
+        "/sitemap.xml",
+        "/status",
+        "/swagger",
+        "/swagger.json",
+        "/swagger-ui",
+        "/test",
+        "/.well-known/security.txt",
     ];
 
     let mut issues = Vec::new();
@@ -337,7 +412,10 @@ async fn check_exposed_endpoints(client: &reqwest::Client, base_url: &str) -> Ch
                     category: "exposed".to_string(),
                     severity: "medium".to_string(),
                     description: format!("Potentially sensitive endpoint '{}' returned 200", path),
-                    recommendation: format!("Restrict access to '{}' or remove if not needed", path),
+                    recommendation: format!(
+                        "Restrict access to '{}' or remove if not needed",
+                        path
+                    ),
                 });
             }
         }
@@ -346,7 +424,10 @@ async fn check_exposed_endpoints(client: &reqwest::Client, base_url: &str) -> Ch
     if issues.is_empty() {
         CheckResult::pass()
     } else {
-        CheckResult { issues, passed: false }
+        CheckResult {
+            issues,
+            passed: false,
+        }
     }
 }
 
@@ -368,7 +449,10 @@ async fn check_auth(client: &reqwest::Client, url: &str) -> CheckResult {
     // Check if the response indicates auth is needed but not enforced
     let body = resp.text().await.unwrap_or_default();
     let lower = body.to_lowercase();
-    if lower.contains("unauthorized") || lower.contains("unauthenticated") || lower.contains("forbidden") {
+    if lower.contains("unauthorized")
+        || lower.contains("unauthenticated")
+        || lower.contains("forbidden")
+    {
         return CheckResult::pass();
     }
 
@@ -379,15 +463,17 @@ async fn check_auth(client: &reqwest::Client, url: &str) -> CheckResult {
 
     // If we got a 200 with no auth headers and the response looks like data, flag it
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body)
-        && json.is_object() && json.as_object().is_some_and(|o| o.len() > 1) {
-            return CheckResult::fail(GuardIssue {
-                endpoint: url.to_string(),
-                category: "auth".to_string(),
-                severity: "info".to_string(),
-                description: "Endpoint returned data without authentication".to_string(),
-                recommendation: "Verify this endpoint should be publicly accessible".to_string(),
-            });
-        }
+        && json.is_object()
+        && json.as_object().is_some_and(|o| o.len() > 1)
+    {
+        return CheckResult::fail(GuardIssue {
+            endpoint: url.to_string(),
+            category: "auth".to_string(),
+            severity: "info".to_string(),
+            description: "Endpoint returned data without authentication".to_string(),
+            recommendation: "Verify this endpoint should be publicly accessible".to_string(),
+        });
+    }
 
     CheckResult::pass()
 }
@@ -443,18 +529,16 @@ mod tests {
             name: "test".into(),
             base_url: "http://localhost".into(),
             default_headers: HashMap::new(),
-            steps: vec![
-                Step::Request(RequestStep {
-                    name: "r1".into(),
-                    method: Method::Get,
-                    url: "https://api.example.com/health".into(),
-                    headers: HashMap::new(),
-                    body: None,
-                    assert: vec![],
-                    save_as: String::new(),
-                    soft_fail: false,
-                }),
-            ],
+            steps: vec![Step::Request(RequestStep {
+                name: "r1".into(),
+                method: Method::Get,
+                url: "https://api.example.com/health".into(),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![],
+                save_as: String::new(),
+                soft_fail: false,
+            })],
             setup: vec![],
             teardown: vec![],
         };

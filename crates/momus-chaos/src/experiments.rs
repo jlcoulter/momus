@@ -53,7 +53,11 @@ pub async fn run_experiment(experiment: &ChaosExperiment) -> Result<ChaosReport>
 }
 
 /// Network latency: inject artificial delay by sleeping before requests.
-async fn run_network_latency(endpoint: &str, delay_ms: u64, duration_secs: u64) -> Result<ChaosReport> {
+async fn run_network_latency(
+    endpoint: &str,
+    delay_ms: u64,
+    duration_secs: u64,
+) -> Result<ChaosReport> {
     let start = Instant::now();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(duration_secs + 10))
@@ -81,7 +85,10 @@ async fn run_network_latency(endpoint: &str, delay_ms: u64, duration_secs: u64) 
         requests_affected: affected,
         failures_during: failures,
         self_healed: true,
-        details: format!("Injected {}ms delay for {}s, {} requests affected, {} failures", delay_ms, duration_secs, affected, failures),
+        details: format!(
+            "Injected {}ms delay for {}s, {} requests affected, {} failures",
+            delay_ms, duration_secs, affected, failures
+        ),
     })
 }
 
@@ -118,7 +125,10 @@ async fn run_service_error(endpoint: &str, status: u16, duration_secs: u64) -> R
         requests_affected: affected,
         failures_during: failures,
         self_healed: true,
-        details: format!("Checked endpoint {} for {}s, expected status {}, {} failures out of {} requests", endpoint, duration_secs, status, failures, affected),
+        details: format!(
+            "Checked endpoint {} for {}s, expected status {}, {} failures out of {} requests",
+            endpoint, duration_secs, status, failures, affected
+        ),
     })
 }
 
@@ -149,7 +159,14 @@ async fn run_service_down(endpoint: &str, duration_secs: u64) -> Result<ChaosRep
         requests_affected: affected,
         failures_during: failures,
         self_healed: !is_down,
-        details: format!("Checked endpoint {} for {}s, {} failures out of {} requests ({}). If the service is still up, the fault was not injected.", endpoint, duration_secs, failures, affected, if is_down { "DOWN" } else { "UP" }),
+        details: format!(
+            "Checked endpoint {} for {}s, {} failures out of {} requests ({}). If the service is still up, the fault was not injected.",
+            endpoint,
+            duration_secs,
+            failures,
+            affected,
+            if is_down { "DOWN" } else { "UP" }
+        ),
     })
 }
 
