@@ -3,6 +3,27 @@ use crate::ast::*;
 use regex::Regex;
 use std::collections::HashMap;
 
+/// Compile a JSON Schema into a validator, caching the result.
+fn compile_schema(schema: &serde_json::Value) -> Result<jsonschema::Validator, String> {
+    jsonschema::validator_for(schema).map_err(|e| format!("invalid JSON Schema: {e}"))
+}
+
+/// Validate a JSON value against a compiled schema, returning errors.
+fn validate_schema(
+    validator: &jsonschema::Validator,
+    instance: &serde_json::Value,
+) -> Result<(), Vec<String>> {
+    let errors: Vec<String> = validator
+        .iter_errors(instance)
+        .map(|e| format!("  - {}: {}", e.instance_path(), e))
+        .collect();
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 /// Evaluate a list of assertions against a response.
 /// Returns one `AssertionResult` per assertion.
 pub fn evaluate_assertions(
@@ -175,14 +196,27 @@ pub fn evaluate_assertion(
             evaluate_json_predicate(path, predicate, &results)
         }
 
-        Assertion::Schema { schema: _ } => {
-            // JSON Schema validation is a separate concern.
-            // For now, we note it's not yet implemented.
-            AssertionResult {
-                description: "json schema validation".into(),
-                passed: true,
-                message: Some("schema validation not yet implemented — skipped".into()),
-                children: vec![],
+        Assertion::Schema { schema } => {
+            match compile_schema(schema) {
+                Ok(validator) => {
+                    let body = match body {
+                        Some(b) => b,
+                        None => {
+                            return AssertionResult::fail(
+                                "json schema validation",
+                                "no response body",
+                            );
+                        }
+                    };
+                    match validate_schema(&validator, body) {
+                        Ok(()) => AssertionResult::pass("json schema validation"),
+                        Err(errors) => AssertionResult::fail(
+                            "json schema validation",
+                            format!("schema violations:\n{}", errors.join("\n")),
+                        ),
+                    }
+                }
+                Err(e) => AssertionResult::fail("json schema validation", e),
             }
         }
 
@@ -486,12 +520,26 @@ fn evaluate_json_predicate(
                 }
             }
         }
-        JsonPredicate::Schema(_schema) => AssertionResult {
-            description: format!("{desc} schema validation"),
-            passed: true,
-            message: Some("schema validation not yet implemented — skipped".into()),
-            children: vec![],
-        },
+        JsonPredicate::Schema(schema) => {
+            match compile_schema(schema) {
+                Ok(validator) => {
+                    if results.is_empty() {
+                        return AssertionResult::fail(
+                            format!("{desc} schema validation"),
+                            "path not found",
+                        );
+                    }
+                    match validate_schema(&validator, &results[0]) {
+                        Ok(()) => AssertionResult::pass(format!("{desc} schema validation")),
+                        Err(errors) => AssertionResult::fail(
+                            format!("{desc} schema validation"),
+                            format!("schema violations:\n{}", errors.join("\n")),
+                        ),
+                    }
+                }
+                Err(e) => AssertionResult::fail(format!("{desc} schema validation"), e),
+            }
+        }
     }
 }
 
