@@ -10,6 +10,10 @@
 
 Momus is a domain-agnostic test runner for HTTP APIs. Tests are defined as a JSON plan — a tree of steps (requests, sequences, parallel blocks) with composable assertions on responses. No DSL, no vendor lock-in.
 
+Momus is the generalization of [fhir-autotest](https://github.com/jlcoulter/fhir-autotest) — a FHIR Implementation Guide conformance test suite. The core pipeline (parse spec → generate resources → generate tests → execute → validate → report) is universal. Momus extracts the engine and makes it domain-agnostic, with FHIR as one of many supported input formats via `momus convert fhir`.
+
+> **Status:** v0.1.0 — Core engine, mock server, and CLI are functional. The assertion runner, template resolution, and fuzz mutators are implemented. Load testing, chaos engineering, contract testing, security scanning, diff testing, and all API description converters (curl, HAR, OpenAPI, FHIR, etc.) are scaffolded with stubs — implementation is in progress for v0.2.0. See [DESIGN.md](DESIGN.md) and [FEATURES.md](FEATURES.md) for the full roadmap.
+
 ## Quick Start
 
 ```bash
@@ -25,14 +29,14 @@ momus run examples/health-check.json --base-url http://localhost:8080
 # Start a mock server for testing
 momus mock --port 8091
 
-# Convert a cURL command into a test plan
-momus convert curl 'curl https://api.example.com/health'
+# Convert a cURL command into a test plan (coming in v0.2.0)
+# momus convert curl 'curl https://api.example.com/health'
 
-# Load test a plan
-momus bench examples/health-check.json --concurrency 50 --duration 30
+# Load test a plan (coming in v0.2.0)
+# momus bench examples/health-check.json --concurrency 50 --duration 30
 
-# Fuzz test a plan
-momus fuzz examples/health-check.json --iterations 1000
+# Fuzz test a plan (coming in v0.2.0)
+# momus fuzz examples/health-check.json --iterations 1000
 ```
 
 ## Example Test Plan
