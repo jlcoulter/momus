@@ -109,8 +109,10 @@ async fn execute_steps(steps: &[Step], ctx: &mut RunContext) -> Result<Vec<TestR
                     .iter()
                     .map(|s| execute_parallel_step(s, ctx))
                     .collect();
-                let sub_results: Vec<Vec<TestResult>> =
-                    futures::future::join_all(futures).await.into_iter().collect::<Result<Vec<_>>>()?;
+                let sub_results: Vec<Vec<TestResult>> = futures::future::join_all(futures)
+                    .await
+                    .into_iter()
+                    .collect::<Result<Vec<_>>>()?;
                 for mut sr in sub_results {
                     results.append(&mut sr);
                 }
@@ -249,12 +251,8 @@ async fn execute_request(req: &RequestStep, ctx: &mut RunContext) -> Result<Test
     let response_body: Option<serde_json::Value> = response.json().await.ok();
 
     // Evaluate assertions
-    let assertion_results = evaluate_assertions(
-        &req.assert,
-        status_code,
-        &response_headers,
-        &response_body,
-    );
+    let assertion_results =
+        evaluate_assertions(&req.assert, status_code, &response_headers, &response_body);
 
     let passed = assertion_results.iter().all(|a| a.passed);
     let errors: Vec<String> = assertion_results
@@ -264,10 +262,10 @@ async fn execute_request(req: &RequestStep, ctx: &mut RunContext) -> Result<Test
         .collect();
 
     // Save response if requested
-    if !req.save_as.is_empty() {
-        if let Some(ref body) = response_body {
-            ctx.step_responses.insert(req.save_as.clone(), body.clone());
-        }
+    if !req.save_as.is_empty()
+        && let Some(ref body) = response_body
+    {
+        ctx.step_responses.insert(req.save_as.clone(), body.clone());
     }
 
     Ok(TestResult {
@@ -294,9 +292,7 @@ async fn execute_sequence(seq: &SequenceStep, ctx: &mut RunContext) -> Result<Ve
             Step::Request(req) => {
                 vec![execute_request(req, ctx).await?]
             }
-            Step::Sequence(sub_seq) => {
-                Box::pin(execute_sequence(sub_seq, ctx)).await?
-            }
+            Step::Sequence(sub_seq) => Box::pin(execute_sequence(sub_seq, ctx)).await?,
             Step::Parallel(parallel_steps) => {
                 let futures: Vec<_> = parallel_steps
                     .iter()
@@ -396,7 +392,10 @@ mod tests {
             );
             routes.insert(
                 "GET /api/items/item-001".into(),
-                crate::mock::MockResponse::json(200, serde_json::json!({"id": "item-001", "name": "test"})),
+                crate::mock::MockResponse::json(
+                    200,
+                    serde_json::json!({"id": "item-001", "name": "test"}),
+                ),
             );
             routes
         })

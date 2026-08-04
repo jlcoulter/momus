@@ -8,11 +8,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 /// Resolve templates in a URL string.
-pub fn resolve_url(
-    url: &str,
-    base_url: &str,
-    step_responses: &HashMap<String, Value>,
-) -> String {
+pub fn resolve_url(url: &str, base_url: &str, step_responses: &HashMap<String, Value>) -> String {
     let mut result = url.to_string();
     result = result.replace("{base_url}", base_url);
     resolve_step_templates(&mut result, step_responses);
@@ -20,10 +16,7 @@ pub fn resolve_url(
 }
 
 /// Resolve templates in a JSON value (for request bodies).
-pub fn resolve_body(
-    body: &mut Value,
-    step_responses: &HashMap<String, Value>,
-) {
+pub fn resolve_body(body: &mut Value, step_responses: &HashMap<String, Value>) {
     match body {
         Value::String(s) => {
             resolve_step_templates(s, step_responses);
@@ -56,10 +49,10 @@ pub fn resolve_headers(
 fn resolve_step_templates(s: &mut String, step_responses: &HashMap<String, Value>) {
     for (step_name, response) in step_responses {
         let id_pattern = format!("{{steps.{}.id}}", step_name);
-        if let Some(id) = response.get("id").and_then(|v| v.as_str()) {
-            if s.contains(&id_pattern) {
-                *s = s.replace(&id_pattern, id);
-            }
+        if let Some(id) = response.get("id").and_then(|v| v.as_str())
+            && s.contains(&id_pattern)
+        {
+            *s = s.replace(&id_pattern, id);
         }
 
         if let Some(obj) = response.as_object() {
@@ -117,17 +110,24 @@ mod tests {
 
     #[test]
     fn resolve_base_url() {
-        let result = resolve_url("{base_url}/Patient", "http://localhost:8080", &HashMap::new());
+        let result = resolve_url(
+            "{base_url}/Patient",
+            "http://localhost:8080",
+            &HashMap::new(),
+        );
         assert_eq!(result, "http://localhost:8080/Patient");
     }
 
     #[test]
     fn resolve_step_id() {
         let mut steps = HashMap::new();
-        steps.insert("create_patient".into(), json!({
-            "resourceType": "Patient",
-            "id": "pat-001"
-        }));
+        steps.insert(
+            "create_patient".into(),
+            json!({
+                "resourceType": "Patient",
+                "id": "pat-001"
+            }),
+        );
 
         let result = resolve_url("/Patient/{steps.create_patient.id}", "", &steps);
         assert_eq!(result, "/Patient/pat-001");
@@ -136,11 +136,14 @@ mod tests {
     #[test]
     fn resolve_step_field() {
         let mut steps = HashMap::new();
-        steps.insert("create_patient".into(), json!({
-            "resourceType": "Patient",
-            "id": "pat-001",
-            "name": [{"family": "Smith"}]
-        }));
+        steps.insert(
+            "create_patient".into(),
+            json!({
+                "resourceType": "Patient",
+                "id": "pat-001",
+                "name": [{"family": "Smith"}]
+            }),
+        );
 
         let result = resolve_url(
             "/Patient?name={steps.create_patient.name.family}",
@@ -153,9 +156,12 @@ mod tests {
     #[test]
     fn resolve_body_templates() {
         let mut steps = HashMap::new();
-        steps.insert("parent".into(), json!({
-            "id": "org-001"
-        }));
+        steps.insert(
+            "parent".into(),
+            json!({
+                "id": "org-001"
+            }),
+        );
 
         let mut body = json!({
             "resourceType": "Organization",
@@ -176,9 +182,12 @@ mod tests {
     #[test]
     fn resolve_headers_templates() {
         let mut steps = HashMap::new();
-        steps.insert("auth".into(), json!({
-            "token": "abc-123"
-        }));
+        steps.insert(
+            "auth".into(),
+            json!({
+                "token": "abc-123"
+            }),
+        );
 
         let mut headers = HashMap::new();
         headers.insert("Authorization".into(), "Bearer {steps.auth.token}".into());

@@ -5,14 +5,13 @@
 /// - Request recording for verification
 /// - Dynamic response generation via handler functions
 use axum::{
-    Json, Router,
-    extract::Request,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::any,
+    Json, Router, extract::Request, http::StatusCode, response::IntoResponse, routing::any,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+
+/// Handler function type for custom mock server responses.
+pub type MockHandler = Arc<dyn Fn(&RecordedRequest) -> MockResponse + Send + Sync>;
 
 /// A recorded request.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -73,7 +72,7 @@ impl MockServer {
     /// If `None`, the default route-matching handler is used.
     pub async fn start_with_handler(
         routes: HashMap<String, MockResponse>,
-        handler: Option<Arc<dyn Fn(&RecordedRequest) -> MockResponse + Send + Sync>>,
+        handler: Option<MockHandler>,
     ) -> Self {
         let recorded: Arc<Mutex<Vec<RecordedRequest>>> = Arc::new(Mutex::new(Vec::new()));
         let routes_arc = Arc::new(routes);
@@ -141,7 +140,8 @@ impl MockServer {
                         let route_key = format!("{} {}", method, path);
                         match routes.get(&route_key) {
                             Some(resp) => {
-                                let mut response = (resp.status, Json(resp.body.clone())).into_response();
+                                let mut response =
+                                    (resp.status, Json(resp.body.clone())).into_response();
                                 for (k, v) in &resp.headers {
                                     response.headers_mut().insert(
                                         axum::http::HeaderName::from_bytes(k.as_bytes()).unwrap(),
@@ -279,10 +279,7 @@ mod tests {
         let recorded = server.recorded_requests();
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].method, "POST");
-        assert_eq!(
-            recorded[0].body,
-            Some(serde_json::json!({"name": "test"}))
-        );
+        assert_eq!(recorded[0].body, Some(serde_json::json!({"name": "test"})));
 
         server.stop();
     }

@@ -251,7 +251,10 @@ impl RunReport {
                 "failed": g.failed,
             })).collect::<Vec<_>>(),
         });
-        std::fs::write(results_dir.join("summary.json"), serde_json::to_string_pretty(&summary)?)?;
+        std::fs::write(
+            results_dir.join("summary.json"),
+            serde_json::to_string_pretty(&summary)?,
+        )?;
 
         // Write failed tests
         let failed: Vec<&TestResult> = self

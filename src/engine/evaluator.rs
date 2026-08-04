@@ -220,29 +220,20 @@ fn evaluate_value_predicate(
     let desc = format!("header '{name}'");
     match predicate {
         ValuePredicate::Eq(expected) => match actual {
-            Some(v) if v == expected => {
-                AssertionResult::pass(format!("{desc} == '{expected}'"))
-            }
+            Some(v) if v == expected => AssertionResult::pass(format!("{desc} == '{expected}'")),
             Some(v) => {
                 AssertionResult::fail(format!("{desc} == '{expected}'"), format!("got '{v}'"))
             }
-            None => AssertionResult::fail(
-                format!("{desc} == '{expected}'"),
-                "header not present",
-            ),
+            None => AssertionResult::fail(format!("{desc} == '{expected}'"), "header not present"),
         },
         ValuePredicate::Contains(sub) => match actual {
             Some(v) if v.contains(sub.as_str()) => {
                 AssertionResult::pass(format!("{desc} contains '{sub}'"))
             }
-            Some(v) => AssertionResult::fail(
-                format!("{desc} contains '{sub}'"),
-                format!("got '{v}'"),
-            ),
-            None => AssertionResult::fail(
-                format!("{desc} contains '{sub}'"),
-                "header not present",
-            ),
+            Some(v) => {
+                AssertionResult::fail(format!("{desc} contains '{sub}'"), format!("got '{v}'"))
+            }
+            None => AssertionResult::fail(format!("{desc} contains '{sub}'"), "header not present"),
         },
         ValuePredicate::Regex(pattern) => match actual {
             Some(v) => match Regex::new(pattern) {
@@ -261,10 +252,9 @@ fn evaluate_value_predicate(
                     format!("invalid regex: {e}"),
                 ),
             },
-            None => AssertionResult::fail(
-                format!("{desc} matches /{pattern}/"),
-                "header not present",
-            ),
+            None => {
+                AssertionResult::fail(format!("{desc} matches /{pattern}/"), "header not present")
+            }
         },
         ValuePredicate::Present => {
             if actual.is_some() {
@@ -277,10 +267,7 @@ fn evaluate_value_predicate(
             if actual.is_none() {
                 AssertionResult::pass(format!("{desc} is absent"))
             } else {
-                AssertionResult::fail(
-                    format!("{desc} is absent"),
-                    format!("got '{:?}'", actual),
-                )
+                AssertionResult::fail(format!("{desc} is absent"), format!("got '{:?}'", actual))
             }
         }
     }
@@ -308,27 +295,18 @@ fn evaluate_json_predicate(
             if results.is_empty() {
                 AssertionResult::pass(desc)
             } else {
-                AssertionResult::fail(
-                    desc,
-                    format!("path found with {} result(s)", results.len()),
-                )
+                AssertionResult::fail(desc, format!("path found with {} result(s)", results.len()))
             }
         }
         JsonPredicate::Eq(expected) => {
             if results.is_empty() {
-                return AssertionResult::fail(
-                    format!("{desc} == {expected}"),
-                    "path not found",
-                );
+                return AssertionResult::fail(format!("{desc} == {expected}"), "path not found");
             }
             let actual = &results[0];
             if actual == expected {
                 AssertionResult::pass(format!("{desc} == {expected}"))
             } else {
-                AssertionResult::fail(
-                    format!("{desc} == {expected}"),
-                    format!("got {actual}"),
-                )
+                AssertionResult::fail(format!("{desc} == {expected}"), format!("got {actual}"))
             }
         }
         JsonPredicate::NotEq(expected) => {
@@ -339,10 +317,7 @@ fn evaluate_json_predicate(
             if actual != expected {
                 AssertionResult::pass(format!("{desc} != {expected}"))
             } else {
-                AssertionResult::fail(
-                    format!("{desc} != {expected}"),
-                    format!("got {actual}"),
-                )
+                AssertionResult::fail(format!("{desc} != {expected}"), format!("got {actual}"))
             }
         }
         JsonPredicate::Cmp { op, value } => {
@@ -427,13 +402,7 @@ fn evaluate_json_predicate(
             }
             let sub_results: Vec<_> = results
                 .iter()
-                .map(|r| {
-                    evaluate_json_predicate(
-                        &format!("{desc}[*]"),
-                        sub,
-                        &[r.clone()],
-                    )
-                })
+                .map(|r| evaluate_json_predicate(&format!("{desc}[*]"), sub, std::slice::from_ref(r)))
                 .collect();
             let passed = sub_results.iter().all(|r| r.passed);
             AssertionResult {
@@ -454,13 +423,7 @@ fn evaluate_json_predicate(
             }
             let sub_results: Vec<_> = results
                 .iter()
-                .map(|r| {
-                    evaluate_json_predicate(
-                        &format!("{desc}[*]"),
-                        sub,
-                        &[r.clone()],
-                    )
-                })
+                .map(|r| evaluate_json_predicate(&format!("{desc}[*]"), sub, std::slice::from_ref(r)))
                 .collect();
             let passed = sub_results.iter().any(|r| r.passed);
             AssertionResult {
@@ -519,14 +482,12 @@ fn evaluate_json_predicate(
                 }
             }
         }
-        JsonPredicate::Schema(_schema) => {
-            AssertionResult {
-                description: format!("{desc} schema validation"),
-                passed: true,
-                message: Some("schema validation not yet implemented — skipped".into()),
-                children: vec![],
-            }
-        }
+        JsonPredicate::Schema(_schema) => AssertionResult {
+            description: format!("{desc} schema validation"),
+            passed: true,
+            message: Some("schema validation not yet implemented — skipped".into()),
+            children: vec![],
+        },
     }
 }
 
@@ -552,10 +513,7 @@ pub fn resolve_json_path(value: &serde_json::Value, path: &str) -> Vec<serde_jso
     resolve_segments(value, path)
 }
 
-fn resolve_segments(
-    value: &serde_json::Value,
-    path: &str,
-) -> Vec<serde_json::Value> {
+fn resolve_segments(value: &serde_json::Value, path: &str) -> Vec<serde_json::Value> {
     if path.is_empty() {
         return vec![value.clone()];
     }
@@ -580,14 +538,14 @@ fn resolve_segments(
             }
         } else if let Some(captured) = segment.strip_suffix(']') {
             // Array index: key[N]
-            if let Some((name, idx_str)) = captured.rsplit_once('[') {
-                if let Ok(idx) = idx_str.parse::<usize>() {
-                    for v in &current {
-                        if let Some(arr) = v.get(name).and_then(|v| v.as_array()) {
-                            if idx < arr.len() {
-                                next.push(arr[idx].clone());
-                            }
-                        }
+            if let Some((name, idx_str)) = captured.rsplit_once('[')
+                && let Ok(idx) = idx_str.parse::<usize>()
+            {
+                for v in &current {
+                    if let Some(arr) = v.get(name).and_then(|v| v.as_array())
+                        && idx < arr.len()
+                    {
+                        next.push(arr[idx].clone());
                     }
                 }
             }
@@ -814,12 +772,7 @@ mod tests {
     fn test_content_type() {
         let mut headers = HashMap::new();
         headers.insert("content-type".into(), "application/fhir+json".into());
-        let result = evaluate_assertion(
-            &Assertion::content_type("json"),
-            200,
-            &headers,
-            &None,
-        );
+        let result = evaluate_assertion(&Assertion::content_type("json"), 200, &headers, &None);
         assert!(result.passed);
     }
 

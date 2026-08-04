@@ -105,10 +105,7 @@ pub enum JsonPredicate {
     /// The first result must NOT equal this value.
     NotEq(serde_json::Value),
     /// The first result (if numeric) must satisfy a comparison.
-    Cmp {
-        op: CmpOp,
-        value: serde_json::Value,
-    },
+    Cmp { op: CmpOp, value: serde_json::Value },
     /// The result array must have this length.
     Length(LengthPredicate),
     /// Every result must satisfy this sub-predicate.

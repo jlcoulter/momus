@@ -5,7 +5,10 @@ use momus::engine::runner;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "momus", about = "Generic API test harness with a composable assertion AST")]
+#[command(
+    name = "momus",
+    about = "Generic API test harness with a composable assertion AST"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -114,7 +117,12 @@ async fn main() -> Result<()> {
             use axum::{Json, Router, routing::any};
             let app = Router::new().route(
                 "/{*path}",
-                any(|| async { (axum::http::StatusCode::OK, Json(serde_json::json!({"status": "ok"}))) }),
+                any(|| async {
+                    (
+                        axum::http::StatusCode::OK,
+                        Json(serde_json::json!({"status": "ok"})),
+                    )
+                }),
             );
             axum::serve(listener, app).await?;
             Ok(())
