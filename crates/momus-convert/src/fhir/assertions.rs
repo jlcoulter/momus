@@ -421,6 +421,7 @@ fn compare_values(a: &Option<Value>, b: &Option<Value>) -> i32 {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::collections::HashMap;
 
     #[test]
     fn assert_bundle_type_match() {
