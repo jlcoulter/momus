@@ -1,8 +1,7 @@
 use crate::config::GuardConfig;
 use crate::report::{GuardIssue, GuardReport};
 use anyhow::Result;
-use momus_core::ast::{Method, Step, TestPlan};
-use std::collections::HashMap;
+use momus_core::ast::{Step, TestPlan};
 use std::time::Instant;
 
 /// Execute a security scan against a test plan.
@@ -330,20 +329,17 @@ async fn check_exposed_endpoints(client: &reqwest::Client, base_url: &str) -> Ch
 
     for path in common_paths {
         let url = format!("{}{}", base_url, path);
-        match client.get(&url).send().await {
-            Ok(resp) => {
-                let status = resp.status().as_u16();
-                if status == 200 {
-                    issues.push(GuardIssue {
-                        endpoint: url,
-                        category: "exposed".to_string(),
-                        severity: "medium".to_string(),
-                        description: format!("Potentially sensitive endpoint '{}' returned 200", path),
-                        recommendation: format!("Restrict access to '{}' or remove if not needed", path),
-                    });
-                }
+        if let Ok(resp) = client.get(&url).send().await {
+            let status = resp.status().as_u16();
+            if status == 200 {
+                issues.push(GuardIssue {
+                    endpoint: url,
+                    category: "exposed".to_string(),
+                    severity: "medium".to_string(),
+                    description: format!("Potentially sensitive endpoint '{}' returned 200", path),
+                    recommendation: format!("Restrict access to '{}' or remove if not needed", path),
+                });
             }
-            Err(_) => {}
         }
     }
 
@@ -382,8 +378,8 @@ async fn check_auth(client: &reqwest::Client, url: &str) -> CheckResult {
     }
 
     // If we got a 200 with no auth headers and the response looks like data, flag it
-    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
-        if json.is_object() && json.as_object().map_or(false, |o| o.len() > 1) {
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body)
+        && json.is_object() && json.as_object().is_some_and(|o| o.len() > 1) {
             return CheckResult::fail(GuardIssue {
                 endpoint: url.to_string(),
                 category: "auth".to_string(),
@@ -392,7 +388,6 @@ async fn check_auth(client: &reqwest::Client, url: &str) -> CheckResult {
                 recommendation: "Verify this endpoint should be publicly accessible".to_string(),
             });
         }
-    }
 
     CheckResult::pass()
 }

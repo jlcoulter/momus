@@ -87,8 +87,8 @@ pub async fn run_diff(plan: &TestPlan, config: &DiffConfig) -> Result<DiffReport
                 }
 
                 // Compare bodies
-                if config.diff_bodies {
-                    if let (Some(b_body), Some(t_body)) = (&baseline.body, &target.body) {
+                if config.diff_bodies
+                    && let (Some(b_body), Some(t_body)) = (&baseline.body, &target.body) {
                         let body_diffs = diff_json_values("$", b_body, t_body);
                         for d in &body_diffs {
                             match d.change_type.as_str() {
@@ -99,7 +99,6 @@ pub async fn run_diff(plan: &TestPlan, config: &DiffConfig) -> Result<DiffReport
                         }
                         step_diffs.extend(body_diffs);
                     }
-                }
 
                 if step_diffs.is_empty() {
                     identical += 1;
@@ -236,9 +235,7 @@ fn diff_json_values(path: &str, baseline: &serde_json::Value, target: &serde_jso
                         });
                     }
                     Some(t_val) if b_val != t_val => {
-                        if b_val.is_object() && t_val.is_object() {
-                            diffs.extend(diff_json_values(&child_path, b_val, t_val));
-                        } else if b_val.is_array() && t_val.is_array() {
+                        if (b_val.is_object() && t_val.is_object()) || (b_val.is_array() && t_val.is_array()) {
                             diffs.extend(diff_json_values(&child_path, b_val, t_val));
                         } else {
                             diffs.push(DiffEntry {
