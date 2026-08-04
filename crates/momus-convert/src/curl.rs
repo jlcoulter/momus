@@ -207,7 +207,7 @@ fn extract_request_parts(
 
             // Skip flags that take a value (we don't process them)
             "--connect-timeout" | "--retry" | "--retry-delay" | "--retry-max-time"
-            | "--max-time" | "-o" | "--output" | "-w" | "--write-out"
+            | "-o" | "--output" | "-w" | "--write-out"
             | "-T" | "--upload-file" | "-F" | "--form" | "-C" | "--continue-at"
             | "-z" | "--time-cond" | "-e" | "--referer" | "-A" | "--user-agent" => {
                 i += 1; // skip the value
