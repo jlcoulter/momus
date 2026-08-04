@@ -11,6 +11,10 @@ readme = "README.md"
 keywords = ["testing", "api", "http", "assertions", "jsonpath"]
 categories = ["development-tools::testing", "web-programming::http-client"]
 
+[[bin]]
+name = "momus"
+path = "src/main.rs"
+
 [dependencies]
 momus-core = { version = "0.1", path = "../momus-core" }
 momus-mock = { version = "0.1", path = "../momus-mock" }
