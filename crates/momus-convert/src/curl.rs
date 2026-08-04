@@ -117,12 +117,15 @@ fn parse_curl_command(command: &str) -> Result<Vec<String>> {
 }
 
 /// Extracted parts from a parsed cURL command.
-type CurlParts = (String, String, HashMap<String, String>, Option<serde_json::Value>);
+type CurlParts = (
+    String,
+    String,
+    HashMap<String, String>,
+    Option<serde_json::Value>,
+);
 
 /// Extract method, URL, headers, and body from parsed curl arguments.
-fn extract_request_parts(
-    args: &[String],
-) -> Result<CurlParts> {
+fn extract_request_parts(args: &[String]) -> Result<CurlParts> {
     let mut method = String::from("GET");
     let mut url = String::new();
     let mut headers: HashMap<String, String> = HashMap::new();
@@ -154,7 +157,10 @@ fn extract_request_parts(
                     let v = value.trim().to_string();
                     headers.insert(k, v);
                 } else {
-                    anyhow::bail!("Invalid header format: '{}' (expected 'Key: Value')", header_line);
+                    anyhow::bail!(
+                        "Invalid header format: '{}' (expected 'Key: Value')",
+                        header_line
+                    );
                 }
             }
 
@@ -180,10 +186,7 @@ fn extract_request_parts(
                     .cloned()
                     .context("Missing value after -u/--user")?;
                 let encoded = base64_encode(&creds);
-                headers.insert(
-                    "Authorization".to_string(),
-                    format!("Basic {}", encoded),
-                );
+                headers.insert("Authorization".to_string(), format!("Basic {}", encoded));
             }
 
             // Cookie flag
@@ -203,16 +206,16 @@ fn extract_request_parts(
             }
 
             // Skip known flags that take no value
-            "-s" | "--silent" | "-S" | "--show-error" | "-L" | "--location"
-            | "-k" | "--insecure" | "-v" | "--verbose" | "-i" | "--include"
-            | "-N" | "--no-buffer" | "-0" | "--http1.0" | "--http1.1"
-            | "--http2" | "--compressed" | "-O" | "--remote-name" => {}
+            "-s" | "--silent" | "-S" | "--show-error" | "-L" | "--location" | "-k"
+            | "--insecure" | "-v" | "--verbose" | "-i" | "--include" | "-N" | "--no-buffer"
+            | "-0" | "--http1.0" | "--http1.1" | "--http2" | "--compressed" | "-O"
+            | "--remote-name" => {}
 
             // Skip flags that take a value (we don't process them)
-            "--connect-timeout" | "--retry" | "--retry-delay" | "--retry-max-time"
-            | "-o" | "--output" | "-w" | "--write-out"
-            | "-T" | "--upload-file" | "-F" | "--form" | "-C" | "--continue-at"
-            | "-z" | "--time-cond" | "-e" | "--referer" | "-A" | "--user-agent" => {
+            "--connect-timeout" | "--retry" | "--retry-delay" | "--retry-max-time" | "-o"
+            | "--output" | "-w" | "--write-out" | "-T" | "--upload-file" | "-F" | "--form"
+            | "-C" | "--continue-at" | "-z" | "--time-cond" | "-e" | "--referer" | "-A"
+            | "--user-agent" => {
                 i += 1; // skip the value
             }
 
@@ -358,10 +361,9 @@ mod tests {
 
     #[test]
     fn parse_put_with_body() {
-        let plan = convert(
-            r#"curl -X PUT https://api.example.com/users/1 -d '{"name":"updated"}'"#,
-        )
-        .unwrap();
+        let plan =
+            convert(r#"curl -X PUT https://api.example.com/users/1 -d '{"name":"updated"}'"#)
+                .unwrap();
         if let Step::Request(step) = &plan.steps[0] {
             assert_eq!(step.method, Method::Put);
             assert_eq!(step.url, "https://api.example.com/users/1");
@@ -422,7 +424,10 @@ mod tests {
         )
         .unwrap();
         if let Step::Request(step) = &plan.steps[0] {
-            assert_eq!(step.headers.get("Authorization").unwrap(), "Bearer token123");
+            assert_eq!(
+                step.headers.get("Authorization").unwrap(),
+                "Bearer token123"
+            );
             assert_eq!(step.headers.get("X-Custom").unwrap(), "value");
         } else {
             panic!("Expected Request step");
@@ -454,8 +459,8 @@ mod tests {
 
     #[test]
     fn parse_string_body() {
-        let plan = convert(r#"curl -X POST https://api.example.com/echo -d "plain text body""#)
-            .unwrap();
+        let plan =
+            convert(r#"curl -X POST https://api.example.com/echo -d "plain text body""#).unwrap();
         if let Step::Request(step) = &plan.steps[0] {
             assert_eq!(step.method, Method::Post);
             assert_eq!(

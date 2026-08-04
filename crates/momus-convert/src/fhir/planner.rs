@@ -21,7 +21,12 @@ use std::collections::HashMap;
 
 /// Fields that are never summary in FHIR R4.
 fn summary_absent_fields() -> Vec<String> {
-    vec!["text".to_string(), "contained".to_string(), "extension".to_string(), "modifierExtension".to_string()]
+    vec![
+        "text".to_string(),
+        "contained".to_string(),
+        "extension".to_string(),
+        "modifierExtension".to_string(),
+    ]
 }
 
 /// Build a ResponseAssertion appropriate for the test case kind.
@@ -66,7 +71,10 @@ pub fn assertion_for_kind(kind: &TestCaseKind, resource_type: &str) -> Option<Re
         TestCaseKind::ResultParam { param } => match param.as_str() {
             "_summary" => {
                 let mut required = HashMap::new();
-                required.insert(resource_type.to_string(), vec!["id".to_string(), "meta".to_string()]);
+                required.insert(
+                    resource_type.to_string(),
+                    vec!["id".to_string(), "meta".to_string()],
+                );
                 Some(ResponseAssertion {
                     bundle_type: Some("searchset".to_string()),
                     min_entries: Some(0),
@@ -87,7 +95,11 @@ pub fn assertion_for_kind(kind: &TestCaseKind, resource_type: &str) -> Option<Re
             }),
         },
         TestCaseKind::Operation { .. } => Some(ResponseAssertion {
-            response_resource_types: vec!["Parameters".to_string(), "Bundle".to_string(), "OperationOutcome".to_string()],
+            response_resource_types: vec![
+                "Parameters".to_string(),
+                "Bundle".to_string(),
+                "OperationOutcome".to_string(),
+            ],
             ..ResponseAssertion::none()
         }),
         TestCaseKind::Negative { .. } => Some(ResponseAssertion {
@@ -101,8 +113,8 @@ pub fn assertion_for_kind(kind: &TestCaseKind, resource_type: &str) -> Option<Re
 /// Generate a comprehensive test plan from a CapabilityStatement.
 pub fn generate_test_plan(
     cs: &CapabilityStatement,
-    search_parameters: &[SearchParameter],
-    operation_definitions: Option<&[super::operation::OperationDefinition]>,
+    _search_parameters: &[SearchParameter],
+    _operation_definitions: Option<&[super::operation::OperationDefinition]>,
     _profile_urls: Option<&HashMap<String, String>>,
     field_values: &HashMap<String, HashMap<String, String>>,
     _created_ids: &HashMap<String, String>,
@@ -122,7 +134,10 @@ pub fn generate_test_plan(
             for interaction in &resource.interaction {
                 match interaction.code.as_str() {
                     "read" => {
-                        let id = values.and_then(|v| v.get("id")).cloned().unwrap_or_else(|| "{id}".to_string());
+                        let id = values
+                            .and_then(|v| v.get("id"))
+                            .cloned()
+                            .unwrap_or_else(|| "{id}".to_string());
                         tests.push(TestCase {
                             name: format!("read-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
@@ -178,7 +193,10 @@ pub fn generate_test_plan(
                                 url: format!("/{}", rtype),
                                 headers: {
                                     let mut h = HashMap::new();
-                                    h.insert("Content-Type".to_string(), "application/json".to_string());
+                                    h.insert(
+                                        "Content-Type".to_string(),
+                                        "application/json".to_string(),
+                                    );
                                     h
                                 },
                                 body: Some(serde_json::json!({"resourceType": rtype})),
@@ -204,7 +222,10 @@ pub fn generate_test_plan(
                                 url: format!("/{}/{}", rtype, "{id}"),
                                 headers: {
                                     let mut h = HashMap::new();
-                                    h.insert("Content-Type".to_string(), "application/json".to_string());
+                                    h.insert(
+                                        "Content-Type".to_string(),
+                                        "application/json".to_string(),
+                                    );
                                     h
                                 },
                                 body: Some(serde_json::json!({"resourceType": rtype})),
@@ -359,7 +380,12 @@ pub fn generate_test_plan(
                     // Modifier tests for applicable param types
                     for modifier in SearchModifier::applicable_to(&sp.param_type) {
                         tests.push(TestCase {
-                            name: format!("search-{}-{}-{:?}", rtype.to_lowercase(), sp.name, modifier),
+                            name: format!(
+                                "search-{}-{}-{:?}",
+                                rtype.to_lowercase(),
+                                sp.name,
+                                modifier
+                            ),
                             kind: TestCaseKind::SearchModifier {
                                 param_name: sp.name.clone(),
                                 modifier: modifier.clone(),
@@ -369,7 +395,13 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
-                                url: format!("/{}?{}:{}={}", rtype, sp.name, modifier.suffix(), "{value}"),
+                                url: format!(
+                                    "/{}?{}:{}={}",
+                                    rtype,
+                                    sp.name,
+                                    modifier.suffix(),
+                                    "{value}"
+                                ),
                                 headers: HashMap::new(),
                                 body: None,
                             },
@@ -392,7 +424,12 @@ pub fn generate_test_plan(
                     // Prefix tests for number/date/quantity
                     for prefix in SearchPrefix::applicable_to(&sp.param_type) {
                         tests.push(TestCase {
-                            name: format!("search-{}-{}-{:?}", rtype.to_lowercase(), sp.name, prefix),
+                            name: format!(
+                                "search-{}-{}-{:?}",
+                                rtype.to_lowercase(),
+                                sp.name,
+                                prefix
+                            ),
                             kind: TestCaseKind::SearchPrefix {
                                 param_name: sp.name.clone(),
                                 prefix: prefix.clone(),
@@ -402,7 +439,13 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
-                                url: format!("/{}?{}={}{}", rtype, sp.name, prefix.prefix_str(), "{value}"),
+                                url: format!(
+                                    "/{}?{}={}{}",
+                                    rtype,
+                                    sp.name,
+                                    prefix.prefix_str(),
+                                    "{value}"
+                                ),
                                 headers: HashMap::new(),
                                 body: None,
                             },
@@ -430,7 +473,12 @@ pub fn generate_test_plan(
                             let p1 = &resource.search_param[i];
                             let p2 = &resource.search_param[j];
                             tests.push(TestCase {
-                                name: format!("search-{}-{}-{}-combo", rtype.to_lowercase(), p1.name, p2.name),
+                                name: format!(
+                                    "search-{}-{}-{}-combo",
+                                    rtype.to_lowercase(),
+                                    p1.name,
+                                    p2.name
+                                ),
                                 kind: TestCaseKind::SearchCombo {
                                     params: vec![p1.name.clone(), p2.name.clone()],
                                 },
@@ -439,7 +487,10 @@ pub fn generate_test_plan(
                                 profile_url: profile_url.clone(),
                                 request: HttpRequest {
                                     method: "GET".to_string(),
-                                    url: format!("/{}?{}={}&{}={}", rtype, p1.name, "{value1}", p2.name, "{value2}"),
+                                    url: format!(
+                                        "/{}?{}={}&{}={}",
+                                        rtype, p1.name, "{value1}", p2.name, "{value2}"
+                                    ),
                                     headers: HashMap::new(),
                                     body: None,
                                 },
@@ -530,7 +581,11 @@ pub fn generate_test_plan(
                 for result_param in &["_summary=true", "_count=1", "_elements=id", "_sort=_id"] {
                     let param_name = result_param.split('=').next().unwrap_or(result_param);
                     tests.push(TestCase {
-                        name: format!("search-{}-{}", rtype.to_lowercase(), result_param.replace('=', "_")),
+                        name: format!(
+                            "search-{}-{}",
+                            rtype.to_lowercase(),
+                            result_param.replace('=', "_")
+                        ),
                         kind: TestCaseKind::ResultParam {
                             param: param_name.to_string(),
                         },
@@ -597,7 +652,11 @@ pub fn generate_test_plan(
                 .find(|code| !resource.interaction.iter().any(|i| i.code == **code));
             if let Some(undeclared_code) = undeclared {
                 tests.push(TestCase {
-                    name: format!("negative-{}-undeclared-{}", rtype.to_lowercase(), undeclared_code),
+                    name: format!(
+                        "negative-{}-undeclared-{}",
+                        rtype.to_lowercase(),
+                        undeclared_code
+                    ),
                     kind: TestCaseKind::Negative {
                         description: format!("Undeclared interaction: {}", undeclared_code),
                     },
@@ -653,7 +712,10 @@ pub fn generate_test_plan(
     }
 
     FhirTestPlan {
-        name: cs.name.clone().unwrap_or_else(|| "FHIR Test Plan".to_string()),
+        name: cs
+            .name
+            .clone()
+            .unwrap_or_else(|| "FHIR Test Plan".to_string()),
         ig_url: cs.url.clone(),
         test_groups: groups,
         creation_order: vec![],
@@ -677,9 +739,15 @@ mod tests {
                     profile: Some("http://example.org/StructureDefinition/TestPatient".to_string()),
                     supported_profile: vec![],
                     interaction: vec![
-                        RestInteraction { code: "read".to_string() },
-                        RestInteraction { code: "search-type".to_string() },
-                        RestInteraction { code: "create".to_string() },
+                        RestInteraction {
+                            code: "read".to_string(),
+                        },
+                        RestInteraction {
+                            code: "search-type".to_string(),
+                        },
+                        RestInteraction {
+                            code: "create".to_string(),
+                        },
                     ],
                     search_param: vec![
                         RestSearchParam {
@@ -732,7 +800,9 @@ mod tests {
         let plan = generate_test_plan(&cs, &[], None, None, &HashMap::new(), &HashMap::new());
         let group = &plan.test_groups[0];
 
-        let search_tests: Vec<&TestCase> = group.tests.iter()
+        let search_tests: Vec<&TestCase> = group
+            .tests
+            .iter()
             .filter(|t| matches!(t.kind, TestCaseKind::SearchSingle { .. }))
             .collect();
         assert!(search_tests.len() >= 2); // name + birthdate
@@ -744,7 +814,9 @@ mod tests {
         let plan = generate_test_plan(&cs, &[], None, None, &HashMap::new(), &HashMap::new());
         let group = &plan.test_groups[0];
 
-        let modifier_tests: Vec<&TestCase> = group.tests.iter()
+        let modifier_tests: Vec<&TestCase> = group
+            .tests
+            .iter()
             .filter(|t| matches!(t.kind, TestCaseKind::SearchModifier { .. }))
             .collect();
         // String params get :exact and :contains modifiers
@@ -757,7 +829,9 @@ mod tests {
         let plan = generate_test_plan(&cs, &[], None, None, &HashMap::new(), &HashMap::new());
         let group = &plan.test_groups[0];
 
-        let negative_tests: Vec<&TestCase> = group.tests.iter()
+        let negative_tests: Vec<&TestCase> = group
+            .tests
+            .iter()
             .filter(|t| matches!(t.kind, TestCaseKind::Negative { .. }))
             .collect();
         // Should have at least one negative test for an undeclared interaction
@@ -767,11 +841,17 @@ mod tests {
     #[test]
     fn assertion_for_kind_returns_correct_assertions() {
         let search_assertion = assertion_for_kind(
-            &TestCaseKind::SearchSingle { param_name: "name".to_string(), param_type: "string".to_string() },
+            &TestCaseKind::SearchSingle {
+                param_name: "name".to_string(),
+                param_type: "string".to_string(),
+            },
             "Patient",
         );
         assert!(search_assertion.is_some());
-        assert_eq!(search_assertion.unwrap().bundle_type, Some("searchset".to_string()));
+        assert_eq!(
+            search_assertion.unwrap().bundle_type,
+            Some("searchset".to_string())
+        );
 
         let interaction_assertion = assertion_for_kind(&TestCaseKind::Interaction, "Patient");
         assert!(interaction_assertion.is_none());

@@ -63,7 +63,9 @@ pub fn convert(path: &str) -> Result<TestPlan> {
                 _ => momus_core::ast::Method::Get,
             };
 
-            let mut assertions = vec![momus_core::ast::Assertion::Status(test.validation.expected_status)];
+            let mut assertions = vec![momus_core::ast::Assertion::Status(
+                test.validation.expected_status,
+            )];
 
             // Add profile validation assertion if profile URL is available
             if let Some(profile_url) = &test.validation.profile_url {
@@ -97,11 +99,15 @@ pub fn convert(path: &str) -> Result<TestPlan> {
     })
 }
 
-fn select_capability_statement(pkg: &package::IgPackage) -> Result<capability::CapabilityStatement> {
+fn select_capability_statement(
+    pkg: &package::IgPackage,
+) -> Result<capability::CapabilityStatement> {
     pkg.capability_statements
         .iter()
         .find(|cs| {
-            cs.rest.iter().any(|r| r.mode == "server" && !r.resource.is_empty())
+            cs.rest
+                .iter()
+                .any(|r| r.mode == "server" && !r.resource.is_empty())
         })
         .or_else(|| {
             pkg.capability_statements

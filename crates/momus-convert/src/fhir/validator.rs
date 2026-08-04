@@ -66,19 +66,28 @@ pub fn validate_against_profile(
             && let Some(val) = resolved_value.as_ref().and_then(|v| v.as_str())
             && val != fixed
         {
-            errors.push(format!("{}: expected '{}', got '{}'", element.path, fixed, val));
+            errors.push(format!(
+                "{}: expected '{}', got '{}'",
+                element.path, fixed, val
+            ));
         }
         if let Some(fixed) = &element.fixed_code
             && let Some(val) = resolved_value.as_ref().and_then(|v| v.as_str())
             && val != fixed
         {
-            errors.push(format!("{}: expected code '{}', got '{}'", element.path, fixed, val));
+            errors.push(format!(
+                "{}: expected code '{}', got '{}'",
+                element.path, fixed, val
+            ));
         }
         if let Some(fixed) = &element.fixed_uri
             && let Some(val) = resolved_value.as_ref().and_then(|v| v.as_str())
             && val != fixed
         {
-            errors.push(format!("{}: expected uri '{}', got '{}'", element.path, fixed, val));
+            errors.push(format!(
+                "{}: expected uri '{}', got '{}'",
+                element.path, fixed, val
+            ));
         }
         if let Some(fixed) = &element.fixed_boolean
             && let Some(val) = resolved_value.as_ref().and_then(|v| v.as_bool())
@@ -98,13 +107,19 @@ pub fn validate_against_profile(
             && let Some(val) = resolved_value.as_ref().and_then(|v| v.as_str())
             && val != pattern
         {
-            errors.push(format!("{}: pattern expected '{}', got '{}'", element.path, pattern, val));
+            errors.push(format!(
+                "{}: pattern expected '{}', got '{}'",
+                element.path, pattern, val
+            ));
         }
         if let Some(pattern) = &element.pattern_code
             && let Some(val) = resolved_value.as_ref().and_then(|v| v.as_str())
             && val != pattern
         {
-            errors.push(format!("{}: pattern code expected '{}', got '{}'", element.path, pattern, val));
+            errors.push(format!(
+                "{}: pattern code expected '{}', got '{}'",
+                element.path, pattern, val
+            ));
         }
     }
 
@@ -133,7 +148,11 @@ fn get_field_path(path: &str, resource_type: &str) -> Option<String> {
         let first_clean = first.split(':').next().unwrap_or(first);
         format!("{}.{}", first_clean, rest)
     } else {
-        field_part.split(':').next().unwrap_or(field_part).to_string()
+        field_part
+            .split(':')
+            .next()
+            .unwrap_or(field_part)
+            .to_string()
     };
 
     Some(field_name)
@@ -161,16 +180,32 @@ mod tests {
                         min: Some(0),
                         max: Some("*".to_string()),
                         type_: vec![],
-                        fixed_string: None, fixed_uri: None, fixed_code: None,
-                        fixed_boolean: None, fixed_integer: None, fixed_decimal: None,
-                        pattern_string: None, pattern_uri: None, pattern_code: None,
-                        pattern_boolean: None, must_support: false,
-                        short: None, definition: None, binding: None,
-                        content_reference: None, fixed_quantity: None, pattern_quantity: None,
-                        fixed_coding: None, pattern_coding: None,
-                        fixed_codeable_concept: None, pattern_codeable_concept: None,
-                        constraint: vec![], is_modifier: false, is_summary: false,
-                        slice_name: None, slicing: None,
+                        fixed_string: None,
+                        fixed_uri: None,
+                        fixed_code: None,
+                        fixed_boolean: None,
+                        fixed_integer: None,
+                        fixed_decimal: None,
+                        pattern_string: None,
+                        pattern_uri: None,
+                        pattern_code: None,
+                        pattern_boolean: None,
+                        must_support: false,
+                        short: None,
+                        definition: None,
+                        binding: None,
+                        content_reference: None,
+                        fixed_quantity: None,
+                        pattern_quantity: None,
+                        fixed_coding: None,
+                        pattern_coding: None,
+                        fixed_codeable_concept: None,
+                        pattern_codeable_concept: None,
+                        constraint: vec![],
+                        is_modifier: false,
+                        is_summary: false,
+                        slice_name: None,
+                        slicing: None,
                     },
                     ElementDefinition {
                         id: "Patient.name".to_string(),
@@ -179,18 +214,36 @@ mod tests {
                         max: Some("*".to_string()),
                         type_: vec![ElementDefinitionType {
                             code: "HumanName".to_string(),
-                            target_profile: vec![], profile: vec![], versioning: None,
+                            target_profile: vec![],
+                            profile: vec![],
+                            versioning: None,
                         }],
-                        fixed_string: None, fixed_uri: None, fixed_code: None,
-                        fixed_boolean: None, fixed_integer: None, fixed_decimal: None,
-                        pattern_string: None, pattern_uri: None, pattern_code: None,
-                        pattern_boolean: None, must_support: true,
-                        short: None, definition: None, binding: None,
-                        content_reference: None, fixed_quantity: None, pattern_quantity: None,
-                        fixed_coding: None, pattern_coding: None,
-                        fixed_codeable_concept: None, pattern_codeable_concept: None,
-                        constraint: vec![], is_modifier: false, is_summary: false,
-                        slice_name: None, slicing: None,
+                        fixed_string: None,
+                        fixed_uri: None,
+                        fixed_code: None,
+                        fixed_boolean: None,
+                        fixed_integer: None,
+                        fixed_decimal: None,
+                        pattern_string: None,
+                        pattern_uri: None,
+                        pattern_code: None,
+                        pattern_boolean: None,
+                        must_support: true,
+                        short: None,
+                        definition: None,
+                        binding: None,
+                        content_reference: None,
+                        fixed_quantity: None,
+                        pattern_quantity: None,
+                        fixed_coding: None,
+                        pattern_coding: None,
+                        fixed_codeable_concept: None,
+                        pattern_codeable_concept: None,
+                        constraint: vec![],
+                        is_modifier: false,
+                        is_summary: false,
+                        slice_name: None,
+                        slicing: None,
                     },
                 ],
             }),
@@ -222,7 +275,11 @@ mod tests {
         let profile = test_patient_profile();
         let resource = json!({"resourceType": "Patient"});
         let errors = validate_against_profile(&resource, &profile);
-        assert!(errors.iter().any(|e| e.contains("name") && e.contains("Missing required")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("name") && e.contains("Missing required"))
+        );
     }
 
     #[test]
@@ -232,9 +289,13 @@ mod tests {
             snapshot.element.push(ElementDefinition {
                 id: "Patient.gender".to_string(),
                 path: "Patient.gender".to_string(),
-                min: Some(1), max: Some("1".to_string()),
+                min: Some(1),
+                max: Some("1".to_string()),
                 type_: vec![ElementDefinitionType {
-                    code: "code".to_string(), target_profile: vec![], profile: vec![], versioning: None,
+                    code: "code".to_string(),
+                    target_profile: vec![],
+                    profile: vec![],
+                    versioning: None,
                 }],
                 fixed_code: Some("male".to_string()),
                 ..Default::default()
@@ -246,6 +307,10 @@ mod tests {
             "gender": "female"
         });
         let errors = validate_against_profile(&resource, &profile);
-        assert!(errors.iter().any(|e| e.contains("gender") && e.contains("expected code 'male'")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("gender") && e.contains("expected code 'male'"))
+        );
     }
 }

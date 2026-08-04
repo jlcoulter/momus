@@ -16,10 +16,7 @@ use std::time::Instant;
 pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<ContractReport> {
     let start = Instant::now();
 
-    let base_url = config
-        .base_url
-        .as_deref()
-        .unwrap_or(&plan.base_url);
+    let base_url = config.base_url.as_deref().unwrap_or(&plan.base_url);
 
     // Load the spec
     let spec_content = std::fs::read_to_string(&config.spec_path)
@@ -67,9 +64,7 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
                 client.patch(&url).json(&body).send().await
             }
             Method::Head => client.head(&url).send().await,
-            Method::Options => {
-                client.request(reqwest::Method::OPTIONS, &url).send().await
-            }
+            Method::Options => client.request(reqwest::Method::OPTIONS, &url).send().await,
         };
 
         match result {
@@ -83,14 +78,8 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
                 let body: Option<serde_json::Value> = resp.json().await.ok();
 
                 // Validate against spec
-                let step_violations = validate_response(
-                    spec_type,
-                    &step.method,
-                    &step.url,
-                    status,
-                    &headers,
-                    &body,
-                );
+                let step_violations =
+                    validate_response(spec_type, &step.method, &step.url, status, &headers, &body);
 
                 if step_violations.is_empty() {
                     compliant += 1;
@@ -203,7 +192,8 @@ fn validate_response(
                         endpoint: url.to_string(),
                         method: method.to_string(),
                         status: status_code,
-                        description: "Response body is null for a successful status code".to_string(),
+                        description: "Response body is null for a successful status code"
+                            .to_string(),
                         severity: "warning".to_string(),
                     });
                 }
@@ -212,7 +202,8 @@ fn validate_response(
                     endpoint: url.to_string(),
                     method: method.to_string(),
                     status: status_code,
-                    description: "Response body is not valid JSON for a successful status code".to_string(),
+                    description: "Response body is not valid JSON for a successful status code"
+                        .to_string(),
                     severity: "error".to_string(),
                 });
             }
@@ -264,9 +255,15 @@ mod tests {
 
     #[test]
     fn test_detect_spec_type() {
-        assert_eq!(detect_spec_type("openapi.yaml", "openapi: 3.0.0"), "OpenAPI");
+        assert_eq!(
+            detect_spec_type("openapi.yaml", "openapi: 3.0.0"),
+            "OpenAPI"
+        );
         assert_eq!(detect_spec_type("spec.yml", "swagger: '2.0'"), "Swagger");
-        assert_eq!(detect_spec_type("schema.graphql", "type Query {"), "GraphQL");
+        assert_eq!(
+            detect_spec_type("schema.graphql", "type Query {"),
+            "GraphQL"
+        );
         assert_eq!(detect_spec_type("schema.gql", "type Query {"), "GraphQL");
         assert_eq!(detect_spec_type("service.proto", "syntax ="), "Protobuf");
         assert_eq!(detect_spec_type("spec.json", "{}"), "OpenAPI");

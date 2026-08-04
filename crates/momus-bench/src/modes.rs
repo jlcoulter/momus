@@ -2,8 +2,8 @@ use crate::config::BenchMode;
 use crate::report::BenchReport;
 use anyhow::Result;
 use momus_core::ast::{Method, Step, TestPlan};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 use tokio::sync::Semaphore;
 
@@ -132,7 +132,9 @@ async fn run_steady(
                             client.patch(&url).json(&body).send().await
                         }
                         Method::Head => client.head(&url).send().await,
-                        Method::Options => client.request(reqwest::Method::OPTIONS, &url).send().await,
+                        Method::Options => {
+                            client.request(reqwest::Method::OPTIONS, &url).send().await
+                        }
                     };
 
                     let elapsed_ms = step_start.elapsed().as_secs_f64() * 1000.0;
@@ -281,18 +283,16 @@ mod tests {
                 }),
                 Step::Sequence(SequenceStep {
                     name: "seq".into(),
-                    steps: vec![
-                        Step::Request(RequestStep {
-                            name: "r2".into(),
-                            method: Method::Post,
-                            url: "/users".into(),
-                            headers: HashMap::new(),
-                            body: Some(serde_json::json!({"name": "test"})),
-                            assert: vec![],
-                            save_as: String::new(),
-                            soft_fail: false,
-                        }),
-                    ],
+                    steps: vec![Step::Request(RequestStep {
+                        name: "r2".into(),
+                        method: Method::Post,
+                        url: "/users".into(),
+                        headers: HashMap::new(),
+                        body: Some(serde_json::json!({"name": "test"})),
+                        assert: vec![],
+                        save_as: String::new(),
+                        soft_fail: false,
+                    })],
                     continue_on_failure: false,
                 }),
             ],

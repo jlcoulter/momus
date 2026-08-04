@@ -1,0 +1,15 @@
+{
+  "duration_ms": 1,
+  "failed": 1,
+  "groups": [
+    {
+      "failed": 1,
+      "name": "health check",
+      "passed": 0,
+      "total": 1
+    }
+  ],
+  "passed": 0,
+  "plan": "health check",
+  "total": 1
+}

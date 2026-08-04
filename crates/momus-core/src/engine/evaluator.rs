@@ -196,29 +196,24 @@ pub fn evaluate_assertion(
             evaluate_json_predicate(path, predicate, &results)
         }
 
-        Assertion::Schema { schema } => {
-            match compile_schema(schema) {
-                Ok(validator) => {
-                    let body = match body {
-                        Some(b) => b,
-                        None => {
-                            return AssertionResult::fail(
-                                "json schema validation",
-                                "no response body",
-                            );
-                        }
-                    };
-                    match validate_schema(&validator, body) {
-                        Ok(()) => AssertionResult::pass("json schema validation"),
-                        Err(errors) => AssertionResult::fail(
-                            "json schema validation",
-                            format!("schema violations:\n{}", errors.join("\n")),
-                        ),
+        Assertion::Schema { schema } => match compile_schema(schema) {
+            Ok(validator) => {
+                let body = match body {
+                    Some(b) => b,
+                    None => {
+                        return AssertionResult::fail("json schema validation", "no response body");
                     }
+                };
+                match validate_schema(&validator, body) {
+                    Ok(()) => AssertionResult::pass("json schema validation"),
+                    Err(errors) => AssertionResult::fail(
+                        "json schema validation",
+                        format!("schema violations:\n{}", errors.join("\n")),
+                    ),
                 }
-                Err(e) => AssertionResult::fail("json schema validation", e),
             }
-        }
+            Err(e) => AssertionResult::fail("json schema validation", e),
+        },
 
         Assertion::ValidJson => {
             // If we got here, the body was already parsed as JSON.
@@ -520,26 +515,24 @@ fn evaluate_json_predicate(
                 }
             }
         }
-        JsonPredicate::Schema(schema) => {
-            match compile_schema(schema) {
-                Ok(validator) => {
-                    if results.is_empty() {
-                        return AssertionResult::fail(
-                            format!("{desc} schema validation"),
-                            "path not found",
-                        );
-                    }
-                    match validate_schema(&validator, &results[0]) {
-                        Ok(()) => AssertionResult::pass(format!("{desc} schema validation")),
-                        Err(errors) => AssertionResult::fail(
-                            format!("{desc} schema validation"),
-                            format!("schema violations:\n{}", errors.join("\n")),
-                        ),
-                    }
+        JsonPredicate::Schema(schema) => match compile_schema(schema) {
+            Ok(validator) => {
+                if results.is_empty() {
+                    return AssertionResult::fail(
+                        format!("{desc} schema validation"),
+                        "path not found",
+                    );
                 }
-                Err(e) => AssertionResult::fail(format!("{desc} schema validation"), e),
+                match validate_schema(&validator, &results[0]) {
+                    Ok(()) => AssertionResult::pass(format!("{desc} schema validation")),
+                    Err(errors) => AssertionResult::fail(
+                        format!("{desc} schema validation"),
+                        format!("schema violations:\n{}", errors.join("\n")),
+                    ),
+                }
             }
-        }
+            Err(e) => AssertionResult::fail(format!("{desc} schema validation"), e),
+        },
     }
 }
 

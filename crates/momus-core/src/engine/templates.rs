@@ -57,7 +57,10 @@ fn resolve_env_templates(s: &mut String) {
         .replace_all(s, |caps: &regex::Captures| {
             let var_name = &caps[1];
             std::env::var(var_name).unwrap_or_else(|_| {
-                tracing::warn!("Environment variable '{}' not set, leaving template unresolved", var_name);
+                tracing::warn!(
+                    "Environment variable '{}' not set, leaving template unresolved",
+                    var_name
+                );
                 caps[0].to_string()
             })
         })
@@ -225,10 +228,18 @@ mod tests {
     #[test]
     fn resolve_env_var() {
         // Set a test env var
-        unsafe { std::env::set_var("MOMUS_TEST_URL", "http://test:8080"); }
-        let result = resolve_url("{env.MOMUS_TEST_URL}/api", "http://fallback", &HashMap::new());
+        unsafe {
+            std::env::set_var("MOMUS_TEST_URL", "http://test:8080");
+        }
+        let result = resolve_url(
+            "{env.MOMUS_TEST_URL}/api",
+            "http://fallback",
+            &HashMap::new(),
+        );
         assert_eq!(result, "http://test:8080/api");
-        unsafe { std::env::remove_var("MOMUS_TEST_URL"); }
+        unsafe {
+            std::env::remove_var("MOMUS_TEST_URL");
+        }
     }
 
     #[test]

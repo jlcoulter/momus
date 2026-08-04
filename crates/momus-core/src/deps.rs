@@ -199,10 +199,7 @@ mod tests {
 
     #[test]
     fn resolve_no_dependencies() {
-        let deps = vec![
-            ("A".to_string(), vec![]),
-            ("B".to_string(), vec![]),
-        ];
+        let deps = vec![("A".to_string(), vec![]), ("B".to_string(), vec![])];
         let order = resolve_order(&deps).expect("should resolve order with no dependencies");
         assert!(order.contains(&"A".to_string()));
         assert!(order.contains(&"B".to_string()));

@@ -21,27 +21,37 @@ pub fn create_resource(store: &MockStore, r#type: &str, mut body: Value) -> Valu
     body["id"] = Value::String(id.clone());
     stamp_meta(&mut body);
     let mut store = store.lock().unwrap();
-    store.entry(r#type.to_string()).or_default().push(body.clone());
+    store
+        .entry(r#type.to_string())
+        .or_default()
+        .push(body.clone());
     body
 }
 
 /// Read a resource by type and ID (GET).
 pub fn read_resource(store: &MockStore, r#type: &str, id: &str) -> Option<Value> {
     let store = store.lock().unwrap();
-    store.get(r#type)?.iter().find(|r| {
-        r.get("id").and_then(|v| v.as_str()) == Some(id)
-    }).cloned()
+    store
+        .get(r#type)?
+        .iter()
+        .find(|r| r.get("id").and_then(|v| v.as_str()) == Some(id))
+        .cloned()
 }
 
 /// Update a resource by type and ID (PUT). Returns the updated resource.
-pub fn update_resource(store: &MockStore, r#type: &str, id: &str, mut body: Value) -> Option<Value> {
+pub fn update_resource(
+    store: &MockStore,
+    r#type: &str,
+    id: &str,
+    mut body: Value,
+) -> Option<Value> {
     body["id"] = Value::String(id.to_string());
     stamp_meta(&mut body);
     let mut store = store.lock().unwrap();
     if let Some(resources) = store.get_mut(r#type)
-        && let Some(pos) = resources.iter().position(|r| {
-            r.get("id").and_then(|v| v.as_str()) == Some(id)
-        })
+        && let Some(pos) = resources
+            .iter()
+            .position(|r| r.get("id").and_then(|v| v.as_str()) == Some(id))
     {
         resources[pos] = body.clone();
         return Some(body);
@@ -53,9 +63,9 @@ pub fn update_resource(store: &MockStore, r#type: &str, id: &str, mut body: Valu
 pub fn delete_resource(store: &MockStore, r#type: &str, id: &str) -> bool {
     let mut store = store.lock().unwrap();
     if let Some(resources) = store.get_mut(r#type)
-        && let Some(pos) = resources.iter().position(|r| {
-            r.get("id").and_then(|v| v.as_str()) == Some(id)
-        })
+        && let Some(pos) = resources
+            .iter()
+            .position(|r| r.get("id").and_then(|v| v.as_str()) == Some(id))
     {
         resources.remove(pos);
         return true;
@@ -98,7 +108,11 @@ pub fn search_resources(
     // Apply _sort
     if let Some(sort_param) = params.get("_sort") {
         let desc = sort_param.starts_with('-');
-        let field = if desc { &sort_param[1..] } else { sort_param.as_str() };
+        let field = if desc {
+            &sort_param[1..]
+        } else {
+            sort_param.as_str()
+        };
         resources.sort_by(|a, b| {
             let a_val = resolve_field(a, field).cloned();
             let b_val = resolve_field(b, field).cloned();
@@ -111,27 +125,28 @@ pub fn search_resources(
 
     // Apply _count
     if let Some(count_str) = params.get("_count")
-        && let Ok(count) = count_str.parse::<usize>() {
-            resources.truncate(count);
-        }
+        && let Ok(count) = count_str.parse::<usize>()
+    {
+        resources.truncate(count);
+    }
 
     // Apply _summary
     if params.get("_summary").map(|s| s == "true").unwrap_or(false) {
         resources = resources
-        .into_iter()
-        .map(|r| {
-            let mut summary = serde_json::json!({
-                "resourceType": r.get("resourceType"),
-                "id": r.get("id"),
-                "meta": r.get("meta")
-            });
-            // Only keep non-null fields
-            if let Some(obj) = summary.as_object_mut() {
-                obj.retain(|_, v| !v.is_null());
-            }
-            summary
-        })
-        .collect();
+            .into_iter()
+            .map(|r| {
+                let mut summary = serde_json::json!({
+                    "resourceType": r.get("resourceType"),
+                    "id": r.get("id"),
+                    "meta": r.get("meta")
+                });
+                // Only keep non-null fields
+                if let Some(obj) = summary.as_object_mut() {
+                    obj.retain(|_, v| !v.is_null());
+                }
+                summary
+            })
+            .collect();
     }
 
     // Apply _elements
@@ -176,9 +191,10 @@ fn stamp_meta(body: &mut Value) {
 fn match_field(resource: &Value, key: &str, param_value: &str) -> bool {
     // Try exact match on top-level field
     if let Some(val) = resource.get(key)
-        && value_matches(val, param_value) {
-            return true;
-        }
+        && value_matches(val, param_value)
+    {
+        return true;
+    }
 
     // Try nested field (e.g., "name.family")
     if key.contains('.')
@@ -206,15 +222,16 @@ fn match_field(resource: &Value, key: &str, param_value: &str) -> bool {
 
     // Try identifier array (e.g., resource has "identifier" with "value" fields)
     if (key == "identifier" || key.ends_with(".identifier"))
-        && let Some(arr) = resource.get("identifier").and_then(|v| v.as_array()) {
-            for item in arr {
-                if let Some(val) = item.get("value").and_then(|v| v.as_str())
-                    && val == param_value
-                {
-                    return true;
-                }
+        && let Some(arr) = resource.get("identifier").and_then(|v| v.as_array())
+    {
+        for item in arr {
+            if let Some(val) = item.get("value").and_then(|v| v.as_str())
+                && val == param_value
+            {
+                return true;
             }
         }
+    }
 
     false
 }
@@ -263,7 +280,9 @@ fn compare_values(a: &Option<Value>, b: &Option<Value>) -> std::cmp::Ordering {
             if let (Some(a_str), Some(b_str)) = (a_val.as_str(), b_val.as_str()) {
                 a_str.cmp(b_str)
             } else if let (Some(a_num), Some(b_num)) = (a_val.as_f64(), b_val.as_f64()) {
-                a_num.partial_cmp(&b_num).unwrap_or(std::cmp::Ordering::Equal)
+                a_num
+                    .partial_cmp(&b_num)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             } else {
                 std::cmp::Ordering::Equal
             }
@@ -309,7 +328,9 @@ mod tests {
     #[test]
     fn test_update_not_found() {
         let store = new_store();
-        assert!(update_resource(&store, "Patient", "nonexistent", json!({"name": "Jane"})).is_none());
+        assert!(
+            update_resource(&store, "Patient", "nonexistent", json!({"name": "Jane"})).is_none()
+        );
     }
 
     #[test]
@@ -342,7 +363,11 @@ mod tests {
     fn test_search_with_filter() {
         let store = new_store();
         create_resource(&store, "Patient", json!({"name": "John", "gender": "male"}));
-        create_resource(&store, "Patient", json!({"name": "Jane", "gender": "female"}));
+        create_resource(
+            &store,
+            "Patient",
+            json!({"name": "Jane", "gender": "female"}),
+        );
 
         let mut params = HashMap::new();
         params.insert("gender".to_string(), "male".to_string());
@@ -421,7 +446,13 @@ mod tests {
         create_resource(&store, "Patient", json!({"name": "John"}));
         create_resource(&store, "Observation", json!({"value": 42}));
 
-        assert_eq!(search_resources(&store, "Patient", &HashMap::new()).len(), 1);
-        assert_eq!(search_resources(&store, "Observation", &HashMap::new()).len(), 1);
+        assert_eq!(
+            search_resources(&store, "Patient", &HashMap::new()).len(),
+            1
+        );
+        assert_eq!(
+            search_resources(&store, "Observation", &HashMap::new()).len(),
+            1
+        );
     }
 }
