@@ -18,6 +18,9 @@ serde_json = "1"
 anyhow = "1"
 tracing = "0.1"
 
+[dev-dependencies]
+tempfile = "3"
+
 [features]
 default = ["openapi", "postman", "har", "curl"]
 openapi = []
