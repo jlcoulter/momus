@@ -44,7 +44,7 @@ This document catalogs every feature across all momus crates, organized by imple
 | `ContentType` — Content-Type match | ✅ | |
 | `ValidJson` — valid JSON check | ✅ | |
 | `JsonPath` — JSONPath query with predicate | ✅ | Simple resolver |
-| `Schema` — JSON Schema validation | 🔜 | No-op, needs `jsonschema` crate |
+| `Schema` — JSON Schema validation | ✅ | Wired via `jsonschema` crate |
 | `ResponseTime` — max response time | 🔜 | No-op |
 
 ### JSONPath Predicates (✅ Complete)
@@ -195,31 +195,31 @@ This document catalogs every feature across all momus crates, organized by imple
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Parse IG package (.tgz) | 🔜 | Port from fhir-autotest |
-| Categorize resources by type | 🔜 | Port |
-| Select CapabilityStatement | 🔜 | Port |
-| Resolve parent profile chain | 🔜 | Port |
-| Download missing profiles from registry | 🔜 | Port |
-| Extract dependencies (topological sort) | 🔜 | Port |
-| Generate resources from StructureDefinitions | 🔜 | Port (5-pass) |
-| Required field population | 🔜 | Port |
-| Required slice population | 🔜 | Port |
-| Extension slice population | 🔜 | Port |
-| MustSupport backbone population | 🔜 | Port |
-| MustSupport optional field population | 🔜 | Port |
-| Type-specific value generation | 🔜 | Port (HumanName, Address, etc.) |
-| Value set resolution | 🔜 | Port |
-| Generate test plan from CapabilityStatement | 🔜 | Port |
-| CRUD test generation | 🔜 | Port |
-| Search test generation (single, modifiers, prefixes) | 🔜 | Port |
-| Near/proximity search tests | 🔜 | Port |
-| Combinatorial search tests | 🔜 | Port |
-| Chained search tests | 🔜 | Port |
-| Include/revinclude tests | 🔜 | Port |
-| Result param tests (_summary, _elements, _count, _sort, _has) | 🔜 | Port |
-| Operation tests ($operation) | 🔜 | Port |
-| Negative tests | 🔜 | Port |
-| Conformance tests (mustSupport) | 🔜 | Port |
+| Parse IG package (.tgz) | ✅ | Ported |
+| Categorize resources by type | ✅ | Ported |
+| Select CapabilityStatement | ✅ | Ported |
+| Resolve parent profile chain | 🔜 | Port (v0.3.0) |
+| Download missing profiles from registry | 🔜 | Port (v0.3.0) |
+| Extract dependencies (topological sort) | ✅ | Uses `momus_core::deps` |
+| Generate resources from StructureDefinitions | ✅ | Ported (5-pass) |
+| Required field population | ✅ | Ported |
+| Required slice population | ✅ | Ported |
+| Extension slice population | ✅ | Ported |
+| MustSupport backbone population | ✅ | Ported |
+| MustSupport optional field population | ✅ | Ported |
+| Type-specific value generation | ✅ | Ported (HumanName, Address, etc.) |
+| Value set resolution | 🔜 | Port (v0.3.0) |
+| Generate test plan from CapabilityStatement | ✅ | Ported |
+| CRUD test generation | ✅ | Ported |
+| Search test generation (single, modifiers, prefixes) | ✅ | Ported |
+| Near/proximity search tests | 🔜 | Port (v0.3.0) |
+| Combinatorial search tests | ✅ | Ported |
+| Chained search tests | 🔜 | Port (v0.3.0) |
+| Include/revinclude tests | ✅ | Ported |
+| Result param tests (_summary, _elements, _count, _sort, _has) | ✅ | Ported |
+| Operation tests ($operation) | ✅ | Ported |
+| Negative tests | ✅ | Ported |
+| Conformance tests (mustSupport) | 🔜 | Port (v0.3.0) |
 | Bulk data generation (NDJSON) | 🔜 | Port (v0.3.0) |
 | HCPD/AU-specific generation | 🔜 | Port (v0.3.0) |
 | Locality/suburb generation | 🔜 | Port (v0.3.0) |
@@ -302,23 +302,21 @@ This document catalogs every feature across all momus crates, organized by imple
 | `ChaosExperiment` enum (8 types) | ✅ | |
 | `ChaosReport` with Display | ✅ | |
 | Not-healed display | ✅ | |
+| NetworkLatency experiment | ✅ | Proxy-based delay injection |
+| ServiceError experiment | ✅ | Endpoint status monitoring |
+| ServiceDown experiment | ✅ | Unreachability detection |
+| CpuPressure experiment | ✅ | Busy-loop thread saturation |
+| MemoryPressure experiment | ✅ | Vec allocation and hold |
 
-### Planned (v0.2.0)
+### Planned (v0.3.0)
 
 | Feature | Priority | Notes |
 |---------|----------|-------|
-| NetworkLatency experiment (proxy-based) | High | |
-| ServiceError experiment (proxy-based) | High | |
-| ServiceDown experiment (proxy-based) | High | |
 | ConnectionReset experiment | Medium | Requires iptables |
 | PacketLoss experiment | Medium | Requires tc netem |
-| CpuPressure experiment | Medium | Subprocess stress-ng |
-| MemoryPressure experiment | Medium | Subprocess |
 | ClockSkew experiment | Low | Requires faketime |
-| Health check before/during/after | High | |
+| Health check before/during/after | Medium | |
 | Healing time measurement | Medium | |
-| Report generation | High | |
-| Experiment scheduling | Medium | Sequence of experiments |
 | Steady-state hypothesis validation | Medium | |
 
 ---
@@ -360,21 +358,16 @@ This document catalogs every feature across all momus crates, organized by imple
 | `GuardConfig` with check flags | ✅ | |
 | `GuardReport` with Display | ✅ | |
 | `GuardIssue` with Display | ✅ | |
+| Auth header presence check | ✅ | Detects unauthenticated data responses |
+| CORS misconfiguration check | ✅ | OPTIONS preflight with malicious origin |
+| Info leak detection (stack traces, SQL errors) | ✅ | 12 leak patterns scanned |
+| Exposed endpoint discovery | ✅ | 20 common paths checked |
+| Security headers check (HSTS, CSP, X-Content-Type-Options, X-Frame-Options) | ✅ | 4 header checks per endpoint |
 
-### Planned (v0.2.0)
+### Planned (v0.3.0)
 
 | Feature | Priority | Notes |
 |---------|----------|-------|
-| Auth header presence check | High | |
-| Auth header scheme check (Bearer, Basic, etc.) | High | |
-| CORS misconfiguration check | High | |
-| Info leak detection (stack traces, SQL errors) | High | |
-| Path disclosure detection | Medium | |
-| Exposed endpoint discovery | Medium | |
-| HSTS header check | Medium | |
-| CSP header check | Medium | |
-| X-Content-Type-Options check | Medium | |
-| X-Frame-Options check | Medium | |
 | Rate limiting detection | Low | |
 | JWT analysis | Low | |
 
@@ -389,21 +382,21 @@ This document catalogs every feature across all momus crates, organized by imple
 | `DiffConfig` with baseline/target URLs | ✅ | |
 | `DiffReport` with Display | ✅ | |
 | `DiffEntry` with Display | ✅ | |
+| Parallel execution against two endpoints | ✅ | Concurrent requests to baseline + target |
+| Status code comparison | ✅ | |
+| Response body diff (field-level) | ✅ | Recursive JSON object/array diff |
+| Header comparison | ✅ | |
+| New field detection | ✅ | |
+| Missing field detection | ✅ | |
+| Value change detection | ✅ | |
+| Structured JSON diff (not line-level) | ✅ | Recursive with path tracking |
 
-### Planned (v0.2.0)
+### Planned (v0.3.0)
 
 | Feature | Priority | Notes |
 |---------|----------|-------|
-| Parallel execution against two endpoints | High | |
-| Status code comparison | High | |
-| Response body diff (field-level) | High | |
-| Header comparison | Medium | |
-| New field detection | High | |
-| Missing field detection | High | |
-| Value change detection | High | |
-| Structured JSON diff (not line-level) | High | |
 | Severity classification | Medium | |
-| Report generation | High | |
+| HTML report output | Low | |
 
 ---
 
