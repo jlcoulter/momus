@@ -14,17 +14,22 @@ use std::time::Instant;
 ///
 /// Returns an error if the plan cannot be loaded or the HTTP client fails to initialize.
 pub async fn run_bench(plan: &TestPlan, config: &BenchConfig) -> Result<BenchReport> {
-    let _start = Instant::now();
-    let _ = plan; // TODO: use plan steps in v0.2.0
+    let start = Instant::now();
+
+    let base_url = config
+        .base_url
+        .as_deref()
+        .unwrap_or(&plan.base_url);
 
     tracing::info!(
-        "Starting benchmark '{}' in {:?} mode",
+        "Starting benchmark '{}' in {:?} mode against {}",
         plan.name,
-        config.mode
+        config.mode,
+        base_url
     );
 
-    let mut report = run_mode(&config.mode).await?;
-    report.duration_secs = _start.elapsed().as_secs_f64();
+    let mut report = run_mode(&config.mode, plan, base_url).await?;
+    report.duration_secs = start.elapsed().as_secs_f64();
 
     Ok(report)
 }
