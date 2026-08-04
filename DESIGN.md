@@ -37,15 +37,11 @@ The boundary is clean: frontends produce `TestPlan` JSON, Momus executes it. No 
 
 ### Not a fuzzer
 
-Fuzzing is a distinct engineering problem with its own literature (coverage-guided, grammar-based, AFL-style). Bolting SQLi/ XSS mutation onto a test runner produces shallow results and conflates concerns. Momus can *execute* fuzz-generated test cases, but generating them belongs in a separate tool that feeds Momus plans.
+Fuzzing is a distinct engineering problem with its own literature (coverage-guided, grammar-based, AFL-style). Bolting SQLi/XSS mutation onto a test runner produces shallow results and conflates concerns. Momus can *execute* fuzz-generated test cases, but generating them belongs in a separate tool that feeds Momus plans.
 
-### Not a schema validator
+### Not a full benchmarking suite
 
-JSON Schema validation is a stub in the assertion AST for a reason. Full schema validation is a separate crate (`jsonschema`, `valico`) with its own performance characteristics. Momus should delegate to those rather than reimplement.
-
-### Not a performance benchmarker
-
-Latency SLI checks and throughput targets are benchmarking concerns. They require different statistical treatment (warmup, percentile calculation, coordinated omission). Momus measures pass/fail per assertion, not latency distributions.
+Momus should have a `ResponseTime` assertion node (`response_time { max_ms: u64 }`) — asserting that a response came back in under 200ms is a natural fit for the composable assertion model. What Momus is *not* is a full benchmarking tool: warmup phases, percentile distributions (P50/P95/P99), coordinated omission correction, HDR histograms, and throughput ramp profiles belong in a dedicated benchmarking tool. The line is between "did this request meet its SLA?" (an assertion) and "what is the latency distribution of this endpoint under load?" (a benchmark).
 
 ### Not multi-protocol (yet)
 
