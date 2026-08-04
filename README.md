@@ -7,7 +7,7 @@
 
 **Generic API test harness with a composable assertion AST.**
 
-Momus is a domain-agnostic test runner for HTTP APIs. Tests are defined as a JSON plan — a tree of steps (requests, sequences, parallel blocks) with composable assertions on responses. No DSL, no vendor lock-in, no FHIR coupling.
+Momus is a domain-agnostic test runner for HTTP APIs. Tests are defined as a JSON plan — a tree of steps (requests, sequences, parallel blocks) with composable assertions on responses.
 
 ## Quick Start
 
