@@ -246,14 +246,14 @@ pub enum TestCaseKind {
         prefix: SearchPrefix,
     },
     SearchNear {
-        param_name: String,
+        param: String,
     },
     SearchCombo {
         params: Vec<String>,
     },
     SearchChained {
-        chain_param: String,
-        target_param: String,
+        param: String,
+        chain: String,
     },
     Include {
         param: String,
@@ -269,7 +269,8 @@ pub enum TestCaseKind {
         description: String,
     },
     Conformance {
-        description: String,
+        resource_type: String,
+        profile_url: String,
     },
 }
 
