@@ -26,7 +26,5 @@ jobs:
           path-to-document: "https://github.com/jlcoulter/momus/blob/master/CLA.md"
           branch: "cla-signatures"
           allowlist: "jlcoulter,dependabot[bot],github-actions[bot]"
-          remote-repository-name: "momus"
-          remote-organization-name: "jlcoulter"
           lock-pullrequest-aftermerge: false
           use-dco-flag: true
