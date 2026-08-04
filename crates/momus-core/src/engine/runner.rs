@@ -223,6 +223,7 @@ async fn execute_request(req: &RequestStep, ctx: &mut RunContext) -> Result<Test
     );
 
     // Execute
+    let request_start = std::time::Instant::now();
     let response = match request_builder.send().await {
         Ok(resp) => resp,
         Err(e) => {
@@ -241,6 +242,7 @@ async fn execute_request(req: &RequestStep, ctx: &mut RunContext) -> Result<Test
             });
         }
     };
+    let response_time_ms = request_start.elapsed().as_millis() as u64;
 
     let status_code = response.status().as_u16();
     let response_headers: HashMap<String, String> = response
@@ -251,8 +253,13 @@ async fn execute_request(req: &RequestStep, ctx: &mut RunContext) -> Result<Test
     let response_body: Option<serde_json::Value> = response.json().await.ok();
 
     // Evaluate assertions
-    let assertion_results =
-        evaluate_assertions(&req.assert, status_code, &response_headers, &response_body);
+    let assertion_results = evaluate_assertions(
+        &req.assert,
+        status_code,
+        &response_headers,
+        &response_body,
+        response_time_ms,
+    );
 
     let passed = assertion_results.iter().all(|a| a.passed);
     let errors: Vec<String> = assertion_results
