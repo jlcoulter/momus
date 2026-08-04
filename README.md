@@ -1,28 +1,29 @@
 # Momus
 
 [![CI](https://github.com/jlcoulter/momus/actions/workflows/ci.yml/badge.svg)](https://github.com/jlcoulter/momus/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/momus.svg)](https://crates.io/crates/momus)
+[![Docs.rs](https://img.shields.io/docsrs/momus)](https://docs.rs/momus)
 [![Rust](https://img.shields.io/badge/rust-1.88+-blue.svg)](https://www.rust-lang.org)
-[![Edition](https://img.shields.io/badge/edition-2024-orange.svg)](https://doc.rust-lang.org/edition-guide/rust-2024/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 **Generic API test harness with a composable assertion AST.**
 
-Momus is a domain-agnostic test runner for HTTP APIs. Tests are defined as a JSON plan — a tree of steps (requests, sequences, parallel blocks) with composable assertions on responses.
+Momus is a domain-agnostic test runner for HTTP APIs. Tests are defined as a JSON plan — a tree of steps (requests, sequences, parallel blocks) with composable assertions on responses. No DSL, no vendor lock-in.
 
 ## Quick Start
 
 ```bash
-# Build
-cargo build --release
+# Install from source
+cargo install momus
 
 # Validate a test plan
-cargo run -- validate examples/health-check.json
+momus validate examples/health-check.json
 
 # Run against a server
-cargo run -- run examples/health-check.json --base-url http://localhost:8080
+momus run examples/health-check.json --base-url http://localhost:8080
 
 # Start a mock server for testing
-cargo run -- mock --port 8091
+momus mock --port 8091
 ```
 
 ## Example Test Plan
@@ -130,6 +131,52 @@ URLs, headers, and bodies support template substitution:
       ]
     }
   ]
+}
+```
+
+## Library Usage
+
+Add Momus to your `Cargo.toml`:
+
+```toml
+[dependencies]
+momus = "0.1"
+```
+
+Use the library to build and run test plans programmatically:
+
+```rust
+use momus::ast::*;
+use momus::engine::runner;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let plan = TestPlan {
+        name: "health check".into(),
+        base_url: "http://localhost:8080".into(),
+        default_headers: std::collections::HashMap::new(),
+        steps: vec![
+            Step::Request(RequestStep {
+                name: "health".into(),
+                method: Method::Get,
+                url: "/health".into(),
+                headers: std::collections::HashMap::new(),
+                body: None,
+                assert: vec![
+                    Assertion::Status(200),
+                    Assertion::json_path_eq("$.status", serde_json::json!("ok")),
+                ],
+                save_as: String::new(),
+                soft_fail: false,
+            }),
+        ],
+        setup: vec![],
+        teardown: vec![],
+    };
+
+    let report = runner::execute_plan(&plan).await?;
+    println!("{}", report);
+    Ok(())
 }
 ```
 

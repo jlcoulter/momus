@@ -8,6 +8,12 @@ version = "0.1.0"
 edition = "2024"
 description = "Generic API test harness with a composable assertion AST"
 license = "Apache-2.0"
+repository = "https://github.com/jlcoulter/momus"
+homepage = "https://github.com/jlcoulter/momus"
+documentation = "https://github.com/jlcoulter/momus#readme"
+readme = "README.md"
+keywords = ["testing", "api", "http", "assertions", "jsonpath"]
+categories = ["development-tools::testing", "web-programming::http-client"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -19,12 +25,7 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 axum = "0.8"
-uuid = { version = "1", features = ["v4"] }
-chrono = { version = "0.4", features = ["serde"] }
-indexmap = "2"
-toml = "0.8"
 regex = "1"
-jsonpath-rust = "0.7"
 futures = "0.3"
 http-body-util = "0.1"
 bytes = "1"
