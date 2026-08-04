@@ -11,6 +11,15 @@ pub mod assertion;
 
 pub use assertion::*;
 
+/// Escape HTML special characters for safe embedding in HTML output.
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
 // ---------------------------------------------------------------------------
 // Top-level plan
 // ---------------------------------------------------------------------------
@@ -226,6 +235,145 @@ pub struct RunReport {
 }
 
 impl RunReport {
+    /// Render the report as a self-contained HTML page.
+    pub fn to_html(&self) -> String {
+        let pass_pct = if self.total > 0 {
+            (self.passed as f64 / self.total as f64) * 100.0
+        } else {
+            100.0
+        };
+        let fail_pct = if self.total > 0 {
+            (self.failed as f64 / self.total as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        let mut groups_rows = String::new();
+        for group in &self.groups {
+            let group_pass_pct = if group.total > 0 {
+                (group.passed as f64 / group.total as f64) * 100.0
+            } else {
+                100.0
+            };
+            groups_rows.push_str(&format!(
+                r#"<tr><td>{name}</td><td>{total}</td><td class="green">{passed}</td><td class="red">{failed}</td><td>{pct:.1}%</td></tr>"#,
+                name = html_escape(&group.name),
+                total = group.total,
+                passed = group.passed,
+                failed = group.failed,
+                pct = group_pass_pct,
+            ));
+
+            for result in &group.results {
+                let status_icon = if result.passed { "✓" } else { "✗" };
+                let status_class = if result.passed { "pass" } else { "fail" };
+                let errors_html: String = result
+                    .errors
+                    .iter()
+                    .map(|e| format!("<div class=\"error\">{}</div>", html_escape(e)))
+                    .collect();
+                groups_rows.push_str(&format!(
+                    r#"<tr class="detail {status_class}"><td></td><td colspan="4"><span class="{status_class}">{icon}</span> <strong>{method}</strong> {url} <span class="status-code">{status}</span>{errors}</td></tr>"#,
+                    status_class = status_class,
+                    icon = status_icon,
+                    method = html_escape(&result.request_method),
+                    url = html_escape(&result.request_url),
+                    status = result.status_code,
+                    errors = errors_html,
+                ));
+            }
+        }
+
+        format!(
+            r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test Run Report — {plan_name}</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #1a1a2e; padding: 2rem; }}
+  .container {{ max-width: 1000px; margin: 0 auto; }}
+  h1 {{ font-size: 1.6rem; margin-bottom: 0.25rem; }}
+  .subtitle {{ color: #666; margin-bottom: 1.5rem; }}
+  .summary {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 2rem; }}
+  .card {{ background: #fff; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }}
+  .card .label {{ font-size: 0.75rem; text-transform: uppercase; color: #888; letter-spacing: 0.5px; }}
+  .card .value {{ font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem; }}
+  .card .value.green {{ color: #22c55e; }}
+  .card .value.red {{ color: #ef4444; }}
+  .card .value.blue {{ color: #3b82f6; }}
+  table {{ width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }}
+  th {{ background: #f0f2f5; text-align: left; padding: 0.75rem 1rem; font-size: 0.8rem; text-transform: uppercase; color: #666; letter-spacing: 0.5px; }}
+  td {{ padding: 0.5rem 1rem; border-top: 1px solid #e5e7eb; font-size: 0.9rem; }}
+  tr:hover td {{ background: #f9fafb; }}
+  .pass {{ color: #22c55e; }}
+  .fail {{ color: #ef4444; }}
+  .green {{ color: #22c55e; font-weight: 600; }}
+  .red {{ color: #ef4444; font-weight: 600; }}
+  .status-code {{ color: #888; font-size: 0.8rem; margin-left: 0.5rem; }}
+  .error {{ color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem; padding-left: 1rem; }}
+  tr.detail td {{ padding-left: 2rem; font-size: 0.85rem; }}
+  .footer {{ margin-top: 1.5rem; font-size: 0.8rem; color: #999; text-align: center; }}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Test Run Report</h1>
+  <p class="subtitle">Plan: {plan_name} &middot; {total} tests in {duration_ms}ms</p>
+
+  <div class="summary">
+    <div class="card">
+      <div class="label">Total</div>
+      <div class="value blue">{total}</div>
+    </div>
+    <div class="card">
+      <div class="label">Passed</div>
+      <div class="value green">{passed}</div>
+    </div>
+    <div class="card">
+      <div class="label">Failed</div>
+      <div class="value red">{failed}</div>
+    </div>
+    <div class="card">
+      <div class="label">Pass Rate</div>
+      <div class="value green">{pass_pct:.1}%</div>
+    </div>
+    <div class="card">
+      <div class="label">Fail Rate</div>
+      <div class="value red">{fail_pct:.1}%</div>
+    </div>
+    <div class="card">
+      <div class="label">Duration</div>
+      <div class="value">{duration_ms} <span style="font-size:0.8rem;font-weight:400;color:#888;">ms</span></div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Group</th><th>Total</th><th>Passed</th><th>Failed</th><th>Rate</th></tr>
+    </thead>
+    <tbody>
+      {groups_rows}
+    </tbody>
+  </table>
+
+  <div class="footer">Generated by Momus</div>
+</div>
+</body>
+</html>"#,
+            plan_name = html_escape(&self.plan_name),
+            total = self.total,
+            passed = self.passed,
+            failed = self.failed,
+            duration_ms = self.duration_ms,
+            pass_pct = pass_pct,
+            fail_pct = fail_pct,
+            groups_rows = groups_rows,
+        )
+    }
+
     pub fn write_results(&self, output_dir: &std::path::Path) -> anyhow::Result<()> {
         let results_dir = output_dir.join("results");
         std::fs::create_dir_all(&results_dir)?;
@@ -364,5 +512,62 @@ mod tests {
         assert_eq!(Method::Get.to_string(), "GET");
         assert_eq!(Method::Post.to_string(), "POST");
         assert_eq!(Method::Delete.to_string(), "DELETE");
+    }
+
+    #[test]
+    fn test_run_report_to_html() {
+        let report = RunReport {
+            plan_name: "my-test-plan".into(),
+            total: 5,
+            passed: 4,
+            failed: 1,
+            duration_ms: 1234,
+            groups: vec![TestGroupResult {
+                name: "group1".into(),
+                total: 5,
+                passed: 4,
+                failed: 1,
+                results: vec![
+                    TestResult {
+                        name: "test1".into(),
+                        passed: true,
+                        status_code: 200,
+                        request_method: "GET".into(),
+                        request_url: "/api/health".into(),
+                        request_headers: HashMap::new(),
+                        request_body: None,
+                        response_headers: HashMap::new(),
+                        response_body: None,
+                        assertion_results: vec![],
+                        errors: vec![],
+                    },
+                    TestResult {
+                        name: "test2".into(),
+                        passed: false,
+                        status_code: 500,
+                        request_method: "POST".into(),
+                        request_url: "/api/data".into(),
+                        request_headers: HashMap::new(),
+                        request_body: None,
+                        response_headers: HashMap::new(),
+                        response_body: None,
+                        assertion_results: vec![],
+                        errors: vec!["Internal server error".into()],
+                    },
+                ],
+            }],
+        };
+        let html = report.to_html();
+        assert!(html.contains("<!DOCTYPE html>"));
+        assert!(html.contains("Test Run Report"));
+        assert!(html.contains("my-test-plan"));
+        assert!(html.contains("80.0%")); // 4/5 = 80%
+        assert!(html.contains("20.0%")); // 1/5 = 20%
+        assert!(html.contains("GET"));
+        assert!(html.contains("/api/health"));
+        assert!(html.contains("POST"));
+        assert!(html.contains("/api/data"));
+        assert!(html.contains("Internal server error"));
+        assert!(html.contains("</html>"));
     }
 }

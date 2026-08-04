@@ -1,8 +1,15 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use momus_core::ast::*;
 use momus_core::engine::runner;
 use std::path::PathBuf;
+
+#[derive(ValueEnum, Debug, Clone)]
+enum OutputFormat {
+    Auto,
+    Html,
+    Text,
+}
 
 #[derive(Parser)]
 #[command(
@@ -26,6 +33,9 @@ enum Commands {
         /// Output directory for results.
         #[arg(long, default_value = "./output")]
         output: PathBuf,
+        /// Output format (auto-detect from --output extension, or force with this flag).
+        #[arg(long, value_enum, default_value = "auto")]
+        format: OutputFormat,
     },
     /// Validate a test plan JSON file.
     Validate {
@@ -51,6 +61,12 @@ enum Commands {
         /// Base URL override.
         #[arg(long)]
         base_url: Option<String>,
+        /// Output file for the HTML report (omit for stdout).
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Output format (auto-detect from --output extension, or force with this flag).
+        #[arg(long, value_enum, default_value = "auto")]
+        format: OutputFormat,
     },
     /// Fuzz test a plan with payload mutations.
     Fuzz {
@@ -129,6 +145,7 @@ async fn main() -> Result<()> {
             plan,
             base_url,
             output,
+            format,
         } => {
             let content = if plan == "-" {
                 use std::io::Read;
@@ -153,7 +170,32 @@ async fn main() -> Result<()> {
 
             let report = runner::execute_plan(&test_plan).await?;
 
-            println!("{}", report);
+            let want_html = match format {
+                OutputFormat::Html => true,
+                OutputFormat::Text => false,
+                OutputFormat::Auto => output
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e == "html")
+                    .unwrap_or(false),
+            };
+
+            if want_html {
+                let html = report.to_html();
+                if output.extension().and_then(|e| e.to_str()) == Some("html") {
+                    std::fs::create_dir_all(output.parent().unwrap_or(&output))?;
+                    std::fs::write(&output, &html)?;
+                    println!("HTML report written to: {}", output.display());
+                } else {
+                    // --format html but output is a directory — write report.html inside it
+                    std::fs::create_dir_all(&output)?;
+                    let html_path = output.join("report.html");
+                    std::fs::write(&html_path, &html)?;
+                    println!("HTML report written to: {}", html_path.display());
+                }
+            } else {
+                println!("{}", report);
+            }
 
             std::fs::create_dir_all(&output)?;
             report.write_results(&output)?;
@@ -222,6 +264,8 @@ async fn main() -> Result<()> {
             concurrency,
             duration,
             base_url,
+            output,
+            format,
         } => {
             let content = std::fs::read_to_string(&plan)?;
             let test_plan: TestPlan = serde_json::from_str(&content)?;
@@ -234,7 +278,32 @@ async fn main() -> Result<()> {
                 ..Default::default()
             };
             let report = momus_bench::run_bench(&test_plan, &config).await?;
-            println!("{}", report);
+
+            let want_html = match format {
+                OutputFormat::Html => true,
+                OutputFormat::Text => false,
+                OutputFormat::Auto => output
+                    .as_ref()
+                    .and_then(|p| p.extension())
+                    .and_then(|e| e.to_str())
+                    .map(|e| e == "html")
+                    .unwrap_or(false),
+            };
+
+            if want_html {
+                let html = report.to_html();
+                if let Some(path) = &output {
+                    std::fs::create_dir_all(path.parent().unwrap_or(path))?;
+                    std::fs::write(path, &html)?;
+                    println!("HTML report written to: {}", path.display());
+                } else {
+                    // stdout — just print the HTML
+                    println!("{}", html);
+                }
+            } else {
+                println!("{}", report);
+            }
+
             Ok(())
         }
         Commands::Fuzz {
