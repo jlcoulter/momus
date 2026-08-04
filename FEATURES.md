@@ -406,16 +406,16 @@ This document catalogs every feature across all momus crates, organized by imple
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| `run` subcommand | ✅ | |
-| `validate` subcommand | ✅ | |
-| `mock` subcommand | ✅ | |
-| `bench` subcommand | ✅ | Returns empty report |
-| `fuzz` subcommand | ✅ | Returns empty report |
-| `chaos` subcommand | ✅ | Returns empty report |
-| `contract` subcommand | ✅ | Returns empty report |
-| `guard` subcommand | ✅ | Returns empty report |
-| `diff` subcommand | ✅ | Returns empty report |
-| `convert` subcommand | ✅ | Dispatches to stubs |
+| `run` subcommand | ✅ | Full test plan execution |
+| `validate` subcommand | ✅ | Parse + validate test plan JSON |
+| `mock` subcommand | ✅ | Axum-based mock server |
+| `bench` subcommand | ✅ | Steady mode with latency histograms |
+| `fuzz` subcommand | ✅ | 4 mutators with HTTP dispatch + leak detection |
+| `chaos` subcommand | ✅ | 5 implemented experiments |
+| `contract` subcommand | ✅ | OpenAPI/GraphQL response validation |
+| `guard` subcommand | ✅ | 5 security check categories |
+| `diff` subcommand | ✅ | Field-level JSON diff between environments |
+| `convert` subcommand | ✅ | curl, HAR, FHIR converters implemented |
 | `--base-url` flag | ✅ | |
 | `--output` flag | ✅ | |
 | `--verbose` flag | ✅ | |
