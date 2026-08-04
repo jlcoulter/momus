@@ -38,13 +38,13 @@ pub fn update_resource(store: &MockStore, r#type: &str, id: &str, mut body: Valu
     body["id"] = Value::String(id.to_string());
     stamp_meta(&mut body);
     let mut store = store.lock().unwrap();
-    if let Some(resources) = store.get_mut(r#type) {
-        if let Some(pos) = resources.iter().position(|r| {
+    if let Some(resources) = store.get_mut(r#type)
+        && let Some(pos) = resources.iter().position(|r| {
             r.get("id").and_then(|v| v.as_str()) == Some(id)
-        }) {
-            resources[pos] = body.clone();
-            return Some(body);
-        }
+        })
+    {
+        resources[pos] = body.clone();
+        return Some(body);
     }
     None
 }
@@ -52,13 +52,13 @@ pub fn update_resource(store: &MockStore, r#type: &str, id: &str, mut body: Valu
 /// Delete a resource by type and ID (DELETE). Returns true if found and deleted.
 pub fn delete_resource(store: &MockStore, r#type: &str, id: &str) -> bool {
     let mut store = store.lock().unwrap();
-    if let Some(resources) = store.get_mut(r#type) {
-        if let Some(pos) = resources.iter().position(|r| {
+    if let Some(resources) = store.get_mut(r#type)
+        && let Some(pos) = resources.iter().position(|r| {
             r.get("id").and_then(|v| v.as_str()) == Some(id)
-        }) {
-            resources.remove(pos);
-            return true;
-        }
+        })
+    {
+        resources.remove(pos);
+        return true;
     }
     false
 }
@@ -110,11 +110,10 @@ pub fn search_resources(
     }
 
     // Apply _count
-    if let Some(count_str) = params.get("_count") {
-        if let Ok(count) = count_str.parse::<usize>() {
+    if let Some(count_str) = params.get("_count")
+        && let Ok(count) = count_str.parse::<usize>() {
             resources.truncate(count);
         }
-    }
 
     // Apply _summary
     if params.get("_summary").map(|s| s == "true").unwrap_or(false) {
@@ -176,49 +175,46 @@ fn stamp_meta(body: &mut Value) {
 /// Handles top-level fields, nested fields, and token/coding patterns.
 fn match_field(resource: &Value, key: &str, param_value: &str) -> bool {
     // Try exact match on top-level field
-    if let Some(val) = resource.get(key) {
-        if value_matches(val, param_value) {
+    if let Some(val) = resource.get(key)
+        && value_matches(val, param_value) {
             return true;
         }
-    }
 
     // Try nested field (e.g., "name.family")
-    if key.contains('.') {
-        if let Some(val) = resolve_field(resource, key) {
-            if value_matches(&val, param_value) {
-                return true;
-            }
-        }
+    if key.contains('.')
+        && let Some(val) = resolve_field(resource, key)
+        && value_matches(val, param_value)
+    {
+        return true;
     }
 
     // Try name array (e.g., resource has "name" array with "family" fields)
     if let Some(arr) = resource.get(key).and_then(|v| v.as_array()) {
         for item in arr {
-            if let Some(family) = item.get("family").and_then(|v| v.as_str()) {
-                if family == param_value {
-                    return true;
-                }
+            if let Some(family) = item.get("family").and_then(|v| v.as_str())
+                && family == param_value
+            {
+                return true;
             }
-            if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
-                if text == param_value {
-                    return true;
-                }
+            if let Some(text) = item.get("text").and_then(|v| v.as_str())
+                && text == param_value
+            {
+                return true;
             }
         }
     }
 
     // Try identifier array (e.g., resource has "identifier" with "value" fields)
-    if key == "identifier" || key.ends_with(".identifier") {
-        if let Some(arr) = resource.get("identifier").and_then(|v| v.as_array()) {
+    if (key == "identifier" || key.ends_with(".identifier"))
+        && let Some(arr) = resource.get("identifier").and_then(|v| v.as_array()) {
             for item in arr {
-                if let Some(val) = item.get("value").and_then(|v| v.as_str()) {
-                    if val == param_value {
-                        return true;
-                    }
+                if let Some(val) = item.get("value").and_then(|v| v.as_str())
+                    && val == param_value
+                {
+                    return true;
                 }
             }
         }
-    }
 
     false
 }
@@ -416,7 +412,7 @@ mod tests {
     fn test_create_assigns_id() {
         let store = new_store();
         let created = create_resource(&store, "Patient", json!({"name": "Test"}));
-        assert!(created["id"].as_str().unwrap().len() > 0);
+        assert!(!created["id"].as_str().unwrap().is_empty());
     }
 
     #[test]

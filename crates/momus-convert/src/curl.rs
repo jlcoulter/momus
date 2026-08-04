@@ -116,10 +116,13 @@ fn parse_curl_command(command: &str) -> Result<Vec<String>> {
     Ok(tokens)
 }
 
+/// Extracted parts from a parsed cURL command.
+type CurlParts = (String, String, HashMap<String, String>, Option<serde_json::Value>);
+
 /// Extract method, URL, headers, and body from parsed curl arguments.
 fn extract_request_parts(
     args: &[String],
-) -> Result<(String, String, HashMap<String, String>, Option<serde_json::Value>)> {
+) -> Result<CurlParts> {
     let mut method = String::from("GET");
     let mut url = String::new();
     let mut headers: HashMap<String, String> = HashMap::new();
@@ -244,7 +247,7 @@ fn extract_request_parts(
             if b.trim().starts_with('{') || b.trim().starts_with('[') {
                 serde_json::from_str(&b)
                     .ok()
-                    .or_else(|| Some(serde_json::Value::String(b)))
+                    .or(Some(serde_json::Value::String(b)))
             } else {
                 Some(serde_json::Value::String(b))
             }

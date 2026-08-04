@@ -130,13 +130,11 @@ pub async fn run_fuzz(plan: &TestPlan, config: &FuzzConfig) -> Result<FuzzReport
                     }
 
                     // Check for info leaks in error responses
-                    if !status.is_success() {
-                        if let Ok(body) = resp.text().await {
-                            if has_info_leak(&body) {
+                    if !status.is_success()
+                        && let Ok(body) = resp.text().await
+                            && has_info_leak(&body) {
                                 leaks.fetch_add(1, Ordering::Relaxed);
                             }
-                        }
-                    }
                 }
                 Err(_) => {
                     errors.fetch_add(1, Ordering::Relaxed);
@@ -161,11 +159,11 @@ pub async fn run_fuzz(plan: &TestPlan, config: &FuzzConfig) -> Result<FuzzReport
 
     Ok(FuzzReport {
         plan_name: plan.name.clone(),
-        total_mutations: total_count as u64,
-        passed: passed_count as u64,
-        rejected: rejected_count as u64,
-        errors: error_count as u64,
-        leaks: leak_count as u64,
+        total_mutations: total_count,
+        passed: passed_count,
+        rejected: rejected_count,
+        errors: error_count,
+        leaks: leak_count,
         duration_secs: elapsed,
         mutators_applied: applied_mutators,
     })

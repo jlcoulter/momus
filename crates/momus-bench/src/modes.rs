@@ -97,7 +97,6 @@ async fn run_steady(
         let errors = errors.clone();
         let latencies = latencies.clone();
         let semaphore = semaphore.clone();
-        let start = start;
 
         let handle = tokio::spawn(async move {
             loop {
@@ -189,7 +188,7 @@ async fn run_steady(
 
     Ok(BenchReport {
         mode: "steady".into(),
-        total_requests: total_requests as u64,
+        total_requests,
         duration_secs: elapsed,
         p50_ms: p50,
         p90_ms: p90,
@@ -198,7 +197,7 @@ async fn run_steady(
         avg_ms: avg,
         min_ms: min,
         max_ms: max,
-        error_count: error_count as u64,
+        error_count,
         error_rate: if total_requests > 0 {
             error_count as f64 / total_requests as f64
         } else {
