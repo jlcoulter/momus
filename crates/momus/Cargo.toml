@@ -1,32 +1,24 @@
 [package]
-name = "momus-cli"
+name = "momus"
 version = "0.1.0"
 edition = "2024"
-description = "Momus API test harness — CLI runner"
+description = "Generic API test harness with a composable assertion AST (umbrella crate)"
 license = "Apache-2.0"
 repository = "https://github.com/jlcoulter/momus"
 homepage = "https://github.com/jlcoulter/momus"
 documentation = "https://github.com/jlcoulter/momus#readme"
-readme = "README.md"
 keywords = ["testing", "api", "http", "assertions", "jsonpath"]
 categories = ["development-tools::testing", "web-programming::http-client"]
 
 [dependencies]
 momus-core = { version = "0.1", path = "../momus-core" }
 momus-mock = { version = "0.1", path = "../momus-mock" }
-momus-convert = { version = "0.1", path = "../momus-convert", features = [
-    "openapi", "postman", "har", "curl", "graphql", "grpc", "fhir",
-] }
+momus-convert = { version = "0.1", path = "../momus-convert" }
 momus-bench = { version = "0.1", path = "../momus-bench" }
 momus-fuzz = { version = "0.1", path = "../momus-fuzz" }
 momus-chaos = { version = "0.1", path = "../momus-chaos" }
 momus-contract = { version = "0.1", path = "../momus-contract" }
 momus-guard = { version = "0.1", path = "../momus-guard" }
 momus-diff = { version = "0.1", path = "../momus-diff" }
-anyhow = "1"
-clap = { version = "4", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["full"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-axum = "0.8"
+anyhow = "1"

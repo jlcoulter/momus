@@ -38,6 +38,39 @@ enum Commands {
         #[arg(long, default_value = "0")]
         port: u16,
     },
+    /// Load test a plan (steady, max-throughput, or soak).
+    Bench {
+        /// Path to the test plan JSON file.
+        plan: PathBuf,
+        /// Concurrency level.
+        #[arg(long, default_value = "10")]
+        concurrency: usize,
+        /// Duration in seconds (0 = one-shot).
+        #[arg(long, default_value = "30")]
+        duration: u64,
+        /// Base URL override.
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+    /// Fuzz test a plan with payload mutations.
+    Fuzz {
+        /// Path to the test plan JSON file.
+        plan: PathBuf,
+        /// Number of mutations to generate.
+        #[arg(long, default_value = "1000")]
+        iterations: usize,
+        /// Base URL override.
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+    /// Run chaos experiments against a plan.
+    Chaos {
+        /// Path to the test plan JSON file.
+        plan: PathBuf,
+        /// Base URL override.
+        #[arg(long)]
+        base_url: Option<String>,
+    },
     /// Convert an API description into a test plan.
     Convert {
         /// Input format: openapi, postman, har, curl, graphql, grpc, fhir
@@ -47,6 +80,36 @@ enum Commands {
         /// Output file for the test plan (default: stdout).
         #[arg(short, long)]
         output: Option<PathBuf>,
+    },
+    /// Validate API responses against an OpenAPI/GraphQL spec.
+    Contract {
+        /// Path to the test plan JSON file.
+        plan: PathBuf,
+        /// Path to the API spec file (OpenAPI YAML/JSON or GraphQL SDL).
+        #[arg(long)]
+        spec: String,
+        /// Base URL override.
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+    /// Security scan a plan for common vulnerabilities.
+    Guard {
+        /// Path to the test plan JSON file.
+        plan: PathBuf,
+        /// Base URL override.
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+    /// Diff responses between two environments.
+    Diff {
+        /// Path to the test plan JSON file.
+        plan: PathBuf,
+        /// Baseline URL (e.g. production).
+        #[arg(long)]
+        baseline: String,
+        /// Target URL (e.g. staging).
+        #[arg(long)]
+        target: String,
     },
 }
 
@@ -152,6 +215,98 @@ async fn main() -> Result<()> {
                 Some(path) => std::fs::write(path, json)?,
                 None => println!("{}", json),
             }
+            Ok(())
+        }
+        Commands::Bench {
+            plan,
+            concurrency,
+            duration,
+            base_url,
+        } => {
+            let content = std::fs::read_to_string(&plan)?;
+            let test_plan: TestPlan = serde_json::from_str(&content)?;
+            let config = momus_bench::BenchConfig {
+                mode: momus_bench::BenchMode::Steady {
+                    concurrency,
+                    duration_secs: duration,
+                },
+                base_url,
+                ..Default::default()
+            };
+            let report = momus_bench::run_bench(&test_plan, &config).await?;
+            println!("{}", report);
+            Ok(())
+        }
+        Commands::Fuzz {
+            plan,
+            iterations,
+            base_url,
+        } => {
+            let content = std::fs::read_to_string(&plan)?;
+            let test_plan: TestPlan = serde_json::from_str(&content)?;
+            let config = momus_fuzz::FuzzConfig {
+                iterations,
+                base_url,
+                ..Default::default()
+            };
+            let report = momus_fuzz::run_fuzz(&test_plan, &config).await?;
+            println!("{}", report);
+            Ok(())
+        }
+        Commands::Chaos { plan, base_url } => {
+            let content = std::fs::read_to_string(&plan)?;
+            let test_plan: TestPlan = serde_json::from_str(&content)?;
+            let config = momus_chaos::ChaosConfig {
+                base_url,
+                ..Default::default()
+            };
+            let reports = momus_chaos::run_chaos(&test_plan, &config).await?;
+            for report in &reports {
+                println!("{}", report);
+            }
+            Ok(())
+        }
+        Commands::Contract {
+            plan,
+            spec,
+            base_url,
+        } => {
+            let content = std::fs::read_to_string(&plan)?;
+            let test_plan: TestPlan = serde_json::from_str(&content)?;
+            let config = momus_contract::ContractConfig {
+                spec_path: spec,
+                base_url,
+                ..Default::default()
+            };
+            let report = momus_contract::run_contract(&test_plan, &config).await?;
+            println!("{}", report);
+            Ok(())
+        }
+        Commands::Guard { plan, base_url } => {
+            let content = std::fs::read_to_string(&plan)?;
+            let test_plan: TestPlan = serde_json::from_str(&content)?;
+            let config = momus_guard::GuardConfig {
+                base_url,
+                ..Default::default()
+            };
+            let report = momus_guard::run_guard(&test_plan, &config).await?;
+            println!("{}", report);
+            Ok(())
+        }
+        Commands::Diff {
+            plan,
+            baseline,
+            target,
+        } => {
+            let content = std::fs::read_to_string(&plan)?;
+            let test_plan: TestPlan = serde_json::from_str(&content)?;
+            let config = momus_diff::DiffConfig {
+                baseline_url: baseline,
+                target_url: target,
+                ..Default::default()
+            };
+            let report = momus_diff::run_diff(&test_plan, &config).await?;
+            println!("{}", report);
             Ok(())
         }
     }
