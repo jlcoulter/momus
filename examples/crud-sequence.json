@@ -1,0 +1,49 @@
+{
+  "name": "create then read",
+  "base_url": "http://localhost:8080",
+  "default_headers": {
+    "Content-Type": "application/json",
+    "Accept": "application/json"
+  },
+  "steps": [
+    {
+      "type": "sequence",
+      "name": "crud",
+      "steps": [
+        {
+          "type": "request",
+          "name": "create item",
+          "method": "POST",
+          "url": "/api/items",
+          "body": { "name": "test-item", "value": 42 },
+          "assert": [
+            { "status": 201 },
+            { "content_type": "application/json" },
+            { "json_path": { "path": "$.id", "predicate": { "exists": null } } }
+          ],
+          "save_as": "created_item"
+        },
+        {
+          "type": "request",
+          "name": "read item",
+          "method": "GET",
+          "url": "/api/items/{steps.created_item.id}",
+          "assert": [
+            { "status": 200 },
+            { "json_path": { "path": "$.name", "predicate": { "eq": "test-item" } } },
+            { "json_path": { "path": "$.value", "predicate": { "cmp": { "op": "ge", "value": 40 } } } }
+          ]
+        },
+        {
+          "type": "request",
+          "name": "delete item",
+          "method": "DELETE",
+          "url": "/api/items/{steps.created_item.id}",
+          "assert": [
+            { "status": 204 }
+          ]
+        }
+      ]
+    }
+  ]
+}

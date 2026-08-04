@@ -1,0 +1,21 @@
+{
+  "name": "health check",
+  "base_url": "http://localhost:8080",
+  "default_headers": {
+    "Accept": "application/json"
+  },
+  "steps": [
+    {
+      "type": "request",
+      "name": "health endpoint",
+      "method": "GET",
+      "url": "/health",
+      "assert": [
+        { "status": 200 },
+        { "content_type": "application/json" },
+        { "json_path": { "path": "$.status", "predicate": { "eq": "ok" } } },
+        { "valid_json": null }
+      ]
+    }
+  ]
+}

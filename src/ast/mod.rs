@@ -50,7 +50,7 @@ impl TestPlan {
 
 /// A single step in a test plan.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Step {
     /// A single HTTP request with assertions.
     Request(RequestStep),
