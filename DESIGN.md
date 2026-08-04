@@ -12,33 +12,49 @@ That pipeline is not FHIR-specific. Every API testing workflow follows the same 
 
 ## Crate Map
 
-The Momus workspace is organized as a set of crates, each with a single responsibility. The dependency direction is always toward `momus-core` — frontends depend on the core, never the other way.
+The Momus workspace is organized as a set of crates, each with a single responsibility. The dependency direction is always toward `momus-core` — every other crate depends on the core, never the other way.
 
 ```
 momus/                          # workspace root
 ├── crates/
+│   ├── momus/                  # Umbrella crate: re-exports, builder, prelude
 │   ├── momus-core/             # AST types, assertion evaluation, plan runner, template resolution
 │   ├── momus-mock/             # Configurable mock HTTP server
+│   ├── momus-convert/          # Convert API descriptions into test plans
+│   │   ├── curl.rs             #   cURL command → TestPlan (v0.1.0)
+│   │   ├── har.rs              #   HAR file → TestPlan (v0.1.0)
+│   │   ├── openapi.rs          #   OpenAPI 3.x → TestPlan (WIP)
+│   │   ├── postman.rs          #   Postman Collection → TestPlan (WIP)
+│   │   ├── graphql.rs          #   GraphQL SDL → TestPlan (WIP)
+│   │   ├── grpc.rs             #   gRPC proto → TestPlan (WIP)
+│   │   └── fhir.rs             #   FHIR IG → TestPlan (WIP)
 │   ├── momus-bench/            # Load testing: steady, max-throughput, soak modes
 │   ├── momus-fuzz/             # Payload mutation: boundary, encoding, type mismatch, cardinality
-│   ├── momus-openapi/          # OpenAPI 3.x frontend: spec → TestPlan
-│   ├── momus-postman/          # Postman Collection v2.1 frontend: collection → TestPlan
-│   ├── momus-har/              # HAR (HTTP Archive) frontend: recorded traffic → TestPlan
-│   ├── momus-curl/             # cURL command frontend: curl → TestPlan
-│   ├── momus-graphql/          # GraphQL frontend: SDL/introspection → TestPlan
-│   ├── momus-grpc/             # gRPC frontend: proto reflection → TestPlan
-│   ├── momus-fhir/             # FHIR frontend: IG package → TestPlan (extracted from fhir-autotest)
-│   └── momus-cli/              # CLI binary: run, validate, mock, bench, fuzz, convert
+│   ├── momus-chaos/            # Chaos engineering: network, service, resource, state faults
+│   ├── momus-contract/         # Contract testing: validate responses against OpenAPI/GraphQL specs
+│   ├── momus-guard/            # Security scanning: auth, CORS, info leaks, exposed endpoints
+│   ├── momus-diff/             # Regression/diff testing: compare responses between environments
+│   └── momus-cli/              # CLI binary: run, validate, mock, bench, fuzz, chaos, contract, guard, diff, convert
 └── examples/
     ├── health-check.json
-    └── petstore.json
+    └── crud-sequence.json
 ```
+
+### momus (umbrella)
+
+The top-level `momus` crate re-exports all sub-crates and provides convenience APIs:
+
+- **`prelude`** — re-exports common types (`TestPlan`, `Step`, `Assertion`, `Method`, `RunReport`, `runner`)
+- **`builder`** — programmatic plan construction (`TestPlanBuilder`, `RequestStepBuilder`, `SequenceStepBuilder`)
+- **`load_plan` / `parse_plan` / `validate_plan`** — convenience functions
+
+Users who want the full toolkit depend on `momus`. Users who only need the AST depend on `momus-core`.
 
 ### momus-core
 
 The foundation. No CLI, no config file parsing, no protocol-specific logic. Just the AST and the engine that executes it.
 
-**AST types** (`momus::ast`):
+**AST types** (`momus_core::ast`):
 - `TestPlan` — top-level: name, base_url, default_headers, steps, setup, teardown
 - `Step` — tagged union: `Request`, `Sequence`, `Parallel`, `Script`, `Noop`
 - `RequestStep` — method, url, headers, body, assertions, save_as, soft_fail
@@ -46,7 +62,7 @@ The foundation. No CLI, no config file parsing, no protocol-specific logic. Just
 - `Assertion` — composable tree: `AllOf`, `AnyOf`, `Not`, `Status`, `StatusIn`, `Header`, `BodyLength`, `ContentType`, `ValidJson`, `JsonPath`, `Schema`, `ResponseTime`
 - `TestResult`, `TestGroupResult`, `RunReport` — output types
 
-**Engine** (`momus::engine`):
+**Engine** (`momus_core::engine`):
 - `runner::execute_plan` — walks the step tree, resolves `{base_url}` and `{steps.<name>.*}` templates, dispatches HTTP requests, evaluates assertions, collects results
 - `evaluator::evaluate_assertions` — evaluates the assertion tree against a response
 - `templates::resolve_url`, `resolve_body`, `resolve_headers` — template substitution
@@ -59,41 +75,54 @@ The foundation. No CLI, no config file parsing, no protocol-specific logic. Just
 
 ### momus-mock
 
-A configurable mock HTTP server for testing. Extracted from the FHIR project's `mock_server.rs`.
+A configurable mock HTTP server for testing.
 
 - Route-based response matching (`"GET /path"` → canned JSON response)
 - Custom handler functions for dynamic responses
 - Request recording for verification
 - Graceful shutdown
 
+### momus-convert
+
+Converts API descriptions into `TestPlan` JSON. Each format is a feature-gated module:
+
+| Module | Format | Status |
+|--------|--------|--------|
+| `curl` | cURL command string | ✅ v0.1.0 — full parser |
+| `har` | HAR (HTTP Archive) file | ✅ v0.1.0 — full converter |
+| `openapi` | OpenAPI 3.x YAML/JSON | 🔜 Stub |
+| `postman` | Postman Collection v2.1 | 🔜 Stub |
+| `graphql` | GraphQL SDL / introspection | 🔜 Stub |
+| `grpc` | gRPC proto file | 🔜 Stub |
+| `fhir` | FHIR IG package | 🔜 Stub |
+
+The converters are modules inside a single crate rather than individual crates because they share the same interface (`fn convert(input: &str) -> Result<TestPlan>`) and dependency set. They can graduate to their own crates when implementations warrant it.
+
+**cURL parser** handles: `-X`/`--request`, `-H`/`--header`, `-d`/`--data`/`--data-raw`/`--data-binary`, URL, `--max-time`, `-u`/`--user` (basic auth), and `-b`/`--cookie`.
+
+**HAR converter** reads HAR 1.2 format, extracts each request/response pair, and produces a `RequestStep` with a `Status` assertion matching the recorded status code. The generated plan is a starting point — users add `JsonPath`, `Schema`, and `ResponseTime` assertions on top.
+
 ### momus-bench
 
-Load testing engine. Extracted from the FHIR project's `crates/benchmark/`.
-
-Takes a `TestPlan` and runs it under load. The execution model is fundamentally different from the assertion runner — concurrent stateless fire-and-forget rather than sequential stateful execution.
+Load testing engine. Takes a `TestPlan` and runs it under load. The execution model is fundamentally different from the assertion runner — concurrent stateless fire-and-forget rather than sequential stateful execution.
 
 **Modes:**
 - **Steady** — fixed concurrency for a fixed duration (or one-shot)
 - **Max-throughput** — ramp concurrency upward until error rate or latency threshold is breached
 - **Soak** — sustained load at fixed concurrency for hours
 
-**Features:**
+**Features (planned):**
 - Warmup phase (N requests before recording)
 - HDR histogram latency recording (P50/P90/P95/P99 per group and overall)
 - Per-group statistics
 - Report generation: JSON summary, full results JSON, text report, HTML dashboard
 - Signal handling (Ctrl+C graceful shutdown)
 
-**What gets replaced from the FHIR version:**
-- `fhir_autotest::generate::model::TestPlan` → `momus::ast::TestPlan`
-- `fhir_autotest::config::models::TestConfig` → `momus_bench::BenchConfig`
-- FHIR-specific data ensure/cleanup → generic setup/teardown from the TestPlan
+**Status:** Scaffolded in v0.1.0 with types, config, and report structs. Runner stubs return empty reports. Implementation planned for v0.2.0.
 
 ### momus-fuzz
 
-Payload mutation engine. Extracted from the FHIR project's `crates/fhir-autotest-fuzz/`.
-
-Takes a valid JSON payload and produces mutated variants. The `Mutator` trait is the extension point:
+Payload mutation engine. Takes a valid JSON payload and produces mutated variants. The `Mutator` trait is the extension point:
 
 ```rust
 pub trait Mutator: Send + Sync {
@@ -102,110 +131,63 @@ pub trait Mutator: Send + Sync {
 }
 ```
 
-**Built-in mutators:**
+**Built-in mutators (v0.1.0):**
 - **Boundary** — empty strings, very long strings, zero/negative/NaN numbers, extreme dates, null values
 - **Encoding** — JSON injection, deeply nested objects, duplicate keys, unicode normalization attacks, null bytes
 - **Type mismatch** — string where number expected, array where object expected, boolean where string expected
 - **Cardinality** — remove required fields, duplicate array elements, add unexpected fields, empty arrays
-- **Search param** — SQL injection, format string exploits, path traversal, extremely long values
 
-The fuzzer generates a valid resource, applies each mutator, sends the variant to the server, and classifies the response (passed, rejected, error, leak). It detects information leakage (stack traces, SQL errors, path disclosure) in error responses.
+All mutators use a deterministic PRNG (`SimpleRng`) so the same `(base, seed)` pair always produces the same mutation.
 
-### momus-openapi
+**Status:** Mutators are implemented and tested. The runner that sends mutations to a server and classifies responses is a stub — implementation planned for v0.2.0.
 
-An OpenAPI 3.x frontend. Walks the spec's paths and produces a `TestPlan`.
+### momus-chaos
 
-- Generates CRUD sequences for each path pattern (`POST /users` → `GET /users/{id}` → `PUT /users/{id}` → `DELETE /users/{id}`)
-- Extracts response schemas for `JsonPath` and `Schema` assertions
-- Generates boundary tests from parameter constraints (min/max, pattern, enum)
-- Generates negative tests (required field missing, type violation)
+Chaos engineering engine. Injects infrastructure-level faults into a running system and verifies that the system self-heals, degrades gracefully, or fails safely.
 
-### momus-postman
+**Experiment types (v0.1.0):**
 
-A Postman Collection v2.1 frontend. Converts a Postman collection export into a `TestPlan`.
+| Category | Experiment | Description |
+|----------|-----------|-------------|
+| Network | `NetworkLatency` | Inject artificial delay into requests to a specific endpoint |
+| Network | `ConnectionReset` | Simulate connection resets for a percentage of requests |
+| Network | `PacketLoss` | Drop a percentage of requests |
+| Service | `ServiceError` | Return a specific HTTP status code for a matching endpoint |
+| Service | `ServiceDown` | Simulate a downstream service being unreachable |
+| Resource | `CpuPressure` | Busy-loop on N cores |
+| Resource | `MemoryPressure` | Allocate N MB of memory |
+| State | `ClockSkew` | Simulate clock offset |
 
-Postman collections are the most widely-used format for hand-written API tests. Every item in a collection maps to a `RequestStep`. Key mappings:
+**Status:** Scaffolded in v0.1.0 with types, config, and report structs. Runner stubs return empty reports. Implementation planned for v0.2.0.
 
-| Postman Concept | Momus Concept |
-|----------------|---------------|
-| Item (request) | `RequestStep` — method, url, headers, body |
-| Folder | `SequenceStep` — groups related requests |
-| `pm.response.to.have.status(code)` | `Assertion::Status(code)` |
-| `pm.response.to.have.jsonBody(path)` | `Assertion::JsonPath` with `Exists` |
-| `pm.variables.set("x", val)` | `save_as` — makes value available as `{steps.<name>.x}` |
-| `pm.variables.get("x")` | `{steps.<name>.x}` template in subsequent steps |
-| Pre-request scripts | `ScriptStep` (future — Rhai) |
-| Tests tab assertions | `Assertion` tree |
+### momus-contract
 
-Postman's variable substitution (`{{variable}}`) maps to Momus template syntax. Collection-level and environment-level variables become `default_headers` or step-level overrides.
+Contract testing. Runs a test plan and validates each response against the API's declared schema (OpenAPI or GraphQL). Reports compliance percentage, missing fields, type mismatches, and undocumented fields.
 
-The Postman ecosystem is large — Newman, workspaces, environments, chaining. The initial implementation targets the core subset: collection JSON → runnable plan. Environment files are merged at conversion time.
+**Status:** Scaffolded in v0.1.0. Implementation planned for v0.2.0.
 
-### momus-har
+### momus-guard
 
-A HAR (HTTP Archive) frontend. Converts recorded browser traffic into a `TestPlan`.
+Security scanning. Inspects responses for common security issues:
 
-HAR files are the standard export format from browser DevTools. Every entry in a HAR file maps to a `RequestStep` with a `Status` assertion matching the recorded status code. This enables:
+- Missing or weak authentication headers
+- CORS misconfiguration (permissive origins, credentials with wildcard)
+- Information leakage (stack traces, SQL errors, path disclosure in error bodies)
+- Exposed internal endpoints
+- Missing security headers (HSTS, CSP, X-Content-Type-Options)
 
-- **Regression test generation** — record traffic from a working session, convert to a plan, run it after deployments to verify nothing broke
-- **Traffic replay** — replay recorded requests against a new environment
-- **Baseline comparison** — run the same plan against staging and production, compare results
+**Status:** Scaffolded in v0.1.0. Implementation planned for v0.2.0.
 
-HAR files contain no assertions beyond the recorded status code. The generated plan is a starting point — users add `JsonPath`, `Schema`, and `ResponseTime` assertions on top. The HAR frontend is a scaffolding tool, not a complete test generator.
+### momus-diff
 
-### momus-curl
+Regression/diff testing. Runs the same test plan against two environments (e.g. staging vs production) and reports differences:
 
-A cURL command frontend. Parses a `curl` command and produces a single `RequestStep`.
+- Status code changes
+- New or missing response fields
+- Modified field values
+- Header differences
 
-```bash
-momus curl 'curl -X POST https://api.example.com/users \
-  -H "Authorization: Bearer token" \
-  -d '{"name": "test"}' \
-  --max-time 5'
-```
-
-This is the fastest path from "I have a working curl command" to "I have a repeatable test." The output is a minimal `TestPlan` with one step. Users can then add assertions, wrap it in a sequence, or combine multiple curl commands into a plan.
-
-The parser handles: `-X`/`--request`, `-H`/`--header`, `-d`/`--data`/`--data-raw`/`--data-binary`, URL, `--max-time`, `-u`/`--user` (basic auth), and `-b`/`--cookie`.
-
-### momus-graphql
-
-A GraphQL frontend. Introspects a GraphQL endpoint or reads an SDL file and produces a `TestPlan`.
-
-GraphQL has a fundamentally different execution model from REST — a single endpoint, queries and mutations as operations, a type system for both inputs and outputs. The frontend:
-
-- Introspects the schema (or reads a `.graphql`/`.gql` SDL file)
-- Generates a query for each type in the schema (with field selections)
-- Generates a mutation for each mutation field (with required argument values)
-- Extracts response type definitions for `Schema` assertions
-- Generates negative tests (omit required arguments, send wrong argument types)
-
-GraphQL responses always return 200 with `{"data": ...}` or `{"errors": [...]}`. Assertions focus on the response body structure rather than status codes — `JsonPath("$.data.user.name", Exists)` and `JsonPath("$.errors", NotExists)`.
-
-### momus-grpc
-
-A gRPC frontend. Reads a `.proto` file or connects to a gRPC reflection endpoint and produces a `TestPlan`.
-
-gRPC requires protobuf serialization and a different transport (HTTP/2). This crate depends on `tonic` and `prost-reflect` for dynamic message handling. The frontend:
-
-- Reads `.proto` files or connects to a gRPC reflection service
-- Generates a test for each RPC method on each service
-- Generates valid protobuf messages from the field descriptors
-- Generates boundary tests from field constraints (scalar types, enums, oneofs)
-- Generates negative tests (missing required fields, wrong types)
-
-The transport adapter for gRPC is more involved than HTTP — it needs dynamic protobuf serialization at runtime. The `TransportAdapter` trait in `momus-core` is the abstraction point.
-
-### momus-fhir
-
-The FHIR frontend. This is what fhir-autotest becomes after refactoring — a crate that depends on `momus-core` and compiles FHIR artifacts into `TestPlan` JSON.
-
-The existing fhir-autotest codebase stays intact as the reference implementation. The refactoring path is:
-1. Replace the inline `TestCase`/`TestPlan` types with `momus::ast::*`
-2. Replace the inline assertion types with `momus::ast::Assertion`
-3. Replace the inline HTTP executor with `momus::engine::runner`
-4. Replace the inline mock server with `momus_mock`
-5. The FHIR-specific code (IG parsing, profile resolution, resource generation, conformance test generation) stays in `momus-fhir`
+**Status:** Scaffolded in v0.1.0. Implementation planned for v0.2.0.
 
 ### momus-cli
 
@@ -217,15 +199,19 @@ momus validate plan.json               # momus-core: parse + validate a test pla
 momus mock [--port 8091]               # momus-mock: start a mock server
 momus bench plan.json [--concurrency N] # momus-bench: load test
 momus fuzz plan.json [--iterations N]   # momus-fuzz: fuzz test
+momus chaos plan.json                  # momus-chaos: chaos experiments
+momus contract plan.json --spec spec.yaml # momus-contract: contract validation
+momus guard plan.json                  # momus-guard: security scan
+momus diff plan.json --baseline URL --target URL # momus-diff: regression diff
 
 # Convert API descriptions into test plans
-momus convert openapi spec.yaml        # momus-openapi: OpenAPI → plan
-momus convert postman collection.json  # momus-postman: Postman → plan
-momus convert har traffic.har          # momus-har: HAR → plan
-momus convert curl 'curl ...'          # momus-curl: curl command → plan
-momus convert graphql schema.graphql   # momus-graphql: SDL → plan
-momus convert grpc proto/service.proto # momus-grpc: protobuf → plan
-momus convert fhir package.tgz         # momus-fhir: FHIR IG → plan
+momus convert curl 'curl ...'          # momus-convert: curl command → plan
+momus convert har traffic.har          # momus-convert: HAR → plan
+momus convert openapi spec.yaml        # momus-convert: OpenAPI → plan (WIP)
+momus convert postman collection.json  # momus-convert: Postman → plan (WIP)
+momus convert graphql schema.graphql   # momus-convert: SDL → plan (WIP)
+momus convert grpc proto/service.proto # momus-convert: protobuf → plan (WIP)
+momus convert fhir package.tgz         # momus-convert: FHIR IG → plan (WIP)
 ```
 
 ## What Momus Is Not
@@ -238,35 +224,42 @@ The `momus-fuzz` crate generates mutated payloads, but it is not a coverage-guid
 
 gRPC, GraphQL, and Protobuf each require fundamentally different transport and serialization. A `TransportAdapter` trait is the right abstraction, but implementing it for each protocol is a crate's worth of work per protocol. Start with HTTP/REST and prove the architecture before expanding.
 
+### Not a chaos platform
+
+The `momus-chaos` crate defines experiment types and reports, but the actual fault injection (network latency, CPU pressure, etc.) requires platform-specific tooling (tc, stress-ng, iptables). Momus-chaos orchestrates experiments and validates system behavior — it does not replace dedicated chaos engineering platforms like Chaos Mesh or Gremlin.
+
 ## Future State: End-to-End Workflow
 
 ```
-# 1. Generate a test plan from an API spec
-momus convert openapi petstore.yaml > plan.json
-
-# 2. Or from a Postman collection
-momus convert postman my-collection.json > plan.json
-
-# 3. Or from a curl command you already have working
+# 1. Generate a test plan from a curl command
 momus convert curl 'curl -X POST https://api.example.com/users -d "{\"name\":\"test\"}"' > plan.json
 
-# 4. Or from recorded browser traffic
+# 2. Or from recorded browser traffic
 momus convert har traffic.har > plan.json
 
-# 5. Validate the plan
+# 3. Validate the plan
 momus validate plan.json
 
-# 6. Run the tests
+# 4. Run the tests
 momus run plan.json --base-url http://localhost:8080
 
-# 7. Load test
+# 5. Load test
 momus bench plan.json --concurrency 50 --duration 60
 
-# 8. Fuzz test
+# 6. Fuzz test
 momus fuzz plan.json --iterations 10000
 
-# 9. Or all at once with a FHIR IG package
-momus convert fhir my-ig.tgz | momus run --mock -
+# 7. Chaos test
+momus chaos plan.json
+
+# 8. Contract validation
+momus contract plan.json --spec openapi.yaml
+
+# 9. Security scan
+momus guard plan.json
+
+# 10. Diff between environments
+momus diff plan.json --baseline https://prod --target https://staging
 ```
 
 Each step is a separate crate with a single responsibility. They compose via the `TestPlan` JSON format — the universal contract between frontends and engines.
