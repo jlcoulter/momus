@@ -1,0 +1,26 @@
+[package]
+name = "momus-cli"
+version = "0.1.0"
+edition = "2024"
+description = "Momus API test harness — CLI runner"
+license = "Apache-2.0"
+repository = "https://github.com/jlcoulter/momus"
+homepage = "https://github.com/jlcoulter/momus"
+documentation = "https://github.com/jlcoulter/momus#readme"
+readme = "README.md"
+keywords = ["testing", "api", "http", "assertions", "jsonpath"]
+categories = ["development-tools::testing", "web-programming::http-client"]
+
+[dependencies]
+momus-core = { path = "../momus-core" }
+momus-mock = { path = "../momus-mock" }
+momus-convert = { path = "../momus-convert", features = [
+    "openapi", "postman", "har", "curl", "graphql", "grpc", "fhir",
+] }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+axum = "0.8"
