@@ -1,31 +1,23 @@
 [workspace]
 resolver = "2"
-members = ["."]
+members = [
+    "crates/momus-core",
+    "crates/momus-mock",
+    "crates/momus-convert",
+    "crates/momus-bench",
+    "crates/momus-fuzz",
+    "crates/momus-chaos",
+    "crates/momus-contract",
+    "crates/momus-guard",
+    "crates/momus-diff",
+    "crates/momus-cli",
+    "crates/momus",
+]
 
-[package]
-name = "momus"
-version = "0.1.0"
+[workspace.package]
 edition = "2024"
-description = "Generic API test harness with a composable assertion AST"
 license = "Apache-2.0"
 repository = "https://github.com/jlcoulter/momus"
 homepage = "https://github.com/jlcoulter/momus"
 documentation = "https://github.com/jlcoulter/momus#readme"
 readme = "README.md"
-keywords = ["testing", "api", "http", "assertions", "jsonpath"]
-categories = ["development-tools::testing", "web-programming::http-client"]
-
-[dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-anyhow = "1"
-clap = { version = "4", features = ["derive"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-tokio = { version = "1", features = ["full"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-axum = "0.8"
-regex = "1"
-futures = "0.3"
-http-body-util = "0.1"
-bytes = "1"
