@@ -9,7 +9,9 @@
 
 pub mod assertions;
 pub mod bulk_data;
+pub mod bulk_loader;
 pub mod capability;
+pub mod hcpd;
 pub mod operation;
 pub mod package;
 pub mod planner;

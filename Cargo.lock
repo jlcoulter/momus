@@ -1281,6 +1281,7 @@ dependencies = [
  "serde_yaml",
  "tar",
  "tempfile",
+ "tokio",
  "tracing",
 ]
 
