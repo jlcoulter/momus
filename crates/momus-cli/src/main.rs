@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use momus::ast::*;
-use momus::engine::runner;
+use momus_core::ast::*;
+use momus_core::engine::runner;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -18,8 +18,8 @@ struct Cli {
 enum Commands {
     /// Run a test plan from a JSON file.
     Run {
-        /// Path to the test plan JSON file.
-        plan: PathBuf,
+        /// Path to the test plan JSON file (use - for stdin).
+        plan: String,
         /// Base URL override.
         #[arg(long)]
         base_url: Option<String>,
@@ -27,7 +27,7 @@ enum Commands {
         #[arg(long, default_value = "./output")]
         output: PathBuf,
     },
-    /// Validate a test plan JSON file (parse + check structure).
+    /// Validate a test plan JSON file.
     Validate {
         /// Path to the test plan JSON file.
         plan: PathBuf,
@@ -37,6 +37,16 @@ enum Commands {
         /// Port to listen on (0 = random).
         #[arg(long, default_value = "0")]
         port: u16,
+    },
+    /// Convert an API description into a test plan.
+    Convert {
+        /// Input format: openapi, postman, har, curl, graphql, grpc, fhir
+        format: String,
+        /// Path to the input file (or curl command string for format=curl).
+        input: String,
+        /// Output file for the test plan (default: stdout).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
 }
 
@@ -57,10 +67,16 @@ async fn main() -> Result<()> {
             base_url,
             output,
         } => {
-            let content = std::fs::read_to_string(&plan)?;
+            let content = if plan == "-" {
+                use std::io::Read;
+                let mut buf = String::new();
+                std::io::stdin().read_to_string(&mut buf)?;
+                buf
+            } else {
+                std::fs::read_to_string(&plan)?
+            };
             let mut test_plan: TestPlan = serde_json::from_str(&content)?;
 
-            // Override base URL if provided
             if let Some(url) = base_url {
                 test_plan.base_url = url;
             }
@@ -76,12 +92,10 @@ async fn main() -> Result<()> {
 
             println!("{}", report);
 
-            // Write results
             std::fs::create_dir_all(&output)?;
             report.write_results(&output)?;
             println!("\nResults written to: {}/results/", output.display());
 
-            // Exit with non-zero status if any tests failed
             if report.failed > 0 {
                 std::process::exit(1);
             }
@@ -125,6 +139,19 @@ async fn main() -> Result<()> {
                 }),
             );
             axum::serve(listener, app).await?;
+            Ok(())
+        }
+        Commands::Convert {
+            format,
+            input,
+            output,
+        } => {
+            let plan = momus_convert::convert(&format, &input)?;
+            let json = serde_json::to_string_pretty(&plan)?;
+            match output {
+                Some(path) => std::fs::write(path, json)?,
+                None => println!("{}", json),
+            }
             Ok(())
         }
     }

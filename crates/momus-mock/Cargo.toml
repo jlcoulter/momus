@@ -1,0 +1,23 @@
+[package]
+name = "momus-mock"
+version = "0.1.0"
+edition = "2024"
+description = "Configurable mock HTTP server for API testing"
+license = "Apache-2.0"
+repository = "https://github.com/jlcoulter/momus"
+homepage = "https://github.com/jlcoulter/momus"
+documentation = "https://github.com/jlcoulter/momus#readme"
+readme = "README.md"
+keywords = ["testing", "api", "http", "mock", "server"]
+categories = ["development-tools::testing", "web-programming::http-client"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+http-body-util = "0.1"
+bytes = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tracing = "0.1"
