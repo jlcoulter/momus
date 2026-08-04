@@ -22,76 +22,328 @@ pub struct AustralianSuburb {
 /// These are commonly used in healthcare provider addresses.
 pub const AUSTRALIAN_SUBURBS: &[AustralianSuburb] = &[
     // New South Wales
-    AustralianSuburb { name: "Sydney", postcode: "2000", state: "NSW" },
-    AustralianSuburb { name: "Surry Hills", postcode: "2010", state: "NSW" },
-    AustralianSuburb { name: "Darlinghurst", postcode: "2010", state: "NSW" },
-    AustralianSuburb { name: "Parramatta", postcode: "2150", state: "NSW" },
-    AustralianSuburb { name: "Newcastle", postcode: "2300", state: "NSW" },
-    AustralianSuburb { name: "Wollongong", postcode: "2500", state: "NSW" },
-    AustralianSuburb { name: "Chatswood", postcode: "2067", state: "NSW" },
-    AustralianSuburb { name: "Bondi Junction", postcode: "2022", state: "NSW" },
-    AustralianSuburb { name: "North Sydney", postcode: "2060", state: "NSW" },
-    AustralianSuburb { name: "Penrith", postcode: "2750", state: "NSW" },
-    AustralianSuburb { name: "Gosford", postcode: "2250", state: "NSW" },
-    AustralianSuburb { name: "Liverpool", postcode: "2170", state: "NSW" },
-    AustralianSuburb { name: "Campbelltown", postcode: "2560", state: "NSW" },
-    AustralianSuburb { name: "Tamworth", postcode: "2340", state: "NSW" },
-    AustralianSuburb { name: "Dubbo", postcode: "2830", state: "NSW" },
+    AustralianSuburb {
+        name: "Sydney",
+        postcode: "2000",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "Surry Hills",
+        postcode: "2010",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "Darlinghurst",
+        postcode: "2010",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "Parramatta",
+        postcode: "2150",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "Newcastle",
+        postcode: "2300",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "Wollongong",
+        postcode: "2500",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "Chatswood",
+        postcode: "2067",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "Bondi Junction",
+        postcode: "2022",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "North Sydney",
+        postcode: "2060",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "Penrith",
+        postcode: "2750",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "Gosford",
+        postcode: "2250",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "Liverpool",
+        postcode: "2170",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "Campbelltown",
+        postcode: "2560",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "Tamworth",
+        postcode: "2340",
+        state: "NSW",
+    },
+    AustralianSuburb {
+        name: "Dubbo",
+        postcode: "2830",
+        state: "NSW",
+    },
     // Victoria
-    AustralianSuburb { name: "Melbourne", postcode: "3000", state: "VIC" },
-    AustralianSuburb { name: "Fitzroy", postcode: "3065", state: "VIC" },
-    AustralianSuburb { name: "Richmond", postcode: "3121", state: "VIC" },
-    AustralianSuburb { name: "St Kilda", postcode: "3182", state: "VIC" },
-    AustralianSuburb { name: "Geelong", postcode: "3220", state: "VIC" },
-    AustralianSuburb { name: "Ballarat", postcode: "3350", state: "VIC" },
-    AustralianSuburb { name: "Bendigo", postcode: "3550", state: "VIC" },
-    AustralianSuburb { name: "Dandenong", postcode: "3175", state: "VIC" },
-    AustralianSuburb { name: "Preston", postcode: "3072", state: "VIC" },
-    AustralianSuburb { name: "Footscray", postcode: "3011", state: "VIC" },
-    AustralianSuburb { name: "Box Hill", postcode: "3128", state: "VIC" },
-    AustralianSuburb { name: "Frankston", postcode: "3199", state: "VIC" },
+    AustralianSuburb {
+        name: "Melbourne",
+        postcode: "3000",
+        state: "VIC",
+    },
+    AustralianSuburb {
+        name: "Fitzroy",
+        postcode: "3065",
+        state: "VIC",
+    },
+    AustralianSuburb {
+        name: "Richmond",
+        postcode: "3121",
+        state: "VIC",
+    },
+    AustralianSuburb {
+        name: "St Kilda",
+        postcode: "3182",
+        state: "VIC",
+    },
+    AustralianSuburb {
+        name: "Geelong",
+        postcode: "3220",
+        state: "VIC",
+    },
+    AustralianSuburb {
+        name: "Ballarat",
+        postcode: "3350",
+        state: "VIC",
+    },
+    AustralianSuburb {
+        name: "Bendigo",
+        postcode: "3550",
+        state: "VIC",
+    },
+    AustralianSuburb {
+        name: "Dandenong",
+        postcode: "3175",
+        state: "VIC",
+    },
+    AustralianSuburb {
+        name: "Preston",
+        postcode: "3072",
+        state: "VIC",
+    },
+    AustralianSuburb {
+        name: "Footscray",
+        postcode: "3011",
+        state: "VIC",
+    },
+    AustralianSuburb {
+        name: "Box Hill",
+        postcode: "3128",
+        state: "VIC",
+    },
+    AustralianSuburb {
+        name: "Frankston",
+        postcode: "3199",
+        state: "VIC",
+    },
     // Queensland
-    AustralianSuburb { name: "Brisbane", postcode: "4000", state: "QLD" },
-    AustralianSuburb { name: "South Brisbane", postcode: "4101", state: "QLD" },
-    AustralianSuburb { name: "Fortitude Valley", postcode: "4006", state: "QLD" },
-    AustralianSuburb { name: "Gold Coast", postcode: "4217", state: "QLD" },
-    AustralianSuburb { name: "Sunshine Coast", postcode: "4558", state: "QLD" },
-    AustralianSuburb { name: "Townsville", postcode: "4810", state: "QLD" },
-    AustralianSuburb { name: "Cairns", postcode: "4870", state: "QLD" },
-    AustralianSuburb { name: "Toowoomba", postcode: "4350", state: "QLD" },
-    AustralianSuburb { name: "Ipswich", postcode: "4305", state: "QLD" },
-    AustralianSuburb { name: "Rockhampton", postcode: "4700", state: "QLD" },
+    AustralianSuburb {
+        name: "Brisbane",
+        postcode: "4000",
+        state: "QLD",
+    },
+    AustralianSuburb {
+        name: "South Brisbane",
+        postcode: "4101",
+        state: "QLD",
+    },
+    AustralianSuburb {
+        name: "Fortitude Valley",
+        postcode: "4006",
+        state: "QLD",
+    },
+    AustralianSuburb {
+        name: "Gold Coast",
+        postcode: "4217",
+        state: "QLD",
+    },
+    AustralianSuburb {
+        name: "Sunshine Coast",
+        postcode: "4558",
+        state: "QLD",
+    },
+    AustralianSuburb {
+        name: "Townsville",
+        postcode: "4810",
+        state: "QLD",
+    },
+    AustralianSuburb {
+        name: "Cairns",
+        postcode: "4870",
+        state: "QLD",
+    },
+    AustralianSuburb {
+        name: "Toowoomba",
+        postcode: "4350",
+        state: "QLD",
+    },
+    AustralianSuburb {
+        name: "Ipswich",
+        postcode: "4305",
+        state: "QLD",
+    },
+    AustralianSuburb {
+        name: "Rockhampton",
+        postcode: "4700",
+        state: "QLD",
+    },
     // Western Australia
-    AustralianSuburb { name: "Perth", postcode: "6000", state: "WA" },
-    AustralianSuburb { name: "Fremantle", postcode: "6160", state: "WA" },
-    AustralianSuburb { name: "Subiaco", postcode: "6008", state: "WA" },
-    AustralianSuburb { name: "Joondalup", postcode: "6027", state: "WA" },
-    AustralianSuburb { name: "Bunbury", postcode: "6230", state: "WA" },
-    AustralianSuburb { name: "Albany", postcode: "6330", state: "WA" },
-    AustralianSuburb { name: "Geraldton", postcode: "6530", state: "WA" },
-    AustralianSuburb { name: "Mandurah", postcode: "6210", state: "WA" },
+    AustralianSuburb {
+        name: "Perth",
+        postcode: "6000",
+        state: "WA",
+    },
+    AustralianSuburb {
+        name: "Fremantle",
+        postcode: "6160",
+        state: "WA",
+    },
+    AustralianSuburb {
+        name: "Subiaco",
+        postcode: "6008",
+        state: "WA",
+    },
+    AustralianSuburb {
+        name: "Joondalup",
+        postcode: "6027",
+        state: "WA",
+    },
+    AustralianSuburb {
+        name: "Bunbury",
+        postcode: "6230",
+        state: "WA",
+    },
+    AustralianSuburb {
+        name: "Albany",
+        postcode: "6330",
+        state: "WA",
+    },
+    AustralianSuburb {
+        name: "Geraldton",
+        postcode: "6530",
+        state: "WA",
+    },
+    AustralianSuburb {
+        name: "Mandurah",
+        postcode: "6210",
+        state: "WA",
+    },
     // South Australia
-    AustralianSuburb { name: "Adelaide", postcode: "5000", state: "SA" },
-    AustralianSuburb { name: "North Adelaide", postcode: "5006", state: "SA" },
-    AustralianSuburb { name: "Glenelg", postcode: "5045", state: "SA" },
-    AustralianSuburb { name: "Mount Gambier", postcode: "5290", state: "SA" },
-    AustralianSuburb { name: "Whyalla", postcode: "5600", state: "SA" },
-    AustralianSuburb { name: "Port Augusta", postcode: "5700", state: "SA" },
+    AustralianSuburb {
+        name: "Adelaide",
+        postcode: "5000",
+        state: "SA",
+    },
+    AustralianSuburb {
+        name: "North Adelaide",
+        postcode: "5006",
+        state: "SA",
+    },
+    AustralianSuburb {
+        name: "Glenelg",
+        postcode: "5045",
+        state: "SA",
+    },
+    AustralianSuburb {
+        name: "Mount Gambier",
+        postcode: "5290",
+        state: "SA",
+    },
+    AustralianSuburb {
+        name: "Whyalla",
+        postcode: "5600",
+        state: "SA",
+    },
+    AustralianSuburb {
+        name: "Port Augusta",
+        postcode: "5700",
+        state: "SA",
+    },
     // Tasmania
-    AustralianSuburb { name: "Hobart", postcode: "7000", state: "TAS" },
-    AustralianSuburb { name: "Launceston", postcode: "7250", state: "TAS" },
-    AustralianSuburb { name: "Devonport", postcode: "7310", state: "TAS" },
-    AustralianSuburb { name: "Burnie", postcode: "7320", state: "TAS" },
+    AustralianSuburb {
+        name: "Hobart",
+        postcode: "7000",
+        state: "TAS",
+    },
+    AustralianSuburb {
+        name: "Launceston",
+        postcode: "7250",
+        state: "TAS",
+    },
+    AustralianSuburb {
+        name: "Devonport",
+        postcode: "7310",
+        state: "TAS",
+    },
+    AustralianSuburb {
+        name: "Burnie",
+        postcode: "7320",
+        state: "TAS",
+    },
     // Australian Capital Territory
-    AustralianSuburb { name: "Canberra", postcode: "2600", state: "ACT" },
-    AustralianSuburb { name: "Belconnen", postcode: "2617", state: "ACT" },
-    AustralianSuburb { name: "Woden", postcode: "2606", state: "ACT" },
-    AustralianSuburb { name: "Tuggeranong", postcode: "2900", state: "ACT" },
+    AustralianSuburb {
+        name: "Canberra",
+        postcode: "2600",
+        state: "ACT",
+    },
+    AustralianSuburb {
+        name: "Belconnen",
+        postcode: "2617",
+        state: "ACT",
+    },
+    AustralianSuburb {
+        name: "Woden",
+        postcode: "2606",
+        state: "ACT",
+    },
+    AustralianSuburb {
+        name: "Tuggeranong",
+        postcode: "2900",
+        state: "ACT",
+    },
     // Northern Territory
-    AustralianSuburb { name: "Darwin", postcode: "0800", state: "NT" },
-    AustralianSuburb { name: "Alice Springs", postcode: "0870", state: "NT" },
-    AustralianSuburb { name: "Palmerston", postcode: "0830", state: "NT" },
-    AustralianSuburb { name: "Katherine", postcode: "0850", state: "NT" },
+    AustralianSuburb {
+        name: "Darwin",
+        postcode: "0800",
+        state: "NT",
+    },
+    AustralianSuburb {
+        name: "Alice Springs",
+        postcode: "0870",
+        state: "NT",
+    },
+    AustralianSuburb {
+        name: "Palmerston",
+        postcode: "0830",
+        state: "NT",
+    },
+    AustralianSuburb {
+        name: "Katherine",
+        postcode: "0850",
+        state: "NT",
+    },
 ];
 
 /// Pick a random Australian suburb from the curated list.
@@ -535,9 +787,21 @@ pub fn generate_au_address(rng: &mut impl Rng) -> serde_json::Value {
     let suburb = random_australian_suburb(rng);
     let street_num = rng.random_range(1..9999);
     let street_names = [
-        "George St", "Elizabeth St", "Collins St", "King St", "Queen St",
-        "Victoria St", "Albert St", "Edward St", "Park St", "Market St",
-        "High St", "Main St", "Smith St", "Brown St", "Station St",
+        "George St",
+        "Elizabeth St",
+        "Collins St",
+        "King St",
+        "Queen St",
+        "Victoria St",
+        "Albert St",
+        "Edward St",
+        "Park St",
+        "Market St",
+        "High St",
+        "Main St",
+        "Smith St",
+        "Brown St",
+        "Station St",
     ];
     let street = street_names[rng.random_range(0..street_names.len())];
 
@@ -687,8 +951,10 @@ mod tests {
         let mut rng = rand::rng();
         let addr = generate_au_address(&mut rng);
         assert_eq!(addr["country"], "AU");
-        assert!(addr["state"].as_str().unwrap().len() == 2
-            || addr["state"].as_str().unwrap().len() == 3);
+        assert!(
+            addr["state"].as_str().unwrap().len() == 2
+                || addr["state"].as_str().unwrap().len() == 3
+        );
         assert!(!addr["city"].as_str().unwrap().is_empty());
     }
 
@@ -781,10 +1047,7 @@ mod tests {
             }
         });
         let mut reg_map = HashMap::new();
-        reg_map.insert(
-            "practitioner-1".to_string(),
-            "MED1234567890".to_string(),
-        );
+        reg_map.insert("practitioner-1".to_string(), "MED1234567890".to_string());
         let vs_systems = HashMap::new();
         let cs_codes = HashMap::new();
 
@@ -810,10 +1073,7 @@ mod tests {
             "http://hl7.org.au/id/ahpra-registration-number"
         );
         // Should pick up the registration from the practitioner
-        assert_eq!(
-            identifiers[1]["value"],
-            "MED1234567890"
-        );
+        assert_eq!(identifiers[1]["value"], "MED1234567890");
     }
 
     #[test]
@@ -864,9 +1124,6 @@ mod tests {
         // Should have SNOMED coding for type
         let types = resource["type"].as_array().unwrap();
         assert_eq!(types[0]["coding"][0]["code"], "408443003");
-        assert_eq!(
-            types[0]["coding"][0]["display"],
-            "General medical practice"
-        );
+        assert_eq!(types[0]["coding"][0]["display"], "General medical practice");
     }
 }

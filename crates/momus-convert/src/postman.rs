@@ -14,7 +14,9 @@ pub fn convert(path: &str) -> Result<TestPlan> {
     let collection: Value = serde_json::from_str(&content)
         .with_context(|| format!("Failed to parse Postman collection JSON: {}", path))?;
 
-    let info = collection.get("info").or_else(|| collection.get("collection").and_then(|c| c.get("info")));
+    let info = collection
+        .get("info")
+        .or_else(|| collection.get("collection").and_then(|c| c.get("info")));
     let name = info
         .and_then(|i| i.get("name").and_then(|n| n.as_str()))
         .unwrap_or("Postman Collection");
@@ -45,10 +47,10 @@ fn walk_items(items: &[Value], steps: &mut Vec<Step>) {
         if let Some(sub_items) = item.get("item").and_then(|v| v.as_array()) {
             // This is a folder — recurse into it
             walk_items(sub_items, steps);
-        } else if let Some(request) = item.get("request") {
-            if let Some(step) = convert_request(item, request) {
-                steps.push(step);
-            }
+        } else if let Some(request) = item.get("request")
+            && let Some(step) = convert_request(item, request)
+        {
+            steps.push(step);
         }
     }
 }
@@ -97,16 +99,14 @@ fn convert_request(item: &Value, request: &Value) -> Option<Step> {
 
     // Assertions from responses
     let mut assertions = Vec::new();
-    if let Some(responses) = item.get("response").and_then(|r| r.as_array()) {
-        if let Some(first_resp) = responses.first() {
-            if let Some(status) = first_resp
-                .get("code")
-                .and_then(|c| c.as_u64())
-                .map(|c| c as u16)
-            {
-                assertions.push(Assertion::Status(status));
-            }
-        }
+    if let Some(responses) = item.get("response").and_then(|r| r.as_array())
+        && let Some(first_resp) = responses.first()
+        && let Some(status) = first_resp
+            .get("code")
+            .and_then(|c| c.as_u64())
+            .map(|c| c as u16)
+    {
+        assertions.push(Assertion::Status(status));
     }
     if assertions.is_empty() {
         assertions.push(Assertion::Status(200));
@@ -127,7 +127,10 @@ fn convert_request(item: &Value, request: &Value) -> Option<Step> {
 /// Extract URL from a Postman request object.
 fn extract_url(request: &Value) -> String {
     // Try url.raw first
-    if let Some(raw) = request.get("url").and_then(|u| u.get("raw").and_then(|r| r.as_str())) {
+    if let Some(raw) = request
+        .get("url")
+        .and_then(|u| u.get("raw").and_then(|r| r.as_str()))
+    {
         return raw.to_string();
     }
 
@@ -290,7 +293,8 @@ mod tests {
                     ]
                 }
             ]
-        }"#.to_string()
+        }"#
+        .to_string()
     }
 
     #[test]
@@ -317,7 +321,11 @@ mod tests {
             assert_eq!(step.method, Method::Get);
             assert_eq!(step.url, "https://api.example.com/health");
             assert_eq!(step.headers.get("Accept").unwrap(), "application/json");
-            assert!(step.assert.iter().any(|a| matches!(a, Assertion::Status(200))));
+            assert!(
+                step.assert
+                    .iter()
+                    .any(|a| matches!(a, Assertion::Status(200)))
+            );
         } else {
             panic!("Expected Request step");
         }

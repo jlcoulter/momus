@@ -45,11 +45,7 @@ pub fn resolve_profiles(pkg: &mut IgPackage) -> Result<()> {
                     resolved = true;
                 }
                 Err(e) => {
-                    tracing::warn!(
-                        "Could not resolve parent profile '{}': {}",
-                        base_url,
-                        e
-                    );
+                    tracing::warn!("Could not resolve parent profile '{}': {}", base_url, e);
                 }
             }
         }
@@ -62,11 +58,11 @@ pub fn resolve_profiles(pkg: &mut IgPackage) -> Result<()> {
             .base_definition
             .clone()
             .map(|s| strip_version(&s));
-        if let Some(base_url) = base_url {
-            if let Some(&parent_idx) = url_map.get(&base_url) {
-                let parent = pkg.structure_definitions[parent_idx].clone();
-                merge_snapshot_elements(&mut pkg.structure_definitions[i], &parent);
-            }
+        if let Some(base_url) = base_url
+            && let Some(&parent_idx) = url_map.get(&base_url)
+        {
+            let parent = pkg.structure_definitions[parent_idx].clone();
+            merge_snapshot_elements(&mut pkg.structure_definitions[i], &parent);
         }
     }
 
@@ -134,7 +130,11 @@ fn merge_snapshot_elements(child: &mut StructureDefinition, parent: &StructureDe
         None => return,
     };
 
-    let child_ids: HashSet<String> = child_snapshot.element.iter().map(|e| e.id.clone()).collect();
+    let child_ids: HashSet<String> = child_snapshot
+        .element
+        .iter()
+        .map(|e| e.id.clone())
+        .collect();
 
     let mut to_add: Vec<ElementDefinition> = Vec::new();
     for parent_elem in &parent_snapshot.element {
@@ -161,7 +161,7 @@ fn strip_version(url: &str) -> String {
 fn download_profile(url: &str) -> Result<StructureDefinition> {
     let name = url
         .split('/')
-        .last()
+        .next_back()
         .ok_or_else(|| anyhow::anyhow!("Invalid profile URL: {}", url))?;
 
     let sources = vec![
@@ -202,8 +202,14 @@ mod tests {
 
     #[test]
     fn test_strip_version() {
-        assert_eq!(strip_version("http://example.org/StructureDefinition/Patient"), "http://example.org/StructureDefinition/Patient");
-        assert_eq!(strip_version("http://example.org/StructureDefinition/Patient|4.0.1"), "http://example.org/StructureDefinition/Patient");
+        assert_eq!(
+            strip_version("http://example.org/StructureDefinition/Patient"),
+            "http://example.org/StructureDefinition/Patient"
+        );
+        assert_eq!(
+            strip_version("http://example.org/StructureDefinition/Patient|4.0.1"),
+            "http://example.org/StructureDefinition/Patient"
+        );
     }
 
     #[test]
@@ -217,15 +223,13 @@ mod tests {
             derivation: Some("constraint".into()),
             base_definition: Some("http://example.org/StructureDefinition/Parent".into()),
             snapshot: Some(Snapshot {
-                element: vec![
-                    ElementDefinition {
-                        id: "Patient.name".into(),
-                        path: "Patient.name".into(),
-                        min: Some(1),
-                        max: Some("1".into()),
-                        ..Default::default()
-                    },
-                ],
+                element: vec![ElementDefinition {
+                    id: "Patient.name".into(),
+                    path: "Patient.name".into(),
+                    min: Some(1),
+                    max: Some("1".into()),
+                    ..Default::default()
+                }],
             }),
             differential: None,
         };
@@ -281,29 +285,25 @@ mod tests {
     #[test]
     fn test_resolve_profiles_no_parents() {
         let mut pkg = IgPackage {
-            structure_definitions: vec![
-                StructureDefinition {
-                    resource_type: "StructureDefinition".into(),
-                    url: "http://example.org/StructureDefinition/TestPatient".into(),
-                    name: "TestPatient".into(),
-                    base_type: "Patient".into(),
-                    kind: "resource".into(),
-                    derivation: None,
-                    base_definition: None,
-                    snapshot: Some(Snapshot {
-                        element: vec![
-                            ElementDefinition {
-                                id: "Patient".into(),
-                                path: "Patient".into(),
-                                min: Some(0),
-                                max: Some("*".into()),
-                                ..Default::default()
-                            },
-                        ],
-                    }),
-                    differential: None,
-                },
-            ],
+            structure_definitions: vec![StructureDefinition {
+                resource_type: "StructureDefinition".into(),
+                url: "http://example.org/StructureDefinition/TestPatient".into(),
+                name: "TestPatient".into(),
+                base_type: "Patient".into(),
+                kind: "resource".into(),
+                derivation: None,
+                base_definition: None,
+                snapshot: Some(Snapshot {
+                    element: vec![ElementDefinition {
+                        id: "Patient".into(),
+                        path: "Patient".into(),
+                        min: Some(0),
+                        max: Some("*".into()),
+                        ..Default::default()
+                    }],
+                }),
+                differential: None,
+            }],
             capability_statements: vec![],
             search_parameters: vec![],
             operation_definitions: vec![],

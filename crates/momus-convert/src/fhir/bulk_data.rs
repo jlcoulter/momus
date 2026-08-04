@@ -1355,14 +1355,8 @@ mod tests {
         counts.insert("HealthcareService".to_string(), 50);
 
         let profile_urls = HashMap::new();
-        let ids = generate_bulk_data(
-            &counts,
-            &profile_urls,
-            &[],
-            &HashMap::new(),
-            dir.path(),
-        )
-        .expect("should succeed");
+        let ids = generate_bulk_data(&counts, &profile_urls, &[], &HashMap::new(), dir.path())
+            .expect("should succeed");
 
         assert_eq!(ids.get("Organization").expect("key should exist").len(), 10);
         assert_eq!(ids.get("Practitioner").expect("key should exist").len(), 50);
@@ -1419,14 +1413,8 @@ mod tests {
         counts.insert("HealthcareService".to_string(), 10);
 
         let profile_urls = HashMap::new();
-        let ids = generate_bulk_data(
-            &counts,
-            &profile_urls,
-            &[],
-            &HashMap::new(),
-            dir.path(),
-        )
-        .expect("should succeed");
+        let ids = generate_bulk_data(&counts, &profile_urls, &[], &HashMap::new(), dir.path())
+            .expect("should succeed");
 
         let pr_path = dir.path().join("data/PractitionerRole.ndjson");
         let pr_contents = std::fs::read_to_string(&pr_path).expect("should read file");
@@ -1481,14 +1469,8 @@ mod tests {
         let mut counts = HashMap::new();
         counts.insert("Location".to_string(), 100);
 
-        generate_bulk_data(
-            &counts,
-            &HashMap::new(),
-            &[],
-            &HashMap::new(),
-            dir.path(),
-        )
-        .expect("should succeed");
+        generate_bulk_data(&counts, &HashMap::new(), &[], &HashMap::new(), dir.path())
+            .expect("should succeed");
 
         let loc_path = dir.path().join("data/Location.ndjson");
         let contents = std::fs::read_to_string(&loc_path).expect("should read file");
@@ -1560,14 +1542,8 @@ mod tests {
         let mut counts = HashMap::new();
         counts.insert("Patient".to_string(), 5);
 
-        let ids = generate_bulk_data(
-            &counts,
-            &HashMap::new(),
-            &[],
-            &HashMap::new(),
-            dir.path(),
-        )
-        .expect("should succeed");
+        let ids = generate_bulk_data(&counts, &HashMap::new(), &[], &HashMap::new(), dir.path())
+            .expect("should succeed");
         assert_eq!(ids.get("Patient").expect("key should exist").len(), 5);
 
         let path = dir.path().join("data/Patient.ndjson");
@@ -1594,14 +1570,8 @@ mod tests {
             "http://example.org/fhir/StructureDefinition/MyOrg".to_string(),
         );
 
-        let ids = generate_bulk_data(
-            &counts,
-            &profile_urls,
-            &[],
-            &HashMap::new(),
-            dir.path(),
-        )
-        .expect("should succeed");
+        let ids = generate_bulk_data(&counts, &profile_urls, &[], &HashMap::new(), dir.path())
+            .expect("should succeed");
         assert_eq!(ids.get("Organization").expect("key should exist").len(), 3);
 
         let path = dir.path().join("data/Organization.ndjson");
@@ -1627,14 +1597,8 @@ mod tests {
         counts.insert("Organization".to_string(), 2);
 
         let profile_urls = HashMap::new();
-        let ids = generate_bulk_data(
-            &counts,
-            &profile_urls,
-            &[],
-            &HashMap::new(),
-            dir.path(),
-        )
-        .expect("should succeed");
+        let ids = generate_bulk_data(&counts, &profile_urls, &[], &HashMap::new(), dir.path())
+            .expect("should succeed");
         assert_eq!(ids.get("Organization").expect("key should exist").len(), 2);
 
         let path = dir.path().join("data/Organization.ndjson");
@@ -1981,13 +1945,9 @@ mod tests {
 
     #[test]
     fn supplement_resource_creates_valid_fhir_json() {
-        let resource = generate_supplement_resource(
-            "Organization",
-            &HashMap::new(),
-            &[],
-            &HashMap::new(),
-        )
-        .expect("should succeed");
+        let resource =
+            generate_supplement_resource("Organization", &HashMap::new(), &[], &HashMap::new())
+                .expect("should succeed");
 
         assert_eq!(resource["resourceType"], "Organization");
         assert_eq!(resource["id"], "organization-1");
@@ -2003,13 +1963,9 @@ mod tests {
             "http://example.org/fhir/StructureDefinition/MyOrg".to_string(),
         );
 
-        let resource = generate_supplement_resource(
-            "Organization",
-            &profile_urls,
-            &[],
-            &HashMap::new(),
-        )
-        .expect("should succeed");
+        let resource =
+            generate_supplement_resource("Organization", &profile_urls, &[], &HashMap::new())
+                .expect("should succeed");
 
         let profiles = resource["meta"]["profile"]
             .as_array()
@@ -2022,13 +1978,9 @@ mod tests {
 
     #[test]
     fn supplement_resource_normalizes_references() {
-        let resource = generate_supplement_resource(
-            "PractitionerRole",
-            &HashMap::new(),
-            &[],
-            &HashMap::new(),
-        )
-        .expect("should succeed");
+        let resource =
+            generate_supplement_resource("PractitionerRole", &HashMap::new(), &[], &HashMap::new())
+                .expect("should succeed");
 
         let practitioner_ref = resource["practitioner"]["reference"]
             .as_str()
@@ -2043,13 +1995,9 @@ mod tests {
 
     #[test]
     fn supplement_resource_handles_unknown_type() {
-        let resource = generate_supplement_resource(
-            "UnknownType",
-            &HashMap::new(),
-            &[],
-            &HashMap::new(),
-        )
-        .expect("should succeed");
+        let resource =
+            generate_supplement_resource("UnknownType", &HashMap::new(), &[], &HashMap::new())
+                .expect("should succeed");
 
         assert_eq!(resource["resourceType"], "UnknownType");
         assert_eq!(resource["id"], "unknowntype-1");
@@ -2171,14 +2119,8 @@ mod tests {
         counts.insert("Organization".to_string(), 5);
         counts.insert("Practitioner".to_string(), 10);
 
-        let ids = generate_bulk_data(
-            &counts,
-            &HashMap::new(),
-            &[],
-            &HashMap::new(),
-            dir.path(),
-        )
-        .expect("should succeed");
+        let ids = generate_bulk_data(&counts, &HashMap::new(), &[], &HashMap::new(), dir.path())
+            .expect("should succeed");
 
         generate_update_ndjson(&ids, dir.path()).expect("should generate bulk data");
 
@@ -2204,14 +2146,8 @@ mod tests {
         let mut counts = HashMap::new();
         counts.insert("Organization".to_string(), 3);
 
-        let ids = generate_bulk_data(
-            &counts,
-            &HashMap::new(),
-            &[],
-            &HashMap::new(),
-            dir.path(),
-        )
-        .expect("should succeed");
+        let ids = generate_bulk_data(&counts, &HashMap::new(), &[], &HashMap::new(), dir.path())
+            .expect("should succeed");
 
         let orig_path = dir.path().join("data/Organization.ndjson");
         let orig_contents = std::fs::read_to_string(&orig_path).expect("should read file");
@@ -2247,14 +2183,8 @@ mod tests {
         counts.insert("Organization".to_string(), 2);
         counts.insert("Practitioner".to_string(), 2);
 
-        let ids = generate_bulk_data(
-            &counts,
-            &HashMap::new(),
-            &[],
-            &HashMap::new(),
-            dir.path(),
-        )
-        .expect("should succeed");
+        let ids = generate_bulk_data(&counts, &HashMap::new(), &[], &HashMap::new(), dir.path())
+            .expect("should succeed");
 
         generate_update_ndjson(&ids, dir.path()).expect("should generate bulk data");
 
@@ -2295,14 +2225,8 @@ mod tests {
         let dir = tempfile::tempdir().expect("should create temp dir");
         let counts = HashMap::new();
 
-        let ids = generate_bulk_data(
-            &counts,
-            &HashMap::new(),
-            &[],
-            &HashMap::new(),
-            dir.path(),
-        )
-        .expect("should succeed");
+        let ids = generate_bulk_data(&counts, &HashMap::new(), &[], &HashMap::new(), dir.path())
+            .expect("should succeed");
 
         assert!(
             ids.is_empty(),
@@ -2317,14 +2241,8 @@ mod tests {
         counts.insert("Organization".to_string(), 3);
         counts.insert("Practitioner".to_string(), 2);
 
-        generate_bulk_data(
-            &counts,
-            &HashMap::new(),
-            &[],
-            &HashMap::new(),
-            dir.path(),
-        )
-        .expect("should succeed");
+        generate_bulk_data(&counts, &HashMap::new(), &[], &HashMap::new(), dir.path())
+            .expect("should succeed");
 
         let combined_path = dir.path().join("data/combined.ndjson");
         assert!(combined_path.exists(), "combined.ndjson should exist");
@@ -2345,14 +2263,8 @@ mod tests {
         let mut counts = HashMap::new();
         counts.insert("Organization".to_string(), 5);
 
-        generate_bulk_data(
-            &counts,
-            &HashMap::new(),
-            &[],
-            &HashMap::new(),
-            dir.path(),
-        )
-        .expect("should succeed");
+        generate_bulk_data(&counts, &HashMap::new(), &[], &HashMap::new(), dir.path())
+            .expect("should succeed");
 
         let path = dir.path().join("data/Organization.ndjson");
         let contents = std::fs::read_to_string(&path).expect("should read file");

@@ -141,11 +141,7 @@ pub fn generate_near_search_tests(
 
     // :near modifier test — uses lat/lon or coordinate value
     tests.push(TestCase {
-        name: format!(
-            "search-{}-{}-near",
-            rtype.to_lowercase(),
-            sp.name
-        ),
+        name: format!("search-{}-{}-near", rtype.to_lowercase(), sp.name),
         kind: TestCaseKind::SearchNear {
             param: sp.name.clone(),
         },
@@ -154,12 +150,7 @@ pub fn generate_near_search_tests(
         profile_url: profile_url.clone(),
         request: HttpRequest {
             method: "GET".to_string(),
-            url: format!(
-                "/{}?{}:near={}",
-                rtype,
-                sp.name,
-                "{lat}|{lon}|{distance}"
-            ),
+            url: format!("/{}?{}:near={}", rtype, sp.name, "{lat}|{lon}|{distance}"),
             headers: HashMap::new(),
             body: None,
         },
@@ -179,11 +170,7 @@ pub fn generate_near_search_tests(
 
     // :within modifier test
     tests.push(TestCase {
-        name: format!(
-            "search-{}-{}-within",
-            rtype.to_lowercase(),
-            sp.name
-        ),
+        name: format!("search-{}-{}-within", rtype.to_lowercase(), sp.name),
         kind: TestCaseKind::SearchNear {
             param: sp.name.clone(),
         },
@@ -192,12 +179,7 @@ pub fn generate_near_search_tests(
         profile_url: profile_url.clone(),
         request: HttpRequest {
             method: "GET".to_string(),
-            url: format!(
-                "/{}?{}:within={}",
-                rtype,
-                sp.name,
-                "{lat}|{lon}|{distance}"
-            ),
+            url: format!("/{}?{}:within={}", rtype, sp.name, "{lat}|{lon}|{distance}"),
             headers: HashMap::new(),
             body: None,
         },
@@ -246,9 +228,7 @@ pub fn generate_chained_search_tests(
     // A chainable expression typically has the form "ResourceType.referenceField"
     // We look for patterns like "ResourceType.field" where field is a reference
     let chainable = !expression.is_empty()
-        && (expression.contains('.')
-            || sp.param_type == "reference"
-            || sp.param_type == "string");
+        && (expression.contains('.') || sp.param_type == "reference" || sp.param_type == "string");
 
     if !chainable {
         return tests;
@@ -274,11 +254,7 @@ pub fn generate_chained_search_tests(
     let chain_param = format!("{}.{}", chain_prefix, sp.name);
 
     tests.push(TestCase {
-        name: format!(
-            "search-{}-{}-chained",
-            rtype.to_lowercase(),
-            sp.name
-        ),
+        name: format!("search-{}-{}-chained", rtype.to_lowercase(), sp.name),
         kind: TestCaseKind::SearchChained {
             param: sp.name.clone(),
             chain: chain_param.clone(),
@@ -332,10 +308,7 @@ pub fn generate_conformance_tests(
     }
 
     for profile_url_str in profiles {
-        let test_name = format!(
-            "conformance-{}-mustsupport",
-            rtype.to_lowercase()
-        );
+        let test_name = format!("conformance-{}-mustsupport", rtype.to_lowercase());
 
         tests.push(TestCase {
             name: if profile_url_str == profile_url.as_deref().unwrap_or("") {
@@ -1159,7 +1132,12 @@ mod tests {
         assert_eq!(tests.len(), 2, "should generate :near and :within tests");
         assert!(tests[0].name.contains("near"));
         assert!(tests[1].name.contains("within"));
-        assert_eq!(tests[0].kind, TestCaseKind::SearchNear { param: "near".to_string() });
+        assert_eq!(
+            tests[0].kind,
+            TestCaseKind::SearchNear {
+                param: "near".to_string()
+            }
+        );
     }
 
     #[test]
@@ -1171,7 +1149,10 @@ mod tests {
             documentation: None,
         };
         let tests = generate_near_search_tests("Patient", &None, &sp);
-        assert!(tests.is_empty(), "string params should not generate near tests");
+        assert!(
+            tests.is_empty(),
+            "string params should not generate near tests"
+        );
     }
 
     #[test]
@@ -1212,7 +1193,10 @@ mod tests {
             documentation: None,
         };
         let tests = generate_chained_search_tests("Patient", &None, &sp, &[]);
-        assert!(tests.is_empty(), "no expression should yield no chained tests");
+        assert!(
+            tests.is_empty(),
+            "no expression should yield no chained tests"
+        );
     }
 
     #[test]
@@ -1241,7 +1225,11 @@ mod tests {
             &None,
             &["http://example.org/StructureDefinition/SupportedPatient".to_string()],
         );
-        assert_eq!(tests.len(), 1, "should generate one conformance test per supported profile");
+        assert_eq!(
+            tests.len(),
+            1,
+            "should generate one conformance test per supported profile"
+        );
         assert!(tests[0].name.contains("mustsupport"));
     }
 
@@ -1270,7 +1258,14 @@ mod tests {
             description: None,
         }];
 
-        let plan = generate_test_plan(&cs, &search_params, None, None, &HashMap::new(), &HashMap::new());
+        let plan = generate_test_plan(
+            &cs,
+            &search_params,
+            None,
+            None,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
         let group = &plan.test_groups[0];
 
         let near_tests: Vec<&TestCase> = group
@@ -1285,13 +1280,19 @@ mod tests {
             .iter()
             .filter(|t| matches!(t.kind, TestCaseKind::SearchChained { .. }))
             .collect();
-        assert!(!chained_tests.is_empty(), "should have chained search tests");
+        assert!(
+            !chained_tests.is_empty(),
+            "should have chained search tests"
+        );
 
         let conformance_tests: Vec<&TestCase> = group
             .tests
             .iter()
             .filter(|t| matches!(t.kind, TestCaseKind::Conformance { .. }))
             .collect();
-        assert!(!conformance_tests.is_empty(), "should have conformance tests");
+        assert!(
+            !conformance_tests.is_empty(),
+            "should have conformance tests"
+        );
     }
 }

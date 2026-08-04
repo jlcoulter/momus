@@ -13,10 +13,12 @@ use std::collections::HashMap;
 /// Scans all raw JSON resources for `resourceType == "ValueSet"`,
 /// extracts the URL, then finds the system URL from `compose.include[].system`
 /// or `expansion.contains[].system`.
-pub fn build_value_set_system_map(raw_resources: &HashMap<String, serde_json::Value>) -> HashMap<String, String> {
+pub fn build_value_set_system_map(
+    raw_resources: &HashMap<String, serde_json::Value>,
+) -> HashMap<String, String> {
     let mut map = HashMap::new();
 
-    for (_path, resource) in raw_resources {
+    for resource in raw_resources.values() {
         let resource_type = resource
             .get("resourceType")
             .and_then(|v| v.as_str())
@@ -48,7 +50,7 @@ pub fn build_code_system_first_code_map(
 ) -> HashMap<String, (String, Option<String>)> {
     let mut map = HashMap::new();
 
-    for (_path, resource) in raw_resources {
+    for resource in raw_resources.values() {
         let resource_type = resource
             .get("resourceType")
             .and_then(|v| v.as_str())
@@ -76,23 +78,23 @@ pub fn build_code_system_first_code_map(
 /// Prefers `compose.include[].system`, falls back to `expansion.contains[].system`.
 fn extract_valueset_system(resource: &serde_json::Value) -> Option<String> {
     // Try compose.include[].system first
-    if let Some(compose) = resource.get("compose") {
-        if let Some(includes) = compose.get("include").and_then(|v| v.as_array()) {
-            for include in includes {
-                if let Some(system) = include.get("system").and_then(|v| v.as_str()) {
-                    return Some(system.to_string());
-                }
+    if let Some(compose) = resource.get("compose")
+        && let Some(includes) = compose.get("include").and_then(|v| v.as_array())
+    {
+        for include in includes {
+            if let Some(system) = include.get("system").and_then(|v| v.as_str()) {
+                return Some(system.to_string());
             }
         }
     }
 
     // Fall back to expansion.contains[].system
-    if let Some(expansion) = resource.get("expansion") {
-        if let Some(contains) = expansion.get("contains").and_then(|v| v.as_array()) {
-            for item in contains {
-                if let Some(system) = item.get("system").and_then(|v| v.as_str()) {
-                    return Some(system.to_string());
-                }
+    if let Some(expansion) = resource.get("expansion")
+        && let Some(contains) = expansion.get("contains").and_then(|v| v.as_array())
+    {
+        for item in contains {
+            if let Some(system) = item.get("system").and_then(|v| v.as_str()) {
+                return Some(system.to_string());
             }
         }
     }
@@ -104,9 +106,12 @@ fn extract_valueset_system(resource: &serde_json::Value) -> Option<String> {
 fn extract_first_code(resource: &serde_json::Value) -> Option<(String, Option<String>)> {
     let concepts = resource.get("concept").and_then(|v| v.as_array())?;
 
-    for concept in concepts {
+    if let Some(concept) = concepts.iter().next() {
         let code = concept.get("code").and_then(|v| v.as_str())?.to_string();
-        let display = concept.get("display").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let display = concept
+            .get("display")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
         return Some((code, display));
     }
 
@@ -249,7 +254,9 @@ mod tests {
 
         let map = build_code_system_first_code_map(&resources);
         assert_eq!(map.len(), 1);
-        let (code, display) = map.get("http://hl7.org/fhir/administrative-gender").unwrap();
+        let (code, display) = map
+            .get("http://hl7.org/fhir/administrative-gender")
+            .unwrap();
         assert_eq!(code, "male");
         assert_eq!(display.as_deref(), Some("Male"));
     }
@@ -292,15 +299,24 @@ mod tests {
 
     #[test]
     fn test_code_value_for_system() {
-        assert_eq!(code_value_for_system("http://hl7.org/fhir/days-of-week"), "mon");
-        assert_eq!(code_value_for_system("http://hl7.org/fhir/administrative-gender"), "male");
+        assert_eq!(
+            code_value_for_system("http://hl7.org/fhir/days-of-week"),
+            "mon"
+        );
+        assert_eq!(
+            code_value_for_system("http://hl7.org/fhir/administrative-gender"),
+            "male"
+        );
         assert_eq!(code_value_for_system("http://unknown.system"), "unknown");
     }
 
     #[test]
     fn test_codeable_concept_for_system() {
         let cc = codeable_concept_for_system("http://hl7.org/fhir/administrative-gender");
-        assert_eq!(cc["coding"][0]["system"], "http://hl7.org/fhir/administrative-gender");
+        assert_eq!(
+            cc["coding"][0]["system"],
+            "http://hl7.org/fhir/administrative-gender"
+        );
         assert_eq!(cc["coding"][0]["code"], "male");
     }
 

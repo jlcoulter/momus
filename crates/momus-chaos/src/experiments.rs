@@ -35,10 +35,9 @@ pub async fn run_experiment(experiment: &ChaosExperiment) -> Result<ChaosReport>
             cores,
             duration_secs,
         } => run_cpu_pressure(*cores, *duration_secs).await,
-        ChaosExperiment::MemoryPressure {
-            mb,
-            duration_secs,
-        } => run_memory_pressure(*mb, *duration_secs).await,
+        ChaosExperiment::MemoryPressure { mb, duration_secs } => {
+            run_memory_pressure(*mb, *duration_secs).await
+        }
         ChaosExperiment::ClockSkew {
             offset_secs,
             duration_secs,
@@ -99,12 +98,12 @@ fn detect_interface() -> String {
         .arg("ip route get 1 2>/dev/null | grep -oP 'dev \\K\\S+'")
         .output();
 
-    if let Ok(output) = output {
-        if output.status.success() {
-            let iface = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !iface.is_empty() {
-                return iface;
-            }
+    if let Ok(output) = output
+        && output.status.success()
+    {
+        let iface = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !iface.is_empty() {
+            return iface;
         }
     }
     "eth0".to_string()
@@ -165,11 +164,7 @@ async fn run_network_latency(
 }
 
 /// Service error: verify the endpoint returns errors (simulated by checking status).
-async fn run_service_error(
-    endpoint: &str,
-    status: u16,
-    duration_secs: u64,
-) -> Result<ChaosReport> {
+async fn run_service_error(endpoint: &str, status: u16, duration_secs: u64) -> Result<ChaosReport> {
     let start = Instant::now();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -340,7 +335,7 @@ async fn run_connection_reset(
     };
 
     // Use iptables statistic module for percentage-based rejection
-    let probability = (reset_pct as f64).min(100.0).max(0.0) / 100.0;
+    let probability = (reset_pct as f64).clamp(0.0, 100.0) / 100.0;
     let apply_cmd = format!(
         "iptables -A INPUT -p tcp --dport {} -m statistic --mode random \
          --probability {} -j REJECT --reject-with tcp-reset",
@@ -407,11 +402,7 @@ async fn run_connection_reset(
 ///
 /// Adds a `netem loss` qdisc on the detected default network interface,
 /// monitors the endpoint during the fault window, then removes the qdisc.
-async fn run_packet_loss(
-    endpoint: &str,
-    drop_pct: u8,
-    duration_secs: u64,
-) -> Result<ChaosReport> {
+async fn run_packet_loss(endpoint: &str, drop_pct: u8, duration_secs: u64) -> Result<ChaosReport> {
     let start = Instant::now();
     let iface = detect_interface();
 
@@ -635,10 +626,6 @@ mod tests {
         );
         let ts = ts.unwrap();
         // Should be a reasonable recent timestamp (2020-01-01 = 1577836800)
-        assert!(
-            ts > 1577836800,
-            "Timestamp {} should be after 2020",
-            ts
-        );
+        assert!(ts > 1577836800, "Timestamp {} should be after 2020", ts);
     }
 }

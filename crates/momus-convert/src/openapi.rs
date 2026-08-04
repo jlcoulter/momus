@@ -41,10 +41,9 @@ pub fn convert(path: &str) -> Result<TestPlan> {
                 None => continue,
             };
 
-            let operation_id = operation
-                .operation_id
-                .clone()
-                .unwrap_or_else(|| format!("{}_{}", method.to_lowercase(), sanitize_path(&path_str)));
+            let operation_id = operation.operation_id.clone().unwrap_or_else(|| {
+                format!("{}_{}", method.to_lowercase(), sanitize_path(&path_str))
+            });
 
             let url = build_url(&path_str, &operation.parameters);
             let mut headers = HashMap::new();
@@ -75,19 +74,17 @@ pub fn convert(path: &str) -> Result<TestPlan> {
             let body = build_request_body(&operation.request_body);
 
             let mut assertions = Vec::new();
-            for (status_code, response) in &operation.responses.responses {
+            if let Some((status_code, response)) = operation.responses.responses.iter().next() {
                 let status = match status_code {
                     StatusCode::Code(n) => *n,
                     StatusCode::Range(n) => *n * 100,
                 };
                 assertions.push(Assertion::Status(status));
-                if let Some(response) = response.as_item() {
-                    for (content_type, _) in &response.content {
-                        assertions.push(Assertion::ContentType(content_type.clone()));
-                        break;
-                    }
+                if let Some(response) = response.as_item()
+                    && let Some((content_type, _)) = response.content.iter().next()
+                {
+                    assertions.push(Assertion::ContentType(content_type.clone()));
                 }
-                break;
             }
 
             let step = RequestStep {
@@ -106,7 +103,11 @@ pub fn convert(path: &str) -> Result<TestPlan> {
 
     Ok(TestPlan {
         name: format!("OpenAPI: {}", title),
-        base_url: spec.servers.first().map(|s| s.url.clone()).unwrap_or_default(),
+        base_url: spec
+            .servers
+            .first()
+            .map(|s| s.url.clone())
+            .unwrap_or_default(),
         default_headers: HashMap::new(),
         steps,
         setup: vec![],
@@ -129,15 +130,17 @@ fn build_url(path: &str, parameters: &[ReferenceOr<Parameter>]) -> String {
     url
 }
 
-fn build_request_body(request_body: &Option<ReferenceOr<RequestBody>>) -> Option<serde_json::Value> {
+fn build_request_body(
+    request_body: &Option<ReferenceOr<RequestBody>>,
+) -> Option<serde_json::Value> {
     let body = match request_body {
         Some(ReferenceOr::Item(b)) => b,
         _ => return None,
     };
-    if let Some(media_type) = body.content.get("application/json") {
-        if let Some(schema) = &media_type.schema {
-            return schema_to_value(schema);
-        }
+    if let Some(media_type) = body.content.get("application/json")
+        && let Some(schema) = &media_type.schema
+    {
+        return schema_to_value(schema);
     }
     for (_, media_type) in &body.content {
         if let Some(schema) = &media_type.schema {
@@ -161,10 +164,10 @@ fn schema_kind_to_value(kind: &SchemaKind) -> serde_json::Value {
         SchemaKind::AllOf { all_of } => {
             let mut map = serde_json::Map::new();
             for sub in all_of {
-                if let Some(val) = schema_to_value(sub) {
-                    if let Some(obj) = val.as_object() {
-                        map.extend(obj.clone());
-                    }
+                if let Some(val) = schema_to_value(sub)
+                    && let Some(obj) = val.as_object()
+                {
+                    map.extend(obj.clone());
                 }
             }
             serde_json::Value::Object(map)
@@ -225,8 +228,7 @@ fn parse_method(method: &str) -> Result<Method> {
 fn sanitize_path(path: &str) -> String {
     path.trim_start_matches('/')
         .replace('/', "_")
-        .replace('{', "")
-        .replace('}', "")
+        .replace(['{', '}'], "")
         .replace('-', "_")
 }
 
@@ -281,11 +283,15 @@ paths:
       responses:
         "200":
           description: OK
-"#.to_string();
+"#
+        .to_string();
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("spec.yaml");
         std::fs::write(&path, &spec).unwrap();
-        (dir.path().join("spec.yaml").to_str().unwrap().to_string(), dir)
+        (
+            dir.path().join("spec.yaml").to_str().unwrap().to_string(),
+            dir,
+        )
     }
 
     #[test]
@@ -304,7 +310,11 @@ paths:
         if let Step::Request(step) = &plan.steps[0] {
             assert_eq!(step.method, Method::Get);
             assert_eq!(step.url, "/health");
-            assert!(step.assert.iter().any(|a| matches!(a, Assertion::Status(200))));
+            assert!(
+                step.assert
+                    .iter()
+                    .any(|a| matches!(a, Assertion::Status(200)))
+            );
         } else {
             panic!("Expected Request step");
         }
