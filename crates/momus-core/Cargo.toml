@@ -1,6 +1,6 @@
 [package]
 name = "momus-core"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 description = "Generic API test harness — AST types, assertion evaluation, plan runner, template resolution"
 license = "Apache-2.0"

@@ -1,6 +1,6 @@
 [package]
 name = "momus-convert"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 description = "Convert API descriptions (OpenAPI, Postman, HAR, cURL, GraphQL, gRPC, FHIR) into Momus test plans"
 license = "Apache-2.0"
