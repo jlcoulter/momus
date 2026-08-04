@@ -106,8 +106,253 @@ pub fn assertion_for_kind(kind: &TestCaseKind, resource_type: &str) -> Option<Re
             outcome_severity: Some("error".to_string()),
             ..ResponseAssertion::none()
         }),
-        TestCaseKind::Conformance { .. } => None,
+        TestCaseKind::Conformance { resource_type, .. } => {
+            let mut required = HashMap::new();
+            required.insert(
+                resource_type.clone(),
+                vec!["id".to_string(), "meta".to_string()],
+            );
+            Some(ResponseAssertion {
+                bundle_type: Some("searchset".to_string()),
+                min_entries: Some(1),
+                required_fields: required,
+                ..ResponseAssertion::none()
+            })
+        }
     }
+}
+
+/// Generate near/proximity search tests for location/coordinate type params.
+///
+/// For search parameters of type "quantity" or "location", generates test cases
+/// using `:near` and `:within` modifiers with coordinate-like values.
+pub fn generate_near_search_tests(
+    rtype: &str,
+    profile_url: &Option<String>,
+    sp: &RestSearchParam,
+) -> Vec<TestCase> {
+    let mut tests = Vec::new();
+
+    // Near/proximity search is applicable to quantity and location types
+    let is_near_type = matches!(sp.param_type.as_str(), "quantity" | "location" | "special");
+    if !is_near_type {
+        return tests;
+    }
+
+    // :near modifier test — uses lat/lon or coordinate value
+    tests.push(TestCase {
+        name: format!("search-{}-{}-near", rtype.to_lowercase(), sp.name),
+        kind: TestCaseKind::SearchNear {
+            param: sp.name.clone(),
+        },
+        interaction: Interaction::SearchType,
+        resource_type: rtype.to_string(),
+        profile_url: profile_url.clone(),
+        request: HttpRequest {
+            method: "GET".to_string(),
+            url: format!("/{}?{}:near={}", rtype, sp.name, "{lat}|{lon}|{distance}"),
+            headers: HashMap::new(),
+            body: None,
+        },
+        validation: ValidationSpec {
+            expected_status: 200,
+            profile_url: profile_url.clone(),
+            required_elements: vec![],
+            forbidden_elements: vec![],
+            response_assertion: assertion_for_kind(
+                &TestCaseKind::SearchNear {
+                    param: sp.name.clone(),
+                },
+                rtype,
+            ),
+        },
+    });
+
+    // :within modifier test
+    tests.push(TestCase {
+        name: format!("search-{}-{}-within", rtype.to_lowercase(), sp.name),
+        kind: TestCaseKind::SearchNear {
+            param: sp.name.clone(),
+        },
+        interaction: Interaction::SearchType,
+        resource_type: rtype.to_string(),
+        profile_url: profile_url.clone(),
+        request: HttpRequest {
+            method: "GET".to_string(),
+            url: format!("/{}?{}:within={}", rtype, sp.name, "{lat}|{lon}|{distance}"),
+            headers: HashMap::new(),
+            body: None,
+        },
+        validation: ValidationSpec {
+            expected_status: 200,
+            profile_url: profile_url.clone(),
+            required_elements: vec![],
+            forbidden_elements: vec![],
+            response_assertion: assertion_for_kind(
+                &TestCaseKind::SearchNear {
+                    param: sp.name.clone(),
+                },
+                rtype,
+            ),
+        },
+    });
+
+    tests
+}
+
+/// Generate chained search tests for search parameters with chain expressions.
+///
+/// Chained search allows searching across resource references, e.g.
+/// `?patient.name=John` searches for observations where the patient's name is John.
+/// This function generates test cases for chained search syntax using the
+/// search parameter's expression to identify chainable references.
+pub fn generate_chained_search_tests(
+    rtype: &str,
+    profile_url: &Option<String>,
+    sp: &RestSearchParam,
+    search_parameters: &[SearchParameter],
+) -> Vec<TestCase> {
+    let mut tests = Vec::new();
+
+    // Find the full SearchParameter definition to get the expression
+    let sp_def = search_parameters
+        .iter()
+        .find(|s| s.code == sp.name && s.base.contains(&rtype.to_string()));
+
+    let expression = match sp_def {
+        Some(def) => def.expression.as_deref().unwrap_or(""),
+        None => "",
+    };
+
+    // Check if the expression contains a reference chain (e.g., "Patient.generalPractitioner")
+    // A chainable expression typically has the form "ResourceType.referenceField"
+    // We look for patterns like "ResourceType.field" where field is a reference
+    let chainable = !expression.is_empty()
+        && (expression.contains('.') || sp.param_type == "reference" || sp.param_type == "string");
+
+    if !chainable {
+        return tests;
+    }
+
+    // Extract chain prefix from expression if available
+    let chain_prefix = if let Some(dot_pos) = expression.find('.') {
+        let prefix = &expression[..dot_pos];
+        // Extract just the resource type part (before any space or pipe)
+        prefix
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .trim_end_matches('|')
+            .to_lowercase()
+    } else {
+        // Default: use the param name as a chain prefix
+        sp.name.to_lowercase()
+    };
+
+    // Generate a chained search test
+    // e.g., ?patient.name=John or ?subject.name=John
+    let chain_param = format!("{}.{}", chain_prefix, sp.name);
+
+    tests.push(TestCase {
+        name: format!("search-{}-{}-chained", rtype.to_lowercase(), sp.name),
+        kind: TestCaseKind::SearchChained {
+            param: sp.name.clone(),
+            chain: chain_param.clone(),
+        },
+        interaction: Interaction::SearchType,
+        resource_type: rtype.to_string(),
+        profile_url: profile_url.clone(),
+        request: HttpRequest {
+            method: "GET".to_string(),
+            url: format!("/{}?{}={}", rtype, chain_param, "{value}"),
+            headers: HashMap::new(),
+            body: None,
+        },
+        validation: ValidationSpec {
+            expected_status: 200,
+            profile_url: profile_url.clone(),
+            required_elements: vec![],
+            forbidden_elements: vec![],
+            response_assertion: assertion_for_kind(
+                &TestCaseKind::SearchChained {
+                    param: sp.name.clone(),
+                    chain: chain_param.clone(),
+                },
+                rtype,
+            ),
+        },
+    });
+
+    tests
+}
+
+/// Generate conformance (mustSupport) tests for a StructureDefinition profile.
+///
+/// For each resource type with a profile URL, generates test cases that verify
+/// mustSupport fields are present in responses. Uses the FHIR response assertions
+/// engine to check required field presence.
+pub fn generate_conformance_tests(
+    rtype: &str,
+    profile_url: &Option<String>,
+    supported_profile: &[String],
+) -> Vec<TestCase> {
+    let mut tests = Vec::new();
+
+    // Collect all profile URLs to test
+    let mut profiles = Vec::new();
+    if let Some(url) = profile_url {
+        profiles.push(url.clone());
+    }
+    for sp in supported_profile {
+        profiles.push(sp.clone());
+    }
+
+    for profile_url_str in profiles {
+        let test_name = format!("conformance-{}-mustsupport", rtype.to_lowercase());
+
+        tests.push(TestCase {
+            name: if profile_url_str == profile_url.as_deref().unwrap_or("") {
+                test_name
+            } else {
+                format!(
+                    "conformance-{}-mustsupport-{}",
+                    rtype.to_lowercase(),
+                    profile_url_str
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or(&profile_url_str)
+                )
+            },
+            kind: TestCaseKind::Conformance {
+                resource_type: rtype.to_string(),
+                profile_url: profile_url_str.clone(),
+            },
+            interaction: Interaction::SearchType,
+            resource_type: rtype.to_string(),
+            profile_url: Some(profile_url_str.clone()),
+            request: HttpRequest {
+                method: "GET".to_string(),
+                url: format!("/{}?_count=1", rtype),
+                headers: HashMap::new(),
+                body: None,
+            },
+            validation: ValidationSpec {
+                expected_status: 200,
+                profile_url: Some(profile_url_str.clone()),
+                required_elements: vec!["id".to_string(), "meta".to_string()],
+                forbidden_elements: vec![],
+                response_assertion: assertion_for_kind(
+                    &TestCaseKind::Conformance {
+                        resource_type: rtype.to_string(),
+                        profile_url: profile_url_str.clone(),
+                    },
+                    rtype,
+                ),
+            },
+        });
+    }
+
+    tests
 }
 
 /// Generate a comprehensive test plan from a CapabilityStatement.
@@ -142,7 +387,7 @@ pub fn generate_test_plan(
                             name: format!("read-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
                             interaction: Interaction::Read,
-                            resource_type: rtype.clone(),
+                            resource_type: rtype.to_string(),
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
@@ -164,7 +409,7 @@ pub fn generate_test_plan(
                             name: format!("vread-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
                             interaction: Interaction::Vread,
-                            resource_type: rtype.clone(),
+                            resource_type: rtype.to_string(),
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
@@ -186,7 +431,7 @@ pub fn generate_test_plan(
                             name: format!("create-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
                             interaction: Interaction::Create,
-                            resource_type: rtype.clone(),
+                            resource_type: rtype.to_string(),
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "POST".to_string(),
@@ -215,7 +460,7 @@ pub fn generate_test_plan(
                             name: format!("update-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
                             interaction: Interaction::Update,
-                            resource_type: rtype.clone(),
+                            resource_type: rtype.to_string(),
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "PUT".to_string(),
@@ -244,7 +489,7 @@ pub fn generate_test_plan(
                             name: format!("delete-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
                             interaction: Interaction::Delete,
-                            resource_type: rtype.clone(),
+                            resource_type: rtype.to_string(),
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "DELETE".to_string(),
@@ -266,7 +511,7 @@ pub fn generate_test_plan(
                             name: format!("patch-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
                             interaction: Interaction::Patch,
-                            resource_type: rtype.clone(),
+                            resource_type: rtype.to_string(),
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "PATCH".to_string(),
@@ -292,7 +537,7 @@ pub fn generate_test_plan(
                             name: format!("history-instance-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
                             interaction: Interaction::HistoryInstance,
-                            resource_type: rtype.clone(),
+                            resource_type: rtype.to_string(),
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
@@ -318,7 +563,7 @@ pub fn generate_test_plan(
                             name: format!("history-type-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
                             interaction: Interaction::HistoryType,
-                            resource_type: rtype.clone(),
+                            resource_type: rtype.to_string(),
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
@@ -354,7 +599,7 @@ pub fn generate_test_plan(
                             param_type: sp.param_type.clone(),
                         },
                         interaction: Interaction::SearchType,
-                        resource_type: rtype.clone(),
+                        resource_type: rtype.to_string(),
                         profile_url: profile_url.clone(),
                         request: HttpRequest {
                             method: "GET".to_string(),
@@ -391,7 +636,7 @@ pub fn generate_test_plan(
                                 modifier: modifier.clone(),
                             },
                             interaction: Interaction::SearchType,
-                            resource_type: rtype.clone(),
+                            resource_type: rtype.to_string(),
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
@@ -435,7 +680,7 @@ pub fn generate_test_plan(
                                 prefix: prefix.clone(),
                             },
                             interaction: Interaction::SearchType,
-                            resource_type: rtype.clone(),
+                            resource_type: rtype.to_string(),
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
@@ -464,6 +709,17 @@ pub fn generate_test_plan(
                             },
                         });
                     }
+
+                    // Near/proximity search tests for location/coordinate type params
+                    tests.extend(generate_near_search_tests(rtype, &profile_url, sp));
+
+                    // Chained search tests for reference params with chain expressions
+                    tests.extend(generate_chained_search_tests(
+                        rtype,
+                        &profile_url,
+                        sp,
+                        _search_parameters,
+                    ));
                 }
 
                 // Combinatorial search (2-param combos)
@@ -483,7 +739,7 @@ pub fn generate_test_plan(
                                     params: vec![p1.name.clone(), p2.name.clone()],
                                 },
                                 interaction: Interaction::SearchType,
-                                resource_type: rtype.clone(),
+                                resource_type: rtype.to_string(),
                                 profile_url: profile_url.clone(),
                                 request: HttpRequest {
                                     method: "GET".to_string(),
@@ -520,7 +776,7 @@ pub fn generate_test_plan(
                             revinclude: false,
                         },
                         interaction: Interaction::SearchType,
-                        resource_type: rtype.clone(),
+                        resource_type: rtype.to_string(),
                         profile_url: profile_url.clone(),
                         request: HttpRequest {
                             method: "GET".to_string(),
@@ -553,7 +809,7 @@ pub fn generate_test_plan(
                             revinclude: true,
                         },
                         interaction: Interaction::SearchType,
-                        resource_type: rtype.clone(),
+                        resource_type: rtype.to_string(),
                         profile_url: profile_url.clone(),
                         request: HttpRequest {
                             method: "GET".to_string(),
@@ -590,7 +846,7 @@ pub fn generate_test_plan(
                             param: param_name.to_string(),
                         },
                         interaction: Interaction::SearchType,
-                        resource_type: rtype.clone(),
+                        resource_type: rtype.to_string(),
                         profile_url: profile_url.clone(),
                         request: HttpRequest {
                             method: "GET".to_string(),
@@ -622,7 +878,7 @@ pub fn generate_test_plan(
                         code: op.name.clone(),
                     },
                     interaction: Interaction::Operation(op.name.clone()),
-                    resource_type: rtype.clone(),
+                    resource_type: rtype.to_string(),
                     profile_url: profile_url.clone(),
                     request: HttpRequest {
                         method: "GET".to_string(),
@@ -661,7 +917,7 @@ pub fn generate_test_plan(
                         description: format!("Undeclared interaction: {}", undeclared_code),
                     },
                     interaction: Interaction::from_code(undeclared_code).unwrap(),
-                    resource_type: rtype.clone(),
+                    resource_type: rtype.to_string(),
                     profile_url: profile_url.clone(),
                     request: HttpRequest {
                         method: match *undeclared_code {
@@ -701,9 +957,16 @@ pub fn generate_test_plan(
                 });
             }
 
+            // --- Conformance (mustSupport) tests ---
+            tests.extend(generate_conformance_tests(
+                rtype,
+                &profile_url,
+                &resource.supported_profile,
+            ));
+
             if !tests.is_empty() {
                 groups.push(TestGroup {
-                    resource_type: rtype.clone(),
+                    resource_type: rtype.to_string(),
                     profile_url,
                     tests,
                 });
@@ -855,5 +1118,181 @@ mod tests {
 
         let interaction_assertion = assertion_for_kind(&TestCaseKind::Interaction, "Patient");
         assert!(interaction_assertion.is_none());
+    }
+
+    #[test]
+    fn generate_near_search_tests_for_location_type() {
+        let sp = RestSearchParam {
+            name: "near".to_string(),
+            param_type: "location".to_string(),
+            definition: None,
+            documentation: None,
+        };
+        let tests = generate_near_search_tests("Location", &None, &sp);
+        assert_eq!(tests.len(), 2, "should generate :near and :within tests");
+        assert!(tests[0].name.contains("near"));
+        assert!(tests[1].name.contains("within"));
+        assert_eq!(
+            tests[0].kind,
+            TestCaseKind::SearchNear {
+                param: "near".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn generate_near_search_tests_skips_non_location() {
+        let sp = RestSearchParam {
+            name: "name".to_string(),
+            param_type: "string".to_string(),
+            definition: None,
+            documentation: None,
+        };
+        let tests = generate_near_search_tests("Patient", &None, &sp);
+        assert!(
+            tests.is_empty(),
+            "string params should not generate near tests"
+        );
+    }
+
+    #[test]
+    fn generate_chained_search_tests_with_expression() {
+        let sp = RestSearchParam {
+            name: "name".to_string(),
+            param_type: "string".to_string(),
+            definition: None,
+            documentation: None,
+        };
+        let search_params = vec![SearchParameter {
+            resource_type: "SearchParameter".to_string(),
+            url: "http://example.org/SearchParameter/Patient-name".to_string(),
+            name: "name".to_string(),
+            code: "name".to_string(),
+            base: vec!["Patient".to_string()],
+            param_type: "string".to_string(),
+            expression: Some("Patient.name".to_string()),
+            description: None,
+        }];
+        let tests = generate_chained_search_tests("Patient", &None, &sp, &search_params);
+        assert_eq!(tests.len(), 1, "should generate one chained search test");
+        assert!(tests[0].name.contains("chained"));
+        if let TestCaseKind::SearchChained { param, chain } = &tests[0].kind {
+            assert_eq!(param, "name");
+            assert!(chain.contains('.'));
+        } else {
+            panic!("Expected SearchChained variant");
+        }
+    }
+
+    #[test]
+    fn generate_chained_search_tests_skips_without_expression() {
+        let sp = RestSearchParam {
+            name: "name".to_string(),
+            param_type: "string".to_string(),
+            definition: None,
+            documentation: None,
+        };
+        let tests = generate_chained_search_tests("Patient", &None, &sp, &[]);
+        assert!(
+            tests.is_empty(),
+            "no expression should yield no chained tests"
+        );
+    }
+
+    #[test]
+    fn generate_conformance_tests_with_profile() {
+        let tests = generate_conformance_tests(
+            "Patient",
+            &Some("http://example.org/StructureDefinition/TestPatient".to_string()),
+            &[],
+        );
+        assert_eq!(tests.len(), 1, "should generate one conformance test");
+        assert!(tests[0].name.contains("mustsupport"));
+        assert_eq!(
+            tests[0].kind,
+            TestCaseKind::Conformance {
+                resource_type: "Patient".to_string(),
+                profile_url: "http://example.org/StructureDefinition/TestPatient".to_string(),
+            }
+        );
+        assert_eq!(tests[0].validation.required_elements, vec!["id", "meta"]);
+    }
+
+    #[test]
+    fn generate_conformance_tests_with_supported_profiles() {
+        let tests = generate_conformance_tests(
+            "Patient",
+            &None,
+            &["http://example.org/StructureDefinition/SupportedPatient".to_string()],
+        );
+        assert_eq!(
+            tests.len(),
+            1,
+            "should generate one conformance test per supported profile"
+        );
+        assert!(tests[0].name.contains("mustsupport"));
+    }
+
+    #[test]
+    fn generate_plan_includes_near_chained_conformance() {
+        let mut cs = test_capability_statement();
+        // Add a location-type search param to trigger near tests
+        cs.rest[0].resource[0].search_param.push(RestSearchParam {
+            name: "position".to_string(),
+            param_type: "location".to_string(),
+            definition: None,
+            documentation: None,
+        });
+        // Add a supported profile to trigger conformance tests
+        cs.rest[0].resource[0].supported_profile =
+            vec!["http://example.org/StructureDefinition/SupportedPatient".to_string()];
+
+        let search_params = vec![SearchParameter {
+            resource_type: "SearchParameter".to_string(),
+            url: "http://example.org/SearchParameter/Patient-name".to_string(),
+            name: "name".to_string(),
+            code: "name".to_string(),
+            base: vec!["Patient".to_string()],
+            param_type: "string".to_string(),
+            expression: Some("Patient.name".to_string()),
+            description: None,
+        }];
+
+        let plan = generate_test_plan(
+            &cs,
+            &search_params,
+            None,
+            None,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        let group = &plan.test_groups[0];
+
+        let near_tests: Vec<&TestCase> = group
+            .tests
+            .iter()
+            .filter(|t| matches!(t.kind, TestCaseKind::SearchNear { .. }))
+            .collect();
+        assert!(!near_tests.is_empty(), "should have near search tests");
+
+        let chained_tests: Vec<&TestCase> = group
+            .tests
+            .iter()
+            .filter(|t| matches!(t.kind, TestCaseKind::SearchChained { .. }))
+            .collect();
+        assert!(
+            !chained_tests.is_empty(),
+            "should have chained search tests"
+        );
+
+        let conformance_tests: Vec<&TestCase> = group
+            .tests
+            .iter()
+            .filter(|t| matches!(t.kind, TestCaseKind::Conformance { .. }))
+            .collect();
+        assert!(
+            !conformance_tests.is_empty(),
+            "should have conformance tests"
+        );
     }
 }

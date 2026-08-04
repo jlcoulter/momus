@@ -31,10 +31,11 @@ pub fn evaluate_assertions(
     status_code: u16,
     headers: &HashMap<String, String>,
     body: &Option<serde_json::Value>,
+    response_time_ms: u64,
 ) -> Vec<AssertionResult> {
     assertions
         .iter()
-        .map(|a| evaluate_assertion(a, status_code, headers, body))
+        .map(|a| evaluate_assertion(a, status_code, headers, body, response_time_ms))
         .collect()
 }
 
@@ -44,13 +45,14 @@ pub fn evaluate_assertion(
     status_code: u16,
     headers: &HashMap<String, String>,
     body: &Option<serde_json::Value>,
+    response_time_ms: u64,
 ) -> AssertionResult {
     match assertion {
         // -- Combinators ----------------------------------------------------
         Assertion::AllOf(children) => {
             let results: Vec<_> = children
                 .iter()
-                .map(|c| evaluate_assertion(c, status_code, headers, body))
+                .map(|c| evaluate_assertion(c, status_code, headers, body, response_time_ms))
                 .collect();
             let passed = results.iter().all(|r| r.passed);
             let failures: Vec<_> = results
@@ -73,7 +75,7 @@ pub fn evaluate_assertion(
         Assertion::AnyOf(children) => {
             let results: Vec<_> = children
                 .iter()
-                .map(|c| evaluate_assertion(c, status_code, headers, body))
+                .map(|c| evaluate_assertion(c, status_code, headers, body, response_time_ms))
                 .collect();
             let passed = results.iter().any(|r| r.passed);
             AssertionResult {
@@ -89,7 +91,7 @@ pub fn evaluate_assertion(
         }
 
         Assertion::Not(child) => {
-            let result = evaluate_assertion(child, status_code, headers, body);
+            let result = evaluate_assertion(child, status_code, headers, body, response_time_ms);
             AssertionResult {
                 description: format!("not ({})", result.description),
                 passed: !result.passed,
@@ -231,6 +233,20 @@ pub fn evaluate_assertion(
                 AssertionResult::fail(
                     format!("content-type contains '{expected}'"),
                     format!("got '{actual}'"),
+                )
+            }
+        }
+
+        // -- Performance ----------------------------------------------------
+        Assertion::ResponseTime(max_millis) => {
+            if response_time_ms <= *max_millis {
+                AssertionResult::pass(format!(
+                    "response time <= {max_millis}ms (was {response_time_ms}ms)"
+                ))
+            } else {
+                AssertionResult::fail(
+                    format!("response time <= {max_millis}ms"),
+                    format!("took {response_time_ms}ms"),
                 )
             }
         }
@@ -653,13 +669,13 @@ mod tests {
 
     #[test]
     fn test_status_pass() {
-        let result = evaluate_assertion(&Assertion::Status(200), 200, &HashMap::new(), &None);
+        let result = evaluate_assertion(&Assertion::Status(200), 200, &HashMap::new(), &None, 0);
         assert!(result.passed);
     }
 
     #[test]
     fn test_status_fail() {
-        let result = evaluate_assertion(&Assertion::Status(200), 404, &HashMap::new(), &None);
+        let result = evaluate_assertion(&Assertion::Status(200), 404, &HashMap::new(), &None, 0);
         assert!(!result.passed);
         assert!(result.message.unwrap().contains("404"));
     }
@@ -671,6 +687,7 @@ mod tests {
             304,
             &HashMap::new(),
             &None,
+            0,
         );
         assert!(result.passed);
     }
@@ -684,6 +701,7 @@ mod tests {
             200,
             &headers,
             &None,
+            0,
         );
         assert!(result.passed);
     }
@@ -697,6 +715,7 @@ mod tests {
             200,
             &headers,
             &None,
+            0,
         );
         assert!(result.passed);
     }
@@ -709,6 +728,7 @@ mod tests {
             200,
             &HashMap::new(),
             &Some(body),
+            0,
         );
         assert!(result.passed);
     }
@@ -724,6 +744,7 @@ mod tests {
             200,
             &HashMap::new(),
             &Some(body),
+            0,
         );
         assert!(result.passed);
     }
@@ -736,6 +757,7 @@ mod tests {
             200,
             &HashMap::new(),
             &Some(body),
+            0,
         );
         assert!(result.passed);
     }
@@ -756,6 +778,7 @@ mod tests {
             200,
             &HashMap::new(),
             &Some(body),
+            0,
         );
         assert!(result.passed);
     }
@@ -772,6 +795,7 @@ mod tests {
             200,
             &HashMap::new(),
             &Some(body),
+            0,
         );
         assert!(result.passed);
     }
@@ -787,6 +811,7 @@ mod tests {
             200,
             &HashMap::new(),
             &Some(body),
+            0,
         );
         assert!(!result.passed);
     }
@@ -798,6 +823,7 @@ mod tests {
             304,
             &HashMap::new(),
             &None,
+            0,
         );
         assert!(result.passed);
     }
@@ -809,6 +835,7 @@ mod tests {
             200,
             &HashMap::new(),
             &None,
+            0,
         );
         assert!(result.passed);
     }
@@ -817,7 +844,7 @@ mod tests {
     fn test_content_type() {
         let mut headers = HashMap::new();
         headers.insert("content-type".into(), "application/fhir+json".into());
-        let result = evaluate_assertion(&Assertion::content_type("json"), 200, &headers, &None);
+        let result = evaluate_assertion(&Assertion::content_type("json"), 200, &headers, &None, 0);
         assert!(result.passed);
     }
 
@@ -829,6 +856,7 @@ mod tests {
             200,
             &HashMap::new(),
             &Some(body),
+            0,
         );
         assert!(result.passed);
     }
@@ -847,6 +875,7 @@ mod tests {
             200,
             &HashMap::new(),
             &Some(body),
+            0,
         );
         assert!(result.passed);
     }
@@ -865,6 +894,7 @@ mod tests {
             200,
             &HashMap::new(),
             &Some(body),
+            0,
         );
         assert!(result.passed);
     }
@@ -880,6 +910,45 @@ mod tests {
             200,
             &HashMap::new(),
             &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_response_time_pass() {
+        let result = evaluate_assertion(
+            &Assertion::response_time(500),
+            200,
+            &HashMap::new(),
+            &None,
+            150,
+        );
+        assert!(result.passed);
+        assert!(result.description.contains("500ms"));
+    }
+
+    #[test]
+    fn test_response_time_fail() {
+        let result = evaluate_assertion(
+            &Assertion::response_time(100),
+            200,
+            &HashMap::new(),
+            &None,
+            500,
+        );
+        assert!(!result.passed);
+        assert!(result.message.unwrap().contains("500ms"));
+    }
+
+    #[test]
+    fn test_response_time_exact_boundary() {
+        let result = evaluate_assertion(
+            &Assertion::response_time(200),
+            200,
+            &HashMap::new(),
+            &None,
+            200,
         );
         assert!(result.passed);
     }

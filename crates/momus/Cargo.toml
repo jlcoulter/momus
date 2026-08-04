@@ -1,6 +1,6 @@
 [package]
 name = "momus"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 description = "Generic API test harness with a composable assertion AST (umbrella crate)"
 license = "Apache-2.0"
@@ -11,14 +11,14 @@ keywords = ["testing", "api", "http", "assertions", "jsonpath"]
 categories = ["development-tools::testing", "web-programming::http-client"]
 
 [dependencies]
-momus-core = { version = "0.1", path = "../momus-core" }
-momus-mock = { version = "0.1", path = "../momus-mock" }
-momus-convert = { version = "0.1", path = "../momus-convert" }
-momus-bench = { version = "0.1", path = "../momus-bench" }
-momus-fuzz = { version = "0.1", path = "../momus-fuzz" }
-momus-chaos = { version = "0.1", path = "../momus-chaos" }
-momus-contract = { version = "0.1", path = "../momus-contract" }
-momus-guard = { version = "0.1", path = "../momus-guard" }
-momus-diff = { version = "0.1", path = "../momus-diff" }
+momus-core = { path = "../momus-core" }
+momus-mock = { path = "../momus-mock" }
+momus-convert = { path = "../momus-convert" }
+momus-bench = { path = "../momus-bench" }
+momus-fuzz = { path = "../momus-fuzz" }
+momus-chaos = { path = "../momus-chaos" }
+momus-contract = { path = "../momus-contract" }
+momus-guard = { path = "../momus-guard" }
+momus-diff = { path = "../momus-diff" }
 serde_json = "1"
 anyhow = "1"

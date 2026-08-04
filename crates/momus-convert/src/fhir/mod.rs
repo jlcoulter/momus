@@ -8,15 +8,20 @@
 //! 3. Generate test plan with CRUD, search, and conformance tests
 
 pub mod assertions;
+pub mod bulk_data;
+pub mod bulk_loader;
 pub mod capability;
+pub mod hcpd;
 pub mod operation;
 pub mod package;
 pub mod planner;
 pub mod profile;
+pub mod profile_resolver;
 pub mod resource_gen;
 pub mod search_param;
 pub mod test_model;
 pub mod validator;
+pub mod valuesets;
 
 use anyhow::{Context, Result};
 use momus_core::ast::TestPlan;
