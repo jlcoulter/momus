@@ -402,7 +402,9 @@ fn evaluate_json_predicate(
             }
             let sub_results: Vec<_> = results
                 .iter()
-                .map(|r| evaluate_json_predicate(&format!("{desc}[*]"), sub, std::slice::from_ref(r)))
+                .map(|r| {
+                    evaluate_json_predicate(&format!("{desc}[*]"), sub, std::slice::from_ref(r))
+                })
                 .collect();
             let passed = sub_results.iter().all(|r| r.passed);
             AssertionResult {
@@ -423,7 +425,9 @@ fn evaluate_json_predicate(
             }
             let sub_results: Vec<_> = results
                 .iter()
-                .map(|r| evaluate_json_predicate(&format!("{desc}[*]"), sub, std::slice::from_ref(r)))
+                .map(|r| {
+                    evaluate_json_predicate(&format!("{desc}[*]"), sub, std::slice::from_ref(r))
+                })
                 .collect();
             let passed = sub_results.iter().any(|r| r.passed);
             AssertionResult {
