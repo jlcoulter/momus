@@ -4,6 +4,7 @@
 /// - `{base_url}` → the configured base URL
 /// - `{steps.<name>.id}` → the `id` field from a saved step response
 /// - `{steps.<name>.<field.path>}` → a field value from a saved step response
+/// - `{env.VAR}` → the value of environment variable `VAR`
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -11,6 +12,7 @@ use std::collections::HashMap;
 pub fn resolve_url(url: &str, base_url: &str, step_responses: &HashMap<String, Value>) -> String {
     let mut result = url.to_string();
     result = result.replace("{base_url}", base_url);
+    resolve_env_templates(&mut result);
     resolve_step_templates(&mut result, step_responses);
     result
 }
@@ -19,6 +21,7 @@ pub fn resolve_url(url: &str, base_url: &str, step_responses: &HashMap<String, V
 pub fn resolve_body(body: &mut Value, step_responses: &HashMap<String, Value>) {
     match body {
         Value::String(s) => {
+            resolve_env_templates(s);
             resolve_step_templates(s, step_responses);
         }
         Value::Object(obj) => {
@@ -41,8 +44,24 @@ pub fn resolve_headers(
     step_responses: &HashMap<String, Value>,
 ) {
     for value in headers.values_mut() {
+        resolve_env_templates(value);
         resolve_step_templates(value, step_responses);
     }
+}
+
+/// Resolve `{env.VAR}` templates in a string.
+fn resolve_env_templates(s: &mut String) {
+    // Match {env.VAR_NAME} patterns
+    let re = regex::Regex::new(r"\{env\.([A-Za-z_][A-Za-z0-9_]*)\}").unwrap();
+    *s = re
+        .replace_all(s, |caps: &regex::Captures| {
+            let var_name = &caps[1];
+            std::env::var(var_name).unwrap_or_else(|_| {
+                tracing::warn!("Environment variable '{}' not set, leaving template unresolved", var_name);
+                caps[0].to_string()
+            })
+        })
+        .to_string();
 }
 
 /// Resolve `{steps.<name>.id}` and `{steps.<name>.<field>}` templates in a string.
@@ -201,5 +220,21 @@ mod tests {
     fn no_templates_unchanged() {
         let result = resolve_url("/plain/url", "http://base", &HashMap::new());
         assert_eq!(result, "/plain/url");
+    }
+
+    #[test]
+    fn resolve_env_var() {
+        // Set a test env var
+        unsafe { std::env::set_var("MOMUS_TEST_URL", "http://test:8080"); }
+        let result = resolve_url("{env.MOMUS_TEST_URL}/api", "http://fallback", &HashMap::new());
+        assert_eq!(result, "http://test:8080/api");
+        unsafe { std::env::remove_var("MOMUS_TEST_URL"); }
+    }
+
+    #[test]
+    fn resolve_env_var_missing() {
+        // Missing env var should leave template unresolved
+        let result = resolve_url("{env.NONEXISTENT_VAR}/path", "http://base", &HashMap::new());
+        assert_eq!(result, "{env.NONEXISTENT_VAR}/path");
     }
 }
