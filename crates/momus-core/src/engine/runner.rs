@@ -339,7 +339,7 @@ async fn execute_sequence(seq: &SequenceStep, ctx: &mut RunContext) -> Result<Ve
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mock::MockServer;
+    use momus_mock::MockServer;
 
     #[tokio::test]
     async fn test_execute_simple_request() {
@@ -347,7 +347,7 @@ mod tests {
             let mut routes = std::collections::HashMap::new();
             routes.insert(
                 "GET /api/health".into(),
-                crate::mock::MockResponse::json(200, serde_json::json!({"status": "ok"})),
+                momus_mock::MockResponse::json(200, serde_json::json!({"status": "ok"})),
             );
             routes
         })
@@ -388,11 +388,11 @@ mod tests {
             let mut routes = std::collections::HashMap::new();
             routes.insert(
                 "POST /api/items".into(),
-                crate::mock::MockResponse::json(201, serde_json::json!({"id": "item-001"})),
+                momus_mock::MockResponse::json(201, serde_json::json!({"id": "item-001"})),
             );
             routes.insert(
                 "GET /api/items/item-001".into(),
-                crate::mock::MockResponse::json(
+                momus_mock::MockResponse::json(
                     200,
                     serde_json::json!({"id": "item-001", "name": "test"}),
                 ),
@@ -452,7 +452,7 @@ mod tests {
             let mut routes = std::collections::HashMap::new();
             routes.insert(
                 "GET /api/data".into(),
-                crate::mock::MockResponse::json(200, serde_json::json!({"value": 42})),
+                momus_mock::MockResponse::json(200, serde_json::json!({"value": 42})),
             );
             routes
         })
@@ -493,15 +493,15 @@ mod tests {
             let mut routes = std::collections::HashMap::new();
             routes.insert(
                 "POST /api/setup".into(),
-                crate::mock::MockResponse::json(200, serde_json::json!({"status": "ready"})),
+                momus_mock::MockResponse::json(200, serde_json::json!({"status": "ready"})),
             );
             routes.insert(
                 "GET /api/test".into(),
-                crate::mock::MockResponse::json(200, serde_json::json!({"result": "pass"})),
+                momus_mock::MockResponse::json(200, serde_json::json!({"result": "pass"})),
             );
             routes.insert(
                 "POST /api/teardown".into(),
-                crate::mock::MockResponse::json(200, serde_json::json!({"status": "cleaned"})),
+                momus_mock::MockResponse::json(200, serde_json::json!({"status": "cleaned"})),
             );
             routes
         })

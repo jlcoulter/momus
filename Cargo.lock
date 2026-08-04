@@ -713,18 +713,159 @@ name = "momus"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "axum",
- "bytes",
- "clap",
+ "momus-bench",
+ "momus-chaos",
+ "momus-contract",
+ "momus-convert",
+ "momus-core",
+ "momus-diff",
+ "momus-fuzz",
+ "momus-guard",
+ "momus-mock",
+ "serde_json",
+]
+
+[[package]]
+name = "momus-bench"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
  "futures",
- "http-body-util",
+ "momus-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "momus-chaos"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "momus-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "momus-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "clap",
+ "momus-bench",
+ "momus-chaos",
+ "momus-contract",
+ "momus-convert",
+ "momus-core",
+ "momus-diff",
+ "momus-fuzz",
+ "momus-guard",
+ "momus-mock",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "momus-contract"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "momus-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "momus-convert"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "momus-core",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "momus-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "momus-mock",
  "regex",
  "reqwest",
  "serde",
  "serde_json",
  "tokio",
  "tracing",
- "tracing-subscriber",
+]
+
+[[package]]
+name = "momus-diff"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "momus-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "momus-fuzz"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "momus-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "momus-guard"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "momus-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "momus-mock"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "bytes",
+ "http-body-util",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

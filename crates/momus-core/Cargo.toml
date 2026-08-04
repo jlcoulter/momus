@@ -1,0 +1,25 @@
+[package]
+name = "momus-core"
+version = "0.1.0"
+edition = "2024"
+description = "Generic API test harness — AST types, assertion evaluation, plan runner, template resolution"
+license = "Apache-2.0"
+repository = "https://github.com/jlcoulter/momus"
+homepage = "https://github.com/jlcoulter/momus"
+documentation = "https://github.com/jlcoulter/momus#readme"
+readme = "README.md"
+keywords = ["testing", "api", "http", "assertions", "jsonpath"]
+categories = ["development-tools::testing", "web-programming::http-client"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+regex = "1"
+futures = "0.3"
+
+[dev-dependencies]
+momus-mock = { path = "../momus-mock" }

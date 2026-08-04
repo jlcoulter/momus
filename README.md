@@ -24,6 +24,15 @@ momus run examples/health-check.json --base-url http://localhost:8080
 
 # Start a mock server for testing
 momus mock --port 8091
+
+# Convert a cURL command into a test plan
+momus convert curl 'curl https://api.example.com/health'
+
+# Load test a plan
+momus bench examples/health-check.json --concurrency 50 --duration 30
+
+# Fuzz test a plan
+momus fuzz examples/health-check.json --iterations 1000
 ```
 
 ## Example Test Plan
@@ -146,33 +155,21 @@ momus = "0.1"
 Use the library to build and run test plans programmatically:
 
 ```rust
-use momus::ast::*;
-use momus::engine::runner;
+use momus::prelude::*;
+use momus::builder::*;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let plan = TestPlan {
-        name: "health check".into(),
-        base_url: "http://localhost:8080".into(),
-        default_headers: std::collections::HashMap::new(),
-        steps: vec![
-            Step::Request(RequestStep {
-                name: "health".into(),
-                method: Method::Get,
-                url: "/health".into(),
-                headers: std::collections::HashMap::new(),
-                body: None,
-                assert: vec![
-                    Assertion::Status(200),
-                    Assertion::json_path_eq("$.status", serde_json::json!("ok")),
-                ],
-                save_as: String::new(),
-                soft_fail: false,
-            }),
-        ],
-        setup: vec![],
-        teardown: vec![],
-    };
+    let plan = TestPlanBuilder::new("health check")
+        .base_url("http://localhost:8080")
+        .step(
+            request("health")
+                .get("/health")
+                .assert(Assertion::Status(200))
+                .assert(Assertion::json_path_eq("$.status", serde_json::json!("ok")))
+                .build(),
+        )
+        .build();
 
     let report = runner::execute_plan(&plan).await?;
     println!("{}", report);
@@ -189,6 +186,9 @@ Commands:
   run       Run a test plan from a JSON file
   validate  Validate a test plan JSON file
   mock      Start a mock server for testing
+  bench     Load test a plan (steady, max-throughput, or soak)
+  fuzz      Fuzz test a plan with payload mutations
+  convert   Convert an API description into a test plan
 ```
 
 ### `momus run`
@@ -211,8 +211,6 @@ momus validate plan.json
 # ✓ Valid test plan: 'health check'
 #   Total tests: 3
 #   Steps: 1
-#   Setup steps: 1
-#   Teardown steps: 1
 ```
 
 ### `momus mock`
@@ -222,22 +220,70 @@ momus mock --port 8091
 # Momus mock server listening on http://127.0.0.1:8091
 ```
 
+### `momus bench`
+
+```bash
+# Steady load: 50 concurrent users for 60 seconds
+momus bench plan.json --concurrency 50 --duration 60
+
+# Override base URL
+momus bench plan.json --concurrency 100 --duration 30 --base-url http://staging:8080
+```
+
+### `momus fuzz`
+
+```bash
+# Generate 5000 mutations
+momus fuzz plan.json --iterations 5000
+
+# Override base URL
+momus fuzz plan.json --iterations 10000 --base-url http://staging:8080
+```
+
+### `momus convert`
+
+```bash
+# Convert a cURL command into a test plan
+momus convert curl 'curl -X POST https://api.example.com/users -H "Content-Type: application/json" -d "{\"name\":\"test\"}"'
+
+# Convert a HAR file (browser DevTools export) into a test plan
+momus convert har traffic.har
+
+# Convert an OpenAPI spec (coming in v0.2.0)
+momus convert openapi spec.yaml
+
+# Convert a Postman collection (coming in v0.2.0)
+momus convert postman collection.json
+```
+
 ## Project Structure
 
 ```
-src/
-├── main.rs              # CLI entry point
-├── lib.rs               # Public API
-├── ast/
-│   ├── mod.rs           # TestPlan, Step, RequestStep, SequenceStep, TestResult, RunReport
-│   └── assertion.rs     # Composable assertion AST
-├── engine/
-│   ├── mod.rs
-│   ├── evaluator.rs     # Assertion evaluation engine
-│   ├── runner.rs        # Plan executor (setup → steps → teardown)
-│   └── templates.rs     # {base_url}, {steps.<name>.*} template resolution
-└── mock/
-    └── mod.rs           # Configurable mock HTTP server
+momus/                          # workspace root
+├── crates/
+│   ├── momus/                  # Umbrella crate: re-exports, builder, prelude
+│   ├── momus-core/             # AST types, assertion evaluation, plan runner, template resolution
+│   ├── momus-mock/             # Configurable mock HTTP server
+│   ├── momus-convert/          # Convert API descriptions into test plans
+│   │   ├── curl.rs             #   cURL command → TestPlan
+│   │   ├── har.rs              #   HAR file → TestPlan
+│   │   ├── openapi.rs          #   OpenAPI 3.x → TestPlan (WIP)
+│   │   ├── postman.rs          #   Postman Collection → TestPlan (WIP)
+│   │   ├── graphql.rs          #   GraphQL SDL → TestPlan (WIP)
+│   │   ├── grpc.rs             #   gRPC proto → TestPlan (WIP)
+│   │   └── fhir.rs             #   FHIR IG → TestPlan (WIP)
+│   ├── momus-bench/            # Load testing: steady, max-throughput, soak modes
+│   ├── momus-fuzz/             # Payload mutation: boundary, encoding, type mismatch, cardinality
+│   ├── momus-chaos/            # Chaos engineering: network, service, resource, state faults
+│   ├── momus-contract/         # Contract testing: validate responses against OpenAPI/GraphQL specs
+│   ├── momus-guard/            # Security scanning: auth, CORS, info leaks, exposed endpoints
+│   ├── momus-diff/             # Regression/diff testing: compare responses between environments
+│   └── momus-cli/              # CLI binary
+├── examples/
+│   ├── health-check.json
+│   └── crud-sequence.json
+├── DESIGN.md
+└── README.md
 ```
 
 ## Development
