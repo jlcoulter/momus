@@ -1,3 +1,11 @@
+#![allow(dead_code, clippy::type_complexity)]
+
+//! FHIR test model types for generated test plans.
+//!
+//! These types are used by the test plan generator (ported from fhir-autotest)
+//! to represent test cases, groups, and assertions. They are currently defined
+//! here but consumed by the planner module which is ported in a follow-up.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

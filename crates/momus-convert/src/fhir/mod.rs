@@ -1,9 +1,15 @@
-/// FHIR IG package to TestPlan converter.
-///
-/// This module ports the fhir-autotest pipeline into momus:
-/// 1. Parse IG package (.tgz) → extract FHIR resources
-/// 2. Select CapabilityStatement → determine server capabilities
-/// 3. Generate test plan with CRUD, search, and conformance tests
+#![allow(dead_code, clippy::type_complexity)]
+
+//! FHIR IG package to TestPlan converter.
+//!
+//! This module ports the fhir-autotest pipeline into momus:
+//! 1. Parse IG package (.tgz) → extract FHIR resources
+//! 2. Select CapabilityStatement → determine server capabilities
+//! 3. Generate test plan with CRUD, search, and conformance tests
+//!
+//! Some types are defined here but not yet consumed by the converter
+//! (the full test plan generator is ported in a follow-up).
+
 pub mod capability;
 pub mod operation;
 pub mod package;
@@ -15,17 +21,10 @@ use anyhow::{Context, Result};
 use momus_core::ast::TestPlan;
 
 /// Convert a FHIR Implementation Guide package to a TestPlan.
-///
-/// Reads a .tgz IG package, parses CapabilityStatements, StructureDefinitions,
-/// SearchParameters, and OperationDefinitions, and generates a comprehensive
-/// conformance test suite.
 pub fn convert(path: &str) -> Result<TestPlan> {
     let pkg = package::parse_package(path)?;
-
-    // Select the best CapabilityStatement
     let cs = select_capability_statement(&pkg)?;
 
-    // Generate a basic plan with the resource types found
     let resource_types: Vec<String> = cs.rest.iter()
         .flat_map(|r| r.resource.iter())
         .map(|r| r.resource_type.clone())
@@ -62,7 +61,6 @@ pub fn convert(path: &str) -> Result<TestPlan> {
     })
 }
 
-/// Select the best CapabilityStatement from the package.
 fn select_capability_statement(pkg: &package::IgPackage) -> Result<capability::CapabilityStatement> {
     pkg.capability_statements
         .iter()

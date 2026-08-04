@@ -84,7 +84,7 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
 
                 // Validate against spec
                 let step_violations = validate_response(
-                    &spec_type,
+                    spec_type,
                     &step.method,
                     &step.url,
                     status,
