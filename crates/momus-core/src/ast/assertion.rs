@@ -70,6 +70,10 @@ pub enum Assertion {
     // -- Content-type assertions -------------------------------------------
     /// Response Content-Type must match (substring match).
     ContentType(String),
+
+    // -- Performance assertions --------------------------------------------
+    /// Response time must be at most `max_millis` milliseconds.
+    ResponseTime(u64),
 }
 
 // ---------------------------------------------------------------------------
@@ -214,6 +218,11 @@ impl Assertion {
     /// Assert the response body matches a JSON Schema.
     pub fn schema(schema: serde_json::Value) -> Self {
         Assertion::Schema { schema }
+    }
+
+    /// Assert the response time is at most `max_millis` milliseconds.
+    pub fn response_time(max_millis: u64) -> Self {
+        Assertion::ResponseTime(max_millis)
     }
 }
 
