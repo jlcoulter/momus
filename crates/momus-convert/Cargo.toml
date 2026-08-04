@@ -7,7 +7,6 @@ license = "Apache-2.0"
 repository = "https://github.com/jlcoulter/momus"
 homepage = "https://github.com/jlcoulter/momus"
 documentation = "https://github.com/jlcoulter/momus#readme"
-readme = "README.md"
 keywords = ["testing", "api", "openapi", "postman", "graphql"]
 categories = ["development-tools::testing", "web-programming::http-client"]
 
