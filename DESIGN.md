@@ -39,13 +39,29 @@ The boundary is clean: frontends produce `TestPlan` JSON, Momus executes it. No 
 
 Fuzzing is a distinct engineering problem with its own literature (coverage-guided, grammar-based, AFL-style). Bolting SQLi/XSS mutation onto a test runner produces shallow results and conflates concerns. Momus can *execute* fuzz-generated test cases, but generating them belongs in a separate tool that feeds Momus plans.
 
-### Not a full benchmarking suite
-
-Momus should have a `ResponseTime` assertion node (`response_time { max_ms: u64 }`) — asserting that a response came back in under 200ms is a natural fit for the composable assertion model. What Momus is *not* is a full benchmarking tool: warmup phases, percentile distributions (P50/P95/P99), coordinated omission correction, HDR histograms, and throughput ramp profiles belong in a dedicated benchmarking tool. The line is between "did this request meet its SLA?" (an assertion) and "what is the latency distribution of this endpoint under load?" (a benchmark).
-
 ### Not multi-protocol (yet)
 
 gRPC, GraphQL, and Protobuf each require fundamentally different transport and serialization. A `TransportAdapter` trait is the right abstraction, but implementing it for each protocol is a crate's worth of work per protocol. Start with HTTP/REST and prove the architecture before expanding.
+
+## Benchmark Engine (momus-bench)
+
+The benchmark crate from the FHIR project demonstrates a pattern that belongs in Momus: take a `TestPlan`, spawn N concurrent workers, execute random tests from the plan under load, and record latency distributions. The core is already protocol-agnostic — it only needs a list of `(group_name, test_case)` tuples and an HTTP client.
+
+A `momus-bench` crate would provide:
+
+| Feature | Description |
+|---------|-------------|
+| **Steady mode** | Fixed concurrency for a fixed duration |
+| **Max-throughput mode** | Ramp concurrency upward until error rate or latency threshold is breached |
+| **Soak mode** | Sustained load at fixed concurrency for hours |
+| **Warmup** | N requests before recording to warm caches |
+| **HDR histograms** | P50/P90/P95/P99 latency per group and overall |
+| **Reports** | JSON summary, full results, text report, HTML dashboard |
+| **Signal handling** | Graceful shutdown on Ctrl+C |
+
+The benchmark engine is a separate concern from the assertion runner. The assertion runner answers "does this API work correctly?" The benchmark engine answers "how does this API perform under load?" They share the `TestPlan` format and the HTTP client, but the execution model is fundamentally different — sequential with state passing vs concurrent stateless fire-and-forget.
+
+This would live as `crates/momus-bench/` in the workspace, depending on `momus` for the AST types and the HTTP transport.
 
 ## Core Data Structures
 
