@@ -1,6 +1,6 @@
 [package]
 name = "momus-mock"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 description = "Configurable mock HTTP server for API testing"
 license = "Apache-2.0"
