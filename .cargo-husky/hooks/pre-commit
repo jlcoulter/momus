@@ -1,0 +1,26 @@
+#!/bin/sh
+# cargo-husky hook
+# Runs fmt, clippy, and test before each commit
+
+echo "🔍 Running cargo fmt --check..."
+cargo fmt --check
+if [ $? -ne 0 ]; then
+    echo "❌ Format check failed. Run 'cargo fmt' to fix."
+    exit 1
+fi
+
+echo "🔍 Running cargo clippy..."
+cargo clippy --all-targets -- -D warnings
+if [ $? -ne 0 ]; then
+    echo "❌ Clippy found issues."
+    exit 1
+fi
+
+echo "🔍 Running cargo test..."
+cargo test --all-targets
+if [ $? -ne 0 ]; then
+    echo "❌ Tests failed."
+    exit 1
+fi
+
+echo "✅ All checks passed!"

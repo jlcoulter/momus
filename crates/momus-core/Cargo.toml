@@ -25,4 +25,5 @@ jsonschema = "0.49"
 petgraph = "0.7"
 
 [dev-dependencies]
+cargo-husky = "1.5.0"
 momus-mock = { path = "../momus-mock" }
