@@ -13,6 +13,7 @@ pub mod operation;
 pub mod package;
 pub mod planner;
 pub mod profile;
+pub mod profile_resolver;
 pub mod resource_gen;
 pub mod search_param;
 pub mod test_model;
