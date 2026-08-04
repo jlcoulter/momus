@@ -88,17 +88,18 @@ pub async fn run_diff(plan: &TestPlan, config: &DiffConfig) -> Result<DiffReport
 
                 // Compare bodies
                 if config.diff_bodies
-                    && let (Some(b_body), Some(t_body)) = (&baseline.body, &target.body) {
-                        let body_diffs = diff_json_values("$", b_body, t_body);
-                        for d in &body_diffs {
-                            match d.change_type.as_str() {
-                                "added" => fields_added += 1,
-                                "removed" => fields_removed += 1,
-                                _ => fields_modified += 1,
-                            }
+                    && let (Some(b_body), Some(t_body)) = (&baseline.body, &target.body)
+                {
+                    let body_diffs = diff_json_values("$", b_body, t_body);
+                    for d in &body_diffs {
+                        match d.change_type.as_str() {
+                            "added" => fields_added += 1,
+                            "removed" => fields_removed += 1,
+                            _ => fields_modified += 1,
                         }
-                        step_diffs.extend(body_diffs);
                     }
+                    step_diffs.extend(body_diffs);
+                }
 
                 if step_diffs.is_empty() {
                     identical += 1;
@@ -211,11 +212,19 @@ async fn send_request(
         .collect();
     let body: Option<serde_json::Value> = resp.json().await.ok();
 
-    Ok(DiffResponse { status, headers, body })
+    Ok(DiffResponse {
+        status,
+        headers,
+        body,
+    })
 }
 
 /// Recursively diff two JSON values, returning a list of field-level differences.
-fn diff_json_values(path: &str, baseline: &serde_json::Value, target: &serde_json::Value) -> Vec<DiffEntry> {
+fn diff_json_values(
+    path: &str,
+    baseline: &serde_json::Value,
+    target: &serde_json::Value,
+) -> Vec<DiffEntry> {
     let mut diffs = Vec::new();
 
     match (baseline, target) {
@@ -235,7 +244,9 @@ fn diff_json_values(path: &str, baseline: &serde_json::Value, target: &serde_jso
                         });
                     }
                     Some(t_val) if b_val != t_val => {
-                        if (b_val.is_object() && t_val.is_object()) || (b_val.is_array() && t_val.is_array()) {
+                        if (b_val.is_object() && t_val.is_object())
+                            || (b_val.is_array() && t_val.is_array())
+                        {
                             diffs.extend(diff_json_values(&child_path, b_val, t_val));
                         } else {
                             diffs.push(DiffEntry {
@@ -391,18 +402,16 @@ mod tests {
             name: "test".into(),
             base_url: "http://localhost".into(),
             default_headers: HashMap::new(),
-            steps: vec![
-                Step::Request(RequestStep {
-                    name: "r1".into(),
-                    method: Method::Get,
-                    url: "/health".into(),
-                    headers: HashMap::new(),
-                    body: None,
-                    assert: vec![],
-                    save_as: String::new(),
-                    soft_fail: false,
-                }),
-            ],
+            steps: vec![Step::Request(RequestStep {
+                name: "r1".into(),
+                method: Method::Get,
+                url: "/health".into(),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![],
+                save_as: String::new(),
+                soft_fail: false,
+            })],
             setup: vec![],
             teardown: vec![],
         };
