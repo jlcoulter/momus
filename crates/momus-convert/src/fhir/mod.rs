@@ -18,6 +18,7 @@ pub mod resource_gen;
 pub mod search_param;
 pub mod test_model;
 pub mod validator;
+pub mod valuesets;
 
 use anyhow::{Context, Result};
 use momus_core::ast::TestPlan;
