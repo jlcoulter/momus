@@ -35,7 +35,8 @@ pub fn convert(path: &str) -> Result<TestPlan> {
         // Build body
         let body = if entry.request.post_data.is_some() {
             entry.request.post_data.as_ref().and_then(|p| {
-                serde_json::from_str(&p.text).ok()
+                serde_json::from_str(&p.text)
+                    .ok()
                     .or_else(|| Some(serde_json::Value::String(p.text.clone())))
             })
         } else {
@@ -204,7 +205,11 @@ mod tests {
         if let Step::Request(step) = &plan.steps[0] {
             assert_eq!(step.method, Method::Get);
             assert_eq!(step.url, "https://api.example.com/health");
-            assert!(step.assert.iter().any(|a| matches!(a, Assertion::Status(200))));
+            assert!(
+                step.assert
+                    .iter()
+                    .any(|a| matches!(a, Assertion::Status(200)))
+            );
         } else {
             panic!("Expected Request step");
         }
@@ -236,10 +241,7 @@ mod tests {
         if let Step::Request(step) = &plan.steps[0] {
             assert_eq!(step.method, Method::Post);
             assert!(step.body.is_some());
-            assert_eq!(
-                step.body.as_ref().unwrap(),
-                &json!({"name": "test"})
-            );
+            assert_eq!(step.body.as_ref().unwrap(), &json!({"name": "test"}));
         } else {
             panic!("Expected Request step");
         }
@@ -312,7 +314,11 @@ mod tests {
 
         let plan = convert(&path).unwrap();
         if let Step::Request(step) = &plan.steps[0] {
-            assert!(step.assert.iter().any(|a| matches!(a, Assertion::ContentType(ct) if ct == "application/json")));
+            assert!(
+                step.assert
+                    .iter()
+                    .any(|a| matches!(a, Assertion::ContentType(ct) if ct == "application/json"))
+            );
         } else {
             panic!("Expected Request step");
         }

@@ -1,0 +1,19 @@
+[
+  {
+    "name": "health endpoint",
+    "passed": false,
+    "status_code": 0,
+    "request_method": "GET",
+    "request_url": "http://localhost:8080/health",
+    "request_headers": {
+      "Accept": "application/json"
+    },
+    "request_body": null,
+    "response_headers": {},
+    "response_body": null,
+    "assertion_results": [],
+    "errors": [
+      "request failed: error sending request for url (http://localhost:8080/health)"
+    ]
+  }
+]

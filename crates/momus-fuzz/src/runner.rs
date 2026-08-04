@@ -3,8 +3,8 @@ use crate::mutators::{all_mutators, mutator_by_name};
 use crate::report::FuzzReport;
 use anyhow::Result;
 use momus_core::ast::{Method, Step, TestPlan};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 /// Execute a fuzz run against a test plan.
@@ -18,10 +18,7 @@ use std::time::Instant;
 pub async fn run_fuzz(plan: &TestPlan, config: &FuzzConfig) -> Result<FuzzReport> {
     let start = Instant::now();
 
-    let base_url = config
-        .base_url
-        .as_deref()
-        .unwrap_or(&plan.base_url);
+    let base_url = config.base_url.as_deref().unwrap_or(&plan.base_url);
 
     // Select mutators
     let mutators: Vec<Box<dyn crate::Mutator>> = if config.mutators.is_empty() {
@@ -132,9 +129,10 @@ pub async fn run_fuzz(plan: &TestPlan, config: &FuzzConfig) -> Result<FuzzReport
                     // Check for info leaks in error responses
                     if !status.is_success()
                         && let Ok(body) = resp.text().await
-                            && has_info_leak(&body) {
-                                leaks.fetch_add(1, Ordering::Relaxed);
-                            }
+                        && has_info_leak(&body)
+                    {
+                        leaks.fetch_add(1, Ordering::Relaxed);
+                    }
                 }
                 Err(_) => {
                     errors.fetch_add(1, Ordering::Relaxed);
@@ -296,18 +294,16 @@ mod tests {
             name: "test".into(),
             base_url: "http://localhost".into(),
             default_headers: HashMap::new(),
-            steps: vec![
-                Step::Request(RequestStep {
-                    name: "get".into(),
-                    method: Method::Get,
-                    url: "/health".into(),
-                    headers: HashMap::new(),
-                    body: None,
-                    assert: vec![],
-                    save_as: String::new(),
-                    soft_fail: false,
-                }),
-            ],
+            steps: vec![Step::Request(RequestStep {
+                name: "get".into(),
+                method: Method::Get,
+                url: "/health".into(),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![],
+                save_as: String::new(),
+                soft_fail: false,
+            })],
             setup: vec![],
             teardown: vec![],
         };

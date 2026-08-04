@@ -102,8 +102,11 @@ impl Interaction {
 
     pub fn http_method(&self) -> &'static str {
         match self {
-            Interaction::Read | Interaction::Vread | Interaction::SearchType
-            | Interaction::HistoryInstance | Interaction::HistoryType => "GET",
+            Interaction::Read
+            | Interaction::Vread
+            | Interaction::SearchType
+            | Interaction::HistoryInstance
+            | Interaction::HistoryType => "GET",
             Interaction::Create => "POST",
             Interaction::Update => "PUT",
             Interaction::Patch => "PATCH",
@@ -142,8 +145,10 @@ impl SearchModifier {
         match param_type {
             "string" => modifiers.extend([SearchModifier::Exact, SearchModifier::Contains]),
             "token" => modifiers.extend([
-                SearchModifier::Not, SearchModifier::Text,
-                SearchModifier::Above, SearchModifier::Below,
+                SearchModifier::Not,
+                SearchModifier::Text,
+                SearchModifier::Above,
+                SearchModifier::Below,
             ]),
             "reference" => modifiers.extend([SearchModifier::Above, SearchModifier::Below]),
             "uri" => modifiers.extend([SearchModifier::Above, SearchModifier::Below]),
@@ -172,20 +177,38 @@ impl SearchModifier {
 /// Search comparison prefixes for number/date/quantity params.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SearchPrefix {
-    Eq, Ne, Gt, Lt, Ge, Le, Sa, Eb, Ap,
+    Eq,
+    Ne,
+    Gt,
+    Lt,
+    Ge,
+    Le,
+    Sa,
+    Eb,
+    Ap,
 }
 
 impl SearchPrefix {
     pub fn applicable_to(param_type: &str) -> Vec<SearchPrefix> {
         match param_type {
             "number" | "quantity" => vec![
-                SearchPrefix::Eq, SearchPrefix::Ne, SearchPrefix::Gt,
-                SearchPrefix::Lt, SearchPrefix::Ge, SearchPrefix::Le,
+                SearchPrefix::Eq,
+                SearchPrefix::Ne,
+                SearchPrefix::Gt,
+                SearchPrefix::Lt,
+                SearchPrefix::Ge,
+                SearchPrefix::Le,
             ],
             "date" | "dateTime" => vec![
-                SearchPrefix::Eq, SearchPrefix::Ne, SearchPrefix::Gt,
-                SearchPrefix::Lt, SearchPrefix::Ge, SearchPrefix::Le,
-                SearchPrefix::Sa, SearchPrefix::Eb, SearchPrefix::Ap,
+                SearchPrefix::Eq,
+                SearchPrefix::Ne,
+                SearchPrefix::Gt,
+                SearchPrefix::Lt,
+                SearchPrefix::Ge,
+                SearchPrefix::Le,
+                SearchPrefix::Sa,
+                SearchPrefix::Eb,
+                SearchPrefix::Ap,
             ],
             _ => vec![],
         }
@@ -193,10 +216,14 @@ impl SearchPrefix {
 
     pub fn prefix_str(&self) -> &str {
         match self {
-            SearchPrefix::Eq => "eq", SearchPrefix::Ne => "ne",
-            SearchPrefix::Gt => "gt", SearchPrefix::Lt => "lt",
-            SearchPrefix::Ge => "ge", SearchPrefix::Le => "le",
-            SearchPrefix::Sa => "sa", SearchPrefix::Eb => "eb",
+            SearchPrefix::Eq => "eq",
+            SearchPrefix::Ne => "ne",
+            SearchPrefix::Gt => "gt",
+            SearchPrefix::Lt => "lt",
+            SearchPrefix::Ge => "ge",
+            SearchPrefix::Le => "le",
+            SearchPrefix::Sa => "sa",
+            SearchPrefix::Eb => "eb",
             SearchPrefix::Ap => "ap",
         }
     }
@@ -206,17 +233,44 @@ impl SearchPrefix {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TestCaseKind {
     Interaction,
-    SearchSingle { param_name: String, param_type: String },
-    SearchModifier { param_name: String, modifier: SearchModifier },
-    SearchPrefix { param_name: String, prefix: SearchPrefix },
-    SearchNear { param_name: String },
-    SearchCombo { params: Vec<String> },
-    SearchChained { chain_param: String, target_param: String },
-    Include { param: String, revinclude: bool },
-    ResultParam { param: String },
-    Operation { code: String },
-    Negative { description: String },
-    Conformance { description: String },
+    SearchSingle {
+        param_name: String,
+        param_type: String,
+    },
+    SearchModifier {
+        param_name: String,
+        modifier: SearchModifier,
+    },
+    SearchPrefix {
+        param_name: String,
+        prefix: SearchPrefix,
+    },
+    SearchNear {
+        param_name: String,
+    },
+    SearchCombo {
+        params: Vec<String>,
+    },
+    SearchChained {
+        chain_param: String,
+        target_param: String,
+    },
+    Include {
+        param: String,
+        revinclude: bool,
+    },
+    ResultParam {
+        param: String,
+    },
+    Operation {
+        code: String,
+    },
+    Negative {
+        description: String,
+    },
+    Conformance {
+        description: String,
+    },
 }
 
 /// An HTTP request template for a test case.

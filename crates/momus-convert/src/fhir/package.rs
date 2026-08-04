@@ -128,10 +128,17 @@ mod tests {
             }"#;
 
             let mut header = tar::Header::new_gnu();
-            header.set_path("package/CapabilityStatement-test.json").unwrap();
+            header
+                .set_path("package/CapabilityStatement-test.json")
+                .unwrap();
             header.set_size(cs_json.len() as u64);
             header.set_cksum();
-            tar.append_data(&mut header, "package/CapabilityStatement-test.json", cs_json.as_bytes()).unwrap();
+            tar.append_data(
+                &mut header,
+                "package/CapabilityStatement-test.json",
+                cs_json.as_bytes(),
+            )
+            .unwrap();
 
             let sd_json = r#"{
                 "resourceType": "StructureDefinition",
@@ -157,17 +164,25 @@ mod tests {
             }"#;
 
             let mut header2 = tar::Header::new_gnu();
-            header2.set_path("package/StructureDefinition-TestPatient.json").unwrap();
+            header2
+                .set_path("package/StructureDefinition-TestPatient.json")
+                .unwrap();
             header2.set_size(sd_json.len() as u64);
             header2.set_cksum();
-            tar.append_data(&mut header2, "package/StructureDefinition-TestPatient.json", sd_json.as_bytes()).unwrap();
+            tar.append_data(
+                &mut header2,
+                "package/StructureDefinition-TestPatient.json",
+                sd_json.as_bytes(),
+            )
+            .unwrap();
 
             tar.finish().unwrap();
         }
 
         let mut gz_data = Vec::new();
         {
-            let mut gz = flate2::write::GzEncoder::new(&mut gz_data, flate2::Compression::default());
+            let mut gz =
+                flate2::write::GzEncoder::new(&mut gz_data, flate2::Compression::default());
             gz.write_all(&tar_data).unwrap();
             gz.finish().unwrap();
         }
@@ -184,7 +199,10 @@ mod tests {
         let pkg = parse_package(tgz_path.to_str().unwrap()).unwrap();
         assert_eq!(pkg.capability_statements.len(), 1);
         assert_eq!(pkg.structure_definitions.len(), 1);
-        assert_eq!(pkg.capability_statements[0].rest[0].resource[0].resource_type, "Patient");
+        assert_eq!(
+            pkg.capability_statements[0].rest[0].resource[0].resource_type,
+            "Patient"
+        );
         assert_eq!(pkg.structure_definitions[0].base_type, "Patient");
         assert!(pkg.raw_resources.len() >= 2);
     }

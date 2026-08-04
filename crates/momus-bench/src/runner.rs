@@ -16,10 +16,7 @@ use std::time::Instant;
 pub async fn run_bench(plan: &TestPlan, config: &BenchConfig) -> Result<BenchReport> {
     let start = Instant::now();
 
-    let base_url = config
-        .base_url
-        .as_deref()
-        .unwrap_or(&plan.base_url);
+    let base_url = config.base_url.as_deref().unwrap_or(&plan.base_url);
 
     tracing::info!(
         "Starting benchmark '{}' in {:?} mode against {}",

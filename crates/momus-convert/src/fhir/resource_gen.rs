@@ -49,19 +49,49 @@ pub fn generate_resource_with_value_sets(
     };
 
     // Pass 1: Required fields
-    populate_required_fields(&mut resource, elements, &profile.base_type, all_profiles, value_set_systems)?;
+    populate_required_fields(
+        &mut resource,
+        elements,
+        &profile.base_type,
+        all_profiles,
+        value_set_systems,
+    )?;
 
     // Pass 2: Required slices
-    populate_required_slices(&mut resource, elements, &profile.base_type, all_profiles, value_set_systems)?;
+    populate_required_slices(
+        &mut resource,
+        elements,
+        &profile.base_type,
+        all_profiles,
+        value_set_systems,
+    )?;
 
     // Pass 3: Extension slices
-    populate_extension_slices(&mut resource, elements, &profile.base_type, all_profiles, value_set_systems);
+    populate_extension_slices(
+        &mut resource,
+        elements,
+        &profile.base_type,
+        all_profiles,
+        value_set_systems,
+    );
 
     // Pass 4: MustSupport backbones
-    populate_must_support_backbones(&mut resource, elements, &profile.base_type, all_profiles, value_set_systems);
+    populate_must_support_backbones(
+        &mut resource,
+        elements,
+        &profile.base_type,
+        all_profiles,
+        value_set_systems,
+    );
 
     // Pass 5: MustSupport optional fields
-    populate_must_support_optional_fields(&mut resource, elements, &profile.base_type, all_profiles, value_set_systems);
+    populate_must_support_optional_fields(
+        &mut resource,
+        elements,
+        &profile.base_type,
+        all_profiles,
+        value_set_systems,
+    );
 
     Ok(resource)
 }
@@ -86,7 +116,7 @@ fn populate_required_fields(
         if path_has_value(resource, &path) {
             continue;
         }
-        set_field_value(resource, &path, &element, all_profiles, value_set_systems)?;
+        set_field_value(resource, &path, element, all_profiles, value_set_systems)?;
     }
     Ok(())
 }
@@ -166,7 +196,10 @@ fn populate_must_support_backbones(
         if element.min.unwrap_or(0) > 0 {
             continue; // Already handled in pass 1
         }
-        let is_backbone = element.type_.iter().any(|t| t.code.contains("BackboneElement"));
+        let is_backbone = element
+            .type_
+            .iter()
+            .any(|t| t.code.contains("BackboneElement"));
         if !is_backbone {
             continue;
         }
@@ -198,7 +231,10 @@ fn populate_must_support_optional_fields(
         if element.min.unwrap_or(0) > 0 {
             continue;
         }
-        let is_backbone = element.type_.iter().any(|t| t.code.contains("BackboneElement"));
+        let is_backbone = element
+            .type_
+            .iter()
+            .any(|t| t.code.contains("BackboneElement"));
         if is_backbone {
             continue;
         }
@@ -257,7 +293,11 @@ fn set_field_value(
     }
 
     // Generate a value based on the type
-    let type_code = element.type_.first().map(|t| t.code.as_str()).unwrap_or("string");
+    let type_code = element
+        .type_
+        .first()
+        .map(|t| t.code.as_str())
+        .unwrap_or("string");
     let value = generate_type_value(type_code);
     set_json_path(resource, path, value);
     Ok(())
@@ -276,14 +316,26 @@ fn generate_type_value(type_code: &str) -> serde_json::Value {
         "dateTime" | "instant" => serde_json::json!("2024-01-01T00:00:00Z"),
         "time" => serde_json::json!("00:00:00"),
         "base64Binary" => serde_json::json!(""),
-        "HumanName" => serde_json::json!([{"family": "GeneratedFamily", "given": ["GeneratedGiven"]}]),
-        "Address" => serde_json::json!([{"line": ["123 Generated St"], "city": "GeneratedCity", "state": "Gen", "postalCode": "0000"}]),
-        "Identifier" => serde_json::json!([{"system": "http://example.org/id", "value": "gen-001"}]),
-        "CodeableConcept" => serde_json::json!({"coding": [{"system": "http://example.org/code", "code": "gen"}], "text": "generated"}),
+        "HumanName" => {
+            serde_json::json!([{"family": "GeneratedFamily", "given": ["GeneratedGiven"]}])
+        }
+        "Address" => {
+            serde_json::json!([{"line": ["123 Generated St"], "city": "GeneratedCity", "state": "Gen", "postalCode": "0000"}])
+        }
+        "Identifier" => {
+            serde_json::json!([{"system": "http://example.org/id", "value": "gen-001"}])
+        }
+        "CodeableConcept" => {
+            serde_json::json!({"coding": [{"system": "http://example.org/code", "code": "gen"}], "text": "generated"})
+        }
         "Coding" => serde_json::json!({"system": "http://example.org/code", "code": "gen"}),
-        "ContactPoint" => serde_json::json!([{"system": "phone", "value": "0400000000", "use": "mobile"}]),
+        "ContactPoint" => {
+            serde_json::json!([{"system": "phone", "value": "0400000000", "use": "mobile"}])
+        }
         "Period" => serde_json::json!({"start": "2024-01-01", "end": "2024-12-31"}),
-        "Quantity" => serde_json::json!({"value": 1, "unit": "1", "system": "http://unitsofmeasure.org", "code": "1"}),
+        "Quantity" => {
+            serde_json::json!({"value": 1, "unit": "1", "system": "http://unitsofmeasure.org", "code": "1"})
+        }
         "Range" => serde_json::json!({"low": {"value": 0}, "high": {"value": 1}}),
         "Ratio" => serde_json::json!({"numerator": {"value": 1}, "denominator": {"value": 1}}),
         "Reference" => serde_json::json!({"reference": "Unknown/placeholder"}),
@@ -339,7 +391,11 @@ fn get_field_path(path: &str, resource_type: &str) -> Option<String> {
         let first_clean = first.split(':').next().unwrap_or(first);
         format!("{}.{}", first_clean, rest)
     } else {
-        field_part.split(':').next().unwrap_or(field_part).to_string()
+        field_part
+            .split(':')
+            .next()
+            .unwrap_or(field_part)
+            .to_string()
     };
     Some(field_name)
 }
@@ -363,27 +419,34 @@ mod tests {
                     ElementDefinition {
                         id: "Patient".to_string(),
                         path: "Patient".to_string(),
-                        min: Some(0), max: Some("*".to_string()),
+                        min: Some(0),
+                        max: Some("*".to_string()),
                         type_: vec![],
                         ..Default::default()
                     },
                     ElementDefinition {
                         id: "Patient.name".to_string(),
                         path: "Patient.name".to_string(),
-                        min: Some(1), max: Some("*".to_string()),
+                        min: Some(1),
+                        max: Some("*".to_string()),
                         type_: vec![ElementDefinitionType {
                             code: "HumanName".to_string(),
-                            target_profile: vec![], profile: vec![], versioning: None,
+                            target_profile: vec![],
+                            profile: vec![],
+                            versioning: None,
                         }],
                         ..Default::default()
                     },
                     ElementDefinition {
                         id: "Patient.gender".to_string(),
                         path: "Patient.gender".to_string(),
-                        min: Some(1), max: Some("1".to_string()),
+                        min: Some(1),
+                        max: Some("1".to_string()),
                         type_: vec![ElementDefinitionType {
                             code: "code".to_string(),
-                            target_profile: vec![], profile: vec![], versioning: None,
+                            target_profile: vec![],
+                            profile: vec![],
+                            versioning: None,
                         }],
                         fixed_code: Some("male".to_string()),
                         ..Default::default()
@@ -401,7 +464,12 @@ mod tests {
         assert_eq!(resource["resourceType"], "Patient");
         assert!(resource.get("name").is_some());
         assert_eq!(resource["gender"], "male");
-        assert!(resource["meta"]["profile"][0].as_str().unwrap().contains("TestPatient"));
+        assert!(
+            resource["meta"]["profile"][0]
+                .as_str()
+                .unwrap()
+                .contains("TestPatient")
+        );
     }
 
     #[test]

@@ -7,7 +7,6 @@
 
 use super::test_model::*;
 use serde_json::Value;
-use std::collections::HashMap;
 
 /// Evaluate a response assertion against an actual HTTP response body.
 /// Returns a list of assertion failures (empty = all assertions pass).
@@ -408,7 +407,9 @@ fn compare_values(a: &Option<Value>, b: &Option<Value>) -> i32 {
             if let (Some(a_str), Some(b_str)) = (a_val.as_str(), b_val.as_str()) {
                 a_str.cmp(b_str) as i32
             } else if let (Some(a_num), Some(b_num)) = (a_val.as_f64(), b_val.as_f64()) {
-                a_num.partial_cmp(&b_num).unwrap_or(std::cmp::Ordering::Equal) as i32
+                a_num
+                    .partial_cmp(&b_num)
+                    .unwrap_or(std::cmp::Ordering::Equal) as i32
             } else {
                 0
             }
@@ -448,7 +449,11 @@ mod tests {
             "entry": []
         });
         let errors = assert_response(&assertion, 200, &Some(body));
-        assert!(errors.iter().any(|e| e.contains("batch") && e.contains("searchset")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("batch") && e.contains("searchset"))
+        );
     }
 
     #[test]
@@ -508,7 +513,10 @@ mod tests {
     #[test]
     fn assert_required_fields_present() {
         let mut required = HashMap::new();
-        required.insert("Patient".to_string(), vec!["name".to_string(), "birthDate".to_string()]);
+        required.insert(
+            "Patient".to_string(),
+            vec!["name".to_string(), "birthDate".to_string()],
+        );
         let assertion = ResponseAssertion {
             required_fields: required,
             ..ResponseAssertion::none()
@@ -547,7 +555,10 @@ mod tests {
     #[test]
     fn resolve_json_path_nested() {
         let value = json!({"name": [{"family": "Smith", "given": ["John"]}]});
-        assert_eq!(resolve_json_path(&value, "name.family"), Some(json!("Smith")));
+        assert_eq!(
+            resolve_json_path(&value, "name.family"),
+            Some(json!("Smith"))
+        );
     }
 
     #[test]
