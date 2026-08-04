@@ -144,7 +144,12 @@ async fn upload_resource(
         .unwrap_or("")
         .to_string();
 
-    let url = format!("{}/{}/{}", endpoint.base_url().trim_end_matches('/'), resource_type, id);
+    let url = format!(
+        "{}/{}/{}",
+        endpoint.base_url().trim_end_matches('/'),
+        resource_type,
+        id
+    );
 
     let mut req = match endpoint.upload_method().to_uppercase().as_str() {
         "POST" => {
@@ -250,12 +255,12 @@ fn collect_same_type_refs(value: &serde_json::Value, resource_type: &str, out: &
         serde_json::Value::Object(map) => {
             for (key, val) in map {
                 if key == "reference" {
-                    if let Some(s) = val.as_str() {
-                        if s.starts_with(&format!("{}/", resource_type)) {
-                            let id = s.trim_start_matches(&format!("{}/", resource_type));
-                            if !id.is_empty() {
-                                out.push(id.to_string());
-                            }
+                    if let Some(s) = val.as_str()
+                        && s.starts_with(&format!("{}/", resource_type))
+                    {
+                        let id = s.trim_start_matches(&format!("{}/", resource_type));
+                        if !id.is_empty() {
+                            out.push(id.to_string());
                         }
                     }
                 } else {
@@ -278,9 +283,9 @@ fn add_write_auth(
     endpoint: &WriteEndpoint,
 ) -> reqwest::RequestBuilder {
     match endpoint {
-        WriteEndpoint::Repository { username, password, .. } => {
-            req.basic_auth(username.clone(), Some(password.clone()))
-        }
+        WriteEndpoint::Repository {
+            username, password, ..
+        } => req.basic_auth(username.clone(), Some(password.clone())),
         WriteEndpoint::Server { headers, .. } => {
             let mut req = req;
             for (key, value) in headers {
@@ -342,7 +347,12 @@ pub async fn delete_all_resources(
                             Ok(())
                         } else {
                             let body = resp.text().await.unwrap_or_default();
-                            anyhow::bail!("Failed to delete {}: HTTP {} — {}", url, status, body.chars().take(200).collect::<String>())
+                            anyhow::bail!(
+                                "Failed to delete {}: HTTP {} — {}",
+                                url,
+                                status,
+                                body.chars().take(200).collect::<String>()
+                            )
                         }
                     }
                     Err(e) => anyhow::bail!("Failed to delete {}: {}", url, e),
@@ -384,7 +394,11 @@ mod tests {
         ];
         let waves = order_upload_waves("Organization", &lines);
         // Wave 0: a (no deps), Wave 1: b (depends on a), Wave 2: c (depends on b)
-        assert!(waves.len() >= 3, "Expected at least 3 waves, got {}", waves.len());
+        assert!(
+            waves.len() >= 3,
+            "Expected at least 3 waves, got {}",
+            waves.len()
+        );
     }
 
     #[test]

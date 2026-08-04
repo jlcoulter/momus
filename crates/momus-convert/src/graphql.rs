@@ -22,9 +22,7 @@ pub fn convert(path: &str) -> Result<TestPlan> {
     let mutation_fields = extract_fields(&content, "Mutation");
 
     if query_fields.is_empty() && mutation_fields.is_empty() {
-        anyhow::bail!(
-            "No `type Query` or `type Mutation` blocks found in GraphQL SDL: {path}"
-        );
+        anyhow::bail!("No `type Query` or `type Mutation` blocks found in GraphQL SDL: {path}");
     }
 
     let mut steps = Vec::new();
@@ -129,10 +127,7 @@ fn extract_fields(sdl: &str, type_name: &str) -> Vec<String> {
 
     // Extract field names: lines starting with optional whitespace,
     // followed by an identifier (field name), then optional args, then `:`
-    let field_re = Regex::new(
-        r"(?m)^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\([^)]*\))?\s*:"
-    )
-    .unwrap();
+    let field_re = Regex::new(r"(?m)^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\([^)]*\))?\s*:").unwrap();
 
     field_re
         .captures_iter(block)
@@ -149,10 +144,7 @@ fn extract_fields(sdl: &str, type_name: &str) -> Vec<String> {
 /// }
 /// ```
 fn build_query_body(field: &str) -> String {
-    format!(
-        "query {{\n  {}\n}}",
-        field
-    )
+    format!("query {{\n  {}\n}}", field)
 }
 
 /// Build a GraphQL mutation body for a given field.
@@ -164,10 +156,7 @@ fn build_query_body(field: &str) -> String {
 /// }
 /// ```
 fn build_mutation_body(field: &str) -> String {
-    format!(
-        "mutation {{\n  {}\n}}",
-        field
-    )
+    format!("mutation {{\n  {}\n}}", field)
 }
 
 /// Minimal regex escaping for literal type names.
@@ -294,7 +283,11 @@ type HealthStatus {
             );
             let body = step.body.as_ref().unwrap();
             assert_eq!(body["query"], "query {\n  user\n}");
-            assert!(step.assert.iter().any(|a| matches!(a, Assertion::Status(200))));
+            assert!(
+                step.assert
+                    .iter()
+                    .any(|a| matches!(a, Assertion::Status(200)))
+            );
         } else {
             panic!("Expected Request step for query_user");
         }
@@ -323,7 +316,11 @@ type HealthStatus {
             assert_eq!(step.method, Method::Post);
             let body = step.body.as_ref().unwrap();
             assert_eq!(body["query"], "mutation {\n  createUser\n}");
-            assert!(step.assert.iter().any(|a| matches!(a, Assertion::Status(200))));
+            assert!(
+                step.assert
+                    .iter()
+                    .any(|a| matches!(a, Assertion::Status(200)))
+            );
         } else {
             panic!("Expected Request step for mutation_createUser");
         }
