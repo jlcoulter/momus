@@ -39,6 +39,7 @@ pub fn convert(format: &str, input: &str) -> Result<TestPlan> {
 }
 
 /// List all available converter formats based on enabled features.
+#[allow(clippy::vec_init_then_push)]
 pub fn available_formats() -> Vec<&'static str> {
     let mut formats = Vec::new();
     #[cfg(feature = "openapi")]

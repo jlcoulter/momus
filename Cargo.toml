@@ -4,7 +4,14 @@ members = [
     "crates/momus-core",
     "crates/momus-mock",
     "crates/momus-convert",
+    "crates/momus-bench",
+    "crates/momus-fuzz",
+    "crates/momus-chaos",
+    "crates/momus-contract",
+    "crates/momus-guard",
+    "crates/momus-diff",
     "crates/momus-cli",
+    "crates/momus",
 ]
 
 [workspace.package]
