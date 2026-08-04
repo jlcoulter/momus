@@ -45,7 +45,7 @@ This document catalogs every feature across all momus crates, organized by imple
 | `ValidJson` — valid JSON check | ✅ | |
 | `JsonPath` — JSONPath query with predicate | ✅ | Simple resolver |
 | `Schema` — JSON Schema validation | ✅ | Wired via `jsonschema` crate |
-| `ResponseTime` — max response time | 🔜 | No-op |
+| `ResponseTime` — max response time | ✅ | Wired in evaluator + runner |
 
 ### JSONPath Predicates (✅ Complete)
 
@@ -60,7 +60,7 @@ This document catalogs every feature across all momus crates, organized by imple
 | `count` (eq/min/max/range) | ✅ | |
 | `every` — all results satisfy sub-predicate | ✅ | |
 | `some` — at least one satisfies sub-predicate | ✅ | |
-| `schema` — match result against JSON Schema | 🔜 | No-op |
+| `schema` — match result against JSON Schema | ✅ | Wired via `jsonschema` crate |
 
 ### Engine (✅ Complete)
 
@@ -73,8 +73,8 @@ This document catalogs every feature across all momus crates, organized by imple
 | Template resolution: `{steps.<name>.*}` | ✅ | |
 | Template resolution in URLs, headers, bodies | ✅ | |
 | JSONPath resolver (simple) | ✅ | Supports `$.key`, `$.key.nested`, `$.key[*]`, `$.key[0]` |
-| Schema validation | 🔜 | No-op |
-| ResponseTime measurement | 🔜 | No-op |
+| Schema validation | ✅ | Wired via `jsonschema` crate |
+| ResponseTime measurement | ✅ | Wired in evaluator + runner |
 | Script step execution | 📋 | Not implemented |
 
 ### Gaps (v0.2.0+)
@@ -130,58 +130,59 @@ This document catalogs every feature across all momus crates, organized by imple
 
 ## momus-convert — API Description Converters
 
-### cURL Converter
+### cURL Converter (✅ Complete)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Parse `-X`/`--request` | 🔜 | Stub |
-| Parse `-H`/`--header` | 🔜 | Stub |
-| Parse `-d`/`--data`/`--data-raw`/`--data-binary` | 🔜 | Stub |
-| Parse URL | 🔜 | Stub |
-| Parse `--max-time` | 🔜 | Stub |
-| Parse `-u`/`--user` (basic auth) | 🔜 | Stub |
-| Parse `-b`/`--cookie` | 🔜 | Stub |
-| Generate `TestPlan` with assertions | 🔜 | Stub |
+| Parse `-X`/`--request` | ✅ | |
+| Parse `-H`/`--header` | ✅ | |
+| Parse `-d`/`--data`/`--data-raw`/`--data-binary` | ✅ | |
+| Parse URL | ✅ | |
+| Parse `--max-time` | ✅ | |
+| Parse `-u`/`--user` (basic auth) | ✅ | Base64 encoded |
+| Parse `-b`/`--cookie` | ✅ | |
+| Generate `TestPlan` with assertions | ✅ | 13 tests |
 
-### HAR Converter
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Parse HAR 1.2 format | 🔜 | Stub |
-| Extract request/response pairs | 🔜 | Stub |
-| Generate `Status` assertions from recorded status | 🔜 | Stub |
-| Generate `Header` assertions | 🔜 | Stub |
-| Generate `JsonPath` assertions | 🔜 | Stub |
-
-### OpenAPI Converter
+### HAR Converter (✅ Complete)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Parse OpenAPI 3.x YAML/JSON | 🔜 | Stub |
-| Path + operation → RequestStep | 🔜 | Stub |
-| Request body schema → example generation | 🔜 | Stub |
-| Response schema → Schema assertion | 🔜 | Stub |
-| Parameters → URL/header/query construction | 🔜 | Stub |
-| Security schemes → auth header setup | 🔜 | Stub |
+| Parse HAR 1.2 JSON | ✅ | |
+| Map entries to RequestSteps | ✅ | |
+| Extract headers, method, URL, body | ✅ | |
+| Generate status code assertions | ✅ | 6 tests |
 
-### Postman Converter
+### OpenAPI Converter (✅ Complete)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Parse Collection v2.1 JSON | 🔜 | Stub |
-| Request → RequestStep | 🔜 | Stub |
-| Variables → template substitution | 🔜 | Stub |
-| Auth → header setup | 🔜 | Stub |
+| Parse YAML/JSON OpenAPI 3.x | ✅ | |
+| Walk paths and operations | ✅ | |
+| Path/query/header parameter extraction | ✅ | |
+| Example request body generation from schemas | ✅ | Object, array, string, number, boolean, allOf |
+| Status/content-type assertions from responses | ✅ | |
+| Schema-aware value generation | ✅ | Date, datetime, email, uri, uuid formats |
+| Path parameter substitution | ✅ | `{id}` → `1` |
 
-### GraphQL Converter
+### Postman Converter (✅ Complete)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Parse SDL schema | 🔜 | Stub (v0.3.0) |
-| Parse introspection result | 🔜 | Stub (v0.3.0) |
-| Query/mutation → RequestStep | 🔜 | Stub (v0.3.0) |
-| Input types → example variables | 🔜 | Stub (v0.3.0) |
-| Response types → JsonPath assertions | 🔜 | Stub (v0.3.0) |
+| Parse Collection v2.1 JSON | ✅ | |
+| Recursive folder walking | ✅ | |
+| Method, URL, headers, body extraction | ✅ | |
+| Body modes: raw, urlencoded, formdata | ✅ | |
+| Status code assertions from responses | ✅ | 7 tests |
+
+### GraphQL Converter (✅ Complete)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Parse SDL schema | ✅ | Regex-based |
+| Extract Query fields | ✅ | |
+| Extract Mutation fields | ✅ | |
+| Generate query/mutation request bodies | ✅ | |
+| Status 200 assertions | ✅ | 12 tests |
 
 ### gRPC Converter
 
@@ -191,15 +192,15 @@ This document catalogs every feature across all momus crates, organized by imple
 | RPC method → test case | 🔜 | Stub (v0.4.0) |
 | Message types → example payload | 🔜 | Stub (v0.4.0) |
 
-### FHIR Converter (v0.2.0 target — port from fhir-autotest)
+### FHIR Converter (✅ Complete — ported from fhir-autotest)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Parse IG package (.tgz) | ✅ | Ported |
 | Categorize resources by type | ✅ | Ported |
 | Select CapabilityStatement | ✅ | Ported |
-| Resolve parent profile chain | 🔜 | Port (v0.3.0) |
-| Download missing profiles from registry | 🔜 | Port (v0.3.0) |
+| Resolve parent profile chain | ✅ | Ported |
+| Download missing profiles from registry | ✅ | Multi-source download |
 | Extract dependencies (topological sort) | ✅ | Uses `momus_core::deps` |
 | Generate resources from StructureDefinitions | ✅ | Ported (5-pass) |
 | Required field population | ✅ | Ported |
@@ -208,21 +209,24 @@ This document catalogs every feature across all momus crates, organized by imple
 | MustSupport backbone population | ✅ | Ported |
 | MustSupport optional field population | ✅ | Ported |
 | Type-specific value generation | ✅ | Ported (HumanName, Address, etc.) |
-| Value set resolution | 🔜 | Port (v0.3.0) |
+| Value set resolution | ✅ | Ported (ValueSet/CodeSystem maps) |
 | Generate test plan from CapabilityStatement | ✅ | Ported |
 | CRUD test generation | ✅ | Ported |
 | Search test generation (single, modifiers, prefixes) | ✅ | Ported |
-| Near/proximity search tests | 🔜 | Port (v0.3.0) |
+| Near/proximity search tests | ✅ | Ported |
 | Combinatorial search tests | ✅ | Ported |
-| Chained search tests | 🔜 | Port (v0.3.0) |
+| Chained search tests | ✅ | Ported |
 | Include/revinclude tests | ✅ | Ported |
 | Result param tests (_summary, _elements, _count, _sort, _has) | ✅ | Ported |
 | Operation tests ($operation) | ✅ | Ported |
 | Negative tests | ✅ | Ported |
-| Conformance tests (mustSupport) | 🔜 | Port (v0.3.0) |
-| Bulk data generation (NDJSON) | 🔜 | Port (v0.3.0) |
-| HCPD/AU-specific generation | 🔜 | Port (v0.3.0) |
-| Locality/suburb generation | 🔜 | Port (v0.3.0) |
+| Conformance tests (mustSupport) | ✅ | Ported |
+| Bulk data generation (NDJSON) | ✅ | Ported |
+| Bulk data upload with wave ordering | ✅ | Ported |
+| HCPD/AU-specific generation | ✅ | Ported |
+| Locality/suburb generation | ✅ | Ported (65 Australian suburbs) |
+| Profile validation against StructureDefinition | ✅ | Ported |
+| Response assertion engine | ✅ | Ported |
 
 ---
 
@@ -415,7 +419,7 @@ This document catalogs every feature across all momus crates, organized by imple
 | `contract` subcommand | ✅ | OpenAPI/GraphQL response validation |
 | `guard` subcommand | ✅ | 5 security check categories |
 | `diff` subcommand | ✅ | Field-level JSON diff between environments |
-| `convert` subcommand | ✅ | curl, HAR, FHIR converters implemented |
+| `convert` subcommand | ✅ | curl, HAR, FHIR, OpenAPI, Postman, GraphQL converters |
 | `--base-url` flag | ✅ | |
 | `--output` flag | ✅ | |
 | `--verbose` flag | ✅ | |
@@ -426,7 +430,7 @@ This document catalogs every feature across all momus crates, organized by imple
 
 | Feature | Priority | Notes |
 |---------|----------|-------|
-| `--format` (json/text) for output | Medium | |
+| `--format` (json/html/text) for output | ✅ | Auto-detect from .html extension |
 | `--timeout` global flag | Medium | |
 | `--dry-run` for run subcommand | Medium | |
 | Tab completion (shell completions) | Low | |
@@ -441,18 +445,17 @@ This document catalogs every feature across all momus crates, organized by imple
 
 | Area | Status | Notes |
 |------|--------|-------|
-| momus-core unit tests | ✅ | 7 tests |
-| momus-mock unit tests | ✅ | 4 tests |
+| momus-core unit tests | ✅ | 56 tests |
+| momus-mock unit tests | ✅ | 19 tests |
 | momus (umbrella) unit tests | ✅ | 5 tests |
-| momus-fuzz unit tests | ✅ | 10 tests |
-| momus-bench unit tests | 🧪 | 1 test (report display) |
-| momus-chaos unit tests | 🧪 | 2 tests |
-| momus-contract unit tests | 🧪 | 1 test |
-| momus-guard unit tests | 🧪 | 2 tests |
-| momus-diff unit tests | 🧪 | 1 test |
-| momus-convert unit tests | 📋 | 0 tests |
+| momus-fuzz unit tests | ✅ | 16 tests |
+| momus-bench unit tests | ✅ | 5 tests |
+| momus-chaos unit tests | ✅ | 10 tests |
+| momus-contract unit tests | ✅ | 9 tests |
+| momus-guard unit tests | ✅ | 2 tests |
+| momus-diff unit tests | ✅ | 8 tests |
+| momus-convert unit tests | ✅ | 146 tests |
 | momus-cli integration tests | 📋 | 0 tests |
-| FHIR converter integration tests | 📋 | Port from fhir-autotest (8 tests) |
 
 ### Documentation
 
