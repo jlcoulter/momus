@@ -8,6 +8,7 @@
 //! 3. Generate test plan with CRUD, search, and conformance tests
 
 pub mod assertions;
+pub mod bulk_data;
 pub mod capability;
 pub mod operation;
 pub mod package;
