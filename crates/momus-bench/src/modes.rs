@@ -1,7 +1,7 @@
 use crate::config::BenchMode;
 use crate::report::BenchReport;
 use anyhow::Result;
-use momus_core::ast::{Method, Step, TestPlan};
+use momus_core::ast::{Method, TestPlan};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -704,32 +704,14 @@ struct BenchStep {
 }
 
 fn collect_requests(plan: &TestPlan) -> Vec<BenchStep> {
-    let mut steps = Vec::new();
-    collect_from_steps(&plan.steps, &mut steps);
-    collect_from_steps(&plan.setup, &mut steps);
-    collect_from_steps(&plan.teardown, &mut steps);
-    steps
-}
-
-fn collect_from_steps(steps: &[Step], result: &mut Vec<BenchStep>) {
-    for step in steps {
-        match step {
-            Step::Request(req) => {
-                result.push(BenchStep {
-                    method: req.method,
-                    url: req.url.clone(),
-                    body: req.body.clone(),
-                });
-            }
-            Step::Sequence(seq) => {
-                collect_from_steps(&seq.steps, result);
-            }
-            Step::Parallel(children) => {
-                collect_from_steps(children, result);
-            }
-            _ => {}
-        }
-    }
+    plan.request_steps()
+        .into_iter()
+        .map(|req| BenchStep {
+            method: req.method,
+            url: req.url.clone(),
+            body: req.body.clone(),
+        })
+        .collect()
 }
 
 /// Compute a percentile from a sorted slice.

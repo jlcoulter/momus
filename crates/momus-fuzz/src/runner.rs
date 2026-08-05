@@ -2,7 +2,7 @@ use crate::config::FuzzConfig;
 use crate::mutators::{all_mutators, mutator_by_name};
 use crate::report::FuzzReport;
 use anyhow::Result;
-use momus_core::ast::{Method, Step, TestPlan};
+use momus_core::ast::{Method, TestPlan};
 use momus_core::leak::detect_info_leaks;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -181,32 +181,16 @@ struct FuzzTarget {
 
 /// Collect request steps that have bodies from a test plan.
 fn collect_fuzz_targets(plan: &TestPlan) -> Vec<FuzzTarget> {
-    let mut targets = Vec::new();
-    collect_from_steps(&plan.steps, &mut targets);
-    targets
-}
-
-fn collect_from_steps(steps: &[Step], targets: &mut Vec<FuzzTarget>) {
-    for step in steps {
-        match step {
-            Step::Request(req) => {
-                if let Some(body) = &req.body {
-                    targets.push(FuzzTarget {
-                        method: req.method,
-                        url: req.url.clone(),
-                        body: body.clone(),
-                    });
-                }
-            }
-            Step::Sequence(seq) => {
-                collect_from_steps(&seq.steps, targets);
-            }
-            Step::Parallel(children) => {
-                collect_from_steps(children, targets);
-            }
-            _ => {}
-        }
-    }
+    plan.request_steps()
+        .into_iter()
+        .filter_map(|req| {
+            req.body.as_ref().map(|body| FuzzTarget {
+                method: req.method,
+                url: req.url.clone(),
+                body: body.clone(),
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]
