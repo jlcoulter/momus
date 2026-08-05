@@ -25,6 +25,7 @@ jsonschema = "0.49"
 petgraph = "0.7"
 async-trait = "0.1.91"
 rhai = { version = "1", features = ["sync"] }
+jsonpath-rust = "1.0.8"
 
 [dev-dependencies]
 cargo-husky = "1.5.0"

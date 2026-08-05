@@ -553,113 +553,27 @@ fn evaluate_json_predicate(
 }
 
 // ---------------------------------------------------------------------------
-// Simple JSONPath resolver
+// JSONPath resolver (via jsonpath-rust)
 // ---------------------------------------------------------------------------
 
-/// Resolve a simplified JSONPath expression against a JSON value.
+/// Resolve a JSONPath expression against a JSON value using `jsonpath-rust`.
 ///
-/// Supports:
+/// Supports the full JSONPath syntax including:
 /// - `$.key` — root key access
 /// - `$.key.nested` — nested key access
 /// - `$.key[*]` — array wildcard
 /// - `$.key[0]` — array index
-/// - `$.key[0].nested` — array index with nested access
+/// - `$..key` — recursive descent
+/// - `[?(@.key==val)]` — filter expressions
+/// - `[0,1]` — union indices
+/// - `[start:end:step]` — slice operator
 pub fn resolve_json_path(value: &serde_json::Value, path: &str) -> Vec<serde_json::Value> {
-    // Handle bare "$" as root
-    if path == "$" || path.is_empty() {
-        return vec![value.clone()];
+    use jsonpath_rust::JsonPath;
+
+    match value.query(path) {
+        Ok(results) => results.into_iter().cloned().collect(),
+        Err(_) => vec![],
     }
-    // Strip leading $.
-    let path = path.strip_prefix("$.").unwrap_or(path);
-    resolve_segments(value, path)
-}
-
-fn resolve_segments(value: &serde_json::Value, path: &str) -> Vec<serde_json::Value> {
-    if path.is_empty() {
-        return vec![value.clone()];
-    }
-
-    // Split on '.' but not inside brackets
-    let segments = split_path(path);
-    if segments.is_empty() {
-        return vec![value.clone()];
-    }
-
-    let mut current = vec![value.clone()];
-
-    for segment in segments {
-        let mut next = Vec::new();
-
-        if let Some(inner) = segment.strip_suffix("[*]") {
-            // Array wildcard: key[*]
-            for v in &current {
-                if let Some(arr) = v.get(inner).and_then(|v| v.as_array()) {
-                    next.extend(arr.iter().cloned());
-                }
-            }
-        } else if let Some(captured) = segment.strip_suffix(']') {
-            // Array index: key[N]
-            if let Some((name, idx_str)) = captured.rsplit_once('[')
-                && let Ok(idx) = idx_str.parse::<usize>()
-            {
-                for v in &current {
-                    if let Some(arr) = v.get(name).and_then(|v| v.as_array())
-                        && idx < arr.len()
-                    {
-                        next.push(arr[idx].clone());
-                    }
-                }
-            }
-        } else {
-            // Simple key access
-            for v in &current {
-                if let Some(child) = v.get(&segment) {
-                    next.push(child.clone());
-                }
-            }
-        }
-
-        current = next;
-        if current.is_empty() {
-            return vec![];
-        }
-    }
-
-    current
-}
-
-fn split_path(path: &str) -> Vec<String> {
-    let mut segments = Vec::new();
-    let mut current = String::new();
-    let mut depth = 0;
-
-    for ch in path.chars() {
-        match ch {
-            '[' => {
-                current.push('[');
-                depth += 1;
-            }
-            ']' => {
-                current.push(']');
-                depth -= 1;
-            }
-            '.' if depth == 0 => {
-                if !current.is_empty() {
-                    segments.push(current.clone());
-                    current.clear();
-                }
-                continue;
-            }
-            _ => {
-                current.push(ch);
-            }
-        }
-    }
-    if !current.is_empty() {
-        segments.push(current);
-    }
-
-    segments
 }
 
 #[cfg(test)]
