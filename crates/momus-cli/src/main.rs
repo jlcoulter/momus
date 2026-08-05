@@ -524,6 +524,7 @@ async fn main() -> Result<()> {
             };
             let report = momus_fuzz::run_fuzz(&test_plan, &config).await?;
             println!("{}", report);
+            momus_core::write_report_json(&config.output, "fuzz-report.json", &report)?;
             Ok(())
         }
         Commands::Chaos { plan, base_url } => {
@@ -543,6 +544,7 @@ async fn main() -> Result<()> {
             for report in &reports {
                 println!("{}", report);
             }
+            momus_core::write_report_json(&config.output, "chaos-report.json", &reports)?;
             Ok(())
         }
         Commands::Contract {
@@ -565,6 +567,7 @@ async fn main() -> Result<()> {
             };
             let report = momus_contract::run_contract(&test_plan, &config).await?;
             println!("{}", report);
+            momus_core::write_report_json(&config.output, "contract-report.json", &report)?;
             Ok(())
         }
         Commands::Guard { plan, base_url } => {
@@ -582,6 +585,7 @@ async fn main() -> Result<()> {
             };
             let report = momus_guard::run_guard(&test_plan, &config).await?;
             println!("{}", report);
+            momus_core::write_report_json(&config.output, "guard-report.json", &report)?;
             Ok(())
         }
         Commands::Diff {
@@ -602,6 +606,7 @@ async fn main() -> Result<()> {
             };
             let report = momus_diff::run_diff(&test_plan, &config).await?;
             println!("{}", report);
+            momus_core::write_report_json(&config.output, "diff-report.json", &report)?;
             Ok(())
         }
         Commands::Plan { plan, output } => {
