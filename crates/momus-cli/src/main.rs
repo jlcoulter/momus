@@ -192,6 +192,17 @@ enum Commands {
         /// Path to the test plan JSON file (use - for stdin).
         plan: String,
     },
+    /// Generate bulk FHIR test data (NDJSON) from an IG package.
+    FhirGenerate {
+        /// Path to the FHIR IG package (.tgz).
+        package: String,
+        /// Number of resources to generate per type (default: 10).
+        #[arg(long, default_value = "10")]
+        count: u64,
+        /// Output directory for NDJSON files (default: ./fhir-data).
+        #[arg(long, default_value = "./fhir-data")]
+        output: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -624,6 +635,19 @@ async fn main() -> Result<()> {
                     anyhow::bail!("Unknown template '{}'. Available: plan, config", other);
                 }
             }
+            Ok(())
+        }
+        Commands::FhirGenerate {
+            package,
+            count,
+            output,
+        } => {
+            std::fs::create_dir_all(&output)?;
+            momus_convert::generate_fhir_bulk_test_data(&package, count, &output)?;
+            println!(
+                "✓ FHIR bulk test data written to {}/data/",
+                output.display()
+            );
             Ok(())
         }
     }
