@@ -44,6 +44,10 @@ struct Cli {
     #[arg(short, long, global = true)]
     verbose: bool,
 
+    /// Global request timeout in seconds (overrides config file and per-command timeouts).
+    #[arg(long, global = true)]
+    timeout: Option<u64>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -126,6 +130,12 @@ enum Commands {
         /// Base URL override.
         #[arg(long)]
         base_url: Option<String>,
+        /// Select specific mutators by name (repeatable, empty = all).
+        #[arg(long)]
+        mutators: Vec<String>,
+        /// Request timeout in seconds.
+        #[arg(long)]
+        timeout: Option<u64>,
     },
     /// Run chaos experiments against a plan.
     Chaos {
@@ -134,6 +144,12 @@ enum Commands {
         /// Base URL override.
         #[arg(long)]
         base_url: Option<String>,
+        /// Chaos experiments to run (repeatable, JSON format, e.g. '{"NetworkLatency":{"endpoint":"/api","delay_ms":5000,"duration_secs":30}}').
+        #[arg(long)]
+        experiment: Vec<String>,
+        /// Interval between experiments in seconds.
+        #[arg(long)]
+        interval: Option<u64>,
     },
     /// Convert an API description into a test plan.
     Convert {
@@ -162,6 +178,12 @@ enum Commands {
         /// Base URL override.
         #[arg(long)]
         base_url: Option<String>,
+        /// Enable strict mode (fail on undocumented endpoints).
+        #[arg(long)]
+        strict: Option<bool>,
+        /// Request timeout in seconds.
+        #[arg(long)]
+        timeout: Option<u64>,
     },
     /// Security scan a plan for common vulnerabilities.
     Guard {
@@ -170,6 +192,21 @@ enum Commands {
         /// Base URL override.
         #[arg(long)]
         base_url: Option<String>,
+        /// Check for missing security headers.
+        #[arg(long)]
+        check_headers: Option<bool>,
+        /// Check CORS configuration.
+        #[arg(long)]
+        check_cors: Option<bool>,
+        /// Check for information leakage in error responses.
+        #[arg(long)]
+        check_leaks: Option<bool>,
+        /// Check for exposed internal endpoints.
+        #[arg(long)]
+        check_exposed: Option<bool>,
+        /// Request timeout in seconds.
+        #[arg(long)]
+        timeout: Option<u64>,
     },
     /// Diff responses between two environments.
     Diff {
@@ -181,6 +218,18 @@ enum Commands {
         /// Target URL (e.g. staging).
         #[arg(long)]
         target: String,
+        /// Diff response headers.
+        #[arg(long)]
+        diff_headers: Option<bool>,
+        /// Diff response bodies.
+        #[arg(long)]
+        diff_bodies: Option<bool>,
+        /// Diff status codes.
+        #[arg(long)]
+        diff_status: Option<bool>,
+        /// Request timeout in seconds.
+        #[arg(long)]
+        timeout: Option<u64>,
     },
     /// Generate a skeleton test plan or config file.
     Init {
@@ -232,7 +281,12 @@ async fn main() -> Result<()> {
         .init();
 
     // Load optional config file — search default locations if not specified
-    let cfg = load_config(cli.config.as_deref())?;
+    let mut cfg = load_config(cli.config.as_deref())?;
+
+    // Apply global --timeout override if provided
+    if let Some(timeout) = cli.timeout {
+        cfg.global.timeout_secs = timeout;
+    }
 
     match cli.command {
         Commands::Run {
@@ -527,6 +581,8 @@ async fn main() -> Result<()> {
             plan,
             iterations,
             base_url,
+            mutators,
+            timeout,
         } => {
             let content = std::fs::read_to_string(&plan)
                 .with_context(|| format!("Failed to read plan file '{}'", plan.display()))?;
@@ -534,6 +590,21 @@ async fn main() -> Result<()> {
                 .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.fuzz.base_url).or(cfg.global.base_url);
+            let timeout_secs = timeout
+                .or(Some(cfg.fuzz.timeout_secs))
+                .or(Some(cfg.global.timeout_secs))
+                .unwrap_or(30);
+
+            let config = momus_fuzz::FuzzConfig {
+                iterations,
+                mutators: if mutators.is_empty() {
+                    cfg.fuzz.mutators.clone()
+                } else {
+                    mutators
+                },
+                base_url,
+                timeout_secs,
+                output: cfg.fuzz.output,
             let fuzz_output = cfg.fuzz.output.clone();
 
             let config = momus_fuzz::FuzzConfig {
@@ -555,17 +626,40 @@ async fn main() -> Result<()> {
             );
             Ok(())
         }
-        Commands::Chaos { plan, base_url } => {
+        Commands::Chaos {
+            plan,
+            base_url,
+            experiment,
+            interval,
+        } => {
             let content = std::fs::read_to_string(&plan)
                 .with_context(|| format!("Failed to read plan file '{}'", plan.display()))?;
             let test_plan: TestPlan = serde_json::from_str(&content)
                 .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.chaos.base_url).or(cfg.global.base_url);
+            let interval_secs = interval.unwrap_or(cfg.chaos.interval_secs);
+
+            // Parse experiments from CLI JSON strings, or fall back to config
+            let experiments = if experiment.is_empty() {
+                cfg.chaos.experiments.clone()
+            } else {
+                experiment
+                    .iter()
+                    .map(|s| {
+                        serde_json::from_str::<momus_chaos::ChaosExperiment>(s)
+                            .with_context(|| format!("Failed to parse chaos experiment JSON: {s}"))
+                    })
+                    .collect::<Result<Vec<_>>>()?
+            };
             let chaos_output = cfg.chaos.output.clone();
 
             let config = momus_chaos::ChaosConfig {
+                experiments,
                 base_url,
+                interval_secs,
+                timeout_secs: cfg.chaos.timeout_secs,
+                output: cfg.chaos.output,
                 output: chaos_output.clone(),
                 ..Default::default()
             };
@@ -588,6 +682,8 @@ async fn main() -> Result<()> {
             plan,
             spec,
             base_url,
+            strict,
+            timeout,
         } => {
             let content = std::fs::read_to_string(&plan)
                 .with_context(|| format!("Failed to read plan file '{}'", plan.display()))?;
@@ -595,11 +691,19 @@ async fn main() -> Result<()> {
                 .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.contract.base_url).or(cfg.global.base_url);
+            let strict = strict.unwrap_or(cfg.contract.strict);
+            let timeout_secs = timeout
+                .or(Some(cfg.contract.timeout_secs))
+                .or(Some(cfg.global.timeout_secs))
+                .unwrap_or(30);
             let contract_output = cfg.contract.output.clone();
 
             let config = momus_contract::ContractConfig {
                 spec_path: spec,
                 base_url,
+                strict,
+                timeout_secs,
+                output: cfg.contract.output,
                 output: contract_output.clone(),
                 ..Default::default()
             };
@@ -616,13 +720,34 @@ async fn main() -> Result<()> {
             );
             Ok(())
         }
-        Commands::Guard { plan, base_url } => {
+        Commands::Guard {
+            plan,
+            base_url,
+            check_headers,
+            check_cors,
+            check_leaks,
+            check_exposed,
+            timeout,
+        } => {
             let content = std::fs::read_to_string(&plan)
                 .with_context(|| format!("Failed to read plan file '{}'", plan.display()))?;
             let test_plan: TestPlan = serde_json::from_str(&content)
                 .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.guard.base_url).or(cfg.global.base_url);
+            let timeout_secs = timeout
+                .or(Some(cfg.guard.timeout_secs))
+                .or(Some(cfg.global.timeout_secs))
+                .unwrap_or(30);
+
+            let config = momus_guard::GuardConfig {
+                base_url,
+                check_headers: check_headers.unwrap_or(cfg.guard.check_headers),
+                check_cors: check_cors.unwrap_or(cfg.guard.check_cors),
+                check_leaks: check_leaks.unwrap_or(cfg.guard.check_leaks),
+                check_exposed: check_exposed.unwrap_or(cfg.guard.check_exposed),
+                timeout_secs,
+                output: cfg.guard.output,
             let guard_output = cfg.guard.output.clone();
 
             let config = momus_guard::GuardConfig {
@@ -647,17 +772,30 @@ async fn main() -> Result<()> {
             plan,
             baseline,
             target,
+            diff_headers,
+            diff_bodies,
+            diff_status,
+            timeout,
         } => {
             let content = std::fs::read_to_string(&plan)
                 .with_context(|| format!("Failed to read plan file '{}'", plan.display()))?;
             let test_plan: TestPlan = serde_json::from_str(&content)
                 .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
+            let timeout_secs = timeout
+                .or(Some(cfg.diff.timeout_secs))
+                .or(Some(cfg.global.timeout_secs))
+                .unwrap_or(30);
             let diff_output = cfg.diff.output.clone();
 
             let config = momus_diff::DiffConfig {
                 baseline_url: baseline,
                 target_url: target,
+                diff_headers: diff_headers.unwrap_or(cfg.diff.diff_headers),
+                diff_bodies: diff_bodies.unwrap_or(cfg.diff.diff_bodies),
+                diff_status: diff_status.unwrap_or(cfg.diff.diff_status),
+                timeout_secs,
+                output: cfg.diff.output,
                 output: diff_output.clone(),
                 ..Default::default()
             };
@@ -757,6 +895,12 @@ async fn main() -> Result<()> {
 # Number of mutations to generate per input (default: 1000).
 # iterations = 5000
 
+# Select specific mutators (empty = all).
+# mutators = ["null_injection", "boundary"]
+
+# Request timeout in seconds (default: 30).
+# timeout_secs = 60
+
 [chaos]
 # Output directory for results (default: ./output).
 # output = "./chaos-results"
@@ -772,6 +916,9 @@ async fn main() -> Result<()> {
 # spec_path = "./api-spec.yaml"
 # strict = true
 
+# Request timeout in seconds (default: 30).
+# timeout_secs = 60
+
 [guard]
 # Output directory for results (default: ./output).
 # output = "./guard-results"
@@ -781,6 +928,9 @@ async fn main() -> Result<()> {
 # check_cors = true
 # check_leaks = true
 # check_exposed = true
+
+# Request timeout in seconds (default: 30).
+# timeout_secs = 60
 
 [plan]
 # Output directory for the plan display (default: ./output).
@@ -794,6 +944,16 @@ async fn main() -> Result<()> {
 # baseline_url = "https://prod.example.com"
 # Target environment URL (e.g. staging).
 # target_url = "https://staging.example.com"
+
+# Diff response headers (default: true).
+# diff_headers = true
+# Diff response bodies (default: true).
+# diff_bodies = true
+# Diff status codes (default: true).
+# diff_status = true
+
+# Request timeout in seconds (default: 30).
+# timeout_secs = 60
 "#;
                     std::fs::write(&path, content)?;
                     println!("✓ Skeleton config written to: {}", path.display());
