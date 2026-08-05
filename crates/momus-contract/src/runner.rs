@@ -34,7 +34,7 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
     );
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(config.timeout_secs))
         .build()?;
 
     // Collect all request steps
@@ -95,6 +95,21 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
                             .push(format!("{} {}: {}", v.method, v.endpoint, v.description));
                     }
                 }
+
+                // In strict mode, escalate undocumented fields to errors
+                let step_violations: Vec<ContractViolation> = if config.strict {
+                    step_violations
+                        .into_iter()
+                        .map(|mut v| {
+                            if v.severity == "info" {
+                                v.severity = "error".to_string();
+                            }
+                            v
+                        })
+                        .collect()
+                } else {
+                    step_violations
+                };
 
                 // Per-endpoint compliance
                 let checks_passed = step_violations
