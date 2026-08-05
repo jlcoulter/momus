@@ -2,6 +2,7 @@ use crate::config::GuardConfig;
 use crate::report::{GuardIssue, GuardReport};
 use anyhow::Result;
 use momus_core::ast::{Step, TestPlan};
+use momus_core::leak::detect_info_leaks;
 use std::time::Instant;
 
 /// Execute a security scan against a test plan.
@@ -296,81 +297,21 @@ async fn check_info_leaks(client: &reqwest::Client, url: &str) -> CheckResult {
         Err(_) => return CheckResult::pass(),
     };
 
-    let lower = body.to_lowercase();
-    let mut issues = Vec::new();
-
-    let leak_patterns: &[(&str, &str, &str)] = &[
-        (
-            "stack trace",
-            "leak",
-            "Response contains a stack trace, potentially revealing internal code paths",
-        ),
-        ("exception", "leak", "Response contains exception details"),
-        (
-            "syntaxerror",
-            "leak",
-            "Response contains a syntax error message",
-        ),
-        (
-            "sql syntax",
-            "leak",
-            "Response contains SQL syntax information, potential SQL injection vector",
-        ),
-        (
-            "fatal error",
-            "leak",
-            "Response contains a fatal error message",
-        ),
-        (
-            "internal server error",
-            "leak",
-            "Generic internal server error (may be acceptable)",
-        ),
-        ("traceback", "leak", "Response contains a Python traceback"),
-        (
-            "root:x:",
-            "leak",
-            "Response contains password file data (/etc/passwd)",
-        ),
-        (
-            "/etc/passwd",
-            "leak",
-            "Response references /etc/passwd, potential path traversal",
-        ),
-        (
-            "select * from",
-            "leak",
-            "Response contains SQL query, potential SQL injection",
-        ),
-        (
-            "insert into",
-            "leak",
-            "Response contains SQL query, potential SQL injection",
-        ),
-    ];
-
-    for (pattern, _category, description) in leak_patterns {
-        if lower.contains(pattern) {
-            issues.push(GuardIssue {
-                endpoint: url.to_string(),
-                category: "leak".to_string(),
-                severity: "high".to_string(),
-                description: description.to_string(),
-                recommendation: "Sanitize error responses to avoid leaking internal information"
-                    .to_string(),
-            });
-            break; // One leak per endpoint is enough
-        }
+    let matches = detect_info_leaks(&body);
+    if matches.is_empty() {
+        return CheckResult::pass();
     }
 
-    if issues.is_empty() {
-        CheckResult::pass()
-    } else {
-        CheckResult {
-            issues,
-            passed: false,
-        }
-    }
+    // Use the first match for the issue description
+    let m = &matches[0];
+    CheckResult::fail(GuardIssue {
+        endpoint: url.to_string(),
+        category: m.category.to_string(),
+        severity: "high".to_string(),
+        description: m.description.to_string(),
+        recommendation: "Sanitize error responses to avoid leaking internal information"
+            .to_string(),
+    })
 }
 
 /// Check for exposed internal endpoints.
