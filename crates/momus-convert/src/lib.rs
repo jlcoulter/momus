@@ -7,26 +7,28 @@ use momus_core::ast::TestPlan;
 ///
 /// * `format` - The input format: "openapi", "postman", "har", "curl", "graphql", "grpc", "fhir"
 /// * `input` - The input data (file path or raw string for curl)
+/// * `seed_data` - If true, generate seed data setup steps that pre-populate the server
+///   with resources so GET/PUT/DELETE tests have data to operate on
 ///
 /// # Errors
 ///
 /// Returns an error if the format is unknown, the input cannot be read, or conversion fails.
-pub fn convert(format: &str, input: &str) -> Result<TestPlan> {
-    match format {
+pub fn convert(format: &str, input: &str, seed_data: bool) -> Result<TestPlan> {
+    let mut plan = match format {
         #[cfg(feature = "openapi")]
-        "openapi" => openapi::convert(input),
+        "openapi" => openapi::convert(input)?,
         #[cfg(feature = "postman")]
-        "postman" => postman::convert(input),
+        "postman" => postman::convert(input)?,
         #[cfg(feature = "har")]
-        "har" => har::convert(input),
+        "har" => har::convert(input)?,
         #[cfg(feature = "curl")]
-        "curl" => curl::convert(input),
+        "curl" => curl::convert(input)?,
         #[cfg(feature = "graphql")]
-        "graphql" => graphql::convert(input),
+        "graphql" => graphql::convert(input)?,
         #[cfg(feature = "grpc")]
-        "grpc" => grpc::convert(input),
+        "grpc" => grpc::convert(input)?,
         #[cfg(feature = "fhir")]
-        "fhir" => fhir::convert(input),
+        "fhir" => fhir::convert(input)?,
         _ => {
             let available = available_formats();
             anyhow::bail!(
@@ -35,7 +37,30 @@ pub fn convert(format: &str, input: &str) -> Result<TestPlan> {
                 available.join(", ")
             )
         }
+    };
+
+    if seed_data {
+        let seed_steps = match format {
+            #[cfg(feature = "openapi")]
+            "openapi" => openapi::generate_seed_data(input)?,
+            #[cfg(feature = "postman")]
+            "postman" => postman::generate_seed_data(input)?,
+            #[cfg(feature = "har")]
+            "har" => har::generate_seed_data(input)?,
+            #[cfg(feature = "curl")]
+            "curl" => curl::generate_seed_data(input)?,
+            #[cfg(feature = "graphql")]
+            "graphql" => graphql::generate_seed_data(input)?,
+            #[cfg(feature = "grpc")]
+            "grpc" => grpc::generate_seed_data(input)?,
+            #[cfg(feature = "fhir")]
+            "fhir" => fhir::generate_seed_data(input)?,
+            _ => vec![],
+        };
+        plan.setup = seed_steps;
     }
+
+    Ok(plan)
 }
 
 /// List all available converter formats based on enabled features.

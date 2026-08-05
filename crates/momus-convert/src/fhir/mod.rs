@@ -26,7 +26,7 @@ pub mod value_resolver;
 pub mod valuesets;
 
 use anyhow::{Context, Result};
-use momus_core::ast::TestPlan;
+use momus_core::ast::{Step, TestPlan};
 use std::collections::HashMap;
 
 /// Convert a FHIR Implementation Guide package to a TestPlan.
@@ -104,6 +104,15 @@ pub fn convert(path: &str) -> Result<TestPlan> {
         setup: vec![],
         teardown: vec![],
     })
+}
+
+/// Generate seed data setup steps from a FHIR IG package.
+///
+/// FHIR already generates bulk data as NDJSON files. This function
+/// returns an empty vec since FHIR data generation is handled separately
+/// via the `momus fhir` subcommand's bulk data pipeline.
+pub fn generate_seed_data(_path: &str) -> Result<Vec<Step>> {
+    Ok(vec![])
 }
 
 fn select_capability_statement(
