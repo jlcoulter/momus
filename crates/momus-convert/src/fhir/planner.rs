@@ -7,9 +7,9 @@
 //!
 //! Generates test cases for:
 //! - CRUD interactions (read, vread, create, update, delete, patch, history)
-//! - Search params (single, modifiers, prefixes, near, combo, chained)
+//! - Search params (single, modifiers, prefixes, near, combo, chained, _has)
 //! - Include/revinclude tests
-//! - Result param tests (_summary, _elements, _count, _sort, _has)
+//! - Result param tests (_summary, _elements, _count, _sort, _has, _filter, _tag, _profile, _security, _type, _language)
 //! - Operation tests ($operation)
 //! - Negative tests (undeclared interactions/params)
 //! - Conformance tests (mustSupport field presence)
@@ -17,6 +17,7 @@
 use super::capability::*;
 use super::search_param::SearchParameter;
 use super::test_model::*;
+use super::value_resolver::resolve_search_value;
 use std::collections::HashMap;
 
 /// Fields that are never summary in FHIR R4.
@@ -59,6 +60,11 @@ pub fn assertion_for_kind(kind: &TestCaseKind, resource_type: &str) -> Option<Re
             ..ResponseAssertion::none()
         }),
         TestCaseKind::SearchChained { .. } => Some(ResponseAssertion {
+            bundle_type: Some("searchset".to_string()),
+            min_entries: Some(0),
+            ..ResponseAssertion::none()
+        }),
+        TestCaseKind::SearchHas { .. } => Some(ResponseAssertion {
             bundle_type: Some("searchset".to_string()),
             min_entries: Some(0),
             ..ResponseAssertion::none()
@@ -286,6 +292,114 @@ pub fn generate_chained_search_tests(
     tests
 }
 
+/// Generate _has (reverse chaining) search tests.
+///
+/// Reverse chaining allows searching for resources that are referenced by
+/// other resources matching certain criteria, e.g.
+/// `?patient.name=John` searches for observations where the patient's name is John.
+/// `_has` syntax: `?_has:<reference-type>:<param>=<value>`
+///
+/// For each reference-type search param on this resource, generates a test
+/// that uses `_has` to find resources that reference this type.
+pub fn generate_has_search_tests(
+    rtype: &str,
+    profile_url: &Option<String>,
+    sp: &RestSearchParam,
+    all_resources: &[RestResource],
+    search_parameters: &[SearchParameter],
+) -> Vec<TestCase> {
+    let mut tests = Vec::new();
+
+    // _has is only applicable to reference-type params
+    if sp.param_type != "reference" {
+        return tests;
+    }
+
+    // Resolve the target resource type for this reference param
+    let target_type =
+        super::value_resolver::resolve_reference_target(rtype, &sp.name, Some(search_parameters));
+    let Some(_target_type) = target_type else {
+        return tests;
+    };
+
+    // Find resources that reference back to this type (reverse relationship)
+    // e.g., if this is Patient, find resources with a "patient" or "subject" reference
+    let reverse_resources: Vec<&RestResource> = all_resources
+        .iter()
+        .filter(|r| {
+            r.resource_type != rtype
+                && r.search_param.iter().any(|p| {
+                    p.param_type == "reference"
+                        && super::value_resolver::resolve_reference_target(
+                            &r.resource_type,
+                            &p.name,
+                            Some(search_parameters),
+                        )
+                        .as_deref()
+                            == Some(rtype)
+                })
+        })
+        .collect();
+
+    for rev_resource in &reverse_resources {
+        for rev_sp in &rev_resource.search_param {
+            if rev_sp.param_type != "reference" {
+                continue;
+            }
+            let rev_target = super::value_resolver::resolve_reference_target(
+                &rev_resource.resource_type,
+                &rev_sp.name,
+                Some(search_parameters),
+            );
+            if rev_target.as_deref() != Some(rtype) {
+                continue;
+            }
+
+            // Generate _has test: ?_has:<rev-type>:<rev-param>=<value>
+            let has_param = format!("{}:{}", rev_resource.resource_type, rev_sp.name);
+
+            tests.push(TestCase {
+                name: format!(
+                    "search-{}-has-{}-{}",
+                    rtype.to_lowercase(),
+                    rev_resource.resource_type.to_lowercase(),
+                    rev_sp.name
+                ),
+                kind: TestCaseKind::SearchHas {
+                    param: sp.name.clone(),
+                    has_param: has_param.clone(),
+                    has_value: "{value}".to_string(),
+                },
+                interaction: Interaction::SearchType,
+                resource_type: rtype.to_string(),
+                profile_url: profile_url.clone(),
+                request: HttpRequest {
+                    method: "GET".to_string(),
+                    url: format!("/{}?_has:{}={}", rtype, has_param, "{value}"),
+                    headers: HashMap::new(),
+                    body: None,
+                },
+                validation: ValidationSpec {
+                    expected_status: 200,
+                    profile_url: profile_url.clone(),
+                    required_elements: vec![],
+                    forbidden_elements: vec![],
+                    response_assertion: assertion_for_kind(
+                        &TestCaseKind::SearchHas {
+                            param: sp.name.clone(),
+                            has_param: has_param.clone(),
+                            has_value: "{value}".to_string(),
+                        },
+                        rtype,
+                    ),
+                },
+            });
+        }
+    }
+
+    tests
+}
+
 /// Generate conformance (mustSupport) tests for a StructureDefinition profile.
 ///
 /// For each resource type with a profile URL, generates test cases that verify
@@ -355,14 +469,35 @@ pub fn generate_conformance_tests(
     tests
 }
 
+/// Resolve a placeholder value for a search parameter from field_values and created_ids.
+/// Returns the resolved string, or the original placeholder if no value is found.
+fn resolve_param_value(
+    rtype: &str,
+    param_name: &str,
+    param_type: &str,
+    field_values: &HashMap<String, HashMap<String, String>>,
+    created_ids: &HashMap<String, String>,
+) -> String {
+    let values = field_values.get(rtype);
+    let field_values_flat: HashMap<String, String> = values.cloned().unwrap_or_default();
+    resolve_search_value(
+        rtype,
+        param_name,
+        param_type,
+        &field_values_flat,
+        created_ids,
+    )
+    .unwrap_or_else(|| format!("{{{}}}", param_name))
+}
+
 /// Generate a comprehensive test plan from a CapabilityStatement.
 pub fn generate_test_plan(
     cs: &CapabilityStatement,
-    _search_parameters: &[SearchParameter],
+    search_parameters: &[SearchParameter],
     _operation_definitions: Option<&[super::operation::OperationDefinition]>,
     _profile_urls: Option<&HashMap<String, String>>,
     field_values: &HashMap<String, HashMap<String, String>>,
-    _created_ids: &HashMap<String, String>,
+    created_ids: &HashMap<String, String>,
 ) -> FhirTestPlan {
     let mut groups = Vec::new();
 
@@ -405,6 +540,10 @@ pub fn generate_test_plan(
                         });
                     }
                     "vread" => {
+                        let id = values
+                            .and_then(|v| v.get("id"))
+                            .cloned()
+                            .unwrap_or_else(|| "{id}".to_string());
                         tests.push(TestCase {
                             name: format!("vread-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
@@ -413,7 +552,7 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
-                                url: format!("/{}/{}/_history/1", rtype, "{id}"),
+                                url: format!("/{}/{}/_history/1", rtype, id),
                                 headers: HashMap::new(),
                                 body: None,
                             },
@@ -456,6 +595,10 @@ pub fn generate_test_plan(
                         });
                     }
                     "update" => {
+                        let id = values
+                            .and_then(|v| v.get("id"))
+                            .cloned()
+                            .unwrap_or_else(|| "{id}".to_string());
                         tests.push(TestCase {
                             name: format!("update-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
@@ -464,7 +607,7 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "PUT".to_string(),
-                                url: format!("/{}/{}", rtype, "{id}"),
+                                url: format!("/{}/{}", rtype, id),
                                 headers: {
                                     let mut h = HashMap::new();
                                     h.insert(
@@ -485,6 +628,10 @@ pub fn generate_test_plan(
                         });
                     }
                     "delete" => {
+                        let id = values
+                            .and_then(|v| v.get("id"))
+                            .cloned()
+                            .unwrap_or_else(|| "{id}".to_string());
                         tests.push(TestCase {
                             name: format!("delete-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
@@ -493,7 +640,7 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "DELETE".to_string(),
-                                url: format!("/{}/{}", rtype, "{id}"),
+                                url: format!("/{}/{}", rtype, id),
                                 headers: HashMap::new(),
                                 body: None,
                             },
@@ -507,6 +654,10 @@ pub fn generate_test_plan(
                         });
                     }
                     "patch" => {
+                        let id = values
+                            .and_then(|v| v.get("id"))
+                            .cloned()
+                            .unwrap_or_else(|| "{id}".to_string());
                         tests.push(TestCase {
                             name: format!("patch-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
@@ -515,7 +666,7 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "PATCH".to_string(),
-                                url: format!("/{}/{}", rtype, "{id}"),
+                                url: format!("/{}/{}", rtype, id),
                                 headers: {
                                     let mut h = HashMap::new();
                                     h.insert("Content-Type".to_string(), "application/json-patch+json".to_string());
@@ -533,6 +684,10 @@ pub fn generate_test_plan(
                         });
                     }
                     "history-instance" => {
+                        let id = values
+                            .and_then(|v| v.get("id"))
+                            .cloned()
+                            .unwrap_or_else(|| "{id}".to_string());
                         tests.push(TestCase {
                             name: format!("history-instance-{}", rtype.to_lowercase()),
                             kind: TestCaseKind::Interaction,
@@ -541,7 +696,7 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
-                                url: format!("/{}/{}/_history", rtype, "{id}"),
+                                url: format!("/{}/{}/_history", rtype, id),
                                 headers: HashMap::new(),
                                 body: None,
                             },
@@ -591,7 +746,14 @@ pub fn generate_test_plan(
             // --- Search tests ---
             if resource.interaction.iter().any(|i| i.code == "search-type") {
                 for sp in &resource.search_param {
-                    // Single search param test
+                    // Single search param test — resolve {value} placeholder
+                    let resolved_value = resolve_param_value(
+                        rtype,
+                        &sp.name,
+                        &sp.param_type,
+                        field_values,
+                        created_ids,
+                    );
                     tests.push(TestCase {
                         name: format!("search-{}-{}", rtype.to_lowercase(), sp.name),
                         kind: TestCaseKind::SearchSingle {
@@ -603,7 +765,7 @@ pub fn generate_test_plan(
                         profile_url: profile_url.clone(),
                         request: HttpRequest {
                             method: "GET".to_string(),
-                            url: format!("/{}?{}={}", rtype, sp.name, "{value}"),
+                            url: format!("/{}?{}={}", rtype, sp.name, resolved_value),
                             headers: HashMap::new(),
                             body: None,
                         },
@@ -645,7 +807,7 @@ pub fn generate_test_plan(
                                     rtype,
                                     sp.name,
                                     modifier.suffix(),
-                                    "{value}"
+                                    resolved_value
                                 ),
                                 headers: HashMap::new(),
                                 body: None,
@@ -689,7 +851,7 @@ pub fn generate_test_plan(
                                     rtype,
                                     sp.name,
                                     prefix.prefix_str(),
-                                    "{value}"
+                                    resolved_value
                                 ),
                                 headers: HashMap::new(),
                                 body: None,
@@ -718,16 +880,39 @@ pub fn generate_test_plan(
                         rtype,
                         &profile_url,
                         sp,
-                        _search_parameters,
+                        search_parameters,
+                    ));
+
+                    // _has (reverse chaining) tests for reference params
+                    tests.extend(generate_has_search_tests(
+                        rtype,
+                        &profile_url,
+                        sp,
+                        &rest.resource,
+                        search_parameters,
                     ));
                 }
 
-                // Combinatorial search (2-param combos)
+                // Combinatorial search (all pairs)
                 if resource.search_param.len() >= 2 {
-                    for i in 0..resource.search_param.len().min(3) {
-                        for j in (i + 1)..resource.search_param.len().min(4) {
+                    for i in 0..resource.search_param.len() {
+                        for j in (i + 1)..resource.search_param.len() {
                             let p1 = &resource.search_param[i];
                             let p2 = &resource.search_param[j];
+                            let v1 = resolve_param_value(
+                                rtype,
+                                &p1.name,
+                                &p1.param_type,
+                                field_values,
+                                created_ids,
+                            );
+                            let v2 = resolve_param_value(
+                                rtype,
+                                &p2.name,
+                                &p2.param_type,
+                                field_values,
+                                created_ids,
+                            );
                             tests.push(TestCase {
                                 name: format!(
                                     "search-{}-{}-{}-combo",
@@ -745,7 +930,7 @@ pub fn generate_test_plan(
                                     method: "GET".to_string(),
                                     url: format!(
                                         "/{}?{}={}&{}={}",
-                                        rtype, p1.name, "{value1}", p2.name, "{value2}"
+                                        rtype, p1.name, v1, p2.name, v2
                                     ),
                                     headers: HashMap::new(),
                                     body: None,
@@ -833,14 +1018,28 @@ pub fn generate_test_plan(
                     });
                 }
 
-                // Result param tests
-                for result_param in &["_summary=true", "_count=1", "_elements=id", "_sort=_id"] {
+                // Result param tests — expanded set
+                let result_params = &[
+                    "_summary=true",
+                    "_count=1",
+                    "_elements=id",
+                    "_sort=_id",
+                    "_filter=name eq test",
+                    "_tag=http://example.org/tag|test",
+                    "_profile=http://example.org/StructureDefinition/Test",
+                    "_security=http://example.org/security|test",
+                    "_type=Patient",
+                    "_language=en",
+                    "_has:Provenance:target",
+                ];
+                for result_param in result_params {
                     let param_name = result_param.split('=').next().unwrap_or(result_param);
+                    let param_key = result_param.split('=').next().unwrap_or(result_param);
                     tests.push(TestCase {
                         name: format!(
                             "search-{}-{}",
                             rtype.to_lowercase(),
-                            result_param.replace('=', "_")
+                            result_param.replace('=', "_").replace(':', "-")
                         ),
                         kind: TestCaseKind::ResultParam {
                             param: param_name.to_string(),
@@ -861,7 +1060,7 @@ pub fn generate_test_plan(
                             forbidden_elements: vec![],
                             response_assertion: assertion_for_kind(
                                 &TestCaseKind::ResultParam {
-                                    param: param_name.to_string(),
+                                    param: param_key.to_string(),
                                 },
                                 rtype,
                             ),
@@ -1294,5 +1493,180 @@ mod tests {
             !conformance_tests.is_empty(),
             "should have conformance tests"
         );
+    }
+
+    #[test]
+    fn generate_plan_with_has_tests() {
+        // Create a CapabilityStatement with Observation that references Patient
+        let cs = CapabilityStatement {
+            resource_type: "CapabilityStatement".to_string(),
+            url: Some("http://example.org/CapabilityStatement/test".to_string()),
+            name: Some("TestCS".to_string()),
+            status: Some("active".to_string()),
+            rest: vec![Rest {
+                mode: "server".to_string(),
+                resource: vec![
+                    RestResource {
+                        resource_type: "Patient".to_string(),
+                        profile: None,
+                        supported_profile: vec![],
+                        interaction: vec![RestInteraction {
+                            code: "search-type".to_string(),
+                        }],
+                        search_param: vec![RestSearchParam {
+                            name: "_id".to_string(),
+                            param_type: "token".to_string(),
+                            definition: None,
+                            documentation: None,
+                        }],
+                        operation: vec![],
+                        read_history: None,
+                        update_create: None,
+                        conditional_create: None,
+                        conditional_read: None,
+                        conditional_update: None,
+                        conditional_delete: None,
+                        search_include: vec![],
+                        search_revinclude: vec![],
+                    },
+                    RestResource {
+                        resource_type: "Observation".to_string(),
+                        profile: None,
+                        supported_profile: vec![],
+                        interaction: vec![RestInteraction {
+                            code: "search-type".to_string(),
+                        }],
+                        search_param: vec![RestSearchParam {
+                            name: "patient".to_string(),
+                            param_type: "reference".to_string(),
+                            definition: None,
+                            documentation: None,
+                        }],
+                        operation: vec![],
+                        read_history: None,
+                        update_create: None,
+                        conditional_create: None,
+                        conditional_read: None,
+                        conditional_update: None,
+                        conditional_delete: None,
+                        search_include: vec![],
+                        search_revinclude: vec![],
+                    },
+                ],
+                interaction: vec![],
+                operation: vec![],
+            }],
+        };
+
+        let search_params = vec![SearchParameter {
+            resource_type: "SearchParameter".to_string(),
+            url: "http://hl7.org/fhir/SearchParameter/Observation-patient".to_string(),
+            name: "patient".to_string(),
+            code: "patient".to_string(),
+            base: vec!["Observation".to_string()],
+            param_type: "reference".to_string(),
+            expression: Some("Observation.subject.where(resolve() is Patient)".to_string()),
+            description: None,
+        }];
+
+        let plan = generate_test_plan(
+            &cs,
+            &search_params,
+            None,
+            None,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        let has_tests: Vec<&TestCase> = plan
+            .test_groups
+            .iter()
+            .flat_map(|g| &g.tests)
+            .filter(|t| matches!(t.kind, TestCaseKind::SearchHas { .. }))
+            .collect();
+
+        // Patient has a reference param _id (token, not reference), so no _has tests
+        // The _has generation only fires on reference-type params
+        assert!(has_tests.is_empty(), "no _has tests for token params");
+    }
+
+    #[test]
+    fn generate_plan_with_expanded_result_params() {
+        let cs = test_capability_statement();
+        let plan = generate_test_plan(&cs, &[], None, None, &HashMap::new(), &HashMap::new());
+        let group = &plan.test_groups[0];
+
+        let result_param_tests: Vec<&TestCase> = group
+            .tests
+            .iter()
+            .filter(|t| matches!(t.kind, TestCaseKind::ResultParam { .. }))
+            .collect();
+
+        // Should have more than the original 4 result param tests
+        assert!(
+            result_param_tests.len() > 4,
+            "should have expanded result param tests"
+        );
+    }
+
+    #[test]
+    fn generate_plan_with_expanded_combos() {
+        let mut cs = test_capability_statement();
+        // Add more search params to trigger more combos
+        cs.rest[0].resource[0].search_param.push(RestSearchParam {
+            name: "gender".to_string(),
+            param_type: "token".to_string(),
+            definition: None,
+            documentation: None,
+        });
+        cs.rest[0].resource[0].search_param.push(RestSearchParam {
+            name: "active".to_string(),
+            param_type: "token".to_string(),
+            definition: None,
+            documentation: None,
+        });
+
+        let plan = generate_test_plan(&cs, &[], None, None, &HashMap::new(), &HashMap::new());
+        let group = &plan.test_groups[0];
+
+        let combo_tests: Vec<&TestCase> = group
+            .tests
+            .iter()
+            .filter(|t| matches!(t.kind, TestCaseKind::SearchCombo { .. }))
+            .collect();
+
+        // With 4 params, should have C(4,2) = 6 combos
+        assert_eq!(combo_tests.len(), 6, "should have all pair combos");
+    }
+
+    #[test]
+    fn generate_plan_resolves_values() {
+        let mut field_values = HashMap::new();
+        let mut patient_values = HashMap::new();
+        patient_values.insert("id".to_string(), "patient-123".to_string());
+        patient_values.insert("Patient.name[0].family".to_string(), "Smith".to_string());
+        field_values.insert("Patient".to_string(), patient_values);
+
+        let mut created_ids = HashMap::new();
+        created_ids.insert("Patient".to_string(), "patient-123".to_string());
+
+        let cs = test_capability_statement();
+        let plan = generate_test_plan(&cs, &[], None, None, &field_values, &created_ids);
+        let group = &plan.test_groups[0];
+
+        // Read test should use resolved ID
+        let read_test = group
+            .tests
+            .iter()
+            .find(|t| t.name == "read-patient")
+            .unwrap();
+        assert_eq!(read_test.request.url, "/Patient/patient-123");
+
+        // Search test should use resolved value
+        let search_test = group
+            .tests
+            .iter()
+            .find(|t| t.name == "search-patient-name")
+            .unwrap();
+        assert_eq!(search_test.request.url, "/Patient?name=Smith");
     }
 }
