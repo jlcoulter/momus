@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.3](https://github.com/jlcoulter/momus/compare/v0.3.2...v0.3.3) (2026-08-05)
+
+
+### Features
+
+* port remaining fhir-autotest modules (value_resolver, test_helpers, enhanced resource_gen) ([4762a8f](https://github.com/jlcoulter/momus/commit/4762a8f256bd3b05929cfdc1d046cfd7964ec7cd))
+* port remaining fhir-autotest modules (value_resolver, test_helpers, enhanced resource_gen) ([0ef609f](https://github.com/jlcoulter/momus/commit/0ef609fd808e20ddb2780a5ecaa202c990550ebb))
+
 ## [0.3.2](https://github.com/jlcoulter/momus/compare/v0.3.1...v0.3.2) (2026-08-05)
 
 
