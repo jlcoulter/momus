@@ -192,41 +192,45 @@ This document catalogs every feature across all momus crates, organized by imple
 | RPC method → test case | 🔜 | Stub (v0.4.0) |
 | Message types → example payload | 🔜 | Stub (v0.4.0) |
 
-### FHIR Converter (✅ Complete — ported from fhir-autotest)
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Parse IG package (.tgz) | ✅ | Ported |
-| Categorize resources by type | ✅ | Ported |
-| Select CapabilityStatement | ✅ | Ported |
-| Resolve parent profile chain | ✅ | Ported |
-| Download missing profiles from registry | ✅ | Multi-source download |
-| Extract dependencies (topological sort) | ✅ | Uses `momus_core::deps` |
-| Generate resources from StructureDefinitions | ✅ | Ported (5-pass) |
-| Required field population | ✅ | Ported |
-| Required slice population | ✅ | Ported |
-| Extension slice population | ✅ | Ported |
-| MustSupport backbone population | ✅ | Ported |
-| MustSupport optional field population | ✅ | Ported |
-| Type-specific value generation | ✅ | Ported (HumanName, Address, etc.) |
-| Value set resolution | ✅ | Ported (ValueSet/CodeSystem maps) |
-| Generate test plan from CapabilityStatement | ✅ | Ported |
-| CRUD test generation | ✅ | Ported |
-| Search test generation (single, modifiers, prefixes) | ✅ | Ported |
-| Near/proximity search tests | ✅ | Ported |
-| Combinatorial search tests | ✅ | Ported |
-| Chained search tests | ✅ | Ported |
-| Include/revinclude tests | ✅ | Ported |
-| Result param tests (_summary, _elements, _count, _sort, _has) | ✅ | Ported |
-| Operation tests ($operation) | ✅ | Ported |
-| Negative tests | ✅ | Ported |
-| Conformance tests (mustSupport) | ✅ | Ported |
-| Bulk data generation (NDJSON) | ✅ | Ported |
-| Bulk data upload with wave ordering | ✅ | Ported |
-| HCPD/AU-specific generation | ✅ | Ported |
-| Locality/suburb generation | ✅ | Ported (65 Australian suburbs) |
-| Profile validation against StructureDefinition | ✅ | Ported |
-| Response assertion engine | ✅ | Ported |
+|### FHIR Converter (✅ Complete — ported from fhir-autotest)
+|
+|| Feature | Status | Notes |
+||---------|--------|-------|
+|| Parse IG package (.tgz) | ✅ | Ported |
+|| Categorize resources by type | ✅ | Ported |
+|| Select CapabilityStatement | ✅ | Ported |
+|| Resolve parent profile chain | ✅ | Ported |
+|| Download missing profiles from registry | ✅ | Multi-source download |
+|| Extract dependencies (topological sort) | ✅ | Uses `momus_core::deps` |
+|| Generate resources from StructureDefinitions | ✅ | Ported (simplified 5-pass) |
+|| Required field population | ✅ | Ported |
+|| Required slice population | 🧪 | Simplified — missing identifier constraints, extension slices |
+|| Extension slice population | 🧪 | Simplified — missing complex sub-extension handling |
+|| MustSupport backbone population | 🧪 | Simplified — missing nested depth 2+ |
+|| MustSupport optional field population | 🧪 | Simplified — missing nested depth 2+ |
+|| Type-specific value generation | ✅ | Ported (HumanName, Address, etc.) |
+|| Value set resolution | ✅ | Ported (ValueSet/CodeSystem maps) |
+|| Generate test plan from CapabilityStatement | ✅ | Ported |
+|| CRUD test generation | ✅ | Ported |
+|| Search test generation (single, modifiers, prefixes) | ✅ | Ported |
+|| Near/proximity search tests | ✅ | Ported |
+|| Combinatorial search tests | ✅ | Ported |
+|| Chained search tests | ✅ | Ported |
+|| Include/revinclude tests | ✅ | Ported |
+|| Result param tests (_summary, _elements, _count, _sort, _has) | ✅ | Ported |
+|| Operation tests ($operation) | ✅ | Ported |
+|| Negative tests | ✅ | Ported |
+|| Conformance tests (mustSupport) | ✅ | Ported |
+|| Bulk data generation (NDJSON) | ✅ | Ported |
+|| Bulk data upload with wave ordering | ✅ | Ported |
+|| HCPD/AU-specific generation | ✅ | Ported |
+|| Locality/suburb generation | ✅ | Ported (65 Australian suburbs) |
+|| Profile validation against StructureDefinition | ✅ | Ported |
+|| Response assertion engine | ✅ | Ported |
+|| Field value extraction for test URLs | ❌ | `value_resolver.rs` not ported |
+|| FHIR-specific config (TestConfig) | ❌ | Not ported — uses generic `RunConfig` |
+|| End-to-end orchestrator pipeline | ❌ | Not ported — momus-core has generic runner |
+|| Test helpers (IG package builder) | ❌ | Not ported |
 
 ---
 
