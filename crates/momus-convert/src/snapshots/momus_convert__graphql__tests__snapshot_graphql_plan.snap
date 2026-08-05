@@ -1,0 +1,128 @@
+---
+source: crates/momus-convert/src/graphql.rs
+assertion_line: 476
+expression: plan
+---
+{
+  "name": "GraphQL: 3 queries, 3 mutations from test.graphql",
+  "base_url": "",
+  "default_headers": {},
+  "steps": [
+    {
+      "type": "request",
+      "name": "query_user",
+      "method": "GET",
+      "url": "http://localhost:4000/graphql",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "query": "query {\n  user\n}"
+      },
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "query_users",
+      "method": "GET",
+      "url": "http://localhost:4000/graphql",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "query": "query {\n  users\n}"
+      },
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "query_health",
+      "method": "GET",
+      "url": "http://localhost:4000/graphql",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "query": "query {\n  health\n}"
+      },
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "mutation_createUser",
+      "method": "POST",
+      "url": "http://localhost:4000/graphql",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "query": "mutation {\n  createUser\n}"
+      },
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "mutation_updateUser",
+      "method": "POST",
+      "url": "http://localhost:4000/graphql",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "query": "mutation {\n  updateUser\n}"
+      },
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "mutation_deleteUser",
+      "method": "POST",
+      "url": "http://localhost:4000/graphql",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "query": "mutation {\n  deleteUser\n}"
+      },
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    }
+  ],
+  "setup": [],
+  "teardown": []
+}

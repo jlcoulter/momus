@@ -370,6 +370,53 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_har_single_get() {
+        let har = create_test_har(vec![json!({
+            "request": {
+                "method": "GET",
+                "url": "https://api.example.com/health",
+                "headers": []
+            },
+            "response": {
+                "status": 200,
+                "headers": [{"name": "Content-Type", "value": "application/json"}]
+            }
+        })]);
+
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("test.har");
+        std::fs::write(&path, &har).unwrap();
+
+        let plan = convert(path.to_str().unwrap()).unwrap();
+        insta::assert_json_snapshot!(plan);
+    }
+
+    #[test]
+    fn snapshot_har_post_with_body() {
+        let har = create_test_har(vec![json!({
+            "request": {
+                "method": "POST",
+                "url": "https://api.example.com/users",
+                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                "postData": {
+                    "text": "{\"name\":\"test\"}"
+                }
+            },
+            "response": {
+                "status": 201,
+                "headers": []
+            }
+        })]);
+
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("test.har");
+        std::fs::write(&path, &har).unwrap();
+
+        let plan = convert(path.to_str().unwrap()).unwrap();
+        insta::assert_json_snapshot!(plan);
+    }
+
+    #[test]
     fn convert_string_body() {
         let har = create_test_har(vec![json!({
             "request": {

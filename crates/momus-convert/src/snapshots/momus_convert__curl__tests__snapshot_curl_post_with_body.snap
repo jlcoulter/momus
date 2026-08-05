@@ -1,0 +1,32 @@
+---
+source: crates/momus-convert/src/curl.rs
+expression: plan
+---
+{
+  "name": "cURL: curl -X POST https://api.example.com/users -H \"Content-Type:...",
+  "base_url": "",
+  "default_headers": {},
+  "steps": [
+    {
+      "type": "request",
+      "name": "curl_post",
+      "method": "POST",
+      "url": "https://api.example.com/users",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "name": "test"
+      },
+      "assert": [
+        {
+          "status": 201
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    }
+  ],
+  "setup": [],
+  "teardown": []
+}

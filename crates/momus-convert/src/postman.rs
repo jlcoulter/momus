@@ -429,6 +429,17 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_postman_collection() {
+        let spec = create_test_collection();
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        use std::io::Write;
+        write!(tmp, "{spec}").unwrap();
+        let path = tmp.path().to_str().unwrap().to_string();
+        let plan = convert(&path).unwrap();
+        insta::assert_json_snapshot!(plan);
+    }
+
+    #[test]
     fn test_extract_url_raw() {
         let request = serde_json::json!({
             "url": {"raw": "https://api.example.com/test"}

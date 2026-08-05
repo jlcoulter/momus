@@ -1437,6 +1437,13 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_generated_resource() {
+        let profile = test_profile();
+        let resource = generate_resource(&profile, &[]).unwrap();
+        insta::assert_json_snapshot!(resource);
+    }
+
+    #[test]
     fn test_get_field_path() {
         assert_eq!(
             get_field_path("Patient.name", "Patient"),

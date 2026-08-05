@@ -1,0 +1,33 @@
+---
+source: crates/momus-convert/src/har.rs
+assertion_line: 416
+expression: plan
+---
+{
+  "name": "HAR: 1 entries from test.har",
+  "base_url": "",
+  "default_headers": {},
+  "steps": [
+    {
+      "type": "request",
+      "name": "req_0_api.example.com_users",
+      "method": "POST",
+      "url": "https://api.example.com/users",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "name": "test"
+      },
+      "assert": [
+        {
+          "status": 201
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    }
+  ],
+  "setup": [],
+  "teardown": []
+}

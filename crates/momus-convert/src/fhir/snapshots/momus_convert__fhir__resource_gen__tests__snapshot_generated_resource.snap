@@ -1,0 +1,21 @@
+---
+source: crates/momus-convert/src/fhir/resource_gen.rs
+expression: resource
+---
+{
+  "gender": "male",
+  "meta": {
+    "profile": [
+      "http://example.org/TestPatient"
+    ]
+  },
+  "name": [
+    {
+      "family": "GeneratedFamily",
+      "given": [
+        "GeneratedGiven"
+      ]
+    }
+  ],
+  "resourceType": "Patient"
+}
