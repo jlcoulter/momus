@@ -429,6 +429,10 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 ```
 
+## Security
+
+See [SECURITY.md](SECURITY.md) for our security policy and instructions for reporting vulnerabilities.
+
 ## License
 
 Apache 2.0
