@@ -429,6 +429,11 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 ```
 
+## Community
+
+This project is governed by a [Code of Conduct](CODE_OF_CONDUCT.md).
+By participating, you agree to uphold its terms.
+
 ## License
 
 Apache 2.0
