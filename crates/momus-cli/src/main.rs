@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use momus_core::ast::*;
+use momus_core::config::MomusConfig;
 use momus_core::engine::runner;
 use std::path::PathBuf;
 
@@ -17,6 +18,10 @@ enum OutputFormat {
     about = "Generic API test harness with a composable assertion AST"
 )]
 struct Cli {
+    /// Path to config.toml (optional). CLI flags override file values.
+    #[arg(long, global = true)]
+    config: Option<String>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -140,6 +145,13 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    // Load optional config file — all sections default if absent.
+    let cfg = cli
+        .config
+        .as_deref()
+        .map(MomusConfig::load_optional)
+        .unwrap_or_default();
+
     match cli.command {
         Commands::Run {
             plan,
@@ -157,7 +169,8 @@ async fn main() -> Result<()> {
             };
             let mut test_plan: TestPlan = serde_json::from_str(&content)?;
 
-            if let Some(url) = base_url {
+            // Config precedence: CLI > [run] section > [global] section
+            if let Some(url) = base_url.or(cfg.run.base_url).or(cfg.global.base_url) {
                 test_plan.base_url = url;
             }
 
@@ -269,6 +282,10 @@ async fn main() -> Result<()> {
         } => {
             let content = std::fs::read_to_string(&plan)?;
             let test_plan: TestPlan = serde_json::from_str(&content)?;
+
+            // Config precedence: CLI > [bench] section > [global] section
+            let base_url = base_url.or(cfg.bench.base_url).or(cfg.global.base_url);
+
             let config = momus_bench::BenchConfig {
                 mode: momus_bench::BenchMode::Steady {
                     concurrency,
@@ -313,6 +330,9 @@ async fn main() -> Result<()> {
         } => {
             let content = std::fs::read_to_string(&plan)?;
             let test_plan: TestPlan = serde_json::from_str(&content)?;
+
+            let base_url = base_url.or(cfg.fuzz.base_url).or(cfg.global.base_url);
+
             let config = momus_fuzz::FuzzConfig {
                 iterations,
                 base_url,
@@ -325,6 +345,9 @@ async fn main() -> Result<()> {
         Commands::Chaos { plan, base_url } => {
             let content = std::fs::read_to_string(&plan)?;
             let test_plan: TestPlan = serde_json::from_str(&content)?;
+
+            let base_url = base_url.or(cfg.chaos.base_url).or(cfg.global.base_url);
+
             let config = momus_chaos::ChaosConfig {
                 base_url,
                 ..Default::default()
@@ -342,6 +365,9 @@ async fn main() -> Result<()> {
         } => {
             let content = std::fs::read_to_string(&plan)?;
             let test_plan: TestPlan = serde_json::from_str(&content)?;
+
+            let base_url = base_url.or(cfg.contract.base_url).or(cfg.global.base_url);
+
             let config = momus_contract::ContractConfig {
                 spec_path: spec,
                 base_url,
@@ -354,6 +380,9 @@ async fn main() -> Result<()> {
         Commands::Guard { plan, base_url } => {
             let content = std::fs::read_to_string(&plan)?;
             let test_plan: TestPlan = serde_json::from_str(&content)?;
+
+            let base_url = base_url.or(cfg.guard.base_url).or(cfg.global.base_url);
+
             let config = momus_guard::GuardConfig {
                 base_url,
                 ..Default::default()
@@ -369,6 +398,7 @@ async fn main() -> Result<()> {
         } => {
             let content = std::fs::read_to_string(&plan)?;
             let test_plan: TestPlan = serde_json::from_str(&content)?;
+
             let config = momus_diff::DiffConfig {
                 baseline_url: baseline,
                 target_url: target,
