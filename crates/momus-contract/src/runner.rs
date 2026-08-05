@@ -2,7 +2,7 @@ use crate::config::ContractConfig;
 use crate::report::{ContractReport, ContractViolation, EndpointCompliance, FieldCoverage};
 use crate::spec::ParsedSpec;
 use anyhow::{Context, Result};
-use momus_core::ast::{Method, Step, TestPlan};
+use momus_core::ast::{Method, TestPlan};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -208,30 +208,14 @@ struct ContractStep {
 
 /// Collect all request steps from a test plan.
 fn collect_contract_steps(plan: &TestPlan) -> Vec<ContractStep> {
-    let mut steps = Vec::new();
-    collect_from_steps(&plan.steps, &mut steps);
-    steps
-}
-
-fn collect_from_steps(steps: &[Step], result: &mut Vec<ContractStep>) {
-    for step in steps {
-        match step {
-            Step::Request(req) => {
-                result.push(ContractStep {
-                    method: req.method,
-                    url: req.url.clone(),
-                    body: req.body.clone(),
-                });
-            }
-            Step::Sequence(seq) => {
-                collect_from_steps(&seq.steps, result);
-            }
-            Step::Parallel(children) => {
-                collect_from_steps(children, result);
-            }
-            _ => {}
-        }
-    }
+    plan.request_steps()
+        .into_iter()
+        .map(|req| ContractStep {
+            method: req.method,
+            url: req.url.clone(),
+            body: req.body.clone(),
+        })
+        .collect()
 }
 
 #[cfg(test)]
