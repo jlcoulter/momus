@@ -21,5 +21,11 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 tracing = "0.1"
 futures = "0.3"
 
+[features]
+# Feature flags for platform-specific chaos experiments
+iptables = []
+tc = []
+faketime = []
+
 [dev-dependencies]
 cargo-husky.workspace = true
