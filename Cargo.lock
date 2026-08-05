@@ -1318,10 +1318,15 @@ version = "0.3.4"
 dependencies = [
  "anyhow",
  "cargo-husky",
+ "jsonschema",
  "momus-core",
+ "openapiv3",
+ "regex",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "serde_yaml",
+ "tempfile",
  "tokio",
  "tracing",
 ]
