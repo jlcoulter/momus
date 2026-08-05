@@ -191,10 +191,7 @@ fn extract_request_parts(args: &[String]) -> Result<CurlParts> {
                     let v = value.trim().to_string();
                     headers.insert(k, v);
                 } else {
-                    anyhow::bail!(
-                        "Invalid header format: '{}' (expected 'Key: Value')",
-                        header_line
-                    );
+                    anyhow::bail!("Invalid header format: '{header_line}' (expected 'Key: Value')");
                 }
             }
 
@@ -220,7 +217,7 @@ fn extract_request_parts(args: &[String]) -> Result<CurlParts> {
                     .cloned()
                     .context("Missing value after -u/--user")?;
                 let encoded = base64_encode(&creds);
-                headers.insert("Authorization".to_string(), format!("Basic {}", encoded));
+                headers.insert("Authorization".to_string(), format!("Basic {encoded}"));
             }
 
             // Cookie flag
@@ -310,7 +307,7 @@ fn parse_method(method: &str) -> Result<Method> {
         "PATCH" => Ok(Method::Patch),
         "HEAD" => Ok(Method::Head),
         "OPTIONS" => Ok(Method::Options),
-        other => anyhow::bail!("Unsupported HTTP method: {}", other),
+        other => anyhow::bail!("Unsupported HTTP method: {other}"),
     }
 }
 

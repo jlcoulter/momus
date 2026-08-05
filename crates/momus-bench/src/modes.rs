@@ -558,7 +558,7 @@ async fn run_soak(
             if health_start.elapsed() >= health_duration {
                 break;
             }
-            let url = format!("{}/health", health_base_url);
+            let url = format!("{health_base_url}/health");
             match health_client.get(&url).send().await {
                 Ok(resp) => {
                     if !resp.status().is_success() {

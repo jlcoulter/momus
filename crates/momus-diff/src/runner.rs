@@ -77,7 +77,7 @@ pub async fn run_diff(plan: &TestPlan, config: &DiffConfig) -> Result<DiffReport
                                 endpoint: step.url.clone(),
                                 method: step.method.to_string(),
                                 change_type: "modified".to_string(),
-                                field: format!("header.{}", key),
+                                field: format!("header.{key}"),
                                 baseline: bv.map(|v| serde_json::json!(v)),
                                 target: tv.map(|v| serde_json::json!(v)),
                             });
@@ -219,7 +219,7 @@ fn diff_json_values(
         (serde_json::Value::Object(b_map), serde_json::Value::Object(t_map)) => {
             // Check for removed and modified fields
             for (key, b_val) in b_map {
-                let child_path = format!("{}.{}", path, key);
+                let child_path = format!("{path}.{key}");
                 match t_map.get(key) {
                     None => {
                         diffs.push(DiffEntry {
@@ -253,7 +253,7 @@ fn diff_json_values(
             // Check for added fields
             for (key, t_val) in t_map {
                 if !b_map.contains_key(key) {
-                    let child_path = format!("{}.{}", path, key);
+                    let child_path = format!("{path}.{key}");
                     diffs.push(DiffEntry {
                         endpoint: String::new(),
                         method: String::new(),
@@ -268,7 +268,7 @@ fn diff_json_values(
         (serde_json::Value::Array(b_arr), serde_json::Value::Array(t_arr)) => {
             let max_len = b_arr.len().max(t_arr.len());
             for i in 0..max_len {
-                let child_path = format!("{}[{}]", path, i);
+                let child_path = format!("{path}[{i}]");
                 match (b_arr.get(i), t_arr.get(i)) {
                     (Some(b), Some(t)) if b != t => {
                         diffs.push(DiffEntry {

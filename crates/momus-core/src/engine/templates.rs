@@ -146,7 +146,7 @@ fn random_alphanumeric(rng: &mut impl Rng, len: usize) -> String {
 /// Resolve `{steps.<name>.id}` and `{steps.<name>.<field>}` templates in a string.
 fn resolve_step_templates(s: &mut String, step_responses: &HashMap<String, Value>) {
     for (step_name, response) in step_responses {
-        let id_pattern = format!("{{steps.{}.id}}", step_name);
+        let id_pattern = format!("{{steps.{step_name}.id}}");
         if let Some(id) = response.get("id").and_then(|v| v.as_str())
             && s.contains(&id_pattern)
         {
@@ -170,10 +170,10 @@ fn resolve_step_fields(
         let current_path = if prefix.is_empty() {
             key.clone()
         } else {
-            format!("{}.{}", prefix, key)
+            format!("{prefix}.{key}")
         };
 
-        let pattern = format!("{{steps.{}.{}}}", step_name, current_path);
+        let pattern = format!("{{steps.{step_name}.{current_path}}}");
 
         match value {
             Value::String(v) => {
