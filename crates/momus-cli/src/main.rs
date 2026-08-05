@@ -12,6 +12,13 @@ enum OutputFormat {
     Text,
 }
 
+#[derive(ValueEnum, Debug, Clone)]
+enum BenchModeCli {
+    Steady,
+    MaxThroughput,
+    Soak,
+}
+
 #[derive(Parser)]
 #[command(
     name = "momus",
@@ -57,12 +64,33 @@ enum Commands {
     Bench {
         /// Path to the test plan JSON file.
         plan: PathBuf,
-        /// Concurrency level.
+        /// Benchmark mode: steady, max-throughput, soak.
+        #[arg(long, value_enum, default_value = "steady")]
+        mode: BenchModeCli,
+        /// Concurrency level (steady, soak).
         #[arg(long, default_value = "10")]
         concurrency: usize,
-        /// Duration in seconds (0 = one-shot).
+        /// Duration in seconds (steady, soak; 0 = one-shot).
         #[arg(long, default_value = "30")]
         duration: u64,
+        /// Starting concurrency (max-throughput).
+        #[arg(long)]
+        min_concurrency: Option<usize>,
+        /// Maximum concurrency to try (max-throughput).
+        #[arg(long)]
+        max_concurrency: Option<usize>,
+        /// Concurrency increment per step (max-throughput).
+        #[arg(long)]
+        step: Option<usize>,
+        /// Duration per step in seconds (max-throughput).
+        #[arg(long)]
+        step_duration: Option<u64>,
+        /// Error rate threshold 0.0-1.0 (max-throughput).
+        #[arg(long)]
+        max_error_rate: Option<f64>,
+        /// Latency P99 threshold in ms (max-throughput).
+        #[arg(long)]
+        max_p99_ms: Option<u64>,
         /// Base URL override.
         #[arg(long)]
         base_url: Option<String>,
@@ -291,8 +319,15 @@ async fn main() -> Result<()> {
         }
         Commands::Bench {
             plan,
+            mode,
             concurrency,
             duration,
+            min_concurrency,
+            max_concurrency,
+            step,
+            step_duration,
+            max_error_rate,
+            max_p99_ms,
             base_url,
             output,
             format,
@@ -303,11 +338,27 @@ async fn main() -> Result<()> {
             // Config precedence: CLI > [bench] section > [global] section
             let base_url = base_url.or(cfg.bench.base_url).or(cfg.global.base_url);
 
-            let config = momus_bench::BenchConfig {
-                mode: momus_bench::BenchMode::Steady {
+            let bench_mode = match mode {
+                BenchModeCli::Steady => momus_bench::BenchMode::Steady {
                     concurrency,
                     duration_secs: duration,
                 },
+                BenchModeCli::MaxThroughput => momus_bench::BenchMode::MaxThroughput {
+                    min_concurrency: min_concurrency.unwrap_or(10),
+                    max_concurrency: max_concurrency.unwrap_or(200),
+                    step: step.unwrap_or(10),
+                    step_duration_secs: step_duration.unwrap_or(10),
+                    max_error_rate: max_error_rate.unwrap_or(0.05),
+                    max_p99_ms: max_p99_ms.unwrap_or(2000),
+                },
+                BenchModeCli::Soak => momus_bench::BenchMode::Soak {
+                    concurrency,
+                    duration_secs: duration,
+                },
+            };
+
+            let config = momus_bench::BenchConfig {
+                mode: bench_mode,
                 base_url,
                 ..Default::default()
             };
