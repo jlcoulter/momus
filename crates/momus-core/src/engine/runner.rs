@@ -38,9 +38,21 @@ impl RunContext {
 ///
 /// Teardown steps always run, even if setup or main steps fail.
 /// The first error encountered (if any) is returned after teardown completes.
+///
+/// `timeout_secs` sets the per-request timeout on the HTTP client (defaults to 30).
 pub async fn execute_plan(plan: &TestPlan) -> Result<RunReport> {
+    execute_plan_with_timeout(plan, 30).await
+}
+
+/// Execute a test plan with a configurable per-request timeout.
+pub async fn execute_plan_with_timeout(plan: &TestPlan, timeout_secs: u64) -> Result<RunReport> {
     let start = Instant::now();
-    let transport: Box<dyn TransportAdapter> = Box::new(crate::transport::HttpAdapter::new());
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {e}"))?;
+    let transport: Box<dyn TransportAdapter> =
+        Box::new(crate::transport::HttpAdapter::with_client(client));
     let mut ctx = RunContext::new(
         plan.base_url.clone(),
         plan.default_headers.clone(),
