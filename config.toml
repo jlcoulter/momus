@@ -44,6 +44,9 @@
 # Bench — load testing
 # ---------------------------------------------------------------------------
 [bench]
+# Output directory for results (default: ./output).
+# output = "./bench-results"
+
 # Execution mode: Steady, MaxThroughput, or Soak.
 # [bench.mode]
 # type = "Steady"
@@ -57,6 +60,9 @@
 # Fuzz — payload mutation
 # ---------------------------------------------------------------------------
 [fuzz]
+# Output directory for results (default: ./output).
+# output = "./fuzz-results"
+
 # Number of mutations to generate per input (default: 1000).
 # iterations = 5000
 
@@ -67,6 +73,9 @@
 # Chaos — fault injection
 # ---------------------------------------------------------------------------
 [chaos]
+# Output directory for results (default: ./output).
+# output = "./chaos-results"
+
 # How long to wait between experiments in seconds (default: 5).
 # interval_secs = 10
 
@@ -81,6 +90,9 @@
 # Contract — spec validation
 # ---------------------------------------------------------------------------
 [contract]
+# Output directory for results (default: ./output).
+# output = "./contract-results"
+
 # Path to the API spec file (OpenAPI YAML/JSON or GraphQL SDL).
 # spec_path = "./api-spec.yaml"
 
@@ -91,6 +103,9 @@
 # Guard — security scanning
 # ---------------------------------------------------------------------------
 [guard]
+# Output directory for results (default: ./output).
+# output = "./guard-results"
+
 # Check for missing security headers (default: true).
 # check_headers = true
 # check_cors = true
@@ -98,9 +113,19 @@
 # check_exposed = true
 
 # ---------------------------------------------------------------------------
+# Plan — plan display
+# ---------------------------------------------------------------------------
+[plan]
+# Output directory for the plan display (default: ./output).
+# output = "./plan-output"
+
+# ---------------------------------------------------------------------------
 # Diff — regression testing
 # ---------------------------------------------------------------------------
 [diff]
+# Output directory for results (default: ./output).
+# output = "./diff-results"
+
 # Baseline environment URL (e.g. production).
 # baseline_url = "https://prod.example.com"
 

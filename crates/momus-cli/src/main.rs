@@ -195,6 +195,9 @@ enum Commands {
     Plan {
         /// Path to the test plan JSON file (use - for stdin).
         plan: String,
+        /// Output directory for the plan display.
+        #[arg(long, default_value = "./output")]
+        output: PathBuf,
     },
 }
 
@@ -235,6 +238,13 @@ async fn main() -> Result<()> {
             if let Some(url) = base_url.or(cfg.run.base_url).or(cfg.global.base_url) {
                 test_plan.base_url = url;
             }
+
+            // CLI --output overrides config file output
+            let output = if output.to_str() != Some("./output") {
+                output
+            } else {
+                cfg.run.output
+            };
 
             // Apply global headers and timeout from config
             if !cfg.global.headers.is_empty() {
@@ -409,6 +419,7 @@ async fn main() -> Result<()> {
             let config = momus_bench::BenchConfig {
                 mode: bench_mode,
                 base_url,
+                output: output.clone().unwrap_or(cfg.bench.output),
                 ..Default::default()
             };
             let report = momus_bench::run_bench(&test_plan, &config).await?;
@@ -455,6 +466,7 @@ async fn main() -> Result<()> {
             let config = momus_fuzz::FuzzConfig {
                 iterations,
                 base_url,
+                output: cfg.fuzz.output,
                 ..Default::default()
             };
             let report = momus_fuzz::run_fuzz(&test_plan, &config).await?;
@@ -471,6 +483,7 @@ async fn main() -> Result<()> {
 
             let config = momus_chaos::ChaosConfig {
                 base_url,
+                output: cfg.chaos.output,
                 ..Default::default()
             };
             let reports = momus_chaos::run_chaos(&test_plan, &config).await?;
@@ -494,6 +507,7 @@ async fn main() -> Result<()> {
             let config = momus_contract::ContractConfig {
                 spec_path: spec,
                 base_url,
+                output: cfg.contract.output,
                 ..Default::default()
             };
             let report = momus_contract::run_contract(&test_plan, &config).await?;
@@ -510,6 +524,7 @@ async fn main() -> Result<()> {
 
             let config = momus_guard::GuardConfig {
                 base_url,
+                output: cfg.guard.output,
                 ..Default::default()
             };
             let report = momus_guard::run_guard(&test_plan, &config).await?;
@@ -529,17 +544,30 @@ async fn main() -> Result<()> {
             let config = momus_diff::DiffConfig {
                 baseline_url: baseline,
                 target_url: target,
+                output: cfg.diff.output,
                 ..Default::default()
             };
             let report = momus_diff::run_diff(&test_plan, &config).await?;
             println!("{}", report);
             Ok(())
         }
-        Commands::Plan { plan } => {
+        Commands::Plan { plan, output } => {
             let content = read_plan_content(&plan)?;
             let test_plan: TestPlan = serde_json::from_str(&content)
                 .with_context(|| format!("Failed to parse test plan '{}'", plan))?;
-            print!("{}", test_plan.display_plan());
+
+            // CLI --output overrides config file output
+            let output = if output.to_str() != Some("./output") {
+                output
+            } else {
+                cfg.plan.output
+            };
+
+            let display = test_plan.display_plan();
+            let output_path = output.join("plan.txt");
+            std::fs::create_dir_all(&output)?;
+            std::fs::write(&output_path, &display)?;
+            println!("Plan written to: {}", output_path.display());
             Ok(())
         }
         Commands::Init { template, output } => {
@@ -590,6 +618,9 @@ async fn main() -> Result<()> {
 # output = "./results"
 
 [bench]
+# Output directory for results (default: ./output).
+# output = "./bench-results"
+
 # Execution mode: Steady, MaxThroughput, or Soak.
 # [bench.mode]
 # type = "Steady"
@@ -597,26 +628,45 @@ async fn main() -> Result<()> {
 # duration_secs = 60
 
 [fuzz]
+# Output directory for results (default: ./output).
+# output = "./fuzz-results"
+
 # Number of mutations to generate per input (default: 1000).
 # iterations = 5000
 
 [chaos]
+# Output directory for results (default: ./output).
+# output = "./chaos-results"
+
 # How long to wait between experiments in seconds (default: 5).
 # interval_secs = 10
 
 [contract]
+# Output directory for results (default: ./output).
+# output = "./contract-results"
+
 # Path to the API spec file (OpenAPI YAML/JSON or GraphQL SDL).
 # spec_path = "./api-spec.yaml"
 # strict = true
 
 [guard]
+# Output directory for results (default: ./output).
+# output = "./guard-results"
+
 # Check for missing security headers (default: true).
 # check_headers = true
 # check_cors = true
 # check_leaks = true
 # check_exposed = true
 
+[plan]
+# Output directory for the plan display (default: ./output).
+# output = "./plan-output"
+
 [diff]
+# Output directory for results (default: ./output).
+# output = "./diff-results"
+
 # Baseline environment URL (e.g. production).
 # baseline_url = "https://prod.example.com"
 # Target environment URL (e.g. staging).
