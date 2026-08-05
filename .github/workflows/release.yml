@@ -9,25 +9,18 @@ permissions:
   pull-requests: write
 
 jobs:
-  release-please:
-    name: Release Please
+  release-plz:
+    name: Release-plz
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          token: ${{ secrets.RELEASE_PLEASE_PAT }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-
-      # Enable auto-merge on the release PR so it merges once CI passes
-      - name: Enable auto-merge on release PR
-        if: ${{ steps.release.outputs.prs_created == 'true' }}
+          fetch-depth: 0
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Run release-plz
+        uses: release-plz/action@v0.5
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_PAT }}
-        run: |
-          PRS='${{ steps.release.outputs.prs }}'
-          echo "$PRS" | jq -c '.[]' | while read pr; do
-            PR_NUMBER=$(echo "$pr" | jq -r '.number')
-            gh pr merge "$PR_NUMBER" --repo "${{ github.repository }}" --auto --merge
-          done
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

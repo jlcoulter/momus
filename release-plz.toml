@@ -1,0 +1,9 @@
+[workspace]
+# Publish to crates.io after release
+publish = true
+# Create GitHub releases
+git_release_enable = true
+# Use git-cliff for changelog generation
+changelog_config = "cliff.toml"
+# Bump minor for features even in 0.x
+features_always_increment_minor = true
