@@ -34,7 +34,7 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
     );
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(config.timeout_secs))
         .build()?;
 
     // Collect all request steps
@@ -143,6 +143,20 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
                 });
             }
         }
+    }
+
+    // In strict mode, fail on undocumented endpoints
+    if config.strict && !undocumented_fields.is_empty() {
+        details.push(ContractViolation {
+            endpoint: "*".to_string(),
+            method: "ANY".to_string(),
+            status: 0,
+            description: format!(
+                "Strict mode: {} undocumented field(s) found",
+                undocumented_fields.len()
+            ),
+            severity: "error".to_string(),
+        });
     }
 
     let elapsed = start.elapsed().as_secs_f64();
