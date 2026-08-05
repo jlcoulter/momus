@@ -10,12 +10,28 @@ use tokio::sync::Semaphore;
 /// Run a benchmark in the given mode.
 ///
 /// Dispatches to the appropriate mode-specific runner.
-pub async fn run_mode(mode: &BenchMode, plan: &TestPlan, base_url: &str) -> Result<BenchReport> {
+pub async fn run_mode(
+    mode: &BenchMode,
+    plan: &TestPlan,
+    base_url: &str,
+    warmup_requests: usize,
+    timeout_secs: u64,
+) -> Result<BenchReport> {
     match mode {
         BenchMode::Steady {
             concurrency,
             duration_secs,
-        } => run_steady(*concurrency, *duration_secs, plan, base_url).await,
+        } => {
+            run_steady(
+                *concurrency,
+                *duration_secs,
+                plan,
+                base_url,
+                warmup_requests,
+                timeout_secs,
+            )
+            .await
+        }
         BenchMode::MaxThroughput {
             min_concurrency,
             max_concurrency,
@@ -33,13 +49,25 @@ pub async fn run_mode(mode: &BenchMode, plan: &TestPlan, base_url: &str) -> Resu
                 *max_p99_ms,
                 plan,
                 base_url,
+                warmup_requests,
+                timeout_secs,
             )
             .await
         }
         BenchMode::Soak {
             concurrency,
             duration_secs,
-        } => run_soak(*concurrency, *duration_secs, plan, base_url).await,
+        } => {
+            run_soak(
+                *concurrency,
+                *duration_secs,
+                plan,
+                base_url,
+                warmup_requests,
+                timeout_secs,
+            )
+            .await
+        }
     }
 }
 
@@ -52,9 +80,11 @@ async fn run_steady(
     duration_secs: u64,
     plan: &TestPlan,
     base_url: &str,
+    warmup_requests: usize,
+    timeout_secs: u64,
 ) -> Result<BenchReport> {
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()?;
 
     // Collect all leaf request steps from the plan
@@ -70,6 +100,34 @@ async fn run_steady(
     let total = Arc::new(AtomicU64::new(0));
     let errors = Arc::new(AtomicU64::new(0));
     let latencies: Arc<std::sync::Mutex<Vec<f64>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
+
+    // Warmup phase: send warmup_requests before recording
+    if warmup_requests > 0 {
+        tracing::debug!("Running {warmup_requests} warmup requests");
+        for _ in 0..warmup_requests {
+            for step in steps.iter() {
+                let url = format!("{}{}", base_url, step.url);
+                let _ = match step.method {
+                    Method::Get => client.get(&url).send().await,
+                    Method::Post => {
+                        let body = step.body.clone().unwrap_or(serde_json::json!({}));
+                        client.post(&url).json(&body).send().await
+                    }
+                    Method::Put => {
+                        let body = step.body.clone().unwrap_or(serde_json::json!({}));
+                        client.put(&url).json(&body).send().await
+                    }
+                    Method::Delete => client.delete(&url).send().await,
+                    Method::Patch => {
+                        let body = step.body.clone().unwrap_or(serde_json::json!({}));
+                        client.patch(&url).json(&body).send().await
+                    }
+                    Method::Head => client.head(&url).send().await,
+                    Method::Options => client.request(reqwest::Method::OPTIONS, &url).send().await,
+                };
+            }
+        }
+    }
 
     let start = Instant::now();
     let duration = std::time::Duration::from_secs(duration_secs);
@@ -215,9 +273,11 @@ async fn run_max_throughput(
     max_p99_ms: u64,
     plan: &TestPlan,
     base_url: &str,
+    warmup_requests: usize,
+    timeout_secs: u64,
 ) -> Result<BenchReport> {
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()?;
 
     let steps = collect_requests(plan);
@@ -227,6 +287,34 @@ async fn run_max_throughput(
 
     let steps = Arc::new(steps);
     let base_url = Arc::new(base_url.to_string());
+
+    // Warmup phase
+    if warmup_requests > 0 {
+        tracing::debug!("Running {warmup_requests} warmup requests");
+        for _ in 0..warmup_requests {
+            for step in steps.iter() {
+                let url = format!("{}{}", base_url, step.url);
+                let _ = match step.method {
+                    Method::Get => client.get(&url).send().await,
+                    Method::Post => {
+                        let body = step.body.clone().unwrap_or(serde_json::json!({}));
+                        client.post(&url).json(&body).send().await
+                    }
+                    Method::Put => {
+                        let body = step.body.clone().unwrap_or(serde_json::json!({}));
+                        client.put(&url).json(&body).send().await
+                    }
+                    Method::Delete => client.delete(&url).send().await,
+                    Method::Patch => {
+                        let body = step.body.clone().unwrap_or(serde_json::json!({}));
+                        client.patch(&url).json(&body).send().await
+                    }
+                    Method::Head => client.head(&url).send().await,
+                    Method::Options => client.request(reqwest::Method::OPTIONS, &url).send().await,
+                };
+            }
+        }
+    }
 
     let mut sustainable_concurrency = min_concurrency;
     let mut all_latencies: Vec<f64> = Vec::new();
@@ -400,9 +488,11 @@ async fn run_soak(
     duration_secs: u64,
     plan: &TestPlan,
     base_url: &str,
+    warmup_requests: usize,
+    timeout_secs: u64,
 ) -> Result<BenchReport> {
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()?;
 
     let steps = collect_requests(plan);
@@ -412,6 +502,34 @@ async fn run_soak(
 
     let steps = Arc::new(steps);
     let base_url = Arc::new(base_url.to_string());
+
+    // Warmup phase
+    if warmup_requests > 0 {
+        tracing::debug!("Running {warmup_requests} warmup requests");
+        for _ in 0..warmup_requests {
+            for step in steps.iter() {
+                let url = format!("{}{}", base_url, step.url);
+                let _ = match step.method {
+                    Method::Get => client.get(&url).send().await,
+                    Method::Post => {
+                        let body = step.body.clone().unwrap_or(serde_json::json!({}));
+                        client.post(&url).json(&body).send().await
+                    }
+                    Method::Put => {
+                        let body = step.body.clone().unwrap_or(serde_json::json!({}));
+                        client.put(&url).json(&body).send().await
+                    }
+                    Method::Delete => client.delete(&url).send().await,
+                    Method::Patch => {
+                        let body = step.body.clone().unwrap_or(serde_json::json!({}));
+                        client.patch(&url).json(&body).send().await
+                    }
+                    Method::Head => client.head(&url).send().await,
+                    Method::Options => client.request(reqwest::Method::OPTIONS, &url).send().await,
+                };
+            }
+        }
+    }
 
     // Shared counters
     let total = Arc::new(AtomicU64::new(0));
@@ -760,6 +878,8 @@ mod tests {
             1000,
             &plan,
             "http://localhost",
+            0,
+            30,
         ));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("no request steps"));
@@ -776,7 +896,7 @@ mod tests {
             setup: vec![],
             teardown: vec![],
         };
-        let result = rt.block_on(run_soak(10, 1, &plan, "http://localhost"));
+        let result = rt.block_on(run_soak(10, 1, &plan, "http://localhost", 0, 30));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("no request steps"));
     }
