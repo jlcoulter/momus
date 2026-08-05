@@ -349,7 +349,7 @@ async fn run_connection_reset(
             duration_secs: 0.0,
             requests_affected: 0,
             failures_during: 0,
-            self_healed: true,
+            self_healed: false,
             details: format!(
                 "Connection reset requires iptables. Failed to apply rule: {}. \
                  Use `sudo {}` manually.",
@@ -381,7 +381,7 @@ async fn run_connection_reset(
          --probability {} -j REJECT --reject-with tcp-reset",
         port, probability
     );
-    let _ = run_sudo(&remove_cmd);
+    let removal_ok = run_sudo(&remove_cmd).is_ok();
 
     Ok(ChaosReport {
         experiment: "connection_reset".into(),
@@ -389,7 +389,7 @@ async fn run_connection_reset(
         duration_secs: start.elapsed().as_secs_f64(),
         requests_affected: affected,
         failures_during: failures,
-        self_healed: true,
+        self_healed: removal_ok,
         details: format!(
             "Injected TCP RST on port {} ({}% reset) for {}s, \
              {} requests affected, {} failures",
@@ -415,7 +415,7 @@ async fn run_packet_loss(endpoint: &str, drop_pct: u8, duration_secs: u64) -> Re
             duration_secs: 0.0,
             requests_affected: 0,
             failures_during: 0,
-            self_healed: true,
+            self_healed: false,
             details: format!(
                 "Packet loss requires tc netem. Failed to apply on interface '{}': {}. \
                  Use `sudo {}` manually.",
@@ -443,7 +443,7 @@ async fn run_packet_loss(endpoint: &str, drop_pct: u8, duration_secs: u64) -> Re
 
     // Remove the tc qdisc
     let remove_cmd = format!("tc qdisc del dev {} root", iface);
-    let _ = run_sudo(&remove_cmd);
+    let removal_ok = run_sudo(&remove_cmd).is_ok();
 
     Ok(ChaosReport {
         experiment: "packet_loss".into(),
@@ -451,7 +451,7 @@ async fn run_packet_loss(endpoint: &str, drop_pct: u8, duration_secs: u64) -> Re
         duration_secs: start.elapsed().as_secs_f64(),
         requests_affected: affected,
         failures_during: failures,
-        self_healed: true,
+        self_healed: removal_ok,
         details: format!(
             "Injected {}% packet loss on interface {} for {}s, \
              {} requests affected, {} failures",
@@ -498,7 +498,7 @@ async fn run_clock_skew(offset_secs: i64, duration_secs: u64) -> Result<ChaosRep
             duration_secs: 0.0,
             requests_affected: 0,
             failures_during: 0,
-            self_healed: true,
+            self_healed: false,
             details: format!(
                 "Clock skew requires sudo date. Failed to set clock: {}. \
                  Use `sudo {}` manually.",
