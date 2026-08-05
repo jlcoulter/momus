@@ -74,7 +74,7 @@ impl TestPlan {
         if !self.default_headers.is_empty() {
             writeln!(out, "Default headers:").ok();
             for (k, v) in &self.default_headers {
-                writeln!(out, "  {}: {}", k, v).ok();
+                writeln!(out, "  {k}: {v}").ok();
             }
         }
 
@@ -163,7 +163,7 @@ impl Step {
                         if s.len() > 60 {
                             format!("  {}", &s[..57])
                         } else {
-                            format!("  {}", s)
+                            format!("  {s}")
                         }
                     }
                     None => String::new(),
@@ -180,7 +180,7 @@ impl Step {
                 count
             }
             Step::Parallel(steps) => {
-                writeln!(out, "{}── parallel ──", indent).ok();
+                writeln!(out, "{indent}── parallel ──").ok();
                 let mut count = 0usize;
                 for step in steps {
                     count += step.display(out, depth + 1);
@@ -198,7 +198,7 @@ impl Step {
             }
             Step::Noop { description } => {
                 if !description.is_empty() {
-                    writeln!(out, "{}[noop] {}", indent, description).ok();
+                    writeln!(out, "{indent}[noop] {description}").ok();
                 }
                 0
             }
@@ -563,7 +563,7 @@ impl std::fmt::Display for RunReport {
                     status, result.request_method, result.request_url, result.status_code
                 )?;
                 for err in &result.errors {
-                    writeln!(f, "    └─ {}", err)?;
+                    writeln!(f, "    └─ {err}")?;
                 }
             }
         }

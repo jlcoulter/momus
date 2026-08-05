@@ -27,7 +27,7 @@ impl std::fmt::Display for ChaosReport {
         writeln!(f, "  Duration: {:.1}s", self.duration_secs)?;
         writeln!(f, "  Requests affected: {}", self.requests_affected)?;
         writeln!(f, "  Failures during fault: {}", self.failures_during)?;
-        writeln!(f, "  Self-healed: {}", status)?;
+        writeln!(f, "  Self-healed: {status}")?;
         if !self.details.is_empty() {
             writeln!(f, "  Details: {}", self.details)?;
         }

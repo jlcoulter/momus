@@ -491,7 +491,7 @@ pub fn generate_conformance_tests(
             profile_url: Some(profile_url_str.clone()),
             request: HttpRequest {
                 method: "GET".to_string(),
-                url: format!("/{}?_count=1", rtype),
+                url: format!("/{rtype}?_count=1"),
                 headers: HashMap::new(),
                 body: None,
             },
@@ -532,7 +532,7 @@ fn resolve_param_value(
         &field_values_flat,
         created_ids,
     )
-    .unwrap_or_else(|| format!("{{{}}}", param_name))
+    .unwrap_or_else(|| format!("{{{param_name}}}"))
 }
 
 /// Generate a comprehensive test plan from a CapabilityStatement.
@@ -571,7 +571,7 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
-                                url: format!("/{}/{}", rtype, id),
+                                url: format!("/{rtype}/{id}"),
                                 headers: HashMap::new(),
                                 body: None,
                             },
@@ -597,7 +597,7 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
-                                url: format!("/{}/{}/_history/1", rtype, id),
+                                url: format!("/{rtype}/{id}/_history/1"),
                                 headers: HashMap::new(),
                                 body: None,
                             },
@@ -619,7 +619,7 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "POST".to_string(),
-                                url: format!("/{}", rtype),
+                                url: format!("/{rtype}"),
                                 headers: {
                                     let mut h = HashMap::new();
                                     h.insert(
@@ -652,7 +652,7 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "PUT".to_string(),
-                                url: format!("/{}/{}", rtype, id),
+                                url: format!("/{rtype}/{id}"),
                                 headers: {
                                     let mut h = HashMap::new();
                                     h.insert(
@@ -685,7 +685,7 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "DELETE".to_string(),
-                                url: format!("/{}/{}", rtype, id),
+                                url: format!("/{rtype}/{id}"),
                                 headers: HashMap::new(),
                                 body: None,
                             },
@@ -711,7 +711,7 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "PATCH".to_string(),
-                                url: format!("/{}/{}", rtype, id),
+                                url: format!("/{rtype}/{id}"),
                                 headers: {
                                     let mut h = HashMap::new();
                                     h.insert("Content-Type".to_string(), "application/json-patch+json".to_string());
@@ -741,7 +741,7 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
-                                url: format!("/{}/{}/_history", rtype, id),
+                                url: format!("/{rtype}/{id}/_history"),
                                 headers: HashMap::new(),
                                 body: None,
                             },
@@ -767,7 +767,7 @@ pub fn generate_test_plan(
                             profile_url: profile_url.clone(),
                             request: HttpRequest {
                                 method: "GET".to_string(),
-                                url: format!("/{}/_history", rtype),
+                                url: format!("/{rtype}/_history"),
                                 headers: HashMap::new(),
                                 body: None,
                             },
@@ -1010,7 +1010,7 @@ pub fn generate_test_plan(
                         profile_url: profile_url.clone(),
                         request: HttpRequest {
                             method: "GET".to_string(),
-                            url: format!("/{}?_include={}", rtype, include),
+                            url: format!("/{rtype}?_include={include}"),
                             headers: HashMap::new(),
                             body: None,
                         },
@@ -1043,7 +1043,7 @@ pub fn generate_test_plan(
                         profile_url: profile_url.clone(),
                         request: HttpRequest {
                             method: "GET".to_string(),
-                            url: format!("/{}?_revinclude={}", rtype, revinclude),
+                            url: format!("/{rtype}?_revinclude={revinclude}"),
                             headers: HashMap::new(),
                             body: None,
                         },
@@ -1094,7 +1094,7 @@ pub fn generate_test_plan(
                         profile_url: profile_url.clone(),
                         request: HttpRequest {
                             method: "GET".to_string(),
-                            url: format!("/{}?{}", rtype, result_param),
+                            url: format!("/{rtype}?{result_param}"),
                             headers: HashMap::new(),
                             body: None,
                         },
@@ -1158,7 +1158,7 @@ pub fn generate_test_plan(
                         undeclared_code
                     ),
                     kind: TestCaseKind::Negative {
-                        description: format!("Undeclared interaction: {}", undeclared_code),
+                        description: format!("Undeclared interaction: {undeclared_code}"),
                     },
                     interaction: Interaction::from_code(undeclared_code).unwrap(),
                     resource_type: rtype.to_string(),
@@ -1172,12 +1172,12 @@ pub fn generate_test_plan(
                             _ => "GET".to_string(),
                         },
                         url: match *undeclared_code {
-                            "read" => format!("/{}/nonexistent", rtype),
-                            "search-type" => format!("/{}?name=test", rtype),
-                            "create" => format!("/{}", rtype),
-                            "update" => format!("/{}/nonexistent", rtype),
-                            "delete" => format!("/{}/nonexistent", rtype),
-                            _ => format!("/{}", rtype),
+                            "read" => format!("/{rtype}/nonexistent"),
+                            "search-type" => format!("/{rtype}?name=test"),
+                            "create" => format!("/{rtype}"),
+                            "update" => format!("/{rtype}/nonexistent"),
+                            "delete" => format!("/{rtype}/nonexistent"),
+                            _ => format!("/{rtype}"),
                         },
                         headers: HashMap::new(),
                         body: if *undeclared_code == "create" {
@@ -1193,7 +1193,7 @@ pub fn generate_test_plan(
                         forbidden_elements: vec![],
                         response_assertion: assertion_for_kind(
                             &TestCaseKind::Negative {
-                                description: format!("Undeclared interaction: {}", undeclared_code),
+                                description: format!("Undeclared interaction: {undeclared_code}"),
                             },
                             rtype,
                         ),

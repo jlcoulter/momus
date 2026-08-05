@@ -29,9 +29,9 @@ fn extract_paths(
 ) {
     for (key, val) in obj {
         let path = if prefix.is_empty() {
-            format!("{}.{}", resource_type, key)
+            format!("{resource_type}.{key}")
         } else {
-            format!("{}.{}", prefix, key)
+            format!("{prefix}.{key}")
         };
 
         match val {
@@ -52,7 +52,7 @@ fn extract_paths(
             }
             Value::Array(arr) => {
                 for (i, item) in arr.iter().enumerate() {
-                    let arr_path = format!("{}[{}]", path, i);
+                    let arr_path = format!("{path}[{i}]");
                     match item {
                         Value::String(s) => {
                             if !s.is_empty() && !s.starts_with("urn:uuid:") {
@@ -159,12 +159,12 @@ pub fn resolve_search_value(
         if let Some(target_type) = resolve_reference_target(resource_type, param_name, None)
             && let Some(id) = created_ids.get(&target_type)
         {
-            return Some(format!("{}/{}", target_type, id));
+            return Some(format!("{target_type}/{id}"));
         }
         // Fall back to any created resource of matching type
         for (rt, id) in created_ids {
             if rt.to_lowercase() == param_name.to_lowercase() {
-                return Some(format!("{}/{}", rt, id));
+                return Some(format!("{rt}/{id}"));
             }
         }
         return None;

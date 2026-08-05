@@ -158,7 +158,7 @@ fn parse_method(method: &str) -> Result<Method> {
         "PATCH" => Ok(Method::Patch),
         "HEAD" => Ok(Method::Head),
         "OPTIONS" => Ok(Method::Options),
-        other => anyhow::bail!("Unsupported HTTP method: {}", other),
+        other => anyhow::bail!("Unsupported HTTP method: {other}"),
     }
 }
 
@@ -242,7 +242,7 @@ mod tests {
         })]);
 
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", har).unwrap();
+        write!(tmp, "{har}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let plan = convert(&path).unwrap();
@@ -278,7 +278,7 @@ mod tests {
         })]);
 
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", har).unwrap();
+        write!(tmp, "{har}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let plan = convert(&path).unwrap();
@@ -321,7 +321,7 @@ mod tests {
         ]);
 
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", har).unwrap();
+        write!(tmp, "{har}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let plan = convert(&path).unwrap();
@@ -332,7 +332,7 @@ mod tests {
     fn convert_empty_har() {
         let har = create_test_har(vec![]);
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", har).unwrap();
+        write!(tmp, "{har}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let result = convert(&path);
@@ -354,7 +354,7 @@ mod tests {
         })]);
 
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", har).unwrap();
+        write!(tmp, "{har}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let plan = convert(&path).unwrap();
@@ -387,7 +387,7 @@ mod tests {
         })]);
 
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", har).unwrap();
+        write!(tmp, "{har}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let plan = convert(&path).unwrap();

@@ -291,7 +291,7 @@ message HealthCheckResponse {
     fn convert_proto_to_test_plan() {
         use std::io::Write;
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", SAMPLE_PROTO).unwrap();
+        write!(tmp, "{SAMPLE_PROTO}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let plan = convert(&path).unwrap();
@@ -412,7 +412,7 @@ service SimpleService {
 }
 "#;
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", proto).unwrap();
+        write!(tmp, "{proto}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let plan = convert(&path).unwrap();
@@ -437,7 +437,7 @@ service SimpleService {
         use std::io::Write;
         let proto = "syntax = \"proto3\";\n\nmessage Foo { string bar = 1; }";
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", proto).unwrap();
+        write!(tmp, "{proto}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let result = convert(&path);
@@ -460,7 +460,7 @@ service Greeter {
 }
 "#;
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", proto).unwrap();
+        write!(tmp, "{proto}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let plan = convert(&path).unwrap();
@@ -507,7 +507,7 @@ service Foo {
     fn plan_name_format() {
         use std::io::Write;
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", SAMPLE_PROTO).unwrap();
+        write!(tmp, "{SAMPLE_PROTO}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let plan = convert(&path).unwrap();
