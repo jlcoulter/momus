@@ -1,5 +1,6 @@
 use crate::config::ContractConfig;
-use crate::report::{ContractReport, ContractViolation};
+use crate::report::{ContractReport, ContractViolation, EndpointCompliance, FieldCoverage};
+use crate::spec::ParsedSpec;
 use anyhow::{Context, Result};
 use momus_core::ast::{Method, Step, TestPlan};
 use std::collections::HashMap;
@@ -18,17 +19,17 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
 
     let base_url = config.base_url.as_deref().unwrap_or(&plan.base_url);
 
-    // Load the spec
+    // Load and parse the spec
     let spec_content = std::fs::read_to_string(&config.spec_path)
         .with_context(|| format!("Failed to read spec file: {}", config.spec_path))?;
 
-    // Detect spec type and parse
-    let spec_type = detect_spec_type(&config.spec_path, &spec_content);
+    let spec = ParsedSpec::parse(&config.spec_path, &spec_content)
+        .with_context(|| format!("Failed to parse spec: {}", config.spec_path))?;
 
     tracing::info!(
         "Running contract validation on '{}' against {} spec '{}'",
         plan.name,
-        spec_type,
+        spec,
         config.spec_path
     );
 
@@ -43,6 +44,9 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
     }
 
     let mut details = Vec::new();
+    let mut all_field_coverage: Vec<FieldCoverage> = Vec::new();
+    let mut endpoint_compliance: Vec<EndpointCompliance> = Vec::new();
+    let mut undocumented_fields: Vec<String> = Vec::new();
     let total = steps.len();
     let mut compliant = 0usize;
 
@@ -78,8 +82,41 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
                 let body: Option<serde_json::Value> = resp.json().await.ok();
 
                 // Validate against spec
-                let step_violations =
-                    validate_response(spec_type, &step.method, &step.url, status, &headers, &body);
+                let (step_violations, step_coverage) =
+                    spec.validate(&step.method, &step.url, status, &headers, &body);
+
+                // Track field coverage
+                all_field_coverage.extend(step_coverage);
+
+                // Track undocumented fields
+                for v in &step_violations {
+                    if v.severity == "info" && v.description.contains("Undocumented") {
+                        undocumented_fields
+                            .push(format!("{} {}: {}", v.method, v.endpoint, v.description));
+                    }
+                }
+
+                // Per-endpoint compliance
+                let checks_passed = step_violations
+                    .iter()
+                    .filter(|v| v.severity != "error")
+                    .count();
+                let checks_failed = step_violations.len();
+                let total_checks = checks_passed + checks_failed;
+                let pct = if total_checks > 0 {
+                    (checks_passed as f64 / total_checks as f64) * 100.0
+                } else {
+                    100.0
+                };
+
+                endpoint_compliance.push(EndpointCompliance {
+                    endpoint: step.url.clone(),
+                    method: step.method.to_string(),
+                    passed: step_violations.is_empty(),
+                    pct,
+                    checks_passed,
+                    checks_failed,
+                });
 
                 if step_violations.is_empty() {
                     compliant += 1;
@@ -88,11 +125,20 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
                 }
             }
             Err(e) => {
+                endpoint_compliance.push(EndpointCompliance {
+                    endpoint: step.url.clone(),
+                    method: step.method.to_string(),
+                    passed: false,
+                    pct: 0.0,
+                    checks_passed: 0,
+                    checks_failed: 1,
+                });
+
                 details.push(ContractViolation {
                     endpoint: step.url.clone(),
                     method: step.method.to_string(),
                     status: 0,
-                    description: format!("HTTP error: {}", e),
+                    description: format!("HTTP error: {e}"),
                     severity: "error".to_string(),
                 });
             }
@@ -113,6 +159,9 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
         } else {
             0.0
         },
+        endpoint_compliance,
+        field_coverage: all_field_coverage,
+        undocumented_fields,
         duration_secs: elapsed,
         details,
     })
@@ -153,201 +202,12 @@ fn collect_from_steps(steps: &[Step], result: &mut Vec<ContractStep>) {
     }
 }
 
-/// Detect the spec type from file extension and content.
-fn detect_spec_type(path: &str, content: &str) -> &'static str {
-    let lower = path.to_lowercase();
-    if lower.ends_with(".yaml") || lower.ends_with(".yml") {
-        if content.contains("openapi:") || content.contains("openapi ") {
-            "OpenAPI"
-        } else if content.contains("swagger:") || content.contains("swagger ") {
-            "Swagger"
-        } else {
-            "YAML"
-        }
-    } else if lower.ends_with(".graphql") || lower.ends_with(".gql") || lower.ends_with(".sdl") {
-        "GraphQL"
-    } else if lower.ends_with(".proto") {
-        "Protobuf"
-    } else {
-        "OpenAPI"
-    }
-}
-
-/// Validate a response against the spec.
-fn validate_response(
-    spec_type: &str,
-    method: &Method,
-    url: &str,
-    status_code: u16,
-    _headers: &HashMap<String, String>,
-    body: &Option<serde_json::Value>,
-) -> Vec<ContractViolation> {
-    let mut violations = Vec::new();
-
-    match spec_type {
-        "OpenAPI" | "Swagger" => {
-            if let Some(body) = body {
-                if body.is_null() && (200..300).contains(&status_code) {
-                    violations.push(ContractViolation {
-                        endpoint: url.to_string(),
-                        method: method.to_string(),
-                        status: status_code,
-                        description: "Response body is null for a successful status code"
-                            .to_string(),
-                        severity: "warning".to_string(),
-                    });
-                }
-            } else if (200..300).contains(&status_code) {
-                violations.push(ContractViolation {
-                    endpoint: url.to_string(),
-                    method: method.to_string(),
-                    status: status_code,
-                    description: "Response body is not valid JSON for a successful status code"
-                        .to_string(),
-                    severity: "error".to_string(),
-                });
-            }
-        }
-        "GraphQL" => {
-            if let Some(body) = body {
-                let has_data = body.get("data").is_some();
-                let has_errors = body.get("errors").is_some();
-                if !has_data && !has_errors {
-                    let keys: Vec<&str> = body
-                        .as_object()
-                        .map(|o| o.keys().map(|k| k.as_str()).collect())
-                        .unwrap_or_default();
-                    violations.push(ContractViolation {
-                        endpoint: url.to_string(),
-                        method: method.to_string(),
-                        status: status_code,
-                        description: format!(
-                            "GraphQL response missing 'data' or 'errors' field, got: {:?}",
-                            keys
-                        ),
-                        severity: "error".to_string(),
-                    });
-                }
-            }
-        }
-        _ => {
-            if body.is_none() && (200..300).contains(&status_code) {
-                violations.push(ContractViolation {
-                    endpoint: url.to_string(),
-                    method: method.to_string(),
-                    status: status_code,
-                    description: "Response body is not valid JSON".to_string(),
-                    severity: "warning".to_string(),
-                });
-            }
-        }
-    }
-
-    violations
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use momus_core::ast::*;
     use serde_json::json;
     use std::collections::HashMap;
-
-    #[test]
-    fn test_detect_spec_type() {
-        assert_eq!(
-            detect_spec_type("openapi.yaml", "openapi: 3.0.0"),
-            "OpenAPI"
-        );
-        assert_eq!(detect_spec_type("spec.yml", "swagger: '2.0'"), "Swagger");
-        assert_eq!(
-            detect_spec_type("schema.graphql", "type Query {"),
-            "GraphQL"
-        );
-        assert_eq!(detect_spec_type("schema.gql", "type Query {"), "GraphQL");
-        assert_eq!(detect_spec_type("service.proto", "syntax ="), "Protobuf");
-        assert_eq!(detect_spec_type("spec.json", "{}"), "OpenAPI");
-    }
-
-    #[test]
-    fn test_validate_openapi_success() {
-        let violations = validate_response(
-            "OpenAPI",
-            &Method::Get,
-            "/health",
-            200,
-            &HashMap::new(),
-            &Some(json!({"status": "ok"})),
-        );
-        assert!(violations.is_empty());
-    }
-
-    #[test]
-    fn test_validate_openapi_null_body() {
-        let violations = validate_response(
-            "OpenAPI",
-            &Method::Get,
-            "/health",
-            200,
-            &HashMap::new(),
-            &Some(serde_json::Value::Null),
-        );
-        assert_eq!(violations.len(), 1);
-        assert_eq!(violations[0].severity, "warning");
-    }
-
-    #[test]
-    fn test_validate_openapi_no_body() {
-        let violations = validate_response(
-            "OpenAPI",
-            &Method::Get,
-            "/health",
-            200,
-            &HashMap::new(),
-            &None,
-        );
-        assert_eq!(violations.len(), 1);
-        assert_eq!(violations[0].severity, "error");
-    }
-
-    #[test]
-    fn test_validate_graphql_success() {
-        let violations = validate_response(
-            "GraphQL",
-            &Method::Post,
-            "/graphql",
-            200,
-            &HashMap::new(),
-            &Some(json!({"data": {"health": "ok"}})),
-        );
-        assert!(violations.is_empty());
-    }
-
-    #[test]
-    fn test_validate_graphql_errors() {
-        let violations = validate_response(
-            "GraphQL",
-            &Method::Post,
-            "/graphql",
-            200,
-            &HashMap::new(),
-            &Some(json!({"errors": [{"message": "not found"}]})),
-        );
-        assert!(violations.is_empty());
-    }
-
-    #[test]
-    fn test_validate_graphql_invalid() {
-        let violations = validate_response(
-            "GraphQL",
-            &Method::Post,
-            "/graphql",
-            200,
-            &HashMap::new(),
-            &Some(json!({"foo": "bar"})),
-        );
-        assert_eq!(violations.len(), 1);
-    }
 
     #[test]
     fn test_collect_contract_steps() {
@@ -383,5 +243,57 @@ mod tests {
 
         let steps = collect_contract_steps(&plan);
         assert_eq!(steps.len(), 2);
+    }
+
+    #[test]
+    fn test_collect_nested_steps() {
+        let plan = TestPlan {
+            name: "nested".into(),
+            base_url: "http://localhost".into(),
+            default_headers: HashMap::new(),
+            steps: vec![Step::Sequence(SequenceStep {
+                name: "seq".into(),
+                steps: vec![
+                    Step::Request(RequestStep {
+                        name: "r1".into(),
+                        method: Method::Get,
+                        url: "/a".into(),
+                        headers: HashMap::new(),
+                        body: None,
+                        assert: vec![],
+                        save_as: String::new(),
+                        soft_fail: false,
+                    }),
+                    Step::Parallel(vec![
+                        Step::Request(RequestStep {
+                            name: "r2".into(),
+                            method: Method::Get,
+                            url: "/b".into(),
+                            headers: HashMap::new(),
+                            body: None,
+                            assert: vec![],
+                            save_as: String::new(),
+                            soft_fail: false,
+                        }),
+                        Step::Request(RequestStep {
+                            name: "r3".into(),
+                            method: Method::Get,
+                            url: "/c".into(),
+                            headers: HashMap::new(),
+                            body: None,
+                            assert: vec![],
+                            save_as: String::new(),
+                            soft_fail: false,
+                        }),
+                    ]),
+                ],
+                continue_on_failure: false,
+            })],
+            setup: vec![],
+            teardown: vec![],
+        };
+
+        let steps = collect_contract_steps(&plan);
+        assert_eq!(steps.len(), 3);
     }
 }
