@@ -1,7 +1,7 @@
 use crate::config::DiffConfig;
 use crate::report::{DiffEntry, DiffReport};
 use anyhow::Result;
-use momus_core::ast::{Method, Step, TestPlan};
+use momus_core::ast::{Method, TestPlan};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -156,26 +156,14 @@ struct DiffResponse {
 
 /// Collect all request steps from a test plan.
 fn collect_diff_steps(plan: &TestPlan) -> Vec<DiffStep> {
-    let mut steps = Vec::new();
-    collect_from_steps(&plan.steps, &mut steps);
-    steps
-}
-
-fn collect_from_steps(steps: &[Step], result: &mut Vec<DiffStep>) {
-    for step in steps {
-        match step {
-            Step::Request(req) => {
-                result.push(DiffStep {
-                    method: req.method,
-                    url: req.url.clone(),
-                    body: req.body.clone(),
-                });
-            }
-            Step::Sequence(seq) => collect_from_steps(&seq.steps, result),
-            Step::Parallel(children) => collect_from_steps(children, result),
-            _ => {}
-        }
-    }
+    plan.request_steps()
+        .into_iter()
+        .map(|req| DiffStep {
+            method: req.method,
+            url: req.url.clone(),
+            body: req.body.clone(),
+        })
+        .collect()
 }
 
 /// Send an HTTP request and return the response.

@@ -1,0 +1,60 @@
+{
+  "name": "OpenAPI: Swagger Petstore",
+  "base_url": "http://petstore.swagger.io/v1",
+  "default_headers": {},
+  "steps": [
+    {
+      "type": "request",
+      "name": "listPets",
+      "method": "GET",
+      "url": "/pets?limit=example",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        },
+        {
+          "content_type": "application/json"
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "createPets",
+      "method": "POST",
+      "url": "/pets",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 201
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "showPetById",
+      "method": "GET",
+      "url": "/pets/1",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        },
+        {
+          "content_type": "application/json"
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    }
+  ],
+  "setup": [],
+  "teardown": []
+}
