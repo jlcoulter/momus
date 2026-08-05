@@ -80,14 +80,14 @@ enum Commands {
         /// Path to the test plan JSON file.
         plan: PathBuf,
         /// Benchmark mode: steady, max-throughput, soak.
-        #[arg(long, value_enum, default_value = "steady")]
-        mode: BenchModeCli,
+        #[arg(long, value_enum)]
+        mode: Option<BenchModeCli>,
         /// Concurrency level (steady, soak).
-        #[arg(long, default_value = "10")]
-        concurrency: usize,
+        #[arg(long)]
+        concurrency: Option<usize>,
         /// Duration in seconds (steady, soak; 0 = one-shot).
-        #[arg(long, default_value = "30")]
-        duration: u64,
+        #[arg(long)]
+        duration: Option<u64>,
         /// Starting concurrency (max-throughput).
         #[arg(long)]
         min_concurrency: Option<usize>,
@@ -121,8 +121,8 @@ enum Commands {
         /// Path to the test plan JSON file.
         plan: PathBuf,
         /// Number of mutations to generate.
-        #[arg(long, default_value = "1000")]
-        iterations: usize,
+        #[arg(long)]
+        iterations: Option<usize>,
         /// Base URL override.
         #[arg(long)]
         base_url: Option<String>,
@@ -408,11 +408,37 @@ async fn main() -> Result<()> {
             // Config precedence: CLI > [bench] section > [global] section
             let base_url = base_url.or(cfg.bench.base_url).or(cfg.global.base_url);
 
-            let bench_mode = match mode {
-                BenchModeCli::Steady => momus_bench::BenchMode::Steady {
-                    concurrency,
-                    duration_secs: duration,
-                },
+            // Config precedence: CLI > [bench] section > hardcoded defaults
+            let bench_mode = match mode.unwrap_or({
+                // If no CLI mode, try config file, then default to Steady
+                match &cfg.bench.mode {
+                    momus_bench::BenchMode::Steady { .. } => BenchModeCli::Steady,
+                    momus_bench::BenchMode::MaxThroughput { .. } => BenchModeCli::MaxThroughput,
+                    momus_bench::BenchMode::Soak { .. } => BenchModeCli::Soak,
+                }
+            }) {
+                BenchModeCli::Steady => {
+                    let concurrency = concurrency
+                        .or(match &cfg.bench.mode {
+                            momus_bench::BenchMode::Steady { concurrency, .. } => {
+                                Some(*concurrency)
+                            }
+                            _ => None,
+                        })
+                        .unwrap_or(10);
+                    let duration_secs = duration
+                        .or(match &cfg.bench.mode {
+                            momus_bench::BenchMode::Steady { duration_secs, .. } => {
+                                Some(*duration_secs)
+                            }
+                            _ => None,
+                        })
+                        .unwrap_or(30);
+                    momus_bench::BenchMode::Steady {
+                        concurrency,
+                        duration_secs,
+                    }
+                }
                 BenchModeCli::MaxThroughput => momus_bench::BenchMode::MaxThroughput {
                     min_concurrency: min_concurrency.unwrap_or(10),
                     max_concurrency: max_concurrency.unwrap_or(200),
@@ -421,10 +447,26 @@ async fn main() -> Result<()> {
                     max_error_rate: max_error_rate.unwrap_or(0.05),
                     max_p99_ms: max_p99_ms.unwrap_or(2000),
                 },
-                BenchModeCli::Soak => momus_bench::BenchMode::Soak {
-                    concurrency,
-                    duration_secs: duration,
-                },
+                BenchModeCli::Soak => {
+                    let concurrency = concurrency
+                        .or(match &cfg.bench.mode {
+                            momus_bench::BenchMode::Soak { concurrency, .. } => Some(*concurrency),
+                            _ => None,
+                        })
+                        .unwrap_or(10);
+                    let duration_secs = duration
+                        .or(match &cfg.bench.mode {
+                            momus_bench::BenchMode::Soak { duration_secs, .. } => {
+                                Some(*duration_secs)
+                            }
+                            _ => None,
+                        })
+                        .unwrap_or(30);
+                    momus_bench::BenchMode::Soak {
+                        concurrency,
+                        duration_secs,
+                    }
+                }
             };
 
             let config = momus_bench::BenchConfig {
@@ -475,7 +517,7 @@ async fn main() -> Result<()> {
             let base_url = base_url.or(cfg.fuzz.base_url).or(cfg.global.base_url);
 
             let config = momus_fuzz::FuzzConfig {
-                iterations,
+                iterations: iterations.unwrap_or(cfg.fuzz.iterations),
                 base_url,
                 output: cfg.fuzz.output,
                 ..Default::default()
