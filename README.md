@@ -122,6 +122,12 @@ URLs, headers, and bodies support template substitution:
 - `{base_url}` — the configured base URL
 - `{steps.<name>.id}` — the `id` field from a saved step response
 - `{steps.<name>.<field.path>}` — any field from a saved step response
+- `{env.VAR}` — the value of environment variable `VAR`
+- `{random.uuid}` — a random UUID v4 string (each occurrence produces a different value)
+- `{random.int}` — a random integer (0..=i64::MAX)
+- `{random.int(N,M)}` — a random integer in the range [N, M]
+- `{random.string}` — a random alphanumeric string of length 8
+- `{random.string(N)}` — a random alphanumeric string of length N
 
 ## Multi-Step Sequence Example
 
