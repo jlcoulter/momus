@@ -5,3 +5,17 @@
 .DS_Store
 AGENTS.md
 /output
+
+# Hermes agent workspace
+.hermes/
+
+# Environment files
+.env
+.env.*
+
+# IDE directories
+.idea/
+.vscode/
+
+# Rust backup files
+*.rs.bk
