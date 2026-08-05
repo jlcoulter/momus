@@ -165,9 +165,9 @@ Assertion (enum)
 
 ### Engine (`momus_core::engine`)
 
-- **`runner::execute_plan`** — walks the step tree, resolves `{base_url}` and `{steps.<name>.*}` templates, dispatches HTTP requests via reqwest, evaluates assertions, collects results into `RunReport`
+- **`runner::execute_plan`** — walks the step tree, resolves `{base_url}`, `{steps.<name>.*}`, `{env.VAR}`, and `{random.*}` templates, dispatches HTTP requests via reqwest, evaluates assertions, collects results into `RunReport`
 - **`evaluator::evaluate_assertions`** — evaluates the assertion tree against a response. Includes a simple JSONPath resolver (supports `$.key`, `$.key.nested`, `$.key[*]`, `$.key[0]`)
-- **`templates::resolve_url`, `resolve_body`, `resolve_headers`** — template substitution for `{base_url}` and `{steps.<name>.*}`
+- **`templates::resolve_url`, `resolve_body`, `resolve_headers`** — template substitution for `{base_url}`, `{steps.<name>.*}`, `{env.VAR}`, and `{random.*}`
 
 ### Key Design Decisions
 
