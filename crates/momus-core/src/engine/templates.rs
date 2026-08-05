@@ -508,4 +508,32 @@ mod tests {
         assert_eq!(param.len(), 6);
         assert!(param.chars().all(|c| c.is_ascii_alphanumeric()));
     }
+
+    // -------------------------------------------------------------------------
+    // Property-based tests with proptest
+    // -------------------------------------------------------------------------
+
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Strings without any template patterns should remain unchanged after resolution.
+        #[test]
+        fn prop_no_templates_unchanged(s in "[a-zA-Z0-9/._~-]{0,50}") {
+            let result = resolve_url(&s, "http://base", &HashMap::new());
+            assert_eq!(result, s);
+        }
+
+        /// Strings with only {base_url} templates should resolve idempotently:
+        /// resolving twice produces the same result as resolving once.
+        #[test]
+        fn prop_base_url_idempotent(
+            path in "[a-zA-Z0-9/._~-]{1,20}",
+            base in "http[s]?://[a-z0-9.-]+(:[0-9]+)?",
+        ) {
+            let url = format!("{{base_url}}/{path}");
+            let once = resolve_url(&url, &base, &HashMap::new());
+            let twice = resolve_url(&once, &base, &HashMap::new());
+            assert_eq!(once, twice, "resolving {{base_url}} should be idempotent");
+        }
+    }
 }

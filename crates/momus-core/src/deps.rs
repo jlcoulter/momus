@@ -258,4 +258,97 @@ mod tests {
         assert!(b < a, "B before A");
         assert!(c < a, "C before A");
     }
+
+    // -------------------------------------------------------------------------
+    // Property-based tests with proptest
+    // -------------------------------------------------------------------------
+
+    /// Generate a random dependency graph and verify that the resolved order
+    /// respects all declared dependencies (dependencies come before dependents).
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_resolve_order_invariant(
+            deps in prop::collection::vec(
+                ("[A-Z]", prop::collection::vec("[A-Z]", 0..4)),
+                1..10,
+            ),
+        ) {
+            // Deduplicate items with the same name by merging their dependencies
+            let mut deduped: std::collections::HashMap<String, Vec<String>> =
+                std::collections::HashMap::new();
+            for (name, refs) in deps {
+                let entry = deduped.entry(name.clone()).or_default();
+                entry.extend(refs);
+            }
+
+            // Filter out self-references and references to non-existent items
+            let item_set: std::collections::HashSet<String> = deduped.keys().cloned().collect();
+            let clean_deps: Vec<(String, Vec<String>)> = deduped
+                .into_iter()
+                .map(|(name, refs)| {
+                    let clean_refs: Vec<String> = refs
+                        .into_iter()
+                        .filter(|r| r != &name && item_set.contains(r))
+                        .collect();
+                    (name, clean_refs)
+                })
+                .collect();
+
+            let order = resolve_order(&clean_deps)
+                .expect("resolve_order should not fail for any valid input");
+
+            // Verify all items are present in the output
+            for (item, _) in &clean_deps {
+                assert!(
+                    order.contains(item),
+                    "item {item} should be in the resolved order"
+                );
+            }
+
+            // Verify dependency ordering: if A depends on B, B must come before A,
+            // unless A and B are in a cycle (SCC), in which case order is arbitrary.
+            // Build a graph to detect SCCs for cycle-aware checking.
+            let mut graph = petgraph::graph::DiGraph::<String, ()>::new();
+            let mut node_indices: std::collections::HashMap<String, _> =
+                std::collections::HashMap::new();
+            for (item, _) in &clean_deps {
+                let idx = graph.add_node(item.clone());
+                node_indices.insert(item.clone(), idx);
+            }
+            for (item, refs) in &clean_deps {
+                let from_idx = node_indices[item];
+                for dep in refs {
+                    if let Some(&to_idx) = node_indices.get(dep) {
+                        graph.add_edge(from_idx, to_idx, ());
+                    }
+                }
+            }
+            let sccs = petgraph::algo::kosaraju_scc(&graph);
+            let mut scc_of: std::collections::HashMap<String, usize> =
+                std::collections::HashMap::new();
+            for (scc_id, scc) in sccs.iter().enumerate() {
+                for node in scc {
+                    scc_of.insert(graph[*node].clone(), scc_id);
+                }
+            }
+
+            for (item, refs) in &clean_deps {
+                let item_scc = scc_of[item];
+                for dep in refs {
+                    let dep_scc = scc_of[dep];
+                    // Only check ordering if items are NOT in the same SCC (cycle)
+                    if item_scc != dep_scc {
+                        let item_pos = order.iter().position(|x| x == item).unwrap();
+                        let dep_pos = order.iter().position(|x| x == dep).unwrap();
+                        assert!(
+                            dep_pos < item_pos,
+                            "dependency {dep} should come before {item}"
+                        );
+                    }
+                }
+            }
+        }
+    }
 }

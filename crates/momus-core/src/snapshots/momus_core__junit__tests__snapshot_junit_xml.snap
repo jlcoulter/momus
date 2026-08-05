@@ -1,0 +1,13 @@
+---
+source: crates/momus-core/src/junit.rs
+expression: output
+---
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="my-plan" tests="2" failures="1" errors="0">
+  <testsuite name="group1" tests="2" failures="1" errors="0">
+    <testcase name="test1" classname="group1"/>
+    <testcase name="test2" classname="group1">
+      <failure message="Internal server error" type="AssertionFailure"/>
+    </testcase>
+  </testsuite>
+</testsuites>

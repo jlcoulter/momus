@@ -33,3 +33,4 @@ jsonpath-rust = "1.0.8"
 cargo-husky.workspace = true
 momus-mock = { path = "../momus-mock" }
 insta = { version = "1", features = ["json"] }
+proptest = "1"

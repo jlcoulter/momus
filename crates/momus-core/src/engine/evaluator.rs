@@ -900,4 +900,31 @@ mod tests {
         let results = resolve_json_path(&v, "$.b");
         assert!(results.is_empty());
     }
+
+    // -------------------------------------------------------------------------
+    // Property-based tests with proptest
+    // -------------------------------------------------------------------------
+
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Not(Not(x)) should be equivalent to x for any assertion.
+        ///
+        /// This tests the double-negation elimination algebraic property.
+        #[test]
+        fn prop_not_not_equivalent_to_identity(
+            status_code in 100u16..599u16,
+            response_time in 0u64..10000u64,
+        ) {
+            // Test with a Status assertion
+            let inner = Assertion::Status(status_code);
+            let double_not = Assertion::Not(Box::new(Assertion::Not(Box::new(inner.clone()))));
+
+            let direct = evaluate_assertion(&inner, status_code, &HashMap::new(), &None, response_time);
+            let indirect = evaluate_assertion(&double_not, status_code, &HashMap::new(), &None, response_time);
+
+            assert_eq!(direct.passed, indirect.passed,
+                "Not(Not(Status({status_code}))) should be equivalent to Status({status_code})");
+        }
+    }
 }

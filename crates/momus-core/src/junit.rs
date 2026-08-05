@@ -208,4 +208,54 @@ mod tests {
         assert_eq!(escape_xml("\"quote\""), "&quot;quote&quot;");
         assert_eq!(escape_xml("'single'"), "&apos;single&apos;");
     }
+
+    #[test]
+    fn snapshot_junit_xml() {
+        let report = RunReport {
+            plan_name: "my-plan".into(),
+            total: 2,
+            passed: 1,
+            failed: 1,
+            duration_ms: 100,
+            groups: vec![TestGroupResult {
+                name: "group1".into(),
+                total: 2,
+                passed: 1,
+                failed: 1,
+                results: vec![
+                    TestResult {
+                        name: "test1".into(),
+                        passed: true,
+                        status_code: 200,
+                        request_method: "GET".into(),
+                        request_url: "/api/health".into(),
+                        request_headers: HashMap::new(),
+                        request_body: None,
+                        response_headers: HashMap::new(),
+                        response_body: None,
+                        assertion_results: vec![],
+                        errors: vec![],
+                    },
+                    TestResult {
+                        name: "test2".into(),
+                        passed: false,
+                        status_code: 500,
+                        request_method: "POST".into(),
+                        request_url: "/api/data".into(),
+                        request_headers: HashMap::new(),
+                        request_body: None,
+                        response_headers: HashMap::new(),
+                        response_body: None,
+                        assertion_results: vec![],
+                        errors: vec!["Internal server error".into()],
+                    },
+                ],
+            }],
+        };
+
+        let mut buf = Vec::new();
+        write_junit_xml(&mut buf, &report).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        insta::assert_snapshot!(output);
+    }
 }
