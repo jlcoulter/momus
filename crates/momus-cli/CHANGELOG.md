@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ## [0.5.0] - 2026-08-05
 
+### 🧪 Testing
+
+- Add CLI integration tests (#42)
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.5.0
+- Release v0.5.0
+## [0.5.0] - 2026-08-05
+
 <<<<<<< Updated upstream
 ### 🧪 Testing
 
