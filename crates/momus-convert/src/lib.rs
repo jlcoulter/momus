@@ -1,5 +1,6 @@
 use anyhow::Result;
 use momus_core::ast::TestPlan;
+#[cfg(feature = "fhir")]
 use std::path::Path;
 
 /// Convert an API description into a Momus test plan.
