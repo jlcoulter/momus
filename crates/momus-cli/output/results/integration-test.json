@@ -1,0 +1,48 @@
+{
+  "name": "integration-test",
+  "passed": 1,
+  "failed": 0,
+  "total": 1,
+  "results": [
+    {
+      "name": "health",
+      "passed": true,
+      "status_code": 200,
+      "request_method": "GET",
+      "request_url": "http://127.0.0.1:40121/health",
+      "request_headers": {
+        "Accept": "application/json"
+      },
+      "request_body": null,
+      "response_headers": {
+        "content-type": "application/json",
+        "content-length": "15",
+        "date": "Wed, 05 Aug 2026 07:49:20 GMT"
+      },
+      "response_body": {
+        "status": "ok"
+      },
+      "assertion_results": [
+        {
+          "description": "status is 200",
+          "passed": true,
+          "message": null,
+          "children": []
+        },
+        {
+          "description": "content-type contains 'application/json'",
+          "passed": true,
+          "message": null,
+          "children": []
+        },
+        {
+          "description": "response is valid JSON",
+          "passed": true,
+          "message": null,
+          "children": []
+        }
+      ],
+      "errors": []
+    }
+  ]
+}
