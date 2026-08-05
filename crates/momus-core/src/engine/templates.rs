@@ -68,8 +68,8 @@ fn resolve_env_templates(s: &mut String) {
             let var_name = &caps[1];
             std::env::var(var_name).unwrap_or_else(|_| {
                 tracing::warn!(
-                    "Environment variable '{}' not set, leaving template unresolved",
-                    var_name
+                    var_name,
+                    "environment variable not set, leaving template unresolved"
                 );
                 caps[0].to_string()
             })
