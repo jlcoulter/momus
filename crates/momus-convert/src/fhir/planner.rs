@@ -33,47 +33,59 @@ fn summary_absent_fields() -> Vec<String> {
 /// Build a ResponseAssertion appropriate for the test case kind.
 pub fn assertion_for_kind(kind: &TestCaseKind, resource_type: &str) -> Option<ResponseAssertion> {
     match kind {
-        TestCaseKind::Interaction => None,
-        TestCaseKind::SearchSingle { .. } => Some(ResponseAssertion {
+        // CRUD interactions: verify the response is the expected resource with an id
+        TestCaseKind::Interaction => {
+            let mut required = HashMap::new();
+            required.insert(resource_type.to_string(), vec!["id".to_string()]);
+            Some(ResponseAssertion {
+                resource_types: vec![resource_type.to_string()],
+                required_fields: required,
+                ..ResponseAssertion::none()
+            })
+        }
+        // All search variants: verify searchset bundle with at least one entry
+        // of the expected resource type
+        TestCaseKind::SearchSingle { .. }
+        | TestCaseKind::SearchModifier { .. }
+        | TestCaseKind::SearchPrefix { .. }
+        | TestCaseKind::SearchNear { .. }
+        | TestCaseKind::SearchCombo { .. }
+        | TestCaseKind::SearchChained { .. }
+        | TestCaseKind::SearchHas { .. } => Some(ResponseAssertion {
             bundle_type: Some("searchset".to_string()),
-            min_entries: Some(0),
+            min_entries: Some(1),
+            resource_types: vec![resource_type.to_string()],
             ..ResponseAssertion::none()
         }),
-        TestCaseKind::SearchModifier { .. } => Some(ResponseAssertion {
-            bundle_type: Some("searchset".to_string()),
-            min_entries: Some(0),
-            ..ResponseAssertion::none()
-        }),
-        TestCaseKind::SearchPrefix { .. } => Some(ResponseAssertion {
-            bundle_type: Some("searchset".to_string()),
-            min_entries: Some(0),
-            ..ResponseAssertion::none()
-        }),
-        TestCaseKind::SearchNear { .. } => Some(ResponseAssertion {
-            bundle_type: Some("searchset".to_string()),
-            min_entries: Some(0),
-            ..ResponseAssertion::none()
-        }),
-        TestCaseKind::SearchCombo { .. } => Some(ResponseAssertion {
-            bundle_type: Some("searchset".to_string()),
-            min_entries: Some(0),
-            ..ResponseAssertion::none()
-        }),
-        TestCaseKind::SearchChained { .. } => Some(ResponseAssertion {
-            bundle_type: Some("searchset".to_string()),
-            min_entries: Some(0),
-            ..ResponseAssertion::none()
-        }),
-        TestCaseKind::SearchHas { .. } => Some(ResponseAssertion {
-            bundle_type: Some("searchset".to_string()),
-            min_entries: Some(0),
-            ..ResponseAssertion::none()
-        }),
-        TestCaseKind::Include { .. } => Some(ResponseAssertion {
-            bundle_type: Some("searchset".to_string()),
-            min_entries: Some(0),
-            ..ResponseAssertion::none()
-        }),
+        // _include / _revinclude: verify included resources are present
+        TestCaseKind::Include {
+            param,
+            revinclude: false,
+        } => {
+            let mut include_types = HashMap::new();
+            include_types.insert(param.clone(), resource_type.to_string());
+            Some(ResponseAssertion {
+                bundle_type: Some("searchset".to_string()),
+                min_entries: Some(1),
+                resource_types: vec![resource_type.to_string()],
+                include_types,
+                ..ResponseAssertion::none()
+            })
+        }
+        TestCaseKind::Include {
+            param,
+            revinclude: true,
+        } => {
+            let mut include_types = HashMap::new();
+            include_types.insert(param.clone(), resource_type.to_string());
+            Some(ResponseAssertion {
+                bundle_type: Some("searchset".to_string()),
+                min_entries: Some(1),
+                resource_types: vec![resource_type.to_string()],
+                include_types,
+                ..ResponseAssertion::none()
+            })
+        }
         TestCaseKind::ResultParam { param } => match param.as_str() {
             "_summary" => {
                 let mut required = HashMap::new();
@@ -83,7 +95,8 @@ pub fn assertion_for_kind(kind: &TestCaseKind, resource_type: &str) -> Option<Re
                 );
                 Some(ResponseAssertion {
                     bundle_type: Some("searchset".to_string()),
-                    min_entries: Some(0),
+                    min_entries: Some(1),
+                    resource_types: vec![resource_type.to_string()],
                     absent_fields: summary_absent_fields(),
                     required_fields: required,
                     ..ResponseAssertion::none()
@@ -91,12 +104,43 @@ pub fn assertion_for_kind(kind: &TestCaseKind, resource_type: &str) -> Option<Re
             }
             "_count" => Some(ResponseAssertion {
                 bundle_type: Some("searchset".to_string()),
+                min_entries: Some(1),
                 max_entries: Some(1),
+                resource_types: vec![resource_type.to_string()],
+                ..ResponseAssertion::none()
+            }),
+            "_sort" => Some(ResponseAssertion {
+                bundle_type: Some("searchset".to_string()),
+                min_entries: Some(1),
+                resource_types: vec![resource_type.to_string()],
+                sort_by: Some(SortAssertion {
+                    field: "_id".to_string(),
+                    direction: "asc".to_string(),
+                }),
+                ..ResponseAssertion::none()
+            }),
+            "_elements" => Some(ResponseAssertion {
+                bundle_type: Some("searchset".to_string()),
+                min_entries: Some(1),
+                resource_types: vec![resource_type.to_string()],
+                // Only id and meta should be present when _elements=id
+                absent_fields: vec![
+                    "text".to_string(),
+                    "contained".to_string(),
+                    "extension".to_string(),
+                    "modifierExtension".to_string(),
+                ],
+                required_fields: {
+                    let mut required = HashMap::new();
+                    required.insert(resource_type.to_string(), vec!["id".to_string()]);
+                    required
+                },
                 ..ResponseAssertion::none()
             }),
             _ => Some(ResponseAssertion {
                 bundle_type: Some("searchset".to_string()),
-                min_entries: Some(0),
+                min_entries: Some(1),
+                resource_types: vec![resource_type.to_string()],
                 ..ResponseAssertion::none()
             }),
         },
@@ -121,6 +165,7 @@ pub fn assertion_for_kind(kind: &TestCaseKind, resource_type: &str) -> Option<Re
             Some(ResponseAssertion {
                 bundle_type: Some("searchset".to_string()),
                 min_entries: Some(1),
+                resource_types: vec![resource_type.clone()],
                 required_fields: required,
                 ..ResponseAssertion::none()
             })
@@ -1310,13 +1355,20 @@ mod tests {
             "Patient",
         );
         assert!(search_assertion.is_some());
-        assert_eq!(
-            search_assertion.unwrap().bundle_type,
-            Some("searchset".to_string())
-        );
+        let sa = search_assertion.unwrap();
+        assert_eq!(sa.bundle_type, Some("searchset".to_string()));
+        assert_eq!(sa.min_entries, Some(1));
+        assert_eq!(sa.resource_types, vec!["Patient".to_string()]);
 
         let interaction_assertion = assertion_for_kind(&TestCaseKind::Interaction, "Patient");
-        assert!(interaction_assertion.is_none());
+        assert!(interaction_assertion.is_some());
+        let ia = interaction_assertion.unwrap();
+        assert_eq!(ia.resource_types, vec!["Patient".to_string()]);
+        assert!(ia.required_fields.contains_key("Patient"));
+        assert_eq!(
+            ia.required_fields.get("Patient").unwrap(),
+            &vec!["id".to_string()]
+        );
     }
 
     #[test]
