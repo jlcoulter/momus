@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.4.0] - 2026-08-05
+
+### 🚀 Features
+
+- Deepen FHIR test generation with _has, all-pair combos, expanded result params, and value resolution
+- Wire up fhir-generate CLI subcommand for bulk NDJSON test data generation
+
+### 🐛 Bug Fixes
+
+- Review and improve cargo-husky pre-commit hook configuration (#34)
+- Bump workspace version from 0.3.4 to 0.5.0
+- Downgrade crate versions from 0.5.0 to 0.3.3
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.3.4
+- Release v0.5.0
 ## [0.5.0] - 2026-08-05
 
 ### 🚀 Features
