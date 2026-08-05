@@ -35,6 +35,9 @@ impl RunContext {
 }
 
 /// Execute a full test plan and return a report.
+///
+/// Teardown steps always run, even if setup or main steps fail.
+/// The first error encountered (if any) is returned after teardown completes.
 pub async fn execute_plan(plan: &TestPlan) -> Result<RunReport> {
     let start = Instant::now();
     let transport: Box<dyn TransportAdapter> = Box::new(crate::transport::HttpAdapter::new());
@@ -44,44 +47,68 @@ pub async fn execute_plan(plan: &TestPlan) -> Result<RunReport> {
         transport,
     );
     let mut all_results: Vec<TestGroupResult> = Vec::new();
+    let mut first_error: Option<anyhow::Error> = None;
 
     // Run setup steps
     if !plan.setup.is_empty() {
-        let setup_results = execute_steps(&plan.setup, &mut ctx).await?;
-        if !setup_results.is_empty() {
-            all_results.push(TestGroupResult {
-                name: "_setup".into(),
-                passed: setup_results.iter().filter(|r| r.passed).count(),
-                failed: setup_results.iter().filter(|r| !r.passed).count(),
-                total: setup_results.len(),
-                results: setup_results,
-            });
+        match execute_steps(&plan.setup, &mut ctx).await {
+            Ok(setup_results) => {
+                if !setup_results.is_empty() {
+                    all_results.push(TestGroupResult {
+                        name: "_setup".into(),
+                        passed: setup_results.iter().filter(|r| r.passed).count(),
+                        failed: setup_results.iter().filter(|r| !r.passed).count(),
+                        total: setup_results.len(),
+                        results: setup_results,
+                    });
+                }
+            }
+            Err(e) => {
+                first_error = Some(e);
+            }
         }
     }
 
-    // Run main steps
-    let main_results = execute_steps(&plan.steps, &mut ctx).await?;
-    if !main_results.is_empty() {
-        all_results.push(TestGroupResult {
-            name: plan.name.clone(),
-            passed: main_results.iter().filter(|r| r.passed).count(),
-            failed: main_results.iter().filter(|r| !r.passed).count(),
-            total: main_results.len(),
-            results: main_results,
-        });
+    // Run main steps (only if setup didn't error)
+    if first_error.is_none() && !plan.steps.is_empty() {
+        match execute_steps(&plan.steps, &mut ctx).await {
+            Ok(main_results) => {
+                if !main_results.is_empty() {
+                    all_results.push(TestGroupResult {
+                        name: plan.name.clone(),
+                        passed: main_results.iter().filter(|r| r.passed).count(),
+                        failed: main_results.iter().filter(|r| !r.passed).count(),
+                        total: main_results.len(),
+                        results: main_results,
+                    });
+                }
+            }
+            Err(e) => {
+                first_error = Some(e);
+            }
+        }
     }
 
-    // Run teardown steps
+    // Run teardown steps — always, even on failure
     if !plan.teardown.is_empty() {
-        let teardown_results = execute_steps(&plan.teardown, &mut ctx).await?;
-        if !teardown_results.is_empty() {
-            all_results.push(TestGroupResult {
-                name: "_teardown".into(),
-                passed: teardown_results.iter().filter(|r| r.passed).count(),
-                failed: teardown_results.iter().filter(|r| !r.passed).count(),
-                total: teardown_results.len(),
-                results: teardown_results,
-            });
+        match execute_steps(&plan.teardown, &mut ctx).await {
+            Ok(teardown_results) => {
+                if !teardown_results.is_empty() {
+                    all_results.push(TestGroupResult {
+                        name: "_teardown".into(),
+                        passed: teardown_results.iter().filter(|r| r.passed).count(),
+                        failed: teardown_results.iter().filter(|r| !r.passed).count(),
+                        total: teardown_results.len(),
+                        results: teardown_results,
+                    });
+                }
+            }
+            Err(e) => {
+                // Prefer the first error, but log the teardown error
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
+            }
         }
     }
 
@@ -89,14 +116,21 @@ pub async fn execute_plan(plan: &TestPlan) -> Result<RunReport> {
     let passed: usize = all_results.iter().map(|g| g.passed).sum();
     let failed: usize = all_results.iter().map(|g| g.failed).sum();
 
-    Ok(RunReport {
+    let report = RunReport {
         plan_name: plan.name.clone(),
         total,
         passed,
         failed,
         groups: all_results,
         duration_ms: start.elapsed().as_millis() as u64,
-    })
+    };
+
+    // Return the first error if any, otherwise the report
+    if let Some(err) = first_error {
+        Err(err)
+    } else {
+        Ok(report)
+    }
 }
 
 /// Execute a list of steps, collecting results.
