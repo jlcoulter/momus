@@ -28,4 +28,4 @@ rhai = { version = "1", features = ["sync"] }
 
 [dev-dependencies]
 cargo-husky = "1.5.0"
-momus-mock = { path = "../momus-mock" }
+momus-mock = { path = "../momus-mock", version = "0.3.3" }
