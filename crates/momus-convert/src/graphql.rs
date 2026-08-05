@@ -30,7 +30,7 @@ pub fn convert(path: &str) -> Result<TestPlan> {
     for field in &query_fields {
         let query_body = build_query_body(field);
         let step = RequestStep {
-            name: format!("query_{}", field),
+            name: format!("query_{field}"),
             method: Method::Get,
             url: "http://localhost:4000/graphql".to_string(),
             headers: {
@@ -49,7 +49,7 @@ pub fn convert(path: &str) -> Result<TestPlan> {
     for field in &mutation_fields {
         let mutation_body = build_mutation_body(field);
         let step = RequestStep {
-            name: format!("mutation_{}", field),
+            name: format!("mutation_{field}"),
             method: Method::Post,
             url: "http://localhost:4000/graphql".to_string(),
             headers: {
@@ -80,6 +80,38 @@ pub fn convert(path: &str) -> Result<TestPlan> {
         setup: vec![],
         teardown: vec![],
     })
+}
+
+/// Generate seed data setup steps from a GraphQL SDL file.
+///
+/// For each mutation field, generates a setup step that runs the mutation
+/// with placeholder arguments to pre-populate the server.
+pub fn generate_seed_data(path: &str) -> Result<Vec<Step>> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("Failed to read GraphQL SDL file: {path}"))?;
+
+    let mutation_fields = extract_fields(&content, "Mutation");
+
+    let mut seed_steps = Vec::new();
+    for field in &mutation_fields {
+        let mutation_body = build_mutation_body(field);
+        seed_steps.push(Step::Request(RequestStep {
+            name: format!("seed_mutation_{field}"),
+            method: Method::Post,
+            url: "http://localhost:4000/graphql".to_string(),
+            headers: {
+                let mut h = HashMap::new();
+                h.insert("Content-Type".to_string(), "application/json".to_string());
+                h
+            },
+            body: Some(serde_json::json!({ "query": mutation_body })),
+            assert: vec![Assertion::Status(200)],
+            save_as: String::new(),
+            soft_fail: true,
+        }));
+    }
+
+    Ok(seed_steps)
 }
 
 /// Extract field names from a `type <Name> { ... }` block using regex.

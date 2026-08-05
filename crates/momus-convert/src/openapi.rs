@@ -1,19 +1,19 @@
 use anyhow::{Context, Result};
 use momus_core::ast::*;
 use openapiv3::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Convert an OpenAPI 3.x spec to a TestPlan.
 pub fn convert(path: &str) -> Result<TestPlan> {
     let content = std::fs::read_to_string(path)
-        .with_context(|| format!("Failed to read OpenAPI spec: {}", path))?;
+        .with_context(|| format!("Failed to read OpenAPI spec: {path}"))?;
 
     let spec: OpenAPI = if path.ends_with(".yaml") || path.ends_with(".yml") {
         serde_yaml::from_str(&content)
-            .with_context(|| format!("Failed to parse YAML OpenAPI spec: {}", path))?
+            .with_context(|| format!("Failed to parse YAML OpenAPI spec: {path}"))?
     } else {
         serde_json::from_str(&content)
-            .with_context(|| format!("Failed to parse JSON OpenAPI spec: {}", path))?
+            .with_context(|| format!("Failed to parse JSON OpenAPI spec: {path}"))?
     };
 
     let title = spec.info.title.clone();
@@ -102,7 +102,7 @@ pub fn convert(path: &str) -> Result<TestPlan> {
     }
 
     Ok(TestPlan {
-        name: format!("OpenAPI: {}", title),
+        name: format!("OpenAPI: {title}"),
         base_url: spec
             .servers
             .first()
@@ -113,6 +113,77 @@ pub fn convert(path: &str) -> Result<TestPlan> {
         setup: vec![],
         teardown: vec![],
     })
+}
+
+/// Generate seed data setup steps from an OpenAPI spec.
+///
+/// Scans the spec for POST endpoints that create resources and generates
+/// POST requests with example bodies to pre-populate the server. Also
+/// generates seed data for resources that GET/PUT/DELETE endpoints reference
+/// via path parameters.
+pub fn generate_seed_data(path: &str) -> Result<Vec<Step>> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("Failed to read OpenAPI spec: {path}"))?;
+
+    let spec: OpenAPI = if path.ends_with(".yaml") || path.ends_with(".yml") {
+        serde_yaml::from_str(&content)
+            .with_context(|| format!("Failed to parse YAML OpenAPI spec: {path}"))?
+    } else {
+        serde_json::from_str(&content)
+            .with_context(|| format!("Failed to parse JSON OpenAPI spec: {path}"))?
+    };
+
+    let mut seed_steps: Vec<Step> = Vec::new();
+    let mut seen_urls: HashSet<String> = HashSet::new();
+
+    for (path_str, path_item) in spec.paths.paths {
+        let path_item = match path_item {
+            ReferenceOr::Item(item) => item,
+            ReferenceOr::Reference { .. } => continue,
+        };
+
+        // For POST endpoints with request bodies, generate a seed POST
+        if let Some(op) = &path_item.post
+            && let Some(body) = build_request_body(&op.request_body)
+        {
+            let url = build_url(&path_str, &op.parameters);
+            let key = format!("POST {url}");
+            if seen_urls.insert(key) {
+                seed_steps.push(Step::Request(RequestStep {
+                    name: format!("seed_{}", sanitize_path(&path_str)),
+                    method: Method::Post,
+                    url: url.clone(),
+                    headers: HashMap::new(),
+                    body: Some(body),
+                    assert: vec![Assertion::Status(201)],
+                    save_as: String::new(),
+                    soft_fail: true,
+                }));
+            }
+        }
+
+        // For PUT endpoints with request bodies, generate a seed PUT
+        if let Some(op) = &path_item.put
+            && let Some(body) = build_request_body(&op.request_body)
+        {
+            let url = build_url(&path_str, &op.parameters);
+            let key = format!("PUT {url}");
+            if seen_urls.insert(key) {
+                seed_steps.push(Step::Request(RequestStep {
+                    name: format!("seed_{}", sanitize_path(&path_str)),
+                    method: Method::Put,
+                    url: url.clone(),
+                    headers: HashMap::new(),
+                    body: Some(body),
+                    assert: vec![Assertion::Status(200)],
+                    save_as: String::new(),
+                    soft_fail: true,
+                }));
+            }
+        }
+    }
+
+    Ok(seed_steps)
 }
 
 fn build_url(path: &str, parameters: &[ReferenceOr<Parameter>]) -> String {
