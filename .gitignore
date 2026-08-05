@@ -19,3 +19,6 @@ AGENTS.md
 
 # Rust backup files
 *.rs.bk
+
+# Agent workspace
+.agents/
