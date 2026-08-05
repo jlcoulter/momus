@@ -20,7 +20,15 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: Run release-plz
+        id: release-plz
         uses: release-plz/action@v0.5
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLEASE_PAT }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Enable auto-merge on release PR
+        if: ${{ steps.release-plz.outputs.prs_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_PAT }}
+        run: |
+          PR_NUMBER=$(echo '${{ steps.release-plz.outputs.pr }}' | jq -r '.number')
+          gh pr merge "$PR_NUMBER" --repo "${{ github.repository }}" --auto --merge
