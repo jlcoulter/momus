@@ -5,32 +5,35 @@ use std::process::Command;
 use std::time::Instant;
 
 /// Run a single chaos experiment.
-pub async fn run_experiment(experiment: &ChaosExperiment) -> Result<ChaosReport> {
+pub async fn run_experiment(
+    experiment: &ChaosExperiment,
+    timeout_secs: u64,
+) -> Result<ChaosReport> {
     match experiment {
         ChaosExperiment::NetworkLatency {
             endpoint,
             delay_ms,
             duration_secs,
-        } => run_network_latency(endpoint, *delay_ms, *duration_secs).await,
+        } => run_network_latency(endpoint, *delay_ms, *duration_secs, timeout_secs).await,
         ChaosExperiment::ServiceError {
             endpoint,
             status,
             duration_secs,
-        } => run_service_error(endpoint, *status, *duration_secs).await,
+        } => run_service_error(endpoint, *status, *duration_secs, timeout_secs).await,
         ChaosExperiment::ServiceDown {
             endpoint,
             duration_secs,
-        } => run_service_down(endpoint, *duration_secs).await,
+        } => run_service_down(endpoint, *duration_secs, timeout_secs).await,
         ChaosExperiment::ConnectionReset {
             endpoint,
             reset_pct,
             duration_secs,
-        } => run_connection_reset(endpoint, *reset_pct, *duration_secs).await,
+        } => run_connection_reset(endpoint, *reset_pct, *duration_secs, timeout_secs).await,
         ChaosExperiment::PacketLoss {
             endpoint,
             drop_pct,
             duration_secs,
-        } => run_packet_loss(endpoint, *drop_pct, *duration_secs).await,
+        } => run_packet_loss(endpoint, *drop_pct, *duration_secs, timeout_secs).await,
         ChaosExperiment::CpuPressure {
             cores,
             duration_secs,
@@ -128,10 +131,13 @@ async fn run_network_latency(
     endpoint: &str,
     delay_ms: u64,
     duration_secs: u64,
+    timeout_secs: u64,
 ) -> Result<ChaosReport> {
     let start = Instant::now();
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(duration_secs + 10))
+        .timeout(std::time::Duration::from_secs(
+            timeout_secs.max(duration_secs + 10),
+        ))
         .build()?;
 
     let mut failures = 0u64;
@@ -164,10 +170,15 @@ async fn run_network_latency(
 }
 
 /// Service error: verify the endpoint returns errors (simulated by checking status).
-async fn run_service_error(endpoint: &str, status: u16, duration_secs: u64) -> Result<ChaosReport> {
+async fn run_service_error(
+    endpoint: &str,
+    status: u16,
+    duration_secs: u64,
+    timeout_secs: u64,
+) -> Result<ChaosReport> {
     let start = Instant::now();
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()?;
 
     let mut failures = 0u64;
@@ -204,10 +215,14 @@ async fn run_service_error(endpoint: &str, status: u16, duration_secs: u64) -> R
 }
 
 /// Service down: verify the endpoint becomes unreachable.
-async fn run_service_down(endpoint: &str, duration_secs: u64) -> Result<ChaosReport> {
+async fn run_service_down(
+    endpoint: &str,
+    duration_secs: u64,
+    timeout_secs: u64,
+) -> Result<ChaosReport> {
     let start = Instant::now();
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()?;
 
     let mut failures = 0u64;
@@ -312,6 +327,7 @@ async fn run_connection_reset(
     endpoint: &str,
     reset_pct: u8,
     duration_secs: u64,
+    timeout_secs: u64,
 ) -> Result<ChaosReport> {
     let start = Instant::now();
 
@@ -349,7 +365,7 @@ async fn run_connection_reset(
             duration_secs: 0.0,
             requests_affected: 0,
             failures_during: 0,
-            self_healed: true,
+            self_healed: false,
             details: format!(
                 "Connection reset requires iptables. Failed to apply rule: {}. \
                  Use `sudo {}` manually.",
@@ -360,7 +376,7 @@ async fn run_connection_reset(
 
     // Monitor the endpoint during the fault window
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()?;
 
     let mut failures = 0u64;
@@ -381,7 +397,7 @@ async fn run_connection_reset(
          --probability {} -j REJECT --reject-with tcp-reset",
         port, probability
     );
-    let _ = run_sudo(&remove_cmd);
+    let removal_ok = run_sudo(&remove_cmd).is_ok();
 
     Ok(ChaosReport {
         experiment: "connection_reset".into(),
@@ -389,7 +405,7 @@ async fn run_connection_reset(
         duration_secs: start.elapsed().as_secs_f64(),
         requests_affected: affected,
         failures_during: failures,
-        self_healed: true,
+        self_healed: removal_ok,
         details: format!(
             "Injected TCP RST on port {} ({}% reset) for {}s, \
              {} requests affected, {} failures",
@@ -402,7 +418,12 @@ async fn run_connection_reset(
 ///
 /// Adds a `netem loss` qdisc on the detected default network interface,
 /// monitors the endpoint during the fault window, then removes the qdisc.
-async fn run_packet_loss(endpoint: &str, drop_pct: u8, duration_secs: u64) -> Result<ChaosReport> {
+async fn run_packet_loss(
+    endpoint: &str,
+    drop_pct: u8,
+    duration_secs: u64,
+    timeout_secs: u64,
+) -> Result<ChaosReport> {
     let start = Instant::now();
     let iface = detect_interface();
 
@@ -415,7 +436,7 @@ async fn run_packet_loss(endpoint: &str, drop_pct: u8, duration_secs: u64) -> Re
             duration_secs: 0.0,
             requests_affected: 0,
             failures_during: 0,
-            self_healed: true,
+            self_healed: false,
             details: format!(
                 "Packet loss requires tc netem. Failed to apply on interface '{}': {}. \
                  Use `sudo {}` manually.",
@@ -426,7 +447,7 @@ async fn run_packet_loss(endpoint: &str, drop_pct: u8, duration_secs: u64) -> Re
 
     // Monitor the endpoint during the fault window
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()?;
 
     let mut failures = 0u64;
@@ -443,7 +464,7 @@ async fn run_packet_loss(endpoint: &str, drop_pct: u8, duration_secs: u64) -> Re
 
     // Remove the tc qdisc
     let remove_cmd = format!("tc qdisc del dev {} root", iface);
-    let _ = run_sudo(&remove_cmd);
+    let removal_ok = run_sudo(&remove_cmd).is_ok();
 
     Ok(ChaosReport {
         experiment: "packet_loss".into(),
@@ -451,7 +472,7 @@ async fn run_packet_loss(endpoint: &str, drop_pct: u8, duration_secs: u64) -> Re
         duration_secs: start.elapsed().as_secs_f64(),
         requests_affected: affected,
         failures_during: failures,
-        self_healed: true,
+        self_healed: removal_ok,
         details: format!(
             "Injected {}% packet loss on interface {} for {}s, \
              {} requests affected, {} failures",
@@ -498,7 +519,7 @@ async fn run_clock_skew(offset_secs: i64, duration_secs: u64) -> Result<ChaosRep
             duration_secs: 0.0,
             requests_affected: 0,
             failures_during: 0,
-            self_healed: true,
+            self_healed: false,
             details: format!(
                 "Clock skew requires sudo date. Failed to set clock: {}. \
                  Use `sudo {}` manually.",

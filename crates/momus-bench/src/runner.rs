@@ -25,7 +25,14 @@ pub async fn run_bench(plan: &TestPlan, config: &BenchConfig) -> Result<BenchRep
         base_url
     );
 
-    let mut report = run_mode(&config.mode, plan, base_url).await?;
+    let mut report = run_mode(
+        &config.mode,
+        plan,
+        base_url,
+        config.warmup_requests,
+        config.timeout_secs,
+    )
+    .await?;
     report.duration_secs = start.elapsed().as_secs_f64();
 
     Ok(report)

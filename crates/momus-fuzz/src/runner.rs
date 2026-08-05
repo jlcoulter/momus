@@ -3,6 +3,7 @@ use crate::mutators::{all_mutators, mutator_by_name};
 use crate::report::FuzzReport;
 use anyhow::Result;
 use momus_core::ast::{Method, Step, TestPlan};
+use momus_core::leak::detect_info_leaks;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -110,7 +111,10 @@ pub async fn run_fuzz(plan: &TestPlan, config: &FuzzConfig) -> Result<FuzzReport
                 Method::Post => client.post(&url).json(mutated_body).send().await,
                 Method::Put => client.put(&url).json(mutated_body).send().await,
                 Method::Patch => client.patch(&url).json(mutated_body).send().await,
-                _ => client.post(&url).json(mutated_body).send().await,
+                Method::Get => client.get(&url).query(mutated_body).send().await,
+                Method::Delete => client.delete(&url).send().await,
+                Method::Head => client.head(&url).send().await,
+                Method::Options => client.request(reqwest::Method::OPTIONS, &url).send().await,
             };
 
             match result {
@@ -129,7 +133,7 @@ pub async fn run_fuzz(plan: &TestPlan, config: &FuzzConfig) -> Result<FuzzReport
                     // Check for info leaks in error responses
                     if !status.is_success()
                         && let Ok(body) = resp.text().await
-                        && has_info_leak(&body)
+                        && !detect_info_leaks(&body).is_empty()
                     {
                         leaks.fetch_add(1, Ordering::Relaxed);
                     }
@@ -205,45 +209,6 @@ fn collect_from_steps(steps: &[Step], targets: &mut Vec<FuzzTarget>) {
     }
 }
 
-/// Check if a response body contains information leakage patterns.
-fn has_info_leak(body: &str) -> bool {
-    let leak_patterns = [
-        "stack trace",
-        "exception",
-        "syntaxerror",
-        "referenceerror",
-        "typeerror",
-        "sql syntax",
-        "mysql_error",
-        "ora-",
-        "postgresql",
-        "fatal:",
-        "warning:",
-        "fatal error",
-        "internal error",
-        "internal server error",
-        "debug",
-        "traceback",
-        "com.",
-        "org.",
-        "java.lang",
-        "system.",
-        "system.io",
-        "microsoft",
-        "root:x:",
-        "daemon:x:",
-        "/etc/passwd",
-        "/etc/shadow",
-        "select * from",
-        "insert into",
-        "drop table",
-        "union select",
-    ];
-
-    let lower = body.to_lowercase();
-    leak_patterns.iter().any(|p| lower.contains(p))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,23 +278,23 @@ mod tests {
     }
 
     #[test]
-    fn test_has_info_leak() {
-        assert!(has_info_leak("stack trace: at main()"));
-        assert!(has_info_leak("Fatal error: syntax error"));
-        assert!(has_info_leak("SELECT * FROM users"));
-        assert!(!has_info_leak(r#"{"status": "ok"}"#));
-        assert!(!has_info_leak("hello world"));
+    fn test_detect_info_leak_integration() {
+        assert!(!detect_info_leaks("stack trace: at main()").is_empty());
+        assert!(!detect_info_leaks("Fatal error: syntax error").is_empty());
+        assert!(!detect_info_leaks("SELECT * FROM users").is_empty());
+        assert!(detect_info_leaks(r#"{"status": "ok"}"#).is_empty());
+        assert!(detect_info_leaks("hello world").is_empty());
     }
 
     #[test]
-    fn test_has_info_leak_sql() {
-        assert!(has_info_leak("SQL syntax near 'SELECT'"));
-        assert!(has_info_leak("ORA-00942: table not found"));
+    fn test_detect_info_leak_sql() {
+        assert!(!detect_info_leaks("SQL syntax near 'SELECT'").is_empty());
+        assert!(!detect_info_leaks("ORA-00942: table not found").is_empty());
     }
 
     #[test]
-    fn test_has_info_leak_path() {
-        assert!(has_info_leak("/etc/passwd"));
-        assert!(has_info_leak("root:x:0:0:root:/root:/bin/bash"));
+    fn test_detect_info_leak_path() {
+        assert!(!detect_info_leaks("/etc/passwd").is_empty());
+        assert!(!detect_info_leaks("root:x:0:0:root:/root:/bin/bash").is_empty());
     }
 }

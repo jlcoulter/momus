@@ -116,7 +116,10 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
                     .iter()
                     .filter(|v| v.severity != "error")
                     .count();
-                let checks_failed = step_violations.len();
+                let checks_failed = step_violations
+                    .iter()
+                    .filter(|v| v.severity == "error")
+                    .count();
                 let total_checks = checks_passed + checks_failed;
                 let pct = if total_checks > 0 {
                     (checks_passed as f64 / total_checks as f64) * 100.0
@@ -158,6 +161,20 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
                 });
             }
         }
+    }
+
+    // In strict mode, fail on undocumented endpoints
+    if config.strict && !undocumented_fields.is_empty() {
+        details.push(ContractViolation {
+            endpoint: "*".to_string(),
+            method: "ANY".to_string(),
+            status: 0,
+            description: format!(
+                "Strict mode: {} undocumented field(s) found",
+                undocumented_fields.len()
+            ),
+            severity: "error".to_string(),
+        });
     }
 
     let elapsed = start.elapsed().as_secs_f64();

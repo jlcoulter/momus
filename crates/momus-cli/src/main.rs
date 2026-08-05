@@ -84,14 +84,14 @@ enum Commands {
         /// Path to the test plan JSON file.
         plan: PathBuf,
         /// Benchmark mode: steady, max-throughput, soak.
-        #[arg(long, value_enum, default_value = "steady")]
-        mode: BenchModeCli,
+        #[arg(long, value_enum)]
+        mode: Option<BenchModeCli>,
         /// Concurrency level (steady, soak).
-        #[arg(long, default_value = "10")]
-        concurrency: usize,
+        #[arg(long)]
+        concurrency: Option<usize>,
         /// Duration in seconds (steady, soak; 0 = one-shot).
-        #[arg(long, default_value = "30")]
-        duration: u64,
+        #[arg(long)]
+        duration: Option<u64>,
         /// Starting concurrency (max-throughput).
         #[arg(long)]
         min_concurrency: Option<usize>,
@@ -125,8 +125,8 @@ enum Commands {
         /// Path to the test plan JSON file.
         plan: PathBuf,
         /// Number of mutations to generate.
-        #[arg(long, default_value = "1000")]
-        iterations: usize,
+        #[arg(long)]
+        iterations: Option<usize>,
         /// Base URL override.
         #[arg(long)]
         base_url: Option<String>,
@@ -321,6 +321,25 @@ async fn main() -> Result<()> {
                 }
             }
 
+            // Apply run-specific headers (override global)
+            if !cfg.run.headers.is_empty() {
+                for (k, v) in &cfg.run.headers {
+                    test_plan
+                        .default_headers
+                        .entry(k.clone())
+                        .or_insert_with(|| v.clone());
+                }
+            }
+
+            // Use run-specific timeout, falling back to global
+            let timeout_secs = if cfg.run.timeout_secs != 30 {
+                cfg.run.timeout_secs
+            } else if cfg.global.timeout_secs != 30 {
+                cfg.global.timeout_secs
+            } else {
+                30
+            };
+
             tracing::info!(
                 "Running test plan '{}' with {} test(s) against {}",
                 test_plan.name,
@@ -328,7 +347,7 @@ async fn main() -> Result<()> {
                 test_plan.base_url
             );
 
-            let report = runner::execute_plan(&test_plan).await?;
+            let report = runner::execute_plan_with_timeout(&test_plan, timeout_secs).await?;
 
             let want_html = match format {
                 OutputFormat::Html => true,
@@ -462,11 +481,37 @@ async fn main() -> Result<()> {
             // Config precedence: CLI > [bench] section > [global] section
             let base_url = base_url.or(cfg.bench.base_url).or(cfg.global.base_url);
 
-            let bench_mode = match mode {
-                BenchModeCli::Steady => momus_bench::BenchMode::Steady {
-                    concurrency,
-                    duration_secs: duration,
-                },
+            // Config precedence: CLI > [bench] section > hardcoded defaults
+            let bench_mode = match mode.unwrap_or({
+                // If no CLI mode, try config file, then default to Steady
+                match &cfg.bench.mode {
+                    momus_bench::BenchMode::Steady { .. } => BenchModeCli::Steady,
+                    momus_bench::BenchMode::MaxThroughput { .. } => BenchModeCli::MaxThroughput,
+                    momus_bench::BenchMode::Soak { .. } => BenchModeCli::Soak,
+                }
+            }) {
+                BenchModeCli::Steady => {
+                    let concurrency = concurrency
+                        .or(match &cfg.bench.mode {
+                            momus_bench::BenchMode::Steady { concurrency, .. } => {
+                                Some(*concurrency)
+                            }
+                            _ => None,
+                        })
+                        .unwrap_or(10);
+                    let duration_secs = duration
+                        .or(match &cfg.bench.mode {
+                            momus_bench::BenchMode::Steady { duration_secs, .. } => {
+                                Some(*duration_secs)
+                            }
+                            _ => None,
+                        })
+                        .unwrap_or(30);
+                    momus_bench::BenchMode::Steady {
+                        concurrency,
+                        duration_secs,
+                    }
+                }
                 BenchModeCli::MaxThroughput => momus_bench::BenchMode::MaxThroughput {
                     min_concurrency: min_concurrency.unwrap_or(10),
                     max_concurrency: max_concurrency.unwrap_or(200),
@@ -475,10 +520,26 @@ async fn main() -> Result<()> {
                     max_error_rate: max_error_rate.unwrap_or(0.05),
                     max_p99_ms: max_p99_ms.unwrap_or(2000),
                 },
-                BenchModeCli::Soak => momus_bench::BenchMode::Soak {
-                    concurrency,
-                    duration_secs: duration,
-                },
+                BenchModeCli::Soak => {
+                    let concurrency = concurrency
+                        .or(match &cfg.bench.mode {
+                            momus_bench::BenchMode::Soak { concurrency, .. } => Some(*concurrency),
+                            _ => None,
+                        })
+                        .unwrap_or(10);
+                    let duration_secs = duration
+                        .or(match &cfg.bench.mode {
+                            momus_bench::BenchMode::Soak { duration_secs, .. } => {
+                                Some(*duration_secs)
+                            }
+                            _ => None,
+                        })
+                        .unwrap_or(30);
+                    momus_bench::BenchMode::Soak {
+                        concurrency,
+                        duration_secs,
+                    }
+                }
             };
 
             let config = momus_bench::BenchConfig {
@@ -544,9 +605,25 @@ async fn main() -> Result<()> {
                 base_url,
                 timeout_secs,
                 output: cfg.fuzz.output,
+            let fuzz_output = cfg.fuzz.output.clone();
+
+            let config = momus_fuzz::FuzzConfig {
+                iterations: iterations.unwrap_or(cfg.fuzz.iterations),
+                base_url,
+                output: fuzz_output.clone(),
+                ..Default::default()
             };
             let report = momus_fuzz::run_fuzz(&test_plan, &config).await?;
             println!("{}", report);
+            momus_core::write_report_json(&config.output, "fuzz-report.json", &report)?;
+            // Write report to output directory
+            std::fs::create_dir_all(&fuzz_output)?;
+            let report_json = serde_json::to_string_pretty(&report)?;
+            std::fs::write(fuzz_output.join("fuzz-report.json"), &report_json)?;
+            println!(
+                "\nReport written to: {}/fuzz-report.json",
+                fuzz_output.display()
+            );
             Ok(())
         }
         Commands::Chaos {
@@ -575,6 +652,7 @@ async fn main() -> Result<()> {
                     })
                     .collect::<Result<Vec<_>>>()?
             };
+            let chaos_output = cfg.chaos.output.clone();
 
             let config = momus_chaos::ChaosConfig {
                 experiments,
@@ -582,11 +660,22 @@ async fn main() -> Result<()> {
                 interval_secs,
                 timeout_secs: cfg.chaos.timeout_secs,
                 output: cfg.chaos.output,
+                output: chaos_output.clone(),
+                ..Default::default()
             };
             let reports = momus_chaos::run_chaos(&test_plan, &config).await?;
             for report in &reports {
                 println!("{}", report);
             }
+            momus_core::write_report_json(&config.output, "chaos-report.json", &reports)?;
+            // Write reports to output directory
+            std::fs::create_dir_all(&chaos_output)?;
+            let report_json = serde_json::to_string_pretty(&reports)?;
+            std::fs::write(chaos_output.join("chaos-report.json"), &report_json)?;
+            println!(
+                "\nReport written to: {}/chaos-report.json",
+                chaos_output.display()
+            );
             Ok(())
         }
         Commands::Contract {
@@ -607,6 +696,7 @@ async fn main() -> Result<()> {
                 .or(Some(cfg.contract.timeout_secs))
                 .or(Some(cfg.global.timeout_secs))
                 .unwrap_or(30);
+            let contract_output = cfg.contract.output.clone();
 
             let config = momus_contract::ContractConfig {
                 spec_path: spec,
@@ -614,9 +704,20 @@ async fn main() -> Result<()> {
                 strict,
                 timeout_secs,
                 output: cfg.contract.output,
+                output: contract_output.clone(),
+                ..Default::default()
             };
             let report = momus_contract::run_contract(&test_plan, &config).await?;
             println!("{}", report);
+            momus_core::write_report_json(&config.output, "contract-report.json", &report)?;
+            // Write report to output directory
+            std::fs::create_dir_all(&contract_output)?;
+            let report_json = serde_json::to_string_pretty(&report)?;
+            std::fs::write(contract_output.join("contract-report.json"), &report_json)?;
+            println!(
+                "\nReport written to: {}/contract-report.json",
+                contract_output.display()
+            );
             Ok(())
         }
         Commands::Guard {
@@ -647,9 +748,24 @@ async fn main() -> Result<()> {
                 check_exposed: check_exposed.unwrap_or(cfg.guard.check_exposed),
                 timeout_secs,
                 output: cfg.guard.output,
+            let guard_output = cfg.guard.output.clone();
+
+            let config = momus_guard::GuardConfig {
+                base_url,
+                output: guard_output.clone(),
+                ..Default::default()
             };
             let report = momus_guard::run_guard(&test_plan, &config).await?;
             println!("{}", report);
+            momus_core::write_report_json(&config.output, "guard-report.json", &report)?;
+            // Write report to output directory
+            std::fs::create_dir_all(&guard_output)?;
+            let report_json = serde_json::to_string_pretty(&report)?;
+            std::fs::write(guard_output.join("guard-report.json"), &report_json)?;
+            println!(
+                "\nReport written to: {}/guard-report.json",
+                guard_output.display()
+            );
             Ok(())
         }
         Commands::Diff {
@@ -670,6 +786,7 @@ async fn main() -> Result<()> {
                 .or(Some(cfg.diff.timeout_secs))
                 .or(Some(cfg.global.timeout_secs))
                 .unwrap_or(30);
+            let diff_output = cfg.diff.output.clone();
 
             let config = momus_diff::DiffConfig {
                 baseline_url: baseline,
@@ -679,9 +796,20 @@ async fn main() -> Result<()> {
                 diff_status: diff_status.unwrap_or(cfg.diff.diff_status),
                 timeout_secs,
                 output: cfg.diff.output,
+                output: diff_output.clone(),
+                ..Default::default()
             };
             let report = momus_diff::run_diff(&test_plan, &config).await?;
             println!("{}", report);
+            momus_core::write_report_json(&config.output, "diff-report.json", &report)?;
+            // Write report to output directory
+            std::fs::create_dir_all(&diff_output)?;
+            let report_json = serde_json::to_string_pretty(&report)?;
+            std::fs::write(diff_output.join("diff-report.json"), &report_json)?;
+            println!(
+                "\nReport written to: {}/diff-report.json",
+                diff_output.display()
+            );
             Ok(())
         }
         Commands::Plan { plan, output } => {

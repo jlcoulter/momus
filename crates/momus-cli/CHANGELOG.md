@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.5.0] - 2026-08-05
+
+### 🚀 Features
+
+- Add single-file config system with per-crate TOML sections
+- *(cli)* Add --mode flag to bench subcommand for MaxThroughput/Soak (#27)
+- Improve CLI and config usability
+- Add 'momus plan' subcommand to show all requests in a test plan
+- Add per-command output directory config
+
+### 🐛 Bug Fixes
+
+- Bump workspace version from 0.3.4 to 0.5.0
 ## [0.3.4] - 2026-08-05
 
 ### 🚀 Features
