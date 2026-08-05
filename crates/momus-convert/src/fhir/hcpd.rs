@@ -406,7 +406,7 @@ pub fn luhn_with_prefix(prefix: &str, total_len: usize, rng: &mut impl Rng) -> S
         double = !double;
     }
     let check = (10 - (sum % 10)) % 10;
-    format!("{}{}", base, check)
+    format!("{base}{check}")
 }
 
 /// Generate an HPI-I (Healthcare Provider Identifier - Individual) value.
@@ -863,7 +863,7 @@ mod tests {
         let s = random_digits(11, &mut rng);
         assert_eq!(s.len(), 11);
         for (i, c) in s.chars().enumerate() {
-            assert!(c.is_ascii_digit(), "char at {} should be a digit", i);
+            assert!(c.is_ascii_digit(), "char at {i} should be a digit");
         }
         // First digit should not be zero
         assert_ne!(s.chars().next().unwrap(), '0');

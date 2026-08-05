@@ -223,8 +223,7 @@ async fn run_network_latency(
         failures_during: failures,
         self_healed: true,
         details: format!(
-            "Injected {}ms delay for {}s, {} requests affected, {} failures",
-            delay_ms, duration_secs, affected, failures
+            "Injected {delay_ms}ms delay for {duration_secs}s, {affected} requests affected, {failures} failures"
         ),
     })
 }
@@ -268,8 +267,7 @@ async fn run_service_error(
         failures_during: failures,
         self_healed: true,
         details: format!(
-            "Checked endpoint {} for {}s, expected status {}, {} failures out of {} requests",
-            endpoint, duration_secs, status, failures, affected
+            "Checked endpoint {endpoint} for {duration_secs}s, expected status {status}, {failures} failures out of {affected} requests"
         ),
     })
 }
@@ -338,12 +336,12 @@ async fn run_cpu_pressure(cores: usize, duration_secs: u64) -> Result<ChaosRepor
 
     Ok(ChaosReport {
         experiment: "cpu_pressure".into(),
-        target: format!("{} cores", cores),
+        target: format!("{cores} cores"),
         duration_secs: start.elapsed().as_secs_f64(),
         requests_affected: 0,
         failures_during: 0,
         self_healed: true,
-        details: format!("Saturated {} CPU core(s) for {}s", cores, duration_secs),
+        details: format!("Saturated {cores} CPU core(s) for {duration_secs}s"),
     })
 }
 
@@ -365,12 +363,12 @@ async fn run_memory_pressure(mb: usize, duration_secs: u64) -> Result<ChaosRepor
 
     Ok(ChaosReport {
         experiment: "memory_pressure".into(),
-        target: format!("{} MB", mb),
+        target: format!("{mb} MB"),
         duration_secs: start.elapsed().as_secs_f64(),
         requests_affected: 0,
         failures_during: 0,
         self_healed: true,
-        details: format!("Allocated and held {} MB for {}s", mb, duration_secs),
+        details: format!("Allocated and held {mb} MB for {duration_secs}s"),
     })
 }
 
@@ -405,9 +403,8 @@ async fn run_connection_reset(
                 failures_during: 0,
                 self_healed: true,
                 details: format!(
-                    "Could not extract port from endpoint '{}'. \
-                     Expected format: http://host:port/path",
-                    endpoint
+                    "Could not extract port from endpoint '{endpoint}'. \
+                     Expected format: http://host:port/path"
                 ),
             });
         }
@@ -416,9 +413,8 @@ async fn run_connection_reset(
     // Use iptables statistic module for percentage-based rejection
     let probability = (reset_pct as f64).clamp(0.0, 100.0) / 100.0;
     let apply_cmd = format!(
-        "iptables -A INPUT -p tcp --dport {} -m statistic --mode random \
-         --probability {} -j REJECT --reject-with tcp-reset",
-        port, probability
+        "iptables -A INPUT -p tcp --dport {port} -m statistic --mode random \
+         --probability {probability} -j REJECT --reject-with tcp-reset"
     );
 
     if let Err(e) = run_sudo(&apply_cmd) {
@@ -430,9 +426,8 @@ async fn run_connection_reset(
             failures_during: 0,
             self_healed: false,
             details: format!(
-                "Connection reset requires iptables. Failed to apply rule: {}. \
-                 Use `sudo {}` manually.",
-                e, apply_cmd
+                "Connection reset requires iptables. Failed to apply rule: {e}. \
+                 Use `sudo {apply_cmd}` manually."
             ),
         });
     }
@@ -456,9 +451,8 @@ async fn run_connection_reset(
 
     // Remove the iptables rule
     let remove_cmd = format!(
-        "iptables -D INPUT -p tcp --dport {} -m statistic --mode random \
-         --probability {} -j REJECT --reject-with tcp-reset",
-        port, probability
+        "iptables -D INPUT -p tcp --dport {port} -m statistic --mode random \
+         --probability {probability} -j REJECT --reject-with tcp-reset"
     );
     let removal_ok = run_sudo(&remove_cmd).is_ok();
 
@@ -470,9 +464,8 @@ async fn run_connection_reset(
         failures_during: failures,
         self_healed: removal_ok,
         details: format!(
-            "Injected TCP RST on port {} ({}% reset) for {}s, \
-             {} requests affected, {} failures",
-            port, reset_pct, duration_secs, affected, failures
+            "Injected TCP RST on port {port} ({reset_pct}% reset) for {duration_secs}s, \
+             {affected} requests affected, {failures} failures"
         ),
     })
 }
@@ -493,7 +486,7 @@ async fn run_packet_loss(
     let start = Instant::now();
     let iface = detect_interface();
 
-    let apply_cmd = format!("tc qdisc add dev {} root netem loss {}%", iface, drop_pct);
+    let apply_cmd = format!("tc qdisc add dev {iface} root netem loss {drop_pct}%");
 
     if let Err(e) = run_sudo(&apply_cmd) {
         return Ok(ChaosReport {
@@ -504,9 +497,8 @@ async fn run_packet_loss(
             failures_during: 0,
             self_healed: false,
             details: format!(
-                "Packet loss requires tc netem. Failed to apply on interface '{}': {}. \
-                 Use `sudo {}` manually.",
-                iface, e, apply_cmd
+                "Packet loss requires tc netem. Failed to apply on interface '{iface}': {e}. \
+                 Use `sudo {apply_cmd}` manually."
             ),
         });
     }
@@ -529,7 +521,7 @@ async fn run_packet_loss(
     }
 
     // Remove the tc qdisc
-    let remove_cmd = format!("tc qdisc del dev {} root", iface);
+    let remove_cmd = format!("tc qdisc del dev {iface} root");
     let removal_ok = run_sudo(&remove_cmd).is_ok();
 
     Ok(ChaosReport {
@@ -540,9 +532,8 @@ async fn run_packet_loss(
         failures_during: failures,
         self_healed: removal_ok,
         details: format!(
-            "Injected {}% packet loss on interface {} for {}s, \
-             {} requests affected, {} failures",
-            drop_pct, iface, duration_secs, affected, failures
+            "Injected {drop_pct}% packet loss on interface {iface} for {duration_secs}s, \
+             {affected} requests affected, {failures} failures"
         ),
     })
 }
@@ -564,35 +555,31 @@ async fn run_clock_skew(offset_secs: i64, duration_secs: u64) -> Result<ChaosRep
         Err(e) => {
             return Ok(ChaosReport {
                 experiment: "clock_skew".into(),
-                target: format!("offset {}s", offset_secs),
+                target: format!("offset {offset_secs}s"),
                 duration_secs: 0.0,
                 requests_affected: 0,
                 failures_during: 0,
                 self_healed: true,
-                details: format!(
-                    "Failed to read current time: {}. Cannot apply clock skew.",
-                    e
-                ),
+                details: format!("Failed to read current time: {e}. Cannot apply clock skew."),
             });
         }
     };
 
     // Apply the skew
     let skewed_time = original_time + offset_secs;
-    let apply_cmd = format!("date -s '@{}'", skewed_time);
+    let apply_cmd = format!("date -s '@{skewed_time}'");
 
     if let Err(e) = run_sudo(&apply_cmd) {
         return Ok(ChaosReport {
             experiment: "clock_skew".into(),
-            target: format!("offset {}s", offset_secs),
+            target: format!("offset {offset_secs}s"),
             duration_secs: 0.0,
             requests_affected: 0,
             failures_during: 0,
             self_healed: false,
             details: format!(
-                "Clock skew requires sudo date. Failed to set clock: {}. \
-                 Use `sudo {}` manually.",
-                e, apply_cmd
+                "Clock skew requires sudo date. Failed to set clock: {e}. \
+                 Use `sudo {apply_cmd}` manually."
             ),
         });
     }
@@ -603,7 +590,7 @@ async fn run_clock_skew(offset_secs: i64, duration_secs: u64) -> Result<ChaosRep
 
     // Restore the clock — try multiple methods
     let restore_methods: &[&str] = &[
-        &format!("date -s '@{}'", original_time),
+        &format!("date -s '@{original_time}'"),
         "chronyc makestep 2>/dev/null",
         "ntpdate -u pool.ntp.org 2>/dev/null || true",
         "systemctl restart chronyd 2>/dev/null || systemctl restart ntp 2>/dev/null || true",
@@ -614,7 +601,7 @@ async fn run_clock_skew(offset_secs: i64, duration_secs: u64) -> Result<ChaosRep
     for method in restore_methods {
         if run_sudo(method).is_ok() {
             restored = true;
-            restore_details = format!("restored via: {}", method);
+            restore_details = format!("restored via: {method}");
             break;
         }
     }
@@ -622,22 +609,20 @@ async fn run_clock_skew(offset_secs: i64, duration_secs: u64) -> Result<ChaosRep
     if !restored {
         restore_details = format!(
             "WARNING: could not restore clock automatically. \
-             Original timestamp was {}. \
-             Use `sudo date -s '@{}'` to restore manually.",
-            original_time, original_time
+             Original timestamp was {original_time}. \
+             Use `sudo date -s '@{original_time}'` to restore manually."
         );
     }
 
     Ok(ChaosReport {
         experiment: "clock_skew".into(),
-        target: format!("offset {}s", offset_secs),
+        target: format!("offset {offset_secs}s"),
         duration_secs: start.elapsed().as_secs_f64(),
         requests_affected: 0,
         failures_during: 0,
         self_healed: restored,
         details: format!(
-            "Skewed clock by {}s ({} -> {}) for {}s. {}",
-            offset_secs, original_time, skewed_time, duration_secs, restore_details
+            "Skewed clock by {offset_secs}s ({original_time} -> {skewed_time}) for {duration_secs}s. {restore_details}"
         ),
     })
 }
@@ -716,6 +701,6 @@ mod tests {
         );
         let ts = ts.unwrap();
         // Should be a reasonable recent timestamp (2020-01-01 = 1577836800)
-        assert!(ts > 1577836800, "Timestamp {} should be after 2020", ts);
+        assert!(ts > 1577836800, "Timestamp {ts} should be after 2020");
     }
 }

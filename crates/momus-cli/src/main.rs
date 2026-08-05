@@ -9,6 +9,7 @@ use std::path::PathBuf;
 enum OutputFormat {
     Auto,
     Html,
+    Junit,
     Text,
 }
 
@@ -297,7 +298,7 @@ async fn main() -> Result<()> {
         } => {
             let content = read_plan_content(&plan)?;
             let mut test_plan: TestPlan = serde_json::from_str(&content)
-                .with_context(|| format!("Failed to parse test plan '{}'", plan))?;
+                .with_context(|| format!("Failed to parse test plan '{plan}'"))?;
 
             // Config precedence: CLI > [run] section > [global] section
             if let Some(url) = base_url.or(cfg.run.base_url).or(cfg.global.base_url) {
@@ -349,17 +350,38 @@ async fn main() -> Result<()> {
 
             let report = runner::execute_plan_with_timeout(&test_plan, timeout_secs).await?;
 
-            let want_html = match format {
-                OutputFormat::Html => true,
+            let want_junit = match format {
+                OutputFormat::Junit => true,
+                OutputFormat::Html => false,
                 OutputFormat::Text => false,
                 OutputFormat::Auto => output
                     .extension()
                     .and_then(|e| e.to_str())
-                    .map(|e| e == "html")
+                    .map(|e| e == "xml")
                     .unwrap_or(false),
             };
 
-            if want_html {
+            let want_html = if want_junit {
+                false
+            } else {
+                match format {
+                    OutputFormat::Html => true,
+                    OutputFormat::Text => false,
+                    OutputFormat::Auto => output
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| e == "html")
+                        .unwrap_or(false),
+                    OutputFormat::Junit => false,
+                }
+            };
+
+            if want_junit {
+                std::fs::create_dir_all(&output)?;
+                report.write_junit_xml(&output)?;
+                let junit_path = output.join("junit.xml");
+                println!("JUnit XML report written to: {}", junit_path.display());
+            } else if want_html {
                 let html = report.to_html();
                 if output.extension().and_then(|e| e.to_str()) == Some("html") {
                     // --output is a file path
@@ -374,7 +396,7 @@ async fn main() -> Result<()> {
                     println!("HTML report written to: {}", html_path.display());
                 }
             } else {
-                println!("{}", report);
+                println!("{report}");
             }
 
             // Write per-group results to output/results/
@@ -392,7 +414,7 @@ async fn main() -> Result<()> {
         Commands::Validate { plan } => {
             let content = read_plan_content(&plan)?;
             let test_plan: TestPlan = serde_json::from_str(&content)
-                .with_context(|| format!("Failed to parse test plan '{}'", plan))?;
+                .with_context(|| format!("Failed to parse test plan '{plan}'"))?;
             println!("✓ Valid test plan: '{}'", test_plan.name);
             println!("  Total tests: {}", test_plan.total_tests());
             println!("  Steps: {}", test_plan.steps.len());
@@ -406,13 +428,13 @@ async fn main() -> Result<()> {
         }
         Commands::Mock { port } => {
             let addr = if port > 0 {
-                format!("0.0.0.0:{}", port)
+                format!("0.0.0.0:{port}")
             } else {
                 "0.0.0.0:0".into()
             };
             let listener = tokio::net::TcpListener::bind(&addr).await?;
             let local_addr = listener.local_addr()?;
-            println!("Momus mock server listening on http://{}", local_addr);
+            println!("Momus mock server listening on http://{local_addr}");
             println!("All requests return 200 with 'status: ok'");
             println!("Press Ctrl+C to stop.");
 
@@ -442,7 +464,7 @@ async fn main() -> Result<()> {
                 None => {
                     // Derive output filename from input (except curl, which is a raw command)
                     if format == "curl" {
-                        println!("{}", json);
+                        println!("{json}");
                         return Ok(());
                     }
                     let input_path = std::path::Path::new(&input);
@@ -451,7 +473,7 @@ async fn main() -> Result<()> {
                         .and_then(|s| s.to_str())
                         .unwrap_or("test_plan");
                     let parent = std::path::Path::new(".");
-                    parent.join(format!("{}.momus.json", stem))
+                    parent.join(format!("{stem}.momus.json"))
                 }
             };
             std::fs::write(&path, json)?;
@@ -552,6 +574,7 @@ async fn main() -> Result<()> {
 
             let want_html = match format {
                 OutputFormat::Html => true,
+                OutputFormat::Junit => false,
                 OutputFormat::Text => false,
                 OutputFormat::Auto => output
                     .as_ref()
@@ -569,10 +592,10 @@ async fn main() -> Result<()> {
                     println!("HTML report written to: {}", path.display());
                 } else {
                     // stdout — just print the HTML
-                    println!("{}", html);
+                    println!("{html}");
                 }
             } else {
-                println!("{}", report);
+                println!("{report}");
             }
 
             Ok(())
@@ -599,7 +622,7 @@ async fn main() -> Result<()> {
                 ..Default::default()
             };
             let report = momus_fuzz::run_fuzz(&test_plan, &config).await?;
-            println!("{}", report);
+            println!("{report}");
 
             // Write report to output directory
             std::fs::create_dir_all(&fuzz_output)?;
@@ -648,7 +671,7 @@ async fn main() -> Result<()> {
             };
             let reports = momus_chaos::run_chaos(&test_plan, &config).await?;
             for report in &reports {
-                println!("{}", report);
+                println!("{report}");
             }
 
             // Write reports to output directory
@@ -689,7 +712,7 @@ async fn main() -> Result<()> {
                 output: contract_output.clone(),
             };
             let report = momus_contract::run_contract(&test_plan, &config).await?;
-            println!("{}", report);
+            println!("{report}");
 
             // Write report to output directory
             std::fs::create_dir_all(&contract_output)?;
@@ -724,7 +747,7 @@ async fn main() -> Result<()> {
                 ..Default::default()
             };
             let report = momus_guard::run_guard(&test_plan, &config).await?;
-            println!("{}", report);
+            println!("{report}");
 
             // Write report to output directory
             std::fs::create_dir_all(&guard_output)?;
@@ -766,7 +789,7 @@ async fn main() -> Result<()> {
                 output: diff_output.clone(),
             };
             let report = momus_diff::run_diff(&test_plan, &config).await?;
-            println!("{}", report);
+            println!("{report}");
 
             // Write report to output directory
             std::fs::create_dir_all(&diff_output)?;
@@ -781,7 +804,7 @@ async fn main() -> Result<()> {
         Commands::Plan { plan, output } => {
             let content = read_plan_content(&plan)?;
             let test_plan: TestPlan = serde_json::from_str(&content)
-                .with_context(|| format!("Failed to parse test plan '{}'", plan))?;
+                .with_context(|| format!("Failed to parse test plan '{plan}'"))?;
 
             // CLI --output overrides config file output
             let output = if output.to_str() != Some("./output") {
@@ -925,7 +948,7 @@ async fn main() -> Result<()> {
                     println!("✓ Skeleton config written to: {}", path.display());
                 }
                 other => {
-                    anyhow::bail!("Unknown template '{}'. Available: plan, config", other);
+                    anyhow::bail!("Unknown template '{other}'. Available: plan, config");
                 }
             }
             Ok(())
@@ -954,8 +977,7 @@ fn read_plan_content(plan: &str) -> Result<String> {
         std::io::stdin().read_to_string(&mut buf)?;
         Ok(buf)
     } else {
-        std::fs::read_to_string(plan)
-            .with_context(|| format!("Failed to read plan file '{}'", plan))
+        std::fs::read_to_string(plan).with_context(|| format!("Failed to read plan file '{plan}'"))
     }
 }
 
@@ -983,7 +1005,7 @@ fn load_config(explicit: Option<&str>) -> Result<MomusConfig> {
     match path {
         Some(p) => {
             tracing::debug!("Loading config from: {}", p);
-            MomusConfig::load(&p).with_context(|| format!("Failed to parse config file '{}'", p))
+            MomusConfig::load(&p).with_context(|| format!("Failed to parse config file '{p}'"))
         }
         None => Ok(MomusConfig::default()),
     }

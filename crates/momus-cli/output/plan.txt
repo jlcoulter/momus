@@ -1,0 +1,7 @@
+Plan: display-test
+Base URL: http://localhost:9999
+
+── Tests ──
+GET  /ping
+
+Total requests: 1 (0 setup, 1 tests, 0 teardown)
