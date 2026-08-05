@@ -49,6 +49,40 @@ pub fn convert(command: &str) -> Result<TestPlan> {
     })
 }
 
+/// Generate seed data setup steps from a cURL command.
+///
+/// If the command is a POST or PUT with a body, generates a setup step
+/// that creates the resource before running the main test.
+pub fn generate_seed_data(command: &str) -> Result<Vec<Step>> {
+    let args = parse_curl_command(command)?;
+    let (method, url, _headers, body) = extract_request_parts(&args)?;
+
+    if method != "POST" && method != "PUT" {
+        return Ok(vec![]);
+    }
+
+    if let Some(body) = body {
+        let http_method = if method == "POST" {
+            Method::Post
+        } else {
+            Method::Put
+        };
+        let expected_status = if method == "POST" { 201 } else { 200 };
+        Ok(vec![Step::Request(RequestStep {
+            name: format!("seed_{}", method.to_lowercase()),
+            method: http_method,
+            url,
+            headers: HashMap::new(),
+            body: Some(body),
+            assert: vec![Assertion::Status(expected_status)],
+            save_as: String::new(),
+            soft_fail: true,
+        })])
+    } else {
+        Ok(vec![])
+    }
+}
+
 /// Parse a curl command string into a list of tokens.
 fn parse_curl_command(command: &str) -> Result<Vec<String>> {
     let trimmed = command.trim();

@@ -31,7 +31,7 @@ pub fn convert(path: &str) -> Result<TestPlan> {
         for method in methods {
             let grpc_url = build_grpc_url(&package, service_name, method);
             let step = RequestStep {
-                name: format!("rpc_{}_{}", service_name, method),
+                name: format!("rpc_{service_name}_{method}"),
                 method: Method::Post,
                 url: grpc_url,
                 headers: {
@@ -40,7 +40,7 @@ pub fn convert(path: &str) -> Result<TestPlan> {
                     h
                 },
                 body: Some(serde_json::json!({
-                    "note": format!("gRPC method: {}.{} / {}", package, service_name, method),
+                    "note": format!("gRPC method: {package}.{service_name} / {method}"),
                     "proto_file": path.rsplit('/').next().unwrap_or(path),
                 })),
                 assert: vec![Assertion::Status(200)],
@@ -67,6 +67,15 @@ pub fn convert(path: &str) -> Result<TestPlan> {
         setup: vec![],
         teardown: vec![],
     })
+}
+
+/// Generate seed data setup steps from a gRPC .proto file.
+///
+/// gRPC seed data is limited since we can't generate protobuf payloads
+/// from the .proto alone. Returns an empty vec — users should provide
+/// seed data via other means for gRPC endpoints.
+pub fn generate_seed_data(_path: &str) -> Result<Vec<Step>> {
+    Ok(vec![])
 }
 
 /// Extract the `package` declaration from a .proto file.
