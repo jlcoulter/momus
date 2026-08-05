@@ -1,12 +1,21 @@
 {
-  "release-type": "rust",
+  "release-type": "simple",
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "packages": {
     ".": {
-      "release-type": "rust",
+      "release-type": "simple",
       "extra-files": [
-        "Cargo.toml"
+        {
+          "type": "generic",
+          "path": "Cargo.toml",
+          "edits": [
+            {
+              "search": "version = \"0\\.3\\.0\"",
+              "replacement": "version = \"{{ version }}\""
+            }
+          ]
+        }
       ]
     }
   }
