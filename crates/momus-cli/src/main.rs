@@ -267,6 +267,25 @@ async fn main() -> Result<()> {
                 }
             }
 
+            // Apply run-specific headers (override global)
+            if !cfg.run.headers.is_empty() {
+                for (k, v) in &cfg.run.headers {
+                    test_plan
+                        .default_headers
+                        .entry(k.clone())
+                        .or_insert_with(|| v.clone());
+                }
+            }
+
+            // Use run-specific timeout, falling back to global
+            let timeout_secs = if cfg.run.timeout_secs != 30 {
+                cfg.run.timeout_secs
+            } else if cfg.global.timeout_secs != 30 {
+                cfg.global.timeout_secs
+            } else {
+                30
+            };
+
             tracing::info!(
                 "Running test plan '{}' with {} test(s) against {}",
                 test_plan.name,
@@ -274,7 +293,7 @@ async fn main() -> Result<()> {
                 test_plan.base_url
             );
 
-            let report = runner::execute_plan(&test_plan).await?;
+            let report = runner::execute_plan_with_timeout(&test_plan, timeout_secs).await?;
 
             let want_html = match format {
                 OutputFormat::Html => true,
@@ -515,15 +534,24 @@ async fn main() -> Result<()> {
                 .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.fuzz.base_url).or(cfg.global.base_url);
+            let fuzz_output = cfg.fuzz.output.clone();
 
             let config = momus_fuzz::FuzzConfig {
                 iterations: iterations.unwrap_or(cfg.fuzz.iterations),
                 base_url,
-                output: cfg.fuzz.output,
+                output: fuzz_output.clone(),
                 ..Default::default()
             };
             let report = momus_fuzz::run_fuzz(&test_plan, &config).await?;
             println!("{}", report);
+            // Write report to output directory
+            std::fs::create_dir_all(&fuzz_output)?;
+            let report_json = serde_json::to_string_pretty(&report)?;
+            std::fs::write(fuzz_output.join("fuzz-report.json"), &report_json)?;
+            println!(
+                "\nReport written to: {}/fuzz-report.json",
+                fuzz_output.display()
+            );
             Ok(())
         }
         Commands::Chaos { plan, base_url } => {
@@ -533,16 +561,25 @@ async fn main() -> Result<()> {
                 .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.chaos.base_url).or(cfg.global.base_url);
+            let chaos_output = cfg.chaos.output.clone();
 
             let config = momus_chaos::ChaosConfig {
                 base_url,
-                output: cfg.chaos.output,
+                output: chaos_output.clone(),
                 ..Default::default()
             };
             let reports = momus_chaos::run_chaos(&test_plan, &config).await?;
             for report in &reports {
                 println!("{}", report);
             }
+            // Write reports to output directory
+            std::fs::create_dir_all(&chaos_output)?;
+            let report_json = serde_json::to_string_pretty(&reports)?;
+            std::fs::write(chaos_output.join("chaos-report.json"), &report_json)?;
+            println!(
+                "\nReport written to: {}/chaos-report.json",
+                chaos_output.display()
+            );
             Ok(())
         }
         Commands::Contract {
@@ -556,15 +593,24 @@ async fn main() -> Result<()> {
                 .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.contract.base_url).or(cfg.global.base_url);
+            let contract_output = cfg.contract.output.clone();
 
             let config = momus_contract::ContractConfig {
                 spec_path: spec,
                 base_url,
-                output: cfg.contract.output,
+                output: contract_output.clone(),
                 ..Default::default()
             };
             let report = momus_contract::run_contract(&test_plan, &config).await?;
             println!("{}", report);
+            // Write report to output directory
+            std::fs::create_dir_all(&contract_output)?;
+            let report_json = serde_json::to_string_pretty(&report)?;
+            std::fs::write(contract_output.join("contract-report.json"), &report_json)?;
+            println!(
+                "\nReport written to: {}/contract-report.json",
+                contract_output.display()
+            );
             Ok(())
         }
         Commands::Guard { plan, base_url } => {
@@ -574,14 +620,23 @@ async fn main() -> Result<()> {
                 .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.guard.base_url).or(cfg.global.base_url);
+            let guard_output = cfg.guard.output.clone();
 
             let config = momus_guard::GuardConfig {
                 base_url,
-                output: cfg.guard.output,
+                output: guard_output.clone(),
                 ..Default::default()
             };
             let report = momus_guard::run_guard(&test_plan, &config).await?;
             println!("{}", report);
+            // Write report to output directory
+            std::fs::create_dir_all(&guard_output)?;
+            let report_json = serde_json::to_string_pretty(&report)?;
+            std::fs::write(guard_output.join("guard-report.json"), &report_json)?;
+            println!(
+                "\nReport written to: {}/guard-report.json",
+                guard_output.display()
+            );
             Ok(())
         }
         Commands::Diff {
@@ -594,14 +649,24 @@ async fn main() -> Result<()> {
             let test_plan: TestPlan = serde_json::from_str(&content)
                 .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
+            let diff_output = cfg.diff.output.clone();
+
             let config = momus_diff::DiffConfig {
                 baseline_url: baseline,
                 target_url: target,
-                output: cfg.diff.output,
+                output: diff_output.clone(),
                 ..Default::default()
             };
             let report = momus_diff::run_diff(&test_plan, &config).await?;
             println!("{}", report);
+            // Write report to output directory
+            std::fs::create_dir_all(&diff_output)?;
+            let report_json = serde_json::to_string_pretty(&report)?;
+            std::fs::write(diff_output.join("diff-report.json"), &report_json)?;
+            println!(
+                "\nReport written to: {}/diff-report.json",
+                diff_output.display()
+            );
             Ok(())
         }
         Commands::Plan { plan, output } => {
