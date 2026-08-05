@@ -101,7 +101,10 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
                     .iter()
                     .filter(|v| v.severity != "error")
                     .count();
-                let checks_failed = step_violations.len();
+                let checks_failed = step_violations
+                    .iter()
+                    .filter(|v| v.severity == "error")
+                    .count();
                 let total_checks = checks_passed + checks_failed;
                 let pct = if total_checks > 0 {
                     (checks_passed as f64 / total_checks as f64) * 100.0
