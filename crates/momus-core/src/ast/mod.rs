@@ -53,6 +53,16 @@ impl TestPlan {
         self.steps.iter().map(|s| s.count_tests()).sum()
     }
 
+    /// Collect all `RequestStep` references from the plan, recursing into
+    /// Sequence and Parallel containers. Includes setup, steps, and teardown.
+    pub fn request_steps(&self) -> Vec<&RequestStep> {
+        let mut result = Vec::new();
+        collect_request_steps(&self.setup, &mut result);
+        collect_request_steps(&self.steps, &mut result);
+        collect_request_steps(&self.teardown, &mut result);
+        result
+    }
+
     /// Print a human-readable tree of all requests in the plan.
     pub fn display_plan(&self) -> String {
         let mut out = String::new();
@@ -192,6 +202,18 @@ impl Step {
                 }
                 0
             }
+        }
+    }
+}
+
+/// Recursively collect `RequestStep` references from a slice of steps.
+pub(crate) fn collect_request_steps<'a>(steps: &'a [Step], result: &mut Vec<&'a RequestStep>) {
+    for step in steps {
+        match step {
+            Step::Request(req) => result.push(req),
+            Step::Sequence(seq) => collect_request_steps(&seq.steps, result),
+            Step::Parallel(children) => collect_request_steps(children, result),
+            _ => {}
         }
     }
 }

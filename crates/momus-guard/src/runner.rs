@@ -1,7 +1,7 @@
 use crate::config::GuardConfig;
 use crate::report::{GuardIssue, GuardReport};
 use anyhow::Result;
-use momus_core::ast::{Step, TestPlan};
+use momus_core::ast::TestPlan;
 use momus_core::leak::detect_info_leaks;
 use std::time::Instant;
 
@@ -137,29 +137,20 @@ impl CheckResult {
 
 /// Collect all unique URLs from a test plan.
 fn collect_plan_urls(plan: &TestPlan, base_url: &str) -> Vec<String> {
-    let mut urls = Vec::new();
-    collect_from_steps(&plan.steps, base_url, &mut urls);
+    let mut urls: Vec<String> = plan
+        .request_steps()
+        .into_iter()
+        .map(|req| {
+            if req.url.starts_with("http") {
+                req.url.clone()
+            } else {
+                format!("{}{}", base_url, req.url)
+            }
+        })
+        .collect();
     urls.sort();
     urls.dedup();
     urls
-}
-
-fn collect_from_steps(steps: &[Step], base_url: &str, urls: &mut Vec<String>) {
-    for step in steps {
-        match step {
-            Step::Request(req) => {
-                let url = if req.url.starts_with("http") {
-                    req.url.clone()
-                } else {
-                    format!("{}{}", base_url, req.url)
-                };
-                urls.push(url);
-            }
-            Step::Sequence(seq) => collect_from_steps(&seq.steps, base_url, urls),
-            Step::Parallel(children) => collect_from_steps(children, base_url, urls),
-            _ => {}
-        }
-    }
 }
 
 /// Check for missing security headers.
