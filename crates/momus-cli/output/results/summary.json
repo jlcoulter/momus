@@ -1,0 +1,15 @@
+{
+  "duration_ms": 3,
+  "failed": 0,
+  "groups": [
+    {
+      "failed": 0,
+      "name": "override-test",
+      "passed": 1,
+      "total": 1
+    }
+  ],
+  "passed": 1,
+  "plan": "override-test",
+  "total": 1
+}

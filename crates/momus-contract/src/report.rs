@@ -119,8 +119,7 @@ impl std::fmt::Display for ContractReport {
             writeln!(f)?;
             writeln!(
                 f,
-                "  Field Coverage: {:.0}% ({}/{})",
-                coverage_pct, exercised, total
+                "  Field Coverage: {coverage_pct:.0}% ({exercised}/{total})"
             )?;
         }
 
@@ -133,7 +132,7 @@ impl std::fmt::Display for ContractReport {
                 self.undocumented_fields.len()
             )?;
             for field in &self.undocumented_fields {
-                writeln!(f, "    - {}", field)?;
+                writeln!(f, "    - {field}")?;
             }
         }
 

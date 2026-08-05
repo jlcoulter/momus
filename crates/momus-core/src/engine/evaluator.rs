@@ -118,12 +118,9 @@ pub fn evaluate_assertion(
 
         Assertion::StatusIn(codes) => {
             if codes.contains(&status_code) {
-                AssertionResult::pass(format!("status in {:?}", codes))
+                AssertionResult::pass(format!("status in {codes:?}"))
             } else {
-                AssertionResult::fail(
-                    format!("status in {:?}", codes),
-                    format!("got {status_code}"),
-                )
+                AssertionResult::fail(format!("status in {codes:?}"), format!("got {status_code}"))
             }
         }
 
@@ -312,7 +309,7 @@ fn evaluate_value_predicate(
             if actual.is_none() {
                 AssertionResult::pass(format!("{desc} is absent"))
             } else {
-                AssertionResult::fail(format!("{desc} is absent"), format!("got '{:?}'", actual))
+                AssertionResult::fail(format!("{desc} is absent"), format!("got '{actual:?}'"))
             }
         }
     }
