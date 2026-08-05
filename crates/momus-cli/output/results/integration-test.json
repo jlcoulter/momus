@@ -9,15 +9,15 @@
       "passed": true,
       "status_code": 200,
       "request_method": "GET",
-      "request_url": "http://127.0.0.1:40121/health",
+      "request_url": "http://127.0.0.1:34231/health",
       "request_headers": {
         "Accept": "application/json"
       },
       "request_body": null,
       "response_headers": {
-        "content-type": "application/json",
         "content-length": "15",
-        "date": "Wed, 05 Aug 2026 07:49:20 GMT"
+        "date": "Wed, 05 Aug 2026 09:52:48 GMT",
+        "content-type": "application/json"
       },
       "response_body": {
         "status": "ok"

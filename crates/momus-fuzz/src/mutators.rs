@@ -302,7 +302,7 @@ impl MutationStrategy for UnicodeNormalizationStrategy {
                 1 => {
                     let zw = Self::zero_width_payloads()
                         [rng.next() as usize % Self::zero_width_payloads().len()];
-                    Value::String(format!("{}{}", s, zw))
+                    Value::String(format!("{s}{zw}"))
                 }
                 2 => Value::String(
                     Self::bidi_payloads()[rng.next() as usize % Self::bidi_payloads().len()]
@@ -372,17 +372,17 @@ impl MutationStrategy for FormatStringInjectionStrategy {
                 0 => {
                     let fmt = Self::format_payloads()
                         [rng.next() as usize % Self::format_payloads().len()];
-                    Value::String(format!("{}{}", s, fmt))
+                    Value::String(format!("{s}{fmt}"))
                 }
                 1 => {
                     let ph = Self::placeholder_payloads()
                         [rng.next() as usize % Self::placeholder_payloads().len()];
-                    Value::String(format!("{}{}", s, ph))
+                    Value::String(format!("{s}{ph}"))
                 }
                 2 => {
                     let br = Self::backreference_payloads()
                         [rng.next() as usize % Self::backreference_payloads().len()];
-                    Value::String(format!("{}{}", s, br))
+                    Value::String(format!("{s}{br}"))
                 }
                 _ => Value::String(s.to_string()),
             },
