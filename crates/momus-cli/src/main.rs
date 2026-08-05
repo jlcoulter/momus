@@ -581,8 +581,8 @@ async fn main() -> Result<()> {
             plan,
             iterations,
             base_url,
-            mutators,
-            timeout,
+            mutators: _mutators,
+            timeout: _timeout,
         } => {
             let content = std::fs::read_to_string(&plan)
                 .with_context(|| format!("Failed to read plan file '{}'", plan.display()))?;
@@ -590,21 +590,6 @@ async fn main() -> Result<()> {
                 .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.fuzz.base_url).or(cfg.global.base_url);
-            let timeout_secs = timeout
-                .or(Some(cfg.fuzz.timeout_secs))
-                .or(Some(cfg.global.timeout_secs))
-                .unwrap_or(30);
-
-            let config = momus_fuzz::FuzzConfig {
-                iterations,
-                mutators: if mutators.is_empty() {
-                    cfg.fuzz.mutators.clone()
-                } else {
-                    mutators
-                },
-                base_url,
-                timeout_secs,
-                output: cfg.fuzz.output,
             let fuzz_output = cfg.fuzz.output.clone();
 
             let config = momus_fuzz::FuzzConfig {
@@ -615,7 +600,7 @@ async fn main() -> Result<()> {
             };
             let report = momus_fuzz::run_fuzz(&test_plan, &config).await?;
             println!("{}", report);
-            momus_core::write_report_json(&config.output, "fuzz-report.json", &report)?;
+
             // Write report to output directory
             std::fs::create_dir_all(&fuzz_output)?;
             let report_json = serde_json::to_string_pretty(&report)?;
@@ -659,7 +644,6 @@ async fn main() -> Result<()> {
                 base_url,
                 interval_secs,
                 timeout_secs: cfg.chaos.timeout_secs,
-                output: cfg.chaos.output,
                 output: chaos_output.clone(),
                 ..Default::default()
             };
@@ -667,7 +651,7 @@ async fn main() -> Result<()> {
             for report in &reports {
                 println!("{}", report);
             }
-            momus_core::write_report_json(&config.output, "chaos-report.json", &reports)?;
+
             // Write reports to output directory
             std::fs::create_dir_all(&chaos_output)?;
             let report_json = serde_json::to_string_pretty(&reports)?;
@@ -703,13 +687,12 @@ async fn main() -> Result<()> {
                 base_url,
                 strict,
                 timeout_secs,
-                output: cfg.contract.output,
                 output: contract_output.clone(),
                 ..Default::default()
             };
             let report = momus_contract::run_contract(&test_plan, &config).await?;
             println!("{}", report);
-            momus_core::write_report_json(&config.output, "contract-report.json", &report)?;
+
             // Write report to output directory
             std::fs::create_dir_all(&contract_output)?;
             let report_json = serde_json::to_string_pretty(&report)?;
@@ -723,11 +706,11 @@ async fn main() -> Result<()> {
         Commands::Guard {
             plan,
             base_url,
-            check_headers,
-            check_cors,
-            check_leaks,
-            check_exposed,
-            timeout,
+            check_headers: _check_headers,
+            check_cors: _check_cors,
+            check_leaks: _check_leaks,
+            check_exposed: _check_exposed,
+            timeout: _timeout,
         } => {
             let content = std::fs::read_to_string(&plan)
                 .with_context(|| format!("Failed to read plan file '{}'", plan.display()))?;
@@ -735,19 +718,6 @@ async fn main() -> Result<()> {
                 .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.guard.base_url).or(cfg.global.base_url);
-            let timeout_secs = timeout
-                .or(Some(cfg.guard.timeout_secs))
-                .or(Some(cfg.global.timeout_secs))
-                .unwrap_or(30);
-
-            let config = momus_guard::GuardConfig {
-                base_url,
-                check_headers: check_headers.unwrap_or(cfg.guard.check_headers),
-                check_cors: check_cors.unwrap_or(cfg.guard.check_cors),
-                check_leaks: check_leaks.unwrap_or(cfg.guard.check_leaks),
-                check_exposed: check_exposed.unwrap_or(cfg.guard.check_exposed),
-                timeout_secs,
-                output: cfg.guard.output,
             let guard_output = cfg.guard.output.clone();
 
             let config = momus_guard::GuardConfig {
@@ -757,7 +727,7 @@ async fn main() -> Result<()> {
             };
             let report = momus_guard::run_guard(&test_plan, &config).await?;
             println!("{}", report);
-            momus_core::write_report_json(&config.output, "guard-report.json", &report)?;
+
             // Write report to output directory
             std::fs::create_dir_all(&guard_output)?;
             let report_json = serde_json::to_string_pretty(&report)?;
@@ -795,13 +765,12 @@ async fn main() -> Result<()> {
                 diff_bodies: diff_bodies.unwrap_or(cfg.diff.diff_bodies),
                 diff_status: diff_status.unwrap_or(cfg.diff.diff_status),
                 timeout_secs,
-                output: cfg.diff.output,
                 output: diff_output.clone(),
                 ..Default::default()
             };
             let report = momus_diff::run_diff(&test_plan, &config).await?;
             println!("{}", report);
-            momus_core::write_report_json(&config.output, "diff-report.json", &report)?;
+
             // Write report to output directory
             std::fs::create_dir_all(&diff_output)?;
             let report_json = serde_json::to_string_pretty(&report)?;
