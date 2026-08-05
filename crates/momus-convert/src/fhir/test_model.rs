@@ -255,6 +255,11 @@ pub enum TestCaseKind {
         param: String,
         chain: String,
     },
+    SearchHas {
+        param: String,
+        has_param: String,
+        has_value: String,
+    },
     Include {
         param: String,
         revinclude: bool,

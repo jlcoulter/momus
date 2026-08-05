@@ -212,27 +212,28 @@ This document catalogs every feature across all momus crates, organized by imple
 || MustSupport optional field population | 🧪 | Simplified — missing nested depth 2+ |
 || Type-specific value generation | ✅ | Ported (HumanName, Address, etc.) |
 || Value set resolution | ✅ | Ported (ValueSet/CodeSystem maps) |
-|| Generate test plan from CapabilityStatement | ✅ | Ported |
-|| CRUD test generation | ✅ | Ported |
-|| Search test generation (single, modifiers, prefixes) | ✅ | Ported |
-|| Near/proximity search tests | ✅ | Ported |
-|| Combinatorial search tests | ✅ | Ported |
-|| Chained search tests | ✅ | Ported |
-|| Include/revinclude tests | ✅ | Ported |
-|| Result param tests (_summary, _elements, _count, _sort, _has) | ✅ | Ported |
-|| Operation tests ($operation) | ✅ | Ported |
-|| Negative tests | ✅ | Ported |
-|| Conformance tests (mustSupport) | ✅ | Ported |
-|| Bulk data generation (NDJSON) | ✅ | Ported |
-|| Bulk data upload with wave ordering | ✅ | Ported |
-|| HCPD/AU-specific generation | ✅ | Ported |
-|| Locality/suburb generation | ✅ | Ported (65 Australian suburbs) |
-|| Profile validation against StructureDefinition | ✅ | Ported |
-|| Response assertion engine | ✅ | Ported |
-|| Field value extraction for test URLs | ❌ | `value_resolver.rs` not ported |
-|| FHIR-specific config (TestConfig) | ❌ | Not ported — uses generic `RunConfig` |
-|| End-to-end orchestrator pipeline | ❌ | Not ported — momus-core has generic runner |
-|| Test helpers (IG package builder) | ❌ | Not ported |
+||| Generate test plan from CapabilityStatement | ✅ | Ported |
+||| CRUD test generation | ✅ | Ported |
+||| Search test generation (single, modifiers, prefixes) | ✅ | Ported |
+||| Near/proximity search tests | ✅ | Ported |
+||| Combinatorial search tests (all pairs) | ✅ | Ported — expanded to all C(n,2) pairs |
+||| Chained search tests | ✅ | Ported |
+||| Reverse chaining (_has) search tests | ✅ | New — generates _has tests for reference params |
+||| Include/revinclude tests | ✅ | Ported |
+||| Result param tests (_summary, _elements, _count, _sort, _has, _filter, _tag, _profile, _security, _type, _language) | ✅ | Ported — expanded from 4 to 11 result param tests |
+||| Operation tests ($operation) | ✅ | Ported |
+||| Negative tests | ✅ | Ported |
+||| Conformance tests (mustSupport) | ✅ | Ported |
+||| Bulk data generation (NDJSON) | ✅ | Ported |
+||| Bulk data upload with wave ordering | ✅ | Ported |
+||| HCPD/AU-specific generation | ✅ | Ported |
+||| Locality/suburb generation | ✅ | Ported (65 Australian suburbs) |
+||| Profile validation against StructureDefinition | ✅ | Ported |
+||| Response assertion engine | ✅ | Ported |
+||| Field value extraction for test URLs | ✅ | `value_resolver.rs` now wired into planner — replaces {value}/{id} placeholders |
+||| FHIR-specific config (TestConfig) | ❌ | Not ported — uses generic `RunConfig` |
+||| End-to-end orchestrator pipeline | ❌ | Not ported — momus-core has generic runner |
+||| Test helpers (IG package builder) | ❌ | Not ported |
 
 ---
 
