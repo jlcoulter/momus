@@ -69,7 +69,7 @@ pub async fn upload_ndjson_files(
     let mut all_ids: HashMap<String, Vec<String>> = HashMap::new();
 
     for resource_type in creation_order {
-        let file_path = data_dir.join(format!("{}.ndjson", resource_type));
+        let file_path = data_dir.join(format!("{resource_type}.ndjson"));
         if !file_path.exists() {
             tracing::warn!("NDJSON file not found: {:?}", file_path);
             continue;
@@ -256,9 +256,9 @@ fn collect_same_type_refs(value: &serde_json::Value, resource_type: &str, out: &
             for (key, val) in map {
                 if key == "reference" {
                     if let Some(s) = val.as_str()
-                        && s.starts_with(&format!("{}/", resource_type))
+                        && s.starts_with(&format!("{resource_type}/"))
                     {
-                        let id = s.trim_start_matches(&format!("{}/", resource_type));
+                        let id = s.trim_start_matches(&format!("{resource_type}/"));
                         if !id.is_empty() {
                             out.push(id.to_string());
                         }
@@ -355,7 +355,7 @@ pub async fn delete_all_resources(
                             )
                         }
                     }
-                    Err(e) => anyhow::bail!("Failed to delete {}: {}", url, e),
+                    Err(e) => anyhow::bail!("Failed to delete {url}: {e}"),
                 }
             });
         }
