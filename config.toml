@@ -1,11 +1,18 @@
 # Momus Configuration
 #
-# This is the global config file for momus. It is loaded by the CLI
-# when the --config flag is provided. CLI flags override these values.
+# This is the global config file for momus. It is auto-discovered from:
+#   1. --config <path> (explicit)
+#   2. $MOMUS_CONFIG (env var)
+#   3. ./momus.toml
+#   4. ./.momus.toml
+#   5. ~/.config/momus/config.toml
+#
+# CLI flags override these values.
 #
 # Usage:
+#   momus run plan.json
 #   momus --config config.toml run plan.json
-#   momus --config config.toml bench plan.json --concurrency 20
+#   MOMUS_CONFIG=config.toml momus run plan.json
 #
 # Each crate's settings live in its own TOML section. The [global]
 # section provides defaults inherited by all commands unless a
@@ -14,50 +21,55 @@
 # ---------------------------------------------------------------------------
 # Global defaults — inherited by all commands
 # ---------------------------------------------------------------------------
-# [global]
+[global]
 # Base URL for all requests (overrides the plan's base_url).
 # base_url = "http://localhost:8080"
+
 # Default headers sent with every request.
 # [global.headers]
 # Authorization = "Bearer your-token-here"
 # Accept = "application/json"
+
 # Request timeout in seconds (default: 30).
 # timeout_secs = 60
 
 # ---------------------------------------------------------------------------
 # Run / Validate
 # ---------------------------------------------------------------------------
-# [run]
+[run]
 # Output directory for results (default: ./output).
 # output = "./results"
 
 # ---------------------------------------------------------------------------
 # Bench — load testing
 # ---------------------------------------------------------------------------
-# [bench]
+[bench]
 # Execution mode: Steady, MaxThroughput, or Soak.
 # [bench.mode]
 # type = "Steady"
 # concurrency = 20
 # duration_secs = 60
+
 # Number of warmup requests before recording (default: 0).
 # warmup_requests = 10
 
 # ---------------------------------------------------------------------------
 # Fuzz — payload mutation
 # ---------------------------------------------------------------------------
-# [fuzz]
+[fuzz]
 # Number of mutations to generate per input (default: 1000).
 # iterations = 5000
+
 # Which mutators to apply (empty = all).
 # mutators = ["boundary", "encoding", "type_mismatch"]
 
 # ---------------------------------------------------------------------------
 # Chaos — fault injection
 # ---------------------------------------------------------------------------
-# [chaos]
+[chaos]
 # How long to wait between experiments in seconds (default: 5).
 # interval_secs = 10
+
 # List of experiments to run.
 # [[chaos.experiments]]
 # type = "NetworkLatency"
@@ -68,36 +80,34 @@
 # ---------------------------------------------------------------------------
 # Contract — spec validation
 # ---------------------------------------------------------------------------
-# [contract]
+[contract]
 # Path to the API spec file (OpenAPI YAML/JSON or GraphQL SDL).
 # spec_path = "./api-spec.yaml"
+
 # Fail on undocumented endpoints (default: false).
 # strict = true
 
 # ---------------------------------------------------------------------------
 # Guard — security scanning
 # ---------------------------------------------------------------------------
-# [guard]
+[guard]
 # Check for missing security headers (default: true).
 # check_headers = true
-# Check CORS configuration (default: true).
 # check_cors = true
-# Check for information leakage (default: true).
 # check_leaks = true
-# Check for exposed internal endpoints (default: true).
 # check_exposed = true
 
 # ---------------------------------------------------------------------------
 # Diff — regression testing
 # ---------------------------------------------------------------------------
-# [diff]
+[diff]
 # Baseline environment URL (e.g. production).
 # baseline_url = "https://prod.example.com"
+
 # Target environment URL (e.g. staging).
 # target_url = "https://staging.example.com"
+
 # Diff response headers (default: true).
 # diff_headers = true
-# Diff response bodies (default: true).
 # diff_bodies = true
-# Diff status codes (default: true).
 # diff_status = true
