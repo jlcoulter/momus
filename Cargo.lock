@@ -1230,7 +1230,7 @@ dependencies = [
 
 [[package]]
 name = "momus"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "momus-bench",
@@ -1247,7 +1247,7 @@ dependencies = [
 
 [[package]]
 name = "momus-bench"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "futures",
@@ -1261,7 +1261,7 @@ dependencies = [
 
 [[package]]
 name = "momus-chaos"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "futures",
@@ -1275,7 +1275,7 @@ dependencies = [
 
 [[package]]
 name = "momus-cli"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -1297,7 +1297,7 @@ dependencies = [
 
 [[package]]
 name = "momus-contract"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "momus-core",
@@ -1310,7 +1310,7 @@ dependencies = [
 
 [[package]]
 name = "momus-convert"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1331,7 +1331,7 @@ dependencies = [
 
 [[package]]
 name = "momus-core"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1352,7 +1352,7 @@ dependencies = [
 
 [[package]]
 name = "momus-diff"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "momus-core",
@@ -1365,7 +1365,7 @@ dependencies = [
 
 [[package]]
 name = "momus-fuzz"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "momus-core",
@@ -1378,7 +1378,7 @@ dependencies = [
 
 [[package]]
 name = "momus-guard"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "momus-core",
@@ -1391,7 +1391,7 @@ dependencies = [
 
 [[package]]
 name = "momus-mock"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "axum",
