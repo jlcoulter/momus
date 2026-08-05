@@ -3,6 +3,8 @@ use crate::modes::run_mode;
 use crate::report::BenchReport;
 use anyhow::Result;
 use momus_core::ast::TestPlan;
+use momus_core::transport::TransportAdapter;
+use std::sync::Arc;
 use std::time::Instant;
 
 /// Execute a benchmark against a test plan.
@@ -13,7 +15,11 @@ use std::time::Instant;
 /// # Errors
 ///
 /// Returns an error if the plan cannot be loaded or the HTTP client fails to initialize.
-pub async fn run_bench(plan: &TestPlan, config: &BenchConfig) -> Result<BenchReport> {
+pub async fn run_bench(
+    plan: &TestPlan,
+    config: &BenchConfig,
+    transport: Arc<dyn TransportAdapter>,
+) -> Result<BenchReport> {
     let start = Instant::now();
 
     let base_url = config.base_url.as_deref().unwrap_or(&plan.base_url);
@@ -25,7 +31,7 @@ pub async fn run_bench(plan: &TestPlan, config: &BenchConfig) -> Result<BenchRep
         base_url
     );
 
-    let mut report = run_mode(&config.mode, plan, base_url).await?;
+    let mut report = run_mode(&config.mode, plan, base_url, transport).await?;
     report.duration_secs = start.elapsed().as_secs_f64();
 
     Ok(report)

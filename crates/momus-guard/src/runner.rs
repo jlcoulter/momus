@@ -2,6 +2,8 @@ use crate::config::GuardConfig;
 use crate::report::{GuardIssue, GuardReport};
 use anyhow::Result;
 use momus_core::ast::{Step, TestPlan};
+use momus_core::transport::{TransportAdapter, TransportRequest, TransportResponse};
+use std::collections::HashMap;
 use std::time::Instant;
 
 /// Execute a security scan against a test plan.
@@ -12,14 +14,14 @@ use std::time::Instant;
 /// - Information leakage (stack traces, error details in bodies)
 /// - Exposed internal endpoints (common paths)
 /// - Missing or weak authentication
-pub async fn run_guard(plan: &TestPlan, config: &GuardConfig) -> Result<GuardReport> {
+pub async fn run_guard(
+    plan: &TestPlan,
+    config: &GuardConfig,
+    transport: &dyn TransportAdapter,
+) -> Result<GuardReport> {
     let start = Instant::now();
 
     let base_url = config.base_url.as_deref().unwrap_or(&plan.base_url);
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(config.timeout_secs))
-        .build()?;
 
     let mut issues = Vec::new();
     let mut passed = 0u64;
@@ -37,7 +39,7 @@ pub async fn run_guard(plan: &TestPlan, config: &GuardConfig) -> Result<GuardRep
     // 1. Security headers check
     if config.check_headers {
         for url in &urls {
-            let result = check_security_headers(&client, url).await;
+            let result = check_security_headers(transport, url).await;
             for issue in result.issues {
                 issues.push(issue);
                 failed += 1;
@@ -51,7 +53,7 @@ pub async fn run_guard(plan: &TestPlan, config: &GuardConfig) -> Result<GuardRep
     // 2. CORS check
     if config.check_cors {
         for url in &urls {
-            let result = check_cors(&client, url).await;
+            let result = check_cors(transport, url).await;
             for issue in result.issues {
                 issues.push(issue);
                 failed += 1;
@@ -65,7 +67,7 @@ pub async fn run_guard(plan: &TestPlan, config: &GuardConfig) -> Result<GuardRep
     // 3. Info leak check
     if config.check_leaks {
         for url in &urls {
-            let result = check_info_leaks(&client, url).await;
+            let result = check_info_leaks(transport, url).await;
             for issue in result.issues {
                 issues.push(issue);
                 failed += 1;
@@ -78,7 +80,7 @@ pub async fn run_guard(plan: &TestPlan, config: &GuardConfig) -> Result<GuardRep
 
     // 4. Exposed endpoints check
     if config.check_exposed {
-        let result = check_exposed_endpoints(&client, base_url).await;
+        let result = check_exposed_endpoints(transport, base_url).await;
         for issue in result.issues {
             issues.push(issue);
             failed += 1;
@@ -90,7 +92,7 @@ pub async fn run_guard(plan: &TestPlan, config: &GuardConfig) -> Result<GuardRep
 
     // 5. Auth check
     for url in &urls {
-        let result = check_auth(&client, url).await;
+        let result = check_auth(transport, url).await;
         for issue in result.issues {
             issues.push(issue);
             failed += 1;
@@ -161,18 +163,50 @@ fn collect_from_steps(steps: &[Step], base_url: &str, urls: &mut Vec<String>) {
     }
 }
 
+/// Send a GET request via the transport adapter.
+async fn get(transport: &dyn TransportAdapter, url: &str) -> Result<TransportResponse, String> {
+    let request = TransportRequest {
+        method: momus_core::ast::Method::Get,
+        url: url.to_string(),
+        headers: HashMap::new(),
+        body: None,
+    };
+    transport.send(&request).await
+}
+
+/// Send an OPTIONS request via the transport adapter.
+async fn options(
+    transport: &dyn TransportAdapter,
+    url: &str,
+    origin: &str,
+) -> Result<TransportResponse, String> {
+    let mut headers = HashMap::new();
+    headers.insert("Origin".to_string(), origin.to_string());
+    headers.insert(
+        "Access-Control-Request-Method".to_string(),
+        "GET".to_string(),
+    );
+    let request = TransportRequest {
+        method: momus_core::ast::Method::Options,
+        url: url.to_string(),
+        headers,
+        body: None,
+    };
+    transport.send(&request).await
+}
+
 /// Check for missing security headers.
-async fn check_security_headers(client: &reqwest::Client, url: &str) -> CheckResult {
-    let resp = match client.get(url).send().await {
+async fn check_security_headers(transport: &dyn TransportAdapter, url: &str) -> CheckResult {
+    let resp = match get(transport, url).await {
         Ok(r) => r,
         Err(_) => return CheckResult::pass(),
     };
 
-    let headers = resp.headers();
+    let headers = &resp.headers;
     let mut issues = Vec::new();
 
     // HSTS
-    if headers.get("strict-transport-security").is_none() {
+    if !headers.contains_key("strict-transport-security") {
         issues.push(GuardIssue {
             endpoint: url.to_string(),
             category: "headers".to_string(),
@@ -184,7 +218,7 @@ async fn check_security_headers(client: &reqwest::Client, url: &str) -> CheckRes
     }
 
     // CSP
-    if headers.get("content-security-policy").is_none() {
+    if !headers.contains_key("content-security-policy") {
         issues.push(GuardIssue {
             endpoint: url.to_string(),
             category: "headers".to_string(),
@@ -196,7 +230,7 @@ async fn check_security_headers(client: &reqwest::Client, url: &str) -> CheckRes
     }
 
     // X-Content-Type-Options
-    if headers.get("x-content-type-options").is_none() {
+    if !headers.contains_key("x-content-type-options") {
         issues.push(GuardIssue {
             endpoint: url.to_string(),
             category: "headers".to_string(),
@@ -207,7 +241,7 @@ async fn check_security_headers(client: &reqwest::Client, url: &str) -> CheckRes
     }
 
     // X-Frame-Options
-    if headers.get("x-frame-options").is_none() {
+    if !headers.contains_key("x-frame-options") {
         issues.push(GuardIssue {
             endpoint: url.to_string(),
             category: "headers".to_string(),
@@ -228,24 +262,18 @@ async fn check_security_headers(client: &reqwest::Client, url: &str) -> CheckRes
 }
 
 /// Check CORS configuration.
-async fn check_cors(client: &reqwest::Client, url: &str) -> CheckResult {
-    let resp = match client
-        .request(reqwest::Method::OPTIONS, url)
-        .header("Origin", "https://evil.example.com")
-        .header("Access-Control-Request-Method", "GET")
-        .send()
-        .await
-    {
+async fn check_cors(transport: &dyn TransportAdapter, url: &str) -> CheckResult {
+    let resp = match options(transport, url, "https://evil.example.com").await {
         Ok(r) => r,
         Err(_) => return CheckResult::pass(),
     };
 
-    let headers = resp.headers();
+    let headers = &resp.headers;
     let mut issues = Vec::new();
 
     // Check for permissive CORS
     if let Some(origin) = headers.get("access-control-allow-origin") {
-        let origin_str = origin.to_str().unwrap_or("");
+        let origin_str = origin.as_str();
         if origin_str == "*" {
             issues.push(GuardIssue {
                 endpoint: url.to_string(),
@@ -256,7 +284,7 @@ async fn check_cors(client: &reqwest::Client, url: &str) -> CheckResult {
                     .to_string(),
             });
         }
-        if origin_str == "*" && headers.get("access-control-allow-credentials").is_some() {
+        if origin_str == "*" && headers.contains_key("access-control-allow-credentials") {
             issues.push(GuardIssue {
                 endpoint: url.to_string(),
                 category: "cors".to_string(),
@@ -280,22 +308,18 @@ async fn check_cors(client: &reqwest::Client, url: &str) -> CheckResult {
 }
 
 /// Check for information leakage in response bodies.
-async fn check_info_leaks(client: &reqwest::Client, url: &str) -> CheckResult {
-    let resp = match client.get(url).send().await {
+async fn check_info_leaks(transport: &dyn TransportAdapter, url: &str) -> CheckResult {
+    let resp = match get(transport, url).await {
         Ok(r) => r,
         Err(_) => return CheckResult::pass(),
     };
 
-    let status = resp.status().as_u16();
+    let status = resp.status_code;
     if !(400..=599).contains(&status) {
         return CheckResult::pass();
     }
 
-    let body = match resp.text().await {
-        Ok(b) => b,
-        Err(_) => return CheckResult::pass(),
-    };
-
+    let body = String::from_utf8_lossy(&resp.body_bytes).to_string();
     let lower = body.to_lowercase();
     let mut issues = Vec::new();
 
@@ -374,7 +398,7 @@ async fn check_info_leaks(client: &reqwest::Client, url: &str) -> CheckResult {
 }
 
 /// Check for exposed internal endpoints.
-async fn check_exposed_endpoints(client: &reqwest::Client, base_url: &str) -> CheckResult {
+async fn check_exposed_endpoints(transport: &dyn TransportAdapter, base_url: &str) -> CheckResult {
     let common_paths = &[
         "/.env",
         "/.git/config",
@@ -404,8 +428,8 @@ async fn check_exposed_endpoints(client: &reqwest::Client, base_url: &str) -> Ch
 
     for path in common_paths {
         let url = format!("{}{}", base_url, path);
-        if let Ok(resp) = client.get(&url).send().await {
-            let status = resp.status().as_u16();
+        if let Ok(resp) = get(transport, &url).await {
+            let status = resp.status_code;
             if status == 200 {
                 issues.push(GuardIssue {
                     endpoint: url,
@@ -432,13 +456,13 @@ async fn check_exposed_endpoints(client: &reqwest::Client, base_url: &str) -> Ch
 }
 
 /// Check for missing or weak authentication.
-async fn check_auth(client: &reqwest::Client, url: &str) -> CheckResult {
-    let resp = match client.get(url).send().await {
+async fn check_auth(transport: &dyn TransportAdapter, url: &str) -> CheckResult {
+    let resp = match get(transport, url).await {
         Ok(r) => r,
         Err(_) => return CheckResult::pass(),
     };
 
-    let status = resp.status().as_u16();
+    let status = resp.status_code;
 
     // If the endpoint returns 200 without auth, that might be fine for public endpoints
     // But if it returns 401/403, auth is working
@@ -447,7 +471,7 @@ async fn check_auth(client: &reqwest::Client, url: &str) -> CheckResult {
     }
 
     // Check if the response indicates auth is needed but not enforced
-    let body = resp.text().await.unwrap_or_default();
+    let body = String::from_utf8_lossy(&resp.body_bytes).to_string();
     let lower = body.to_lowercase();
     if lower.contains("unauthorized")
         || lower.contains("unauthenticated")
@@ -524,10 +548,46 @@ mod tests {
     }
 
     #[test]
+    fn test_collect_plan_urls_dedup() {
+        let plan = TestPlan {
+            name: "test".into(),
+            base_url: "http://localhost:8080".into(),
+            default_headers: HashMap::new(),
+            steps: vec![
+                Step::Request(RequestStep {
+                    name: "r1".into(),
+                    method: Method::Get,
+                    url: "/health".into(),
+                    headers: HashMap::new(),
+                    body: None,
+                    assert: vec![],
+                    save_as: String::new(),
+                    soft_fail: false,
+                }),
+                Step::Request(RequestStep {
+                    name: "r2".into(),
+                    method: Method::Get,
+                    url: "/health".into(),
+                    headers: HashMap::new(),
+                    body: None,
+                    assert: vec![],
+                    save_as: String::new(),
+                    soft_fail: false,
+                }),
+            ],
+            setup: vec![],
+            teardown: vec![],
+        };
+
+        let urls = collect_plan_urls(&plan, "http://localhost:8080");
+        assert_eq!(urls.len(), 1);
+    }
+
+    #[test]
     fn test_collect_plan_urls_absolute() {
         let plan = TestPlan {
             name: "test".into(),
-            base_url: "http://localhost".into(),
+            base_url: "http://localhost:8080".into(),
             default_headers: HashMap::new(),
             steps: vec![Step::Request(RequestStep {
                 name: "r1".into(),
@@ -543,18 +603,29 @@ mod tests {
             teardown: vec![],
         };
 
-        let urls = collect_plan_urls(&plan, "http://localhost");
-        assert_eq!(urls, vec!["https://api.example.com/health"]);
+        let urls = collect_plan_urls(&plan, "http://localhost:8080");
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "https://api.example.com/health");
     }
 
     #[test]
-    fn test_check_info_leak_patterns() {
-        let body = "stack trace: at main() in file.php line 42";
-        let lower = body.to_lowercase();
-        assert!(lower.contains("stack trace"));
+    fn test_check_result_pass() {
+        let result = CheckResult::pass();
+        assert!(result.passed);
+        assert!(result.issues.is_empty());
+    }
 
-        let body2 = "{\"status\": \"ok\"}";
-        let lower2 = body2.to_lowercase();
-        assert!(!lower2.contains("stack trace"));
+    #[test]
+    fn test_check_result_fail() {
+        let issue = GuardIssue {
+            endpoint: "/test".into(),
+            category: "test".into(),
+            severity: "high".into(),
+            description: "test issue".into(),
+            recommendation: "fix it".into(),
+        };
+        let result = CheckResult::fail(issue);
+        assert!(!result.passed);
+        assert_eq!(result.issues.len(), 1);
     }
 }

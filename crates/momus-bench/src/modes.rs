@@ -2,6 +2,7 @@ use crate::config::BenchMode;
 use crate::report::BenchReport;
 use anyhow::Result;
 use momus_core::ast::{Method, Step, TestPlan};
+use momus_core::transport::{TransportAdapter, TransportRequest};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -10,12 +11,17 @@ use tokio::sync::Semaphore;
 /// Run a benchmark in the given mode.
 ///
 /// Dispatches to the appropriate mode-specific runner.
-pub async fn run_mode(mode: &BenchMode, plan: &TestPlan, base_url: &str) -> Result<BenchReport> {
+pub async fn run_mode(
+    mode: &BenchMode,
+    plan: &TestPlan,
+    base_url: &str,
+    transport: Arc<dyn TransportAdapter>,
+) -> Result<BenchReport> {
     match mode {
         BenchMode::Steady {
             concurrency,
             duration_secs,
-        } => run_steady(*concurrency, *duration_secs, plan, base_url).await,
+        } => run_steady(*concurrency, *duration_secs, plan, base_url, transport).await,
         BenchMode::MaxThroughput {
             min_concurrency,
             max_concurrency,
@@ -33,14 +39,35 @@ pub async fn run_mode(mode: &BenchMode, plan: &TestPlan, base_url: &str) -> Resu
                 *max_p99_ms,
                 plan,
                 base_url,
+                transport,
             )
             .await
         }
         BenchMode::Soak {
             concurrency,
             duration_secs,
-        } => run_soak(*concurrency, *duration_secs, plan, base_url).await,
+        } => run_soak(*concurrency, *duration_secs, plan, base_url, transport).await,
     }
+}
+
+/// Send a request via the transport adapter and return whether it succeeded.
+async fn send_bench_request(
+    transport: &dyn TransportAdapter,
+    method: Method,
+    url: &str,
+    body: &Option<serde_json::Value>,
+) -> Result<bool> {
+    let request = TransportRequest {
+        method,
+        url: url.to_string(),
+        headers: std::collections::HashMap::new(),
+        body: body.clone(),
+    };
+    let resp = transport
+        .send(&request)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    Ok(resp.status_code >= 200 && resp.status_code < 300)
 }
 
 /// Steady mode: fixed concurrency for a fixed duration.
@@ -52,11 +79,8 @@ async fn run_steady(
     duration_secs: u64,
     plan: &TestPlan,
     base_url: &str,
+    transport: Arc<dyn TransportAdapter>,
 ) -> Result<BenchReport> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()?;
-
     // Collect all leaf request steps from the plan
     let steps = collect_requests(plan);
     if steps.is_empty() {
@@ -78,7 +102,7 @@ async fn run_steady(
     let mut handles = Vec::new();
 
     for _ in 0..concurrency {
-        let client = client.clone();
+        let transport = transport.clone();
         let steps = steps.clone();
         let base_url = base_url.clone();
         let total = total.clone();
@@ -104,40 +128,16 @@ async fn run_steady(
                     let step_start = Instant::now();
                     let url = format!("{}{}", base_url, step.url);
 
-                    let result = match step.method {
-                        Method::Get => client.get(&url).send().await,
-                        Method::Post => {
-                            let body = step.body.clone().unwrap_or(serde_json::json!({}));
-                            client.post(&url).json(&body).send().await
-                        }
-                        Method::Put => {
-                            let body = step.body.clone().unwrap_or(serde_json::json!({}));
-                            client.put(&url).json(&body).send().await
-                        }
-                        Method::Delete => client.delete(&url).send().await,
-                        Method::Patch => {
-                            let body = step.body.clone().unwrap_or(serde_json::json!({}));
-                            client.patch(&url).json(&body).send().await
-                        }
-                        Method::Head => client.head(&url).send().await,
-                        Method::Options => {
-                            client.request(reqwest::Method::OPTIONS, &url).send().await
-                        }
-                    };
+                    let ok = send_bench_request(&*transport, step.method, &url, &step.body)
+                        .await
+                        .unwrap_or(false);
 
                     let elapsed_ms = step_start.elapsed().as_secs_f64() * 1000.0;
 
                     total.fetch_add(1, Ordering::Relaxed);
 
-                    match result {
-                        Ok(resp) => {
-                            if !resp.status().is_success() {
-                                errors.fetch_add(1, Ordering::Relaxed);
-                            }
-                        }
-                        Err(_) => {
-                            errors.fetch_add(1, Ordering::Relaxed);
-                        }
+                    if !ok {
+                        errors.fetch_add(1, Ordering::Relaxed);
                     }
 
                     latencies.lock().unwrap().push(elapsed_ms);
@@ -215,11 +215,8 @@ async fn run_max_throughput(
     max_p99_ms: u64,
     plan: &TestPlan,
     base_url: &str,
+    transport: Arc<dyn TransportAdapter>,
 ) -> Result<BenchReport> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()?;
-
     let steps = collect_requests(plan);
     if steps.is_empty() {
         anyhow::bail!("Test plan has no request steps to benchmark");
@@ -248,7 +245,7 @@ async fn run_max_throughput(
         let mut handles = Vec::new();
 
         for _ in 0..c {
-            let client = client.clone();
+            let transport = transport.clone();
             let steps = steps.clone();
             let base_url = base_url.clone();
             let total = total.clone();
@@ -269,39 +266,15 @@ async fn run_max_throughput(
                         let step_start = Instant::now();
                         let url = format!("{}{}", base_url, step.url);
 
-                        let result = match step.method {
-                            Method::Get => client.get(&url).send().await,
-                            Method::Post => {
-                                let body = step.body.clone().unwrap_or(serde_json::json!({}));
-                                client.post(&url).json(&body).send().await
-                            }
-                            Method::Put => {
-                                let body = step.body.clone().unwrap_or(serde_json::json!({}));
-                                client.put(&url).json(&body).send().await
-                            }
-                            Method::Delete => client.delete(&url).send().await,
-                            Method::Patch => {
-                                let body = step.body.clone().unwrap_or(serde_json::json!({}));
-                                client.patch(&url).json(&body).send().await
-                            }
-                            Method::Head => client.head(&url).send().await,
-                            Method::Options => {
-                                client.request(reqwest::Method::OPTIONS, &url).send().await
-                            }
-                        };
+                        let ok = send_bench_request(&*transport, step.method, &url, &step.body)
+                            .await
+                            .unwrap_or(false);
 
                         let elapsed_ms = step_start.elapsed().as_secs_f64() * 1000.0;
                         total.fetch_add(1, Ordering::Relaxed);
 
-                        match result {
-                            Ok(resp) => {
-                                if !resp.status().is_success() {
-                                    errors.fetch_add(1, Ordering::Relaxed);
-                                }
-                            }
-                            Err(_) => {
-                                errors.fetch_add(1, Ordering::Relaxed);
-                            }
+                        if !ok {
+                            errors.fetch_add(1, Ordering::Relaxed);
                         }
 
                         latencies.lock().unwrap().push(elapsed_ms);
@@ -400,11 +373,8 @@ async fn run_soak(
     duration_secs: u64,
     plan: &TestPlan,
     base_url: &str,
+    transport: Arc<dyn TransportAdapter>,
 ) -> Result<BenchReport> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()?;
-
     let steps = collect_requests(plan);
     if steps.is_empty() {
         anyhow::bail!("Test plan has no request steps to benchmark");
@@ -424,7 +394,7 @@ async fn run_soak(
     let semaphore = Arc::new(Semaphore::new(concurrency));
 
     // Spawn the health check task
-    let health_client = client.clone();
+    let health_transport = transport.clone();
     let health_base_url = base_url.clone();
     let health_failures_clone = health_failures.clone();
     let health_start = start;
@@ -441,15 +411,11 @@ async fn run_soak(
                 break;
             }
             let url = format!("{}/health", health_base_url);
-            match health_client.get(&url).send().await {
-                Ok(resp) => {
-                    if !resp.status().is_success() {
-                        health_failures_clone.fetch_add(1, Ordering::Relaxed);
-                    }
-                }
-                Err(_) => {
-                    health_failures_clone.fetch_add(1, Ordering::Relaxed);
-                }
+            let ok = send_bench_request(&*health_transport, Method::Get, &url, &None)
+                .await
+                .unwrap_or(false);
+            if !ok {
+                health_failures_clone.fetch_add(1, Ordering::Relaxed);
             }
         }
     });
@@ -457,7 +423,7 @@ async fn run_soak(
     // Spawn load-generating workers (same as steady)
     let mut handles = Vec::new();
     for _ in 0..concurrency {
-        let client = client.clone();
+        let transport = transport.clone();
         let steps = steps.clone();
         let base_url = base_url.clone();
         let total = total.clone();
@@ -478,39 +444,15 @@ async fn run_soak(
                     let step_start = Instant::now();
                     let url = format!("{}{}", base_url, step.url);
 
-                    let result = match step.method {
-                        Method::Get => client.get(&url).send().await,
-                        Method::Post => {
-                            let body = step.body.clone().unwrap_or(serde_json::json!({}));
-                            client.post(&url).json(&body).send().await
-                        }
-                        Method::Put => {
-                            let body = step.body.clone().unwrap_or(serde_json::json!({}));
-                            client.put(&url).json(&body).send().await
-                        }
-                        Method::Delete => client.delete(&url).send().await,
-                        Method::Patch => {
-                            let body = step.body.clone().unwrap_or(serde_json::json!({}));
-                            client.patch(&url).json(&body).send().await
-                        }
-                        Method::Head => client.head(&url).send().await,
-                        Method::Options => {
-                            client.request(reqwest::Method::OPTIONS, &url).send().await
-                        }
-                    };
+                    let ok = send_bench_request(&*transport, step.method, &url, &step.body)
+                        .await
+                        .unwrap_or(false);
 
                     let elapsed_ms = step_start.elapsed().as_secs_f64() * 1000.0;
                     total.fetch_add(1, Ordering::Relaxed);
 
-                    match result {
-                        Ok(resp) => {
-                            if !resp.status().is_success() {
-                                errors.fetch_add(1, Ordering::Relaxed);
-                            }
-                        }
-                        Err(_) => {
-                            errors.fetch_add(1, Ordering::Relaxed);
-                        }
+                    if !ok {
+                        errors.fetch_add(1, Ordering::Relaxed);
                     }
 
                     latencies.lock().unwrap().push(elapsed_ms);
@@ -751,6 +693,8 @@ mod tests {
             setup: vec![],
             teardown: vec![],
         };
+        let transport: Arc<dyn TransportAdapter> =
+            Arc::new(momus_core::transport::HttpAdapter::new());
         let result = rt.block_on(run_max_throughput(
             1,
             10,
@@ -760,6 +704,7 @@ mod tests {
             1000,
             &plan,
             "http://localhost",
+            transport,
         ));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("no request steps"));
@@ -776,7 +721,9 @@ mod tests {
             setup: vec![],
             teardown: vec![],
         };
-        let result = rt.block_on(run_soak(10, 1, &plan, "http://localhost"));
+        let transport: Arc<dyn TransportAdapter> =
+            Arc::new(momus_core::transport::HttpAdapter::new());
+        let result = rt.block_on(run_soak(10, 1, &plan, "http://localhost", transport));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("no request steps"));
     }

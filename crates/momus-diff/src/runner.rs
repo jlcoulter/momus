@@ -2,6 +2,7 @@ use crate::config::DiffConfig;
 use crate::report::{DiffEntry, DiffReport};
 use anyhow::Result;
 use momus_core::ast::{Method, Step, TestPlan};
+use momus_core::transport::{TransportAdapter, TransportRequest};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -9,12 +10,12 @@ use std::time::Instant;
 ///
 /// Runs the plan against both `baseline_url` and `target_url`,
 /// then compares responses field-by-field.
-pub async fn run_diff(plan: &TestPlan, config: &DiffConfig) -> Result<DiffReport> {
+pub async fn run_diff(
+    plan: &TestPlan,
+    config: &DiffConfig,
+    transport: &dyn TransportAdapter,
+) -> Result<DiffReport> {
     let start = Instant::now();
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(config.timeout_secs))
-        .build()?;
 
     tracing::info!(
         "Running diff on '{}': baseline={}, target={}",
@@ -40,8 +41,8 @@ pub async fn run_diff(plan: &TestPlan, config: &DiffConfig) -> Result<DiffReport
         let baseline_url = format!("{}{}", config.baseline_url.trim_end_matches('/'), step.url);
         let target_url = format!("{}{}", config.target_url.trim_end_matches('/'), step.url);
 
-        let baseline_resp = send_request(&client, &step.method, &baseline_url, &step.body).await;
-        let target_resp = send_request(&client, &step.method, &target_url, &step.body).await;
+        let baseline_resp = send_request(transport, &step.method, &baseline_url, &step.body).await;
+        let target_resp = send_request(transport, &step.method, &target_url, &step.body).await;
 
         match (baseline_resp, target_resp) {
             (Ok(baseline), Ok(target)) => {
@@ -178,44 +179,28 @@ fn collect_from_steps(steps: &[Step], result: &mut Vec<DiffStep>) {
     }
 }
 
-/// Send an HTTP request and return the response.
+/// Send an HTTP request via the transport adapter and return the response.
 async fn send_request(
-    client: &reqwest::Client,
+    transport: &dyn TransportAdapter,
     method: &Method,
     url: &str,
     body: &Option<serde_json::Value>,
 ) -> Result<DiffResponse> {
-    let resp = match method {
-        Method::Get => client.get(url).send().await?,
-        Method::Post => {
-            let b = body.clone().unwrap_or(serde_json::json!({}));
-            client.post(url).json(&b).send().await?
-        }
-        Method::Put => {
-            let b = body.clone().unwrap_or(serde_json::json!({}));
-            client.put(url).json(&b).send().await?
-        }
-        Method::Delete => client.delete(url).send().await?,
-        Method::Patch => {
-            let b = body.clone().unwrap_or(serde_json::json!({}));
-            client.patch(url).json(&b).send().await?
-        }
-        Method::Head => client.head(url).send().await?,
-        Method::Options => client.request(reqwest::Method::OPTIONS, url).send().await?,
+    let request = TransportRequest {
+        method: *method,
+        url: url.to_string(),
+        headers: HashMap::new(),
+        body: body.clone(),
     };
-
-    let status = resp.status().as_u16();
-    let headers: HashMap<String, String> = resp
-        .headers()
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
-        .collect();
-    let body: Option<serde_json::Value> = resp.json().await.ok();
+    let resp = transport
+        .send(&request)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     Ok(DiffResponse {
-        status,
-        headers,
-        body,
+        status: resp.status_code,
+        headers: resp.headers,
+        body: resp.body,
     })
 }
 

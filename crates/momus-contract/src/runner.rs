@@ -3,6 +3,7 @@ use crate::report::{ContractReport, ContractViolation, EndpointCompliance, Field
 use crate::spec::ParsedSpec;
 use anyhow::{Context, Result};
 use momus_core::ast::{Method, Step, TestPlan};
+use momus_core::transport::{TransportAdapter, TransportRequest};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -14,7 +15,11 @@ use std::time::Instant;
 /// # Errors
 ///
 /// Returns an error if the spec cannot be loaded or the HTTP client fails.
-pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<ContractReport> {
+pub async fn run_contract(
+    plan: &TestPlan,
+    config: &ContractConfig,
+    transport: &dyn TransportAdapter,
+) -> Result<ContractReport> {
     let start = Instant::now();
 
     let base_url = config.base_url.as_deref().unwrap_or(&plan.base_url);
@@ -33,10 +38,6 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
         config.spec_path
     );
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()?;
-
     // Collect all request steps
     let steps = collect_contract_steps(plan);
     if steps.is_empty() {
@@ -52,34 +53,19 @@ pub async fn run_contract(plan: &TestPlan, config: &ContractConfig) -> Result<Co
 
     for step in &steps {
         let url = format!("{}{}", base_url, step.url);
-        let result = match step.method {
-            Method::Get => client.get(&url).send().await,
-            Method::Post => {
-                let body = step.body.clone().unwrap_or(serde_json::json!({}));
-                client.post(&url).json(&body).send().await
-            }
-            Method::Put => {
-                let body = step.body.clone().unwrap_or(serde_json::json!({}));
-                client.put(&url).json(&body).send().await
-            }
-            Method::Delete => client.delete(&url).send().await,
-            Method::Patch => {
-                let body = step.body.clone().unwrap_or(serde_json::json!({}));
-                client.patch(&url).json(&body).send().await
-            }
-            Method::Head => client.head(&url).send().await,
-            Method::Options => client.request(reqwest::Method::OPTIONS, &url).send().await,
+        let transport_request = TransportRequest {
+            method: step.method,
+            url: url.clone(),
+            headers: HashMap::new(),
+            body: step.body.clone(),
         };
+        let result = transport.send(&transport_request).await;
 
         match result {
             Ok(resp) => {
-                let status = resp.status().as_u16();
-                let headers: HashMap<String, String> = resp
-                    .headers()
-                    .iter()
-                    .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
-                    .collect();
-                let body: Option<serde_json::Value> = resp.json().await.ok();
+                let status = resp.status_code;
+                let headers = resp.headers;
+                let body = resp.body;
 
                 // Validate against spec
                 let (step_violations, step_coverage) =

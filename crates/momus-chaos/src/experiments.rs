@@ -1,36 +1,42 @@
 use crate::config::ChaosExperiment;
 use crate::report::ChaosReport;
 use anyhow::{Context, Result};
+use momus_core::ast::Method;
+use momus_core::transport::{TransportAdapter, TransportRequest};
+use std::collections::HashMap;
 use std::process::Command;
 use std::time::Instant;
 
 /// Run a single chaos experiment.
-pub async fn run_experiment(experiment: &ChaosExperiment) -> Result<ChaosReport> {
+pub async fn run_experiment(
+    experiment: &ChaosExperiment,
+    transport: &dyn TransportAdapter,
+) -> Result<ChaosReport> {
     match experiment {
         ChaosExperiment::NetworkLatency {
             endpoint,
             delay_ms,
             duration_secs,
-        } => run_network_latency(endpoint, *delay_ms, *duration_secs).await,
+        } => run_network_latency(transport, endpoint, *delay_ms, *duration_secs).await,
         ChaosExperiment::ServiceError {
             endpoint,
             status,
             duration_secs,
-        } => run_service_error(endpoint, *status, *duration_secs).await,
+        } => run_service_error(transport, endpoint, *status, *duration_secs).await,
         ChaosExperiment::ServiceDown {
             endpoint,
             duration_secs,
-        } => run_service_down(endpoint, *duration_secs).await,
+        } => run_service_down(transport, endpoint, *duration_secs).await,
         ChaosExperiment::ConnectionReset {
             endpoint,
             reset_pct,
             duration_secs,
-        } => run_connection_reset(endpoint, *reset_pct, *duration_secs).await,
+        } => run_connection_reset(transport, endpoint, *reset_pct, *duration_secs).await,
         ChaosExperiment::PacketLoss {
             endpoint,
             drop_pct,
             duration_secs,
-        } => run_packet_loss(endpoint, *drop_pct, *duration_secs).await,
+        } => run_packet_loss(transport, endpoint, *drop_pct, *duration_secs).await,
         ChaosExperiment::CpuPressure {
             cores,
             duration_secs,
@@ -43,6 +49,21 @@ pub async fn run_experiment(experiment: &ChaosExperiment) -> Result<ChaosReport>
             duration_secs,
         } => run_clock_skew(*offset_secs, *duration_secs).await,
     }
+}
+
+/// Send a GET request via the transport adapter and return whether it succeeded.
+async fn get_ok(transport: &dyn TransportAdapter, url: &str) -> Result<bool> {
+    let request = TransportRequest {
+        method: Method::Get,
+        url: url.to_string(),
+        headers: HashMap::new(),
+        body: None,
+    };
+    let resp = transport
+        .send(&request)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    Ok(resp.status_code >= 200 && resp.status_code < 300)
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +116,7 @@ fn extract_port(url: &str) -> Option<u16> {
 fn detect_interface() -> String {
     let output = Command::new("sh")
         .arg("-c")
-        .arg("ip route get 1 2>/dev/null | grep -oP 'dev \\K\\S+'")
+        .arg("ip route get 1 2>/dev/null | grep -oP 'dev \\\\K\\\\S+'")
         .output();
 
     if let Ok(output) = output
@@ -125,14 +146,12 @@ fn get_unix_timestamp() -> Result<i64> {
 
 /// Network latency: inject artificial delay by sleeping before requests.
 async fn run_network_latency(
+    transport: &dyn TransportAdapter,
     endpoint: &str,
     delay_ms: u64,
     duration_secs: u64,
 ) -> Result<ChaosReport> {
     let start = Instant::now();
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(duration_secs + 10))
-        .build()?;
 
     let mut failures = 0u64;
     let mut affected = 0u64;
@@ -142,9 +161,9 @@ async fn run_network_latency(
         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
 
         // Send a request to the target
-        let result = client.get(endpoint).send().await;
+        let ok = get_ok(transport, endpoint).await.unwrap_or(false);
         affected += 1;
-        if result.is_err() || result.is_ok_and(|r| !r.status().is_success()) {
+        if !ok {
             failures += 1;
         }
     }
@@ -164,21 +183,29 @@ async fn run_network_latency(
 }
 
 /// Service error: verify the endpoint returns errors (simulated by checking status).
-async fn run_service_error(endpoint: &str, status: u16, duration_secs: u64) -> Result<ChaosReport> {
+async fn run_service_error(
+    transport: &dyn TransportAdapter,
+    endpoint: &str,
+    status: u16,
+    duration_secs: u64,
+) -> Result<ChaosReport> {
     let start = Instant::now();
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()?;
 
     let mut failures = 0u64;
     let mut affected = 0u64;
 
     while start.elapsed().as_secs() < duration_secs {
-        let result = client.get(endpoint).send().await;
+        let request = TransportRequest {
+            method: Method::Get,
+            url: endpoint.to_string(),
+            headers: HashMap::new(),
+            body: None,
+        };
+        let result = transport.send(&request).await;
         affected += 1;
         match result {
             Ok(resp) => {
-                if resp.status().as_u16() == status || resp.status().is_server_error() {
+                if resp.status_code == status || resp.status_code >= 500 {
                     failures += 1;
                 }
             }
@@ -204,19 +231,20 @@ async fn run_service_error(endpoint: &str, status: u16, duration_secs: u64) -> R
 }
 
 /// Service down: verify the endpoint becomes unreachable.
-async fn run_service_down(endpoint: &str, duration_secs: u64) -> Result<ChaosReport> {
+async fn run_service_down(
+    transport: &dyn TransportAdapter,
+    endpoint: &str,
+    duration_secs: u64,
+) -> Result<ChaosReport> {
     let start = Instant::now();
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()?;
 
     let mut failures = 0u64;
     let mut affected = 0u64;
 
     while start.elapsed().as_secs() < duration_secs {
-        let result = client.get(endpoint).send().await;
+        let ok = get_ok(transport, endpoint).await.unwrap_or(false);
         affected += 1;
-        if result.is_err() {
+        if !ok {
             failures += 1;
         }
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -309,6 +337,7 @@ async fn run_memory_pressure(mb: usize, duration_secs: u64) -> Result<ChaosRepor
 /// port using the `statistic` module so that only a configurable percentage
 /// of packets are reset. The rule is removed after the experiment duration.
 async fn run_connection_reset(
+    transport: &dyn TransportAdapter,
     endpoint: &str,
     reset_pct: u8,
     duration_secs: u64,
@@ -359,17 +388,13 @@ async fn run_connection_reset(
     }
 
     // Monitor the endpoint during the fault window
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()?;
-
     let mut failures = 0u64;
     let mut affected = 0u64;
 
     while start.elapsed().as_secs() < duration_secs {
-        let result = client.get(endpoint).send().await;
+        let ok = get_ok(transport, endpoint).await.unwrap_or(false);
         affected += 1;
-        if result.is_err() {
+        if !ok {
             failures += 1;
         }
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -402,7 +427,12 @@ async fn run_connection_reset(
 ///
 /// Adds a `netem loss` qdisc on the detected default network interface,
 /// monitors the endpoint during the fault window, then removes the qdisc.
-async fn run_packet_loss(endpoint: &str, drop_pct: u8, duration_secs: u64) -> Result<ChaosReport> {
+async fn run_packet_loss(
+    transport: &dyn TransportAdapter,
+    endpoint: &str,
+    drop_pct: u8,
+    duration_secs: u64,
+) -> Result<ChaosReport> {
     let start = Instant::now();
     let iface = detect_interface();
 
@@ -425,17 +455,13 @@ async fn run_packet_loss(endpoint: &str, drop_pct: u8, duration_secs: u64) -> Re
     }
 
     // Monitor the endpoint during the fault window
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()?;
-
     let mut failures = 0u64;
     let mut affected = 0u64;
 
     while start.elapsed().as_secs() < duration_secs {
-        let result = client.get(endpoint).send().await;
+        let ok = get_ok(transport, endpoint).await.unwrap_or(false);
         affected += 1;
-        if result.is_err() {
+        if !ok {
             failures += 1;
         }
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;

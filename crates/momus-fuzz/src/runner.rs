@@ -3,6 +3,7 @@ use crate::mutators::{all_mutators, mutator_by_name};
 use crate::report::FuzzReport;
 use anyhow::Result;
 use momus_core::ast::{Method, Step, TestPlan};
+use momus_core::transport::{TransportAdapter, TransportRequest};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -15,7 +16,11 @@ use std::time::Instant;
 /// # Errors
 ///
 /// Returns an error if the HTTP client fails to initialize.
-pub async fn run_fuzz(plan: &TestPlan, config: &FuzzConfig) -> Result<FuzzReport> {
+pub async fn run_fuzz(
+    plan: &TestPlan,
+    config: &FuzzConfig,
+    transport: Arc<dyn TransportAdapter>,
+) -> Result<FuzzReport> {
     let start = Instant::now();
 
     let base_url = config.base_url.as_deref().unwrap_or(&plan.base_url);
@@ -48,10 +53,6 @@ pub async fn run_fuzz(plan: &TestPlan, config: &FuzzConfig) -> Result<FuzzReport
         targets.len(),
         config.iterations
     );
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(config.timeout_secs))
-        .build()?;
 
     // Pre-compute all mutations: (target_index, mutator_name, mutated_body)
     let mut mutations: Vec<(FuzzTarget, String, serde_json::Value)> = Vec::new();
@@ -89,7 +90,7 @@ pub async fn run_fuzz(plan: &TestPlan, config: &FuzzConfig) -> Result<FuzzReport
     let mut handles = Vec::new();
 
     for chunk_idx in 0..mutations.len() {
-        let client = client.clone();
+        let transport = transport.clone();
         let mutations = mutations.clone();
         let base_url = base_url.clone();
         let total = total.clone();
@@ -106,32 +107,30 @@ pub async fn run_fuzz(plan: &TestPlan, config: &FuzzConfig) -> Result<FuzzReport
             total.fetch_add(1, Ordering::Relaxed);
 
             let url = format!("{}{}", base_url, target.url);
-            let result = match target.method {
-                Method::Post => client.post(&url).json(mutated_body).send().await,
-                Method::Put => client.put(&url).json(mutated_body).send().await,
-                Method::Patch => client.patch(&url).json(mutated_body).send().await,
-                Method::Get => client.get(&url).query(mutated_body).send().await,
-                Method::Delete => client.delete(&url).send().await,
-                Method::Head => client.head(&url).send().await,
-                Method::Options => client.request(reqwest::Method::OPTIONS, &url).send().await,
+            let request = TransportRequest {
+                method: target.method,
+                url,
+                headers: std::collections::HashMap::new(),
+                body: Some(mutated_body.clone()),
             };
+            let result = transport.send(&request).await;
 
             match result {
                 Ok(resp) => {
-                    let status = resp.status();
-                    if status.is_success() {
+                    let status = resp.status_code;
+                    if (200..=299).contains(&status) {
                         passed.fetch_add(1, Ordering::Relaxed);
-                    } else if status.is_client_error() {
+                    } else if (400..=499).contains(&status) {
                         rejected.fetch_add(1, Ordering::Relaxed);
-                    } else if status.is_server_error() {
+                    } else if status >= 500 {
                         errors.fetch_add(1, Ordering::Relaxed);
                     } else {
                         rejected.fetch_add(1, Ordering::Relaxed);
                     }
 
                     // Check for info leaks in error responses
-                    if !status.is_success()
-                        && let Ok(body) = resp.text().await
+                    if !(200..=299).contains(&status)
+                        && let Ok(body) = String::from_utf8(resp.body_bytes.clone())
                         && has_info_leak(&body)
                     {
                         leaks.fetch_add(1, Ordering::Relaxed);

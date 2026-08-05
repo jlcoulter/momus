@@ -3,7 +3,9 @@ use clap::{Parser, Subcommand, ValueEnum};
 use momus_core::ast::*;
 use momus_core::config::MomusConfig;
 use momus_core::engine::runner;
+use momus_core::transport::{HttpAdapter, TransportAdapter};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(ValueEnum, Debug, Clone)]
 enum OutputFormat {
@@ -233,6 +235,9 @@ async fn main() -> Result<()> {
 
     // Load optional config file — search default locations if not specified
     let cfg = load_config(cli.config.as_deref())?;
+
+    // Create a shared HTTP transport adapter for all sub-commands
+    let transport: Arc<dyn TransportAdapter> = Arc::new(HttpAdapter::new());
 
     match cli.command {
         Commands::Run {
@@ -475,7 +480,7 @@ async fn main() -> Result<()> {
                 output: output.clone().unwrap_or(cfg.bench.output),
                 ..Default::default()
             };
-            let report = momus_bench::run_bench(&test_plan, &config).await?;
+            let report = momus_bench::run_bench(&test_plan, &config, transport.clone()).await?;
 
             let want_html = match format {
                 OutputFormat::Html => true,
@@ -522,7 +527,7 @@ async fn main() -> Result<()> {
                 output: cfg.fuzz.output,
                 ..Default::default()
             };
-            let report = momus_fuzz::run_fuzz(&test_plan, &config).await?;
+            let report = momus_fuzz::run_fuzz(&test_plan, &config, transport.clone()).await?;
             println!("{}", report);
             Ok(())
         }
@@ -539,7 +544,7 @@ async fn main() -> Result<()> {
                 output: cfg.chaos.output,
                 ..Default::default()
             };
-            let reports = momus_chaos::run_chaos(&test_plan, &config).await?;
+            let reports = momus_chaos::run_chaos(&test_plan, &config, &*transport).await?;
             for report in &reports {
                 println!("{}", report);
             }
@@ -563,7 +568,7 @@ async fn main() -> Result<()> {
                 output: cfg.contract.output,
                 ..Default::default()
             };
-            let report = momus_contract::run_contract(&test_plan, &config).await?;
+            let report = momus_contract::run_contract(&test_plan, &config, &*transport).await?;
             println!("{}", report);
             Ok(())
         }
@@ -580,7 +585,7 @@ async fn main() -> Result<()> {
                 output: cfg.guard.output,
                 ..Default::default()
             };
-            let report = momus_guard::run_guard(&test_plan, &config).await?;
+            let report = momus_guard::run_guard(&test_plan, &config, &*transport).await?;
             println!("{}", report);
             Ok(())
         }
@@ -600,7 +605,7 @@ async fn main() -> Result<()> {
                 output: cfg.diff.output,
                 ..Default::default()
             };
-            let report = momus_diff::run_diff(&test_plan, &config).await?;
+            let report = momus_diff::run_diff(&test_plan, &config, &*transport).await?;
             println!("{}", report);
             Ok(())
         }

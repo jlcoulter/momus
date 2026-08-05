@@ -3,6 +3,7 @@ use crate::experiments::run_experiment;
 use crate::report::ChaosReport;
 use anyhow::Result;
 use momus_core::ast::TestPlan;
+use momus_core::transport::TransportAdapter;
 use std::time::Instant;
 
 /// Execute a chaos run against a test plan.
@@ -13,7 +14,11 @@ use std::time::Instant;
 /// # Errors
 ///
 /// Returns an error if the HTTP client fails to initialize.
-pub async fn run_chaos(plan: &TestPlan, config: &ChaosConfig) -> Result<Vec<ChaosReport>> {
+pub async fn run_chaos(
+    plan: &TestPlan,
+    config: &ChaosConfig,
+    transport: &dyn TransportAdapter,
+) -> Result<Vec<ChaosReport>> {
     let _start = Instant::now();
     let _ = plan; // TODO: use plan steps in v0.2.0
 
@@ -33,7 +38,7 @@ pub async fn run_chaos(plan: &TestPlan, config: &ChaosConfig) -> Result<Vec<Chao
             experiment
         );
 
-        let report = run_experiment(experiment).await?;
+        let report = run_experiment(experiment, transport).await?;
         reports.push(report);
 
         // Wait between experiments
