@@ -4,12 +4,12 @@
   "groups": [
     {
       "failed": 0,
-      "name": "integration-test",
+      "name": "override-test",
       "passed": 1,
       "total": 1
     }
   ],
   "passed": 1,
-  "plan": "integration-test",
+  "plan": "override-test",
   "total": 1
 }
