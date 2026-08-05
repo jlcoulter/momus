@@ -22,7 +22,9 @@
 pub mod config;
 pub mod report;
 pub mod runner;
+pub mod spec;
 
 pub use config::*;
 pub use report::*;
 pub use runner::*;
+pub use spec::*;
