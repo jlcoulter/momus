@@ -2,6 +2,7 @@ pub mod ast;
 pub mod config;
 pub mod deps;
 pub mod engine;
+pub mod leak;
 pub mod transport;
 
 /// Write a serializable report as pretty-printed JSON to `{output_dir}/{filename}`.
