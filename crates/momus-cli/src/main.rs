@@ -147,6 +147,10 @@ enum Commands {
         /// Output file for the test plan (default: <input_stem>.json in the same directory).
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Generate seed data setup steps to pre-populate the server with resources
+        /// so GET/PUT/DELETE tests have data to operate on.
+        #[arg(long)]
+        seed_data: bool,
     },
     /// Validate API responses against an OpenAPI/GraphQL spec.
     Contract {
@@ -335,8 +339,9 @@ async fn main() -> Result<()> {
             format,
             input,
             output,
+            seed_data,
         } => {
-            let plan = momus_convert::convert(&format, &input)?;
+            let plan = momus_convert::convert(&format, &input, seed_data)?;
             let json = serde_json::to_string_pretty(&plan)?;
             let path = match output {
                 Some(p) => p,

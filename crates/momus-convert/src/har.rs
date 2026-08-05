@@ -12,9 +12,9 @@ use std::collections::HashMap;
 /// and `ResponseTime` assertions on top.
 pub fn convert(path: &str) -> Result<TestPlan> {
     let content = std::fs::read_to_string(path)
-        .with_context(|| format!("Failed to read HAR file: {}", path))?;
+        .with_context(|| format!("Failed to read HAR file: {path}"))?;
     let har: HarFile = serde_json::from_str(&content)
-        .with_context(|| format!("Failed to parse HAR JSON: {}", path))?;
+        .with_context(|| format!("Failed to parse HAR JSON: {path}"))?;
 
     let entries = &har.log.entries;
     if entries.is_empty() {
@@ -56,11 +56,10 @@ pub fn convert(path: &str) -> Result<TestPlan> {
         }
 
         let step_name = if entry.request.url.len() > 40 {
-            format!("req_{}", i)
+            format!("req_{i}")
         } else {
             format!(
-                "req_{}_{}",
-                i,
+                "req_{i}_{}",
                 entry
                     .request
                     .url
@@ -101,6 +100,52 @@ pub fn convert(path: &str) -> Result<TestPlan> {
         setup: vec![],
         teardown: vec![],
     })
+}
+
+/// Generate seed data setup steps from a HAR file.
+///
+/// Extracts POST and PUT request bodies from recorded traffic and generates
+/// setup steps that replay those requests to pre-populate the server.
+pub fn generate_seed_data(path: &str) -> Result<Vec<Step>> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("Failed to read HAR file: {path}"))?;
+    let har: HarFile = serde_json::from_str(&content)
+        .with_context(|| format!("Failed to parse HAR JSON: {path}"))?;
+
+    let mut seed_steps = Vec::new();
+    for (i, entry) in har.log.entries.iter().enumerate() {
+        let method = entry.request.method.to_uppercase();
+        if method != "POST" && method != "PUT" {
+            continue;
+        }
+
+        let body = entry.request.post_data.as_ref().and_then(|p| {
+            serde_json::from_str(&p.text)
+                .ok()
+                .or_else(|| Some(serde_json::Value::String(p.text.clone())))
+        });
+
+        if let Some(body) = body {
+            let http_method = if method == "POST" {
+                Method::Post
+            } else {
+                Method::Put
+            };
+            let expected_status = if method == "POST" { 201 } else { 200 };
+            seed_steps.push(Step::Request(RequestStep {
+                name: format!("seed_{i}"),
+                method: http_method,
+                url: entry.request.url.clone(),
+                headers: HashMap::new(),
+                body: Some(body),
+                assert: vec![Assertion::Status(expected_status)],
+                save_as: String::new(),
+                soft_fail: true,
+            }));
+        }
+    }
+
+    Ok(seed_steps)
 }
 
 /// Parse a method string into a Method enum.

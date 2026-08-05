@@ -9,10 +9,10 @@ use std::collections::HashMap;
 /// (handling folders), and converts each request to a RequestStep.
 pub fn convert(path: &str) -> Result<TestPlan> {
     let content = std::fs::read_to_string(path)
-        .with_context(|| format!("Failed to read Postman collection: {}", path))?;
+        .with_context(|| format!("Failed to read Postman collection: {path}"))?;
 
     let collection: Value = serde_json::from_str(&content)
-        .with_context(|| format!("Failed to parse Postman collection JSON: {}", path))?;
+        .with_context(|| format!("Failed to parse Postman collection JSON: {path}"))?;
 
     let info = collection
         .get("info")
@@ -32,13 +32,76 @@ pub fn convert(path: &str) -> Result<TestPlan> {
     walk_items(&items, &mut steps);
 
     Ok(TestPlan {
-        name: format!("Postman: {}", name),
+        name: format!("Postman: {name}"),
         base_url: String::new(),
         default_headers: HashMap::new(),
         steps,
         setup: vec![],
         teardown: vec![],
     })
+}
+
+/// Generate seed data setup steps from a Postman collection.
+///
+/// Extracts POST and PUT request bodies from the collection and generates
+/// setup steps that pre-populate the server with those resources.
+pub fn generate_seed_data(path: &str) -> Result<Vec<Step>> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("Failed to read Postman collection: {path}"))?;
+
+    let collection: Value = serde_json::from_str(&content)
+        .with_context(|| format!("Failed to parse Postman collection JSON: {path}"))?;
+
+    let items = collection
+        .get("item")
+        .or_else(|| collection.get("collection").and_then(|c| c.get("item")))
+        .and_then(|i| i.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut seed_steps = Vec::new();
+    extract_seed_items(&items, &mut seed_steps);
+    Ok(seed_steps)
+}
+
+/// Walk Postman items recursively, extracting POST/PUT bodies as seed data.
+fn extract_seed_items(items: &[Value], steps: &mut Vec<Step>) {
+    for item in items {
+        if let Some(sub_items) = item.get("item").and_then(|v| v.as_array()) {
+            extract_seed_items(sub_items, steps);
+        } else if let Some(request) = item.get("request") {
+            let method = request
+                .get("method")
+                .and_then(|m| m.as_str())
+                .unwrap_or("GET")
+                .to_uppercase();
+
+            if (method == "POST" || method == "PUT")
+                && let Some(body) = extract_body(request)
+            {
+                let url = extract_url(request);
+                if !url.is_empty() {
+                    let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("seed");
+                    let http_method = if method == "POST" {
+                        Method::Post
+                    } else {
+                        Method::Put
+                    };
+                    let expected_status = if method == "POST" { 201 } else { 200 };
+                    steps.push(Step::Request(RequestStep {
+                        name: format!("seed_{name}"),
+                        method: http_method,
+                        url,
+                        headers: HashMap::new(),
+                        body: Some(body),
+                        assert: vec![Assertion::Status(expected_status)],
+                        save_as: String::new(),
+                        soft_fail: true,
+                    }));
+                }
+            }
+        }
+    }
 }
 
 /// Walk Postman items recursively, converting requests to steps.
