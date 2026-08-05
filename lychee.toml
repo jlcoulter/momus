@@ -1,0 +1,18 @@
+# Exclude certain patterns from link checking
+exclude = [
+    "https://github.com/jlcoulter/momus/blob/master/CLA.md",
+    "https://github\\.com/jlcoulter/momus/compare/v0\\.3\\.",
+    "http://localhost",
+    "http://127.0.0.1",
+]
+# Exclude the config file itself from link checking
+exclude_path = ["lychee.toml"]
+# Cache results to avoid re-checking the same URLs
+cache = true
+max_cache_age = "1d"
+# Timeout per request
+timeout = 10
+# Retry count
+max_retries = 2
+# User agent
+user_agent = "Mozilla/5.0 (compatible; lychee)"
