@@ -14,7 +14,7 @@
 - **Composable Assertion AST** — `all_of`, `any_of`, `not`, `status`, `status_in`, `header`, `body_length`, `content_type`, `valid_json`, `json_path`, `schema`
 - **JSONPath Predicates** — `exists`, `not_exists`, `eq`, `not_eq`, `cmp`, `length`, `count`, `every`, `some`, `schema`
 - **Step Types** — `request`, `sequence`, `parallel`, `script`, `noop`
-- **Template Resolution** — `{base_url}`, `{steps.<name>.<field>}` substitution in URLs, headers, and bodies
+- **Template Resolution** — `{base_url}`, `{steps.<name>.<field>}`, `{env.VAR}`, `{random.uuid}`, `{random.int}`, `{random.string}` substitution in URLs, headers, and bodies
 - **Transport Adapter** — `TransportAdapter` trait with built-in `HttpAdapter` (reqwest-based)
 - **Script Engine** — Rhai-based scripting for custom logic
 - **JSON Schema Validation** — via `jsonschema` crate

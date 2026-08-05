@@ -71,6 +71,8 @@ This document catalogs every feature across all momus crates, organized by imple
 | `evaluate_assertions()` — evaluate assertion tree against response | ✅ | |
 | Template resolution: `{base_url}` | ✅ | |
 | Template resolution: `{steps.<name>.*}` | ✅ | |
+| Template resolution: `{env.VAR}` | ✅ | |
+| Template resolution: `{random.uuid}` / `{random.int}` / `{random.string}` | ✅ | |
 | Template resolution in URLs, headers, bodies | ✅ | |
 | JSONPath resolver (simple) | ✅ | Supports `$.key`, `$.key.nested`, `$.key[*]`, `$.key[0]` |
 | Schema validation | ✅ | Wired via `jsonschema` crate |
@@ -89,7 +91,7 @@ This document catalogs every feature across all momus crates, organized by imple
 | Generic dependency resolver (topological sort) | Medium | Port from fhir-autotest |
 | Report JSON file output | Medium | Port from fhir-autotest |
 | `{env.VAR}` template syntax | Medium | Environment variable substitution |
-| `{random.uuid}` / `{random.int}` template functions | Low | Random value generation in templates |
+| `{random.uuid}` / `{random.int}` / `{random.string}` template functions | ✅ | Random value generation in templates |
 | `{body.<path>}` template syntax | Medium | Reference response body fields |
 | Soft-fail step support | ✅ | Already in AST, needs testing |
 | Parallel step execution | ✅ | Already in AST, needs testing |
