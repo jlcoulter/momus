@@ -335,7 +335,7 @@ async fn check_exposed_endpoints(client: &reqwest::Client, base_url: &str) -> Ch
     let mut issues = Vec::new();
 
     for path in common_paths {
-        let url = format!("{}{}", base_url, path);
+        let url = format!("{base_url}{path}");
         if let Ok(resp) = client.get(&url).send().await {
             let status = resp.status().as_u16();
             if status == 200 {
@@ -343,11 +343,8 @@ async fn check_exposed_endpoints(client: &reqwest::Client, base_url: &str) -> Ch
                     endpoint: url,
                     category: "exposed".to_string(),
                     severity: "medium".to_string(),
-                    description: format!("Potentially sensitive endpoint '{}' returned 200", path),
-                    recommendation: format!(
-                        "Restrict access to '{}' or remove if not needed",
-                        path
-                    ),
+                    description: format!("Potentially sensitive endpoint '{path}' returned 200"),
+                    recommendation: format!("Restrict access to '{path}' or remove if not needed"),
                 });
             }
         }
