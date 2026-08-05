@@ -33,7 +33,7 @@ pub async fn run_chaos(plan: &TestPlan, config: &ChaosConfig) -> Result<Vec<Chao
             experiment
         );
 
-        let report = run_experiment(experiment).await?;
+        let report = run_experiment(experiment, config.timeout_secs).await?;
         reports.push(report);
 
         // Wait between experiments
