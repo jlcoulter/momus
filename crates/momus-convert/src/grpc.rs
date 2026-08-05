@@ -322,8 +322,12 @@ message HealthCheckResponse {
         }
 
         // Check second step: UserService/ListUsers
-        if let Step::Request(step) = &plan.steps[1] {
-            assert_eq!(step.name, "rpc_UserService_ListUsers");
+        let list_users = plan
+            .steps
+            .iter()
+            .find(|s| matches!(s, Step::Request(r) if r.name == "rpc_UserService_ListUsers"))
+            .expect("Expected rpc_UserService_ListUsers step");
+        if let Step::Request(step) = list_users {
             assert_eq!(step.method, Method::Post);
             assert_eq!(
                 step.url,
@@ -334,8 +338,12 @@ message HealthCheckResponse {
         }
 
         // Check third step: UserService/CreateUser
-        if let Step::Request(step) = &plan.steps[2] {
-            assert_eq!(step.name, "rpc_UserService_CreateUser");
+        let create_user = plan
+            .steps
+            .iter()
+            .find(|s| matches!(s, Step::Request(r) if r.name == "rpc_UserService_CreateUser"))
+            .expect("Expected rpc_UserService_CreateUser step");
+        if let Step::Request(step) = create_user {
             assert_eq!(step.method, Method::Post);
             assert_eq!(
                 step.url,
@@ -346,8 +354,12 @@ message HealthCheckResponse {
         }
 
         // Check fourth step: HealthService/Check
-        if let Step::Request(step) = &plan.steps[3] {
-            assert_eq!(step.name, "rpc_HealthService_Check");
+        let health_check = plan
+            .steps
+            .iter()
+            .find(|s| matches!(s, Step::Request(r) if r.name == "rpc_HealthService_Check"))
+            .expect("Expected rpc_HealthService_Check step");
+        if let Step::Request(step) = health_check {
             assert_eq!(step.method, Method::Post);
             assert_eq!(
                 step.url,
@@ -358,8 +370,12 @@ message HealthCheckResponse {
         }
 
         // Check fifth step: HealthService/Watch (streaming)
-        if let Step::Request(step) = &plan.steps[4] {
-            assert_eq!(step.name, "rpc_HealthService_Watch");
+        let health_watch = plan
+            .steps
+            .iter()
+            .find(|s| matches!(s, Step::Request(r) if r.name == "rpc_HealthService_Watch"))
+            .expect("Expected rpc_HealthService_Watch step");
+        if let Step::Request(step) = health_watch {
             assert_eq!(step.method, Method::Post);
             assert_eq!(
                 step.url,
@@ -393,7 +409,12 @@ service SimpleService {
         let plan = convert(&path).unwrap();
         assert_eq!(plan.steps.len(), 2);
 
-        if let Step::Request(step) = &plan.steps[0] {
+        let do_thing = plan
+            .steps
+            .iter()
+            .find(|s| matches!(s, Step::Request(r) if r.name == "rpc_SimpleService_DoThing"))
+            .expect("Expected rpc_SimpleService_DoThing step");
+        if let Step::Request(step) = do_thing {
             assert_eq!(step.name, "rpc_SimpleService_DoThing");
             // Without package, URL should omit the package prefix
             assert_eq!(step.url, "http://localhost:50051/SimpleService/DoThing");
