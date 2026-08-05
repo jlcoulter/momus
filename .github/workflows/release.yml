@@ -19,3 +19,15 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_PAT }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # Enable auto-merge on the release PR so it merges once CI passes
+      - name: Enable auto-merge on release PR
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_PAT }}
+        run: |
+          PRS='${{ steps.release.outputs.prs }}'
+          echo "$PRS" | jq -c '.[]' | while read pr; do
+            PR_NUMBER=$(echo "$pr" | jq -r '.number')
+            gh pr merge "$PR_NUMBER" --auto --merge
+          done
