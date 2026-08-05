@@ -29,6 +29,12 @@ pub struct BenchReport {
     pub error_rate: f64,
     /// Throughput in requests per second.
     pub requests_per_sec: f64,
+    /// Max sustainable concurrency (MaxThroughput mode only).
+    #[serde(default)]
+    pub max_concurrency: Option<usize>,
+    /// Number of health check failures (Soak mode only).
+    #[serde(default)]
+    pub health_check_failures: Option<u64>,
 }
 
 impl BenchReport {
@@ -167,6 +173,12 @@ impl std::fmt::Display for BenchReport {
             self.error_count,
             self.error_rate * 100.0
         )?;
+        if let Some(mc) = self.max_concurrency {
+            writeln!(f, "  Max sustainable concurrency: {mc}")?;
+        }
+        if let Some(hcf) = self.health_check_failures {
+            writeln!(f, "  Health check failures: {hcf}")?;
+        }
         Ok(())
     }
 }
@@ -191,6 +203,8 @@ mod tests {
             error_count: 2,
             error_rate: 0.002,
             requests_per_sec: 33.3,
+            max_concurrency: None,
+            health_check_failures: None,
         };
         let output = report.to_string();
         assert!(output.contains("1000"));
@@ -214,6 +228,8 @@ mod tests {
             error_count: 2,
             error_rate: 0.002,
             requests_per_sec: 33.3,
+            max_concurrency: None,
+            health_check_failures: None,
         };
         let html = report.to_html();
         assert!(html.contains("<!DOCTYPE html>"));
