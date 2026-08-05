@@ -187,6 +187,11 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+    /// Show a human-readable summary of a test plan.
+    Plan {
+        /// Path to the test plan JSON file (use - for stdin).
+        plan: String,
+    },
 }
 
 #[tokio::main]
@@ -346,10 +351,8 @@ async fn main() -> Result<()> {
                         .file_stem()
                         .and_then(|s| s.to_str())
                         .unwrap_or("test_plan");
-                    let parent = input_path
-                        .parent()
-                        .unwrap_or_else(|| std::path::Path::new("."));
-                    parent.join(format!("{}.json", stem))
+                    let parent = std::path::Path::new(".");
+                    parent.join(format!("{}.momus.json", stem))
                 }
             };
             std::fs::write(&path, json)?;
@@ -525,6 +528,13 @@ async fn main() -> Result<()> {
             };
             let report = momus_diff::run_diff(&test_plan, &config).await?;
             println!("{}", report);
+            Ok(())
+        }
+        Commands::Plan { plan } => {
+            let content = read_plan_content(&plan)?;
+            let test_plan: TestPlan = serde_json::from_str(&content)
+                .with_context(|| format!("Failed to parse test plan '{}'", plan))?;
+            print!("{}", test_plan.display_plan());
             Ok(())
         }
         Commands::Init { template, output } => {
