@@ -383,11 +383,11 @@ mod tests {
             }
         })]);
 
-        let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{har}").unwrap();
-        let path = tmp.path().to_str().unwrap().to_string();
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("test.har");
+        std::fs::write(&path, &har).unwrap();
 
-        let plan = convert(&path).unwrap();
+        let plan = convert(path.to_str().unwrap()).unwrap();
         insta::assert_json_snapshot!(plan);
     }
 
@@ -408,11 +408,11 @@ mod tests {
             }
         })]);
 
-        let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{har}").unwrap();
-        let path = tmp.path().to_str().unwrap().to_string();
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("test.har");
+        std::fs::write(&path, &har).unwrap();
 
-        let plan = convert(&path).unwrap();
+        let plan = convert(path.to_str().unwrap()).unwrap();
         insta::assert_json_snapshot!(plan);
     }
 

@@ -1,9 +1,10 @@
 ---
 source: crates/momus-convert/src/fhir/mod.rs
+assertion_line: 229
 expression: plan
 ---
 {
-  "name": "FHIR IG: 2 groups, 63 tests from .tmpPLTSzz",
+  "name": "FHIR IG: 2 groups, 63 tests from test.json",
   "base_url": "",
   "default_headers": {},
   "steps": [

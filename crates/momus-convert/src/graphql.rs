@@ -468,12 +468,11 @@ type Query {
 
     #[test]
     fn snapshot_graphql_plan() {
-        use std::io::Write;
-        let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{SAMPLE_SDL}").unwrap();
-        let path = tmp.path().to_str().unwrap().to_string();
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("test.graphql");
+        std::fs::write(&path, SAMPLE_SDL).unwrap();
 
-        let plan = convert(&path).unwrap();
+        let plan = convert(path.to_str().unwrap()).unwrap();
         insta::assert_json_snapshot!(plan);
     }
 

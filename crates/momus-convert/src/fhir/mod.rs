@@ -221,12 +221,11 @@ mod tests {
     #[test]
     fn snapshot_fhir_test_plan() {
         let pkg_bytes = test_helpers::create_test_ig_package();
-        let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        use std::io::Write;
-        tmp.write_all(&pkg_bytes).unwrap();
-        let path = tmp.path().to_str().unwrap().to_string();
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("test.json");
+        std::fs::write(&path, &pkg_bytes).unwrap();
 
-        let plan = convert(&path).unwrap();
+        let plan = convert(path.to_str().unwrap()).unwrap();
         insta::assert_json_snapshot!(plan);
     }
 }

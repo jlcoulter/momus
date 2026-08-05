@@ -1,9 +1,10 @@
 ---
 source: crates/momus-convert/src/har.rs
+assertion_line: 416
 expression: plan
 ---
 {
-  "name": "HAR: 1 entries from .tmperiXDE",
+  "name": "HAR: 1 entries from test.har",
   "base_url": "",
   "default_headers": {},
   "steps": [
