@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.2](https://github.com/jlcoulter/momus/compare/v0.3.1...v0.3.2) (2026-08-05)
+
+
+### Bug Fixes
+
+* add --repo flag to gh pr merge for no-git-context environments ([dfea80c](https://github.com/jlcoulter/momus/commit/dfea80ca74fc881a83e9565d7d3663001aae7288))
+* add --repo flag to gh pr merge for no-git-context environments ([ba960af](https://github.com/jlcoulter/momus/commit/ba960af1902bbfc192b261b2a844407eae56ef2a))
+* make release-please version regex generic and add auto-merge ([022e5a5](https://github.com/jlcoulter/momus/commit/022e5a5f6ad686d29afda91dd6b9bf9eb8496df0))
+* make release-please version regex generic and add auto-merge ([417d2c9](https://github.com/jlcoulter/momus/commit/417d2c9351bc66b4c7671ed9c2bb94fc0ebb2625))
+
 ## [0.3.1](https://github.com/jlcoulter/momus/compare/v0.3.0...v0.3.1) (2026-08-05)
 
 
