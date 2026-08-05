@@ -7,6 +7,7 @@ license = "Apache-2.0"
 repository = "https://github.com/jlcoulter/momus"
 homepage = "https://github.com/jlcoulter/momus"
 documentation = "https://github.com/jlcoulter/momus#readme"
+readme = "README.md"
 keywords = ["testing", "api", "http", "assertions", "jsonpath"]
 categories = ["development-tools::testing", "web-programming::http-client"]
 
@@ -22,6 +23,8 @@ futures = "0.3"
 toml = "0.8"
 jsonschema = "0.49"
 petgraph = "0.7"
+async-trait = "0.1.91"
+rhai = { version = "1", features = ["sync"] }
 
 [dev-dependencies]
 cargo-husky = "1.5.0"

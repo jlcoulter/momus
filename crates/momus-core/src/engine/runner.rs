@@ -2,6 +2,7 @@
 use crate::ast::*;
 use crate::engine::evaluator::evaluate_assertions;
 use crate::engine::templates;
+use crate::transport::{TransportAdapter, TransportRequest};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -14,17 +15,21 @@ pub struct RunContext {
     pub default_headers: HashMap<String, String>,
     /// Saved responses from named steps (keyed by save_as name).
     pub step_responses: HashMap<String, serde_json::Value>,
-    /// HTTP client.
-    pub client: reqwest::Client,
+    /// Transport adapter for sending requests.
+    pub transport: Box<dyn TransportAdapter>,
 }
 
 impl RunContext {
-    pub fn new(base_url: String, default_headers: HashMap<String, String>) -> Self {
+    pub fn new(
+        base_url: String,
+        default_headers: HashMap<String, String>,
+        transport: Box<dyn TransportAdapter>,
+    ) -> Self {
         Self {
             base_url,
             default_headers,
             step_responses: HashMap::new(),
-            client: reqwest::Client::new(),
+            transport,
         }
     }
 }
@@ -32,7 +37,12 @@ impl RunContext {
 /// Execute a full test plan and return a report.
 pub async fn execute_plan(plan: &TestPlan) -> Result<RunReport> {
     let start = Instant::now();
-    let mut ctx = RunContext::new(plan.base_url.clone(), plan.default_headers.clone());
+    let transport: Box<dyn TransportAdapter> = Box::new(crate::transport::HttpAdapter::new());
+    let mut ctx = RunContext::new(
+        plan.base_url.clone(),
+        plan.default_headers.clone(),
+        transport,
+    );
     let mut all_results: Vec<TestGroupResult> = Vec::new();
 
     // Run setup steps
@@ -117,21 +127,9 @@ async fn execute_steps(steps: &[Step], ctx: &mut RunContext) -> Result<Vec<TestR
                     results.append(&mut sr);
                 }
             }
-            Step::Script(_script) => {
-                // Script steps are not yet implemented
-                results.push(TestResult {
-                    name: "script".into(),
-                    passed: true,
-                    status_code: 0,
-                    request_method: String::new(),
-                    request_url: String::new(),
-                    request_headers: HashMap::new(),
-                    request_body: None,
-                    response_headers: HashMap::new(),
-                    response_body: None,
-                    assertion_results: vec![],
-                    errors: vec!["script steps not yet implemented".into()],
-                });
+            Step::Script(script) => {
+                let result = crate::engine::script::execute_script(script, &ctx.step_responses);
+                results.push(result);
             }
             Step::Noop { .. } => {}
         }
@@ -143,7 +141,8 @@ async fn execute_steps(steps: &[Step], ctx: &mut RunContext) -> Result<Vec<TestR
 /// Execute a single parallel step (returns its results).
 async fn execute_parallel_step(step: &Step, ctx: &RunContext) -> Result<Vec<TestResult>> {
     // Each parallel step gets its own context (no shared state)
-    let mut sub_ctx = RunContext::new(ctx.base_url.clone(), ctx.default_headers.clone());
+    let transport: Box<dyn TransportAdapter> = Box::new(crate::transport::HttpAdapter::new());
+    let mut sub_ctx = RunContext::new(ctx.base_url.clone(), ctx.default_headers.clone(), transport);
     let steps = match step {
         Step::Sequence(seq) => &seq.steps,
         other => std::slice::from_ref(other),
@@ -179,59 +178,24 @@ async fn execute_request(req: &RequestStep, ctx: &mut RunContext) -> Result<Test
         templates::resolve_body(b, &ctx.step_responses);
     }
 
-    // Build the HTTP request
-    let method = req.method.to_string();
-    let request_builder = match req.method {
-        Method::Get => ctx.client.get(&full_url),
-        Method::Post => {
-            let mut rb = ctx.client.post(&full_url);
-            if let Some(ref b) = body {
-                rb = rb.json(b);
-            }
-            rb
-        }
-        Method::Put => {
-            let mut rb = ctx.client.put(&full_url);
-            if let Some(ref b) = body {
-                rb = rb.json(b);
-            }
-            rb
-        }
-        Method::Delete => ctx.client.delete(&full_url),
-        Method::Patch => {
-            let mut rb = ctx.client.patch(&full_url);
-            if let Some(ref b) = body {
-                rb = rb.json(b);
-            }
-            rb
-        }
-        Method::Head => ctx.client.head(&full_url),
-        Method::Options => ctx.client.request(reqwest::Method::OPTIONS, &full_url),
+    // Build the transport request
+    let method = req.method;
+    let transport_request = TransportRequest {
+        method,
+        url: full_url.clone(),
+        headers: all_headers.clone(),
+        body: body.clone(),
     };
 
-    // Add headers
-    let request_builder = request_builder.headers(
-        all_headers
-            .iter()
-            .map(|(k, v)| {
-                (
-                    reqwest::header::HeaderName::from_bytes(k.as_bytes()).unwrap(),
-                    reqwest::header::HeaderValue::from_str(v).unwrap(),
-                )
-            })
-            .collect::<reqwest::header::HeaderMap>(),
-    );
-
-    // Execute
-    let request_start = std::time::Instant::now();
-    let response = match request_builder.send().await {
+    // Execute via transport adapter
+    let transport_response = match ctx.transport.send(&transport_request).await {
         Ok(resp) => resp,
         Err(e) => {
             return Ok(TestResult {
                 name: req.name.clone(),
                 passed: false,
                 status_code: 0,
-                request_method: method,
+                request_method: method.to_string(),
                 request_url: full_url.clone(),
                 request_headers: all_headers,
                 request_body: body,
@@ -242,15 +206,11 @@ async fn execute_request(req: &RequestStep, ctx: &mut RunContext) -> Result<Test
             });
         }
     };
-    let response_time_ms = request_start.elapsed().as_millis() as u64;
 
-    let status_code = response.status().as_u16();
-    let response_headers: HashMap<String, String> = response
-        .headers()
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
-        .collect();
-    let response_body: Option<serde_json::Value> = response.json().await.ok();
+    let status_code = transport_response.status_code;
+    let response_headers = transport_response.headers;
+    let response_body = transport_response.body;
+    let response_time_ms = transport_response.elapsed_ms;
 
     // Evaluate assertions
     let assertion_results = evaluate_assertions(
@@ -279,7 +239,7 @@ async fn execute_request(req: &RequestStep, ctx: &mut RunContext) -> Result<Test
         name: req.name.clone(),
         passed,
         status_code,
-        request_method: method,
+        request_method: method.to_string(),
         request_url: full_url,
         request_headers: all_headers,
         request_body: body,
@@ -313,20 +273,11 @@ async fn execute_sequence(seq: &SequenceStep, ctx: &mut RunContext) -> Result<Ve
                     .flatten()
                     .collect()
             }
-            Step::Script(_) => {
-                vec![TestResult {
-                    name: "script".into(),
-                    passed: true,
-                    status_code: 0,
-                    request_method: String::new(),
-                    request_url: String::new(),
-                    request_headers: HashMap::new(),
-                    request_body: None,
-                    response_headers: HashMap::new(),
-                    response_body: None,
-                    assertion_results: vec![],
-                    errors: vec!["script steps not yet implemented".into()],
-                }]
+            Step::Script(script) => {
+                vec![crate::engine::script::execute_script(
+                    script,
+                    &ctx.step_responses,
+                )]
             }
             Step::Noop { .. } => vec![],
         };
