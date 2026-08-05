@@ -28,12 +28,50 @@ pub async fn run_experiment(
             endpoint,
             reset_pct,
             duration_secs,
-        } => run_connection_reset(endpoint, *reset_pct, *duration_secs, timeout_secs).await,
+        } => {
+            #[cfg(feature = "iptables")]
+            {
+                run_connection_reset(endpoint, *reset_pct, *duration_secs, timeout_secs).await
+            }
+            #[cfg(not(feature = "iptables"))]
+            {
+                let _: &u8 = reset_pct;
+                let _: &u64 = duration_secs;
+                Ok(ChaosReport {
+                    experiment: "connection_reset".into(),
+                    target: endpoint.into(),
+                    duration_secs: 0.0,
+                    requests_affected: 0,
+                    failures_during: 0,
+                    self_healed: true,
+                    details: "ConnectionReset experiment requires the 'iptables' feature. Enable it with: cargo build --features iptables".into(),
+                })
+            }
+        }
         ChaosExperiment::PacketLoss {
             endpoint,
             drop_pct,
             duration_secs,
-        } => run_packet_loss(endpoint, *drop_pct, *duration_secs, timeout_secs).await,
+        } => {
+            #[cfg(feature = "tc")]
+            {
+                run_packet_loss(endpoint, *drop_pct, *duration_secs, timeout_secs).await
+            }
+            #[cfg(not(feature = "tc"))]
+            {
+                let _: &u8 = drop_pct;
+                let _: &u64 = duration_secs;
+                Ok(ChaosReport {
+                    experiment: "packet_loss".into(),
+                    target: endpoint.into(),
+                    duration_secs: 0.0,
+                    requests_affected: 0,
+                    failures_during: 0,
+                    self_healed: true,
+                    details: "PacketLoss experiment requires the 'tc' feature. Enable it with: cargo build --features tc".into(),
+                })
+            }
+        }
         ChaosExperiment::CpuPressure {
             cores,
             duration_secs,
@@ -44,7 +82,25 @@ pub async fn run_experiment(
         ChaosExperiment::ClockSkew {
             offset_secs,
             duration_secs,
-        } => run_clock_skew(*offset_secs, *duration_secs).await,
+        } => {
+            #[cfg(feature = "faketime")]
+            {
+                run_clock_skew(*offset_secs, *duration_secs).await
+            }
+            #[cfg(not(feature = "faketime"))]
+            {
+                let _: &u64 = duration_secs;
+                Ok(ChaosReport {
+                    experiment: "clock_skew".into(),
+                    target: format!("offset {offset_secs}s"),
+                    duration_secs: 0.0,
+                    requests_affected: 0,
+                    failures_during: 0,
+                    self_healed: true,
+                    details: "ClockSkew experiment requires the 'faketime' feature. Enable it with: cargo build --features faketime".into(),
+                })
+            }
+        }
     }
 }
 
@@ -53,6 +109,7 @@ pub async fn run_experiment(
 // ---------------------------------------------------------------------------
 
 /// Run a shell command via sudo. Returns `Ok(())` on success.
+#[allow(dead_code)]
 fn run_sudo(cmd: &str) -> Result<()> {
     let output = Command::new("sudo")
         .arg("sh")
@@ -70,6 +127,7 @@ fn run_sudo(cmd: &str) -> Result<()> {
 }
 
 /// Extract the TCP port from a URL string.
+#[allow(dead_code)]
 fn extract_port(url: &str) -> Option<u16> {
     if url.is_empty() {
         return None;
@@ -95,6 +153,7 @@ fn extract_port(url: &str) -> Option<u16> {
 }
 
 /// Detect the default network interface.
+#[allow(dead_code)]
 fn detect_interface() -> String {
     let output = Command::new("sh")
         .arg("-c")
@@ -113,6 +172,7 @@ fn detect_interface() -> String {
 }
 
 /// Get the current Unix timestamp via `date +%s`.
+#[allow(dead_code)]
 fn get_unix_timestamp() -> Result<i64> {
     let output = Command::new("date")
         .arg("+%s")
@@ -323,6 +383,9 @@ async fn run_memory_pressure(mb: usize, duration_secs: u64) -> Result<ChaosRepor
 /// Applies an iptables `REJECT --reject-with tcp-reset` rule on the target
 /// port using the `statistic` module so that only a configurable percentage
 /// of packets are reset. The rule is removed after the experiment duration.
+///
+/// Requires the `iptables` feature.
+#[cfg(feature = "iptables")]
 async fn run_connection_reset(
     endpoint: &str,
     reset_pct: u8,
@@ -418,6 +481,9 @@ async fn run_connection_reset(
 ///
 /// Adds a `netem loss` qdisc on the detected default network interface,
 /// monitors the endpoint during the fault window, then removes the qdisc.
+///
+/// Requires the `tc` feature.
+#[cfg(feature = "tc")]
 async fn run_packet_loss(
     endpoint: &str,
     drop_pct: u8,
@@ -486,6 +552,9 @@ async fn run_packet_loss(
 /// Saves the current Unix timestamp, applies an offset via `sudo date -s`,
 /// waits for the experiment duration, then attempts to restore the original
 /// time using `date`, `chronyc`, `ntpdate`, or systemd service restarts.
+///
+/// Requires the `faketime` feature.
+#[cfg(feature = "faketime")]
 async fn run_clock_skew(offset_secs: i64, duration_secs: u64) -> Result<ChaosReport> {
     let start = Instant::now();
 
