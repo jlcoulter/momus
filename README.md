@@ -432,6 +432,10 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 ```
 
+## Security
+
+See [SECURITY.md](SECURITY.md) for our security policy and instructions for reporting vulnerabilities.
+
 ## Community
 
 This project is governed by a [Code of Conduct](CODE_OF_CONDUCT.md).
