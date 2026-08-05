@@ -15,6 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 🧪 Testing
 
 - Add snapshot testing with insta for generated artifacts (#40)
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.6.0
+## [0.6.1] - 2026-08-05
+
+### 🐛 Bug Fixes
+
+- Make snapshot tests deterministic by using fixed filenames in temp dirs
+
+### 🧪 Testing
+
+- Add snapshot testing with insta for generated artifacts (#40)
 ## [0.6.0] - 2026-08-05
 
 ### ⚙️ Miscellaneous Tasks
