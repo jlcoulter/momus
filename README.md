@@ -5,6 +5,16 @@
 [![Docs.rs](https://img.shields.io/docsrs/momus)](https://docs.rs/momus)
 [![Rust](https://img.shields.io/badge/rust-1.88+-blue.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![momus-core](https://img.shields.io/crates/v/momus-core.svg?label=momus-core)](https://crates.io/crates/momus-core)
+[![momus-mock](https://img.shields.io/crates/v/momus-mock.svg?label=momus-mock)](https://crates.io/crates/momus-mock)
+[![momus-convert](https://img.shields.io/crates/v/momus-convert.svg?label=momus-convert)](https://crates.io/crates/momus-convert)
+[![momus-bench](https://img.shields.io/crates/v/momus-bench.svg?label=momus-bench)](https://crates.io/crates/momus-bench)
+[![momus-fuzz](https://img.shields.io/crates/v/momus-fuzz.svg?label=momus-fuzz)](https://crates.io/crates/momus-fuzz)
+[![momus-chaos](https://img.shields.io/crates/v/momus-chaos.svg?label=momus-chaos)](https://crates.io/crates/momus-chaos)
+[![momus-contract](https://img.shields.io/crates/v/momus-contract.svg?label=momus-contract)](https://crates.io/crates/momus-contract)
+[![momus-guard](https://img.shields.io/crates/v/momus-guard.svg?label=momus-guard)](https://crates.io/crates/momus-guard)
+[![momus-diff](https://img.shields.io/crates/v/momus-diff.svg?label=momus-diff)](https://crates.io/crates/momus-diff)
+[![momus-cli](https://img.shields.io/crates/v/momus-cli.svg?label=momus-cli)](https://crates.io/crates/momus-cli)
 
 **Generic API test harness with a composable assertion AST.**
 
@@ -12,7 +22,7 @@ Momus is a domain-agnostic test runner for HTTP APIs. Tests are defined as a JSO
 
 Momus is the generalization of [fhir-autotest](https://github.com/jlcoulter/fhir-autotest) — a FHIR Implementation Guide conformance test suite. The core pipeline (parse spec → generate resources → generate tests → execute → validate → report) is universal. Momus extracts the engine and makes it domain-agnostic, with FHIR as one of many supported input formats via `momus convert fhir`.
 
-> **Status:** v0.1.0 — Core engine, mock server, and CLI are functional. The assertion runner, template resolution, and fuzz mutators are implemented. Load testing, chaos engineering, contract testing, security scanning, diff testing, and all API description converters (curl, HAR, OpenAPI, FHIR, etc.) are scaffolded with stubs — implementation is in progress for v0.2.0. See [DESIGN.md](DESIGN.md) and [FEATURES.md](FEATURES.md) for the full roadmap.
+> **Status:** v0.3.0 — All 10 CLI commands are implemented and functional. The core engine, mock server, assertion runner, template resolution, and all sub-crates (bench, fuzz, chaos, contract, guard, diff) are fully implemented. All 7 API description converters (curl, HAR, OpenAPI, Postman, GraphQL, gRPC, FHIR) are complete. See [DESIGN.md](DESIGN.md) for the full architecture.
 
 ## Quick Start
 
@@ -29,14 +39,26 @@ momus run examples/health-check.json --base-url http://localhost:8080
 # Start a mock server for testing
 momus mock --port 8091
 
-# Convert a cURL command into a test plan (coming in v0.2.0)
-# momus convert curl 'curl https://api.example.com/health'
+# Convert a cURL command into a test plan
+momus convert curl 'curl https://api.example.com/health'
 
-# Load test a plan (coming in v0.2.0)
-# momus bench examples/health-check.json --concurrency 50 --duration 30
+# Load test a plan
+momus bench examples/health-check.json --concurrency 50 --duration 30
 
-# Fuzz test a plan (coming in v0.2.0)
-# momus fuzz examples/health-check.json --iterations 1000
+# Fuzz test a plan
+momus fuzz examples/health-check.json --iterations 1000
+
+# Run chaos experiments
+momus chaos examples/health-check.json
+
+# Validate responses against an API spec
+momus contract examples/health-check.json --spec openapi.yaml
+
+# Security scan a plan
+momus guard examples/health-check.json
+
+# Diff responses between two environments
+momus diff examples/health-check.json --baseline https://api-v1.example.com --target https://api-v2.example.com
 ```
 
 ## Example Test Plan
@@ -153,7 +175,7 @@ Add Momus to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-momus = "0.1"
+momus = "0.3"
 ```
 
 Use the library to build and run test plans programmatically:
@@ -161,6 +183,7 @@ Use the library to build and run test plans programmatically:
 ```rust
 use momus::prelude::*;
 use momus::builder::*;
+use momus_core::transport::HttpAdapter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -175,7 +198,19 @@ async fn main() -> anyhow::Result<()> {
         )
         .build();
 
-    let report = runner::execute_plan(&plan).await?;
+    // Use the transport adapter for custom HTTP clients
+    let adapter = HttpAdapter::new();
+    let request = momus_core::transport::TransportRequest {
+        method: momus_core::ast::Method::Get,
+        url: "http://localhost:8080/health".into(),
+        headers: std::collections::HashMap::new(),
+        body: None,
+    };
+    let response = adapter.send(&request).await?;
+    println!("Status: {}, Body: {:?}", response.status_code, response.body);
+
+    // Or use the built-in plan runner
+    let report = momus_core::engine::runner::execute_plan(&plan).await?;
     println!("{}", report);
     Ok(())
 }
@@ -192,7 +227,11 @@ Commands:
   mock      Start a mock server for testing
   bench     Load test a plan (steady, max-throughput, or soak)
   fuzz      Fuzz test a plan with payload mutations
+  chaos     Run chaos experiments against a plan
   convert   Convert an API description into a test plan
+  contract  Validate API responses against an OpenAPI/GraphQL spec
+  guard     Security scan a plan for common vulnerabilities
+  diff      Diff responses between two environments
 ```
 
 ### `momus run`
@@ -244,6 +283,16 @@ momus fuzz plan.json --iterations 5000
 momus fuzz plan.json --iterations 10000 --base-url http://staging:8080
 ```
 
+### `momus chaos`
+
+```bash
+# Run chaos experiments against a plan
+momus chaos plan.json
+
+# Override base URL
+momus chaos plan.json --base-url http://staging:8080
+```
+
 ### `momus convert`
 
 ```bash
@@ -253,29 +302,81 @@ momus convert curl 'curl -X POST https://api.example.com/users -H "Content-Type:
 # Convert a HAR file (browser DevTools export) into a test plan
 momus convert har traffic.har
 
-# Convert an OpenAPI spec (coming in v0.2.0)
+# Convert an OpenAPI spec into a test plan
 momus convert openapi spec.yaml
 
-# Convert a Postman collection (coming in v0.2.0)
+# Convert a Postman collection into a test plan
 momus convert postman collection.json
+
+# Convert a GraphQL schema into a test plan
+momus convert graphql schema.graphql
+
+# Convert a gRPC proto into a test plan
+momus convert grpc service.proto
+
+# Convert a FHIR IG package into a test plan
+momus convert fhir ig.tar.gz
+```
+
+### `momus contract`
+
+```bash
+# Validate responses against an OpenAPI spec
+momus contract plan.json --spec openapi.yaml
+
+# Validate responses against a GraphQL schema
+momus contract plan.json --spec schema.graphql
+```
+
+### `momus guard`
+
+```bash
+# Security scan a plan
+momus guard plan.json
+
+# Override base URL
+momus guard plan.json --base-url http://staging:8080
+```
+
+### `momus diff`
+
+```bash
+# Diff responses between two environments
+momus diff plan.json --baseline https://api-v1.example.com --target https://api-v2.example.com
 ```
 
 ## Project Structure
 
-```
+```text
 momus/                          # workspace root
 ├── crates/
 │   ├── momus/                  # Umbrella crate: re-exports, builder, prelude
-│   ├── momus-core/             # AST types, assertion evaluation, plan runner, template resolution
-│   ├── momus-mock/             # Configurable mock HTTP server
+│   ├── momus-core/             # AST types, assertion evaluation, plan runner, template resolution, transport adapter, script engine
+│   ├── momus-mock/             # Configurable mock HTTP server with stateful CRUD store
 │   ├── momus-convert/          # Convert API descriptions into test plans
 │   │   ├── curl.rs             #   cURL command → TestPlan
 │   │   ├── har.rs              #   HAR file → TestPlan
-│   │   ├── openapi.rs          #   OpenAPI 3.x → TestPlan (WIP)
-│   │   ├── postman.rs          #   Postman Collection → TestPlan (WIP)
-│   │   ├── graphql.rs          #   GraphQL SDL → TestPlan (WIP)
-│   │   ├── grpc.rs             #   gRPC proto → TestPlan (WIP)
-│   │   └── fhir.rs             #   FHIR IG → TestPlan (WIP)
+│   │   ├── openapi.rs          #   OpenAPI 3.x → TestPlan
+│   │   ├── postman.rs          #   Postman Collection → TestPlan
+│   │   ├── graphql.rs          #   GraphQL SDL → TestPlan
+│   │   ├── grpc.rs             #   gRPC proto → TestPlan
+│   │   └── fhir/               #   FHIR IG → TestPlan
+│   │       ├── mod.rs
+│   │       ├── package.rs
+│   │       ├── profile.rs
+│   │       ├── profile_resolver.rs
+│   │       ├── resource_gen.rs
+│   │       ├── capability.rs
+│   │       ├── search_param.rs
+│   │       ├── operation.rs
+│   │       ├── assertions.rs
+│   │       ├── validator.rs
+│   │       ├── planner.rs
+│   │       ├── test_model.rs
+│   │       ├── valuesets.rs
+│   │       ├── bulk_data.rs
+│   │       ├── bulk_loader.rs
+│   │       └── hcpd.rs
 │   ├── momus-bench/            # Load testing: steady, max-throughput, soak modes
 │   ├── momus-fuzz/             # Payload mutation: boundary, encoding, type mismatch, cardinality
 │   ├── momus-chaos/            # Chaos engineering: network, service, resource, state faults
@@ -288,6 +389,35 @@ momus/                          # workspace root
 │   └── crud-sequence.json
 ├── DESIGN.md
 └── README.md
+```
+
+## FHIR Converter
+
+The FHIR converter (`momus convert fhir`) transforms FHIR Implementation Guide packages into comprehensive conformance test plans. It is the most sophisticated converter in Momus, reflecting its origins in [fhir-autotest](https://github.com/jlcoulter/fhir-autotest).
+
+### Capabilities
+
+- **Package Parsing** — extract and parse FHIR IG packages (tar.gz) with NPM-style dependency resolution
+- **Profile Resolution** — resolve FHIR profiles, extensions, and value sets from the IG package and external sources
+- **Resource Generation** — generate valid FHIR resources conforming to profile definitions
+- **Search Parameter Testing** — generate tests for all defined search parameters
+- **Operation Testing** — generate tests for custom FHIR operations
+- **Capability Statement Validation** — verify server CapabilityStatement against IG requirements
+- **Assertion Generation** — generate FHIRPath-based assertions for profile conformance
+- **Bulk Data Testing** — support for FHIR Bulk Data Export ($export) testing
+- **HCPD Integration** — Health Care Provider Directory (HCPD) specific test generation
+
+### Usage
+
+```bash
+# Convert a FHIR IG package into a test plan
+momus convert fhir hl7.fhir.us.core-6.1.0.tar.gz
+
+# Save to a file
+momus convert fhir ig.tar.gz -o fhir-tests.json
+
+# Run the generated tests
+momus run fhir-tests.json --base-url https://fhir.example.com
 ```
 
 ## Development
