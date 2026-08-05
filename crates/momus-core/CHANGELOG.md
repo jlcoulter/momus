@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Bug Fixes
 
+- Add property-based testing with proptest and snapshot testing with insta (#137)
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.6.1
+## [0.6.2] - 2026-08-05
+
+### 🐛 Bug Fixes
+
 - Add #[inline] to hot-path functions and use structured tracing fields (#136)
 
 ### ⚙️ Miscellaneous Tasks
