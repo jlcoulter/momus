@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ## [0.5.1] - 2026-08-05
 
+### 🐛 Bug Fixes
+
+- Resolve clippy uninlined_format_args, version test, and broken link for CI
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.5.1
+## [0.5.1] - 2026-08-05
+
 ### 🚀 Features
 
 - Add 6 new fuzz mutators (Unicode, format string, path traversal, SSRF, SQLi, XSS) (#39)
