@@ -28,6 +28,7 @@ pub mod valuesets;
 use anyhow::{Context, Result};
 use momus_core::ast::{Step, TestPlan};
 use std::collections::HashMap;
+use std::path::Path;
 
 /// Convert a FHIR Implementation Guide package to a TestPlan.
 ///
@@ -133,4 +134,81 @@ fn select_capability_statement(
         .or(pkg.capability_statements.first())
         .cloned()
         .context("No CapabilityStatement found in IG package")
+}
+
+/// Generate bulk FHIR test data (NDJSON) from an IG package.
+///
+/// Parses the IG package at `package_path`, extracts resource types and their
+/// profile URLs from the CapabilityStatement, and generates NDJSON files
+/// under `output_dir/data/` — one per resource type, plus `combined.ndjson`
+/// and `update.ndjson`.
+///
+/// # Arguments
+///
+/// * `package_path` - Path to the IG package `.tgz` file
+/// * `count` - Number of resources to generate per type (default: 10)
+/// * `output_dir` - Directory to write NDJSON files into
+pub fn generate_bulk_test_data(package_path: &str, count: u64, output_dir: &Path) -> Result<()> {
+    let pkg = package::parse_package(package_path)?;
+    let cs = select_capability_statement(&pkg)?;
+
+    // Build counts and profile_urls from the CapabilityStatement
+    let mut counts = HashMap::new();
+    let mut profile_urls = HashMap::new();
+    for rest in &cs.rest {
+        for resource in &rest.resource {
+            let rtype = &resource.resource_type;
+            counts.insert(rtype.clone(), count);
+            if let Some(profile) = &resource.profile {
+                profile_urls.insert(rtype.clone(), profile.clone());
+            }
+        }
+    }
+
+    if counts.is_empty() {
+        anyhow::bail!("No resource types found in CapabilityStatement");
+    }
+
+    // Build value_set_systems from raw resources
+    let value_set_systems = valuesets::build_value_set_system_map(&pkg.raw_resources);
+
+    tracing::info!(
+        "Generating bulk data for {} resource types ({} each) into {}",
+        counts.len(),
+        count,
+        output_dir.display()
+    );
+
+    // Generate initial bulk data
+    let ids = bulk_data::generate_bulk_data(
+        &counts,
+        &profile_urls,
+        &pkg.structure_definitions,
+        &value_set_systems,
+        output_dir,
+    )?;
+
+    // Generate supplement resources for types in creation order that have no bulk count
+    let creation_order = bulk_data::bulk_data_creation_order(&counts);
+    let supplement_ids = bulk_data::write_supplement_ndjson(
+        &creation_order,
+        &counts,
+        &profile_urls,
+        &pkg.structure_definitions,
+        &value_set_systems,
+        output_dir,
+    )?;
+
+    // Merge supplement IDs into the main ID store for update generation
+    let mut all_ids = ids;
+    for (rtype, type_ids) in supplement_ids {
+        all_ids.entry(rtype).or_default().extend(type_ids);
+    }
+
+    // Generate update.ndjson
+    bulk_data::generate_update_ndjson(&all_ids, output_dir)?;
+
+    tracing::info!("Bulk test data written to {}/data/", output_dir.display());
+
+    Ok(())
 }

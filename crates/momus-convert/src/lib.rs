@@ -1,5 +1,6 @@
 use anyhow::Result;
 use momus_core::ast::TestPlan;
+use std::path::Path;
 
 /// Convert an API description into a Momus test plan.
 ///
@@ -82,6 +83,22 @@ pub fn available_formats() -> Vec<&'static str> {
     #[cfg(feature = "fhir")]
     formats.push("fhir");
     formats
+}
+
+/// Generate bulk FHIR test data (NDJSON) from an IG package.
+///
+/// Parses the IG package at `package_path`, extracts resource types and their
+/// profile URLs from the CapabilityStatement, and generates NDJSON files
+/// under `output_dir/data/`.
+///
+/// Only available when the `fhir` feature is enabled.
+#[cfg(feature = "fhir")]
+pub fn generate_fhir_bulk_test_data(
+    package_path: &str,
+    count: u64,
+    output_dir: &Path,
+) -> Result<()> {
+    fhir::generate_bulk_test_data(package_path, count, output_dir)
 }
 
 // ---------------------------------------------------------------------------
