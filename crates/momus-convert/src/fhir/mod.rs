@@ -19,8 +19,10 @@ pub mod profile;
 pub mod profile_resolver;
 pub mod resource_gen;
 pub mod search_param;
+pub mod test_helpers;
 pub mod test_model;
 pub mod validator;
+pub mod value_resolver;
 pub mod valuesets;
 
 use anyhow::{Context, Result};
