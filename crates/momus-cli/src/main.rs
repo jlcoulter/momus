@@ -645,7 +645,6 @@ async fn main() -> Result<()> {
                 interval_secs,
                 timeout_secs: cfg.chaos.timeout_secs,
                 output: chaos_output.clone(),
-                ..Default::default()
             };
             let reports = momus_chaos::run_chaos(&test_plan, &config).await?;
             for report in &reports {
@@ -688,7 +687,6 @@ async fn main() -> Result<()> {
                 strict,
                 timeout_secs,
                 output: contract_output.clone(),
-                ..Default::default()
             };
             let report = momus_contract::run_contract(&test_plan, &config).await?;
             println!("{}", report);
@@ -766,7 +764,6 @@ async fn main() -> Result<()> {
                 diff_status: diff_status.unwrap_or(cfg.diff.diff_status),
                 timeout_secs,
                 output: diff_output.clone(),
-                ..Default::default()
             };
             let report = momus_diff::run_diff(&test_plan, &config).await?;
             println!("{}", report);
