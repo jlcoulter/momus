@@ -21,3 +21,9 @@ license = "Apache-2.0"
 repository = "https://github.com/jlcoulter/momus"
 homepage = "https://github.com/jlcoulter/momus"
 documentation = "https://github.com/jlcoulter/momus#readme"
+
+[workspace.dependencies]
+cargo-husky = { version = "1.5.0", default-features = false, features = [
+    "precommit-hook",
+    "prepush-hook",
+] }

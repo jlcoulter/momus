@@ -23,3 +23,6 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 tracing = "0.1"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+cargo-husky.workspace = true

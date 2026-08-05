@@ -1246,6 +1246,7 @@ name = "momus"
 version = "0.3.4"
 dependencies = [
  "anyhow",
+ "cargo-husky",
  "momus-bench",
  "momus-chaos",
  "momus-contract",
@@ -1263,6 +1264,7 @@ name = "momus-bench"
 version = "0.3.4"
 dependencies = [
  "anyhow",
+ "cargo-husky",
  "futures",
  "momus-core",
  "reqwest 0.12.28",
@@ -1277,6 +1279,7 @@ name = "momus-chaos"
 version = "0.3.4"
 dependencies = [
  "anyhow",
+ "cargo-husky",
  "futures",
  "momus-core",
  "reqwest 0.12.28",
@@ -1292,6 +1295,7 @@ version = "0.3.4"
 dependencies = [
  "anyhow",
  "axum",
+ "cargo-husky",
  "clap",
  "momus-bench",
  "momus-chaos",
@@ -1313,6 +1317,7 @@ name = "momus-contract"
 version = "0.3.4"
 dependencies = [
  "anyhow",
+ "cargo-husky",
  "momus-core",
  "reqwest 0.12.28",
  "serde",
@@ -1326,6 +1331,7 @@ name = "momus-convert"
 version = "0.3.4"
 dependencies = [
  "anyhow",
+ "cargo-husky",
  "chrono",
  "flate2",
  "momus-core",
@@ -1371,6 +1377,7 @@ name = "momus-diff"
 version = "0.3.4"
 dependencies = [
  "anyhow",
+ "cargo-husky",
  "momus-core",
  "reqwest 0.12.28",
  "serde",
@@ -1384,6 +1391,7 @@ name = "momus-fuzz"
 version = "0.3.4"
 dependencies = [
  "anyhow",
+ "cargo-husky",
  "momus-core",
  "reqwest 0.12.28",
  "serde",
@@ -1397,6 +1405,7 @@ name = "momus-guard"
 version = "0.3.4"
 dependencies = [
  "anyhow",
+ "cargo-husky",
  "momus-core",
  "reqwest 0.12.28",
  "serde",
@@ -1412,6 +1421,7 @@ dependencies = [
  "anyhow",
  "axum",
  "bytes",
+ "cargo-husky",
  "chrono",
  "http-body-util",
  "reqwest 0.12.28",

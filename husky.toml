@@ -1,5 +1,20 @@
+# cargo-husky pre-commit and pre-push hook configuration
+#
+# Pre-commit hooks run fast checks (format, lint, compile) to catch issues
+# before they enter the repo. Full test suite runs on pre-push to avoid
+# blocking every commit with a multi-minute test run.
+#
+# To install hooks: cargo test (triggers the build script in any crate)
+# To verify: check .git/hooks/pre-commit and .git/hooks/pre-push
+#
+# See: https://github.com/rhysd/cargo-husky
+
 pre-commit = [
     "cargo fmt --check",
     "cargo clippy --all-targets -- -D warnings",
+    "cargo check --all-targets"
+]
+
+pre-push = [
     "cargo test --all-targets"
 ]
