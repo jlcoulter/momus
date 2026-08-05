@@ -93,7 +93,7 @@ enum Commands {
         format: String,
         /// Path to the input file (or curl command string for format=curl).
         input: String,
-        /// Output file for the test plan (default: stdout).
+        /// Output file for the test plan (default: <input_stem>.json in the same directory).
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
@@ -253,10 +253,27 @@ async fn main() -> Result<()> {
         } => {
             let plan = momus_convert::convert(&format, &input)?;
             let json = serde_json::to_string_pretty(&plan)?;
-            match output {
-                Some(path) => std::fs::write(path, json)?,
-                None => println!("{}", json),
-            }
+            let path = match output {
+                Some(p) => p,
+                None => {
+                    // Derive output filename from input (except curl, which is a raw command)
+                    if format == "curl" {
+                        println!("{}", json);
+                        return Ok(());
+                    }
+                    let input_path = std::path::Path::new(&input);
+                    let stem = input_path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("test_plan");
+                    let parent = input_path
+                        .parent()
+                        .unwrap_or_else(|| std::path::Path::new("."));
+                    parent.join(format!("{}.json", stem))
+                }
+            };
+            std::fs::write(&path, json)?;
+            println!("Test plan written to: {}", path.display());
             Ok(())
         }
         Commands::Bench {
