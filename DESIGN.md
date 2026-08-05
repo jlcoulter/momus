@@ -616,48 +616,66 @@ momus convert fhir package.tgz         # momus-convert: FHIR IG → plan
 
 ---
 
-## FHIR Autotest Porting Plan
-
-The following table maps every module from fhir-autotest to its destination in momus:
-
-| fhir-autotest Module | Lines | Destination | Status |
-|---------------------|-------|-------------|--------|
-| `config/models.rs` | 490 | `momus-core` (generic config) + `momus-convert/fhir.rs` (FHIR-specific) | 🔜 Port |
-| `model/profile.rs` | 180 | `momus-convert/fhir.rs` | 🔜 Port |
-| `model/capability.rs` | ~100 | `momus-convert/fhir.rs` | 🔜 Port |
-| `model/search_param.rs` | ~50 | `momus-convert/fhir.rs` | 🔜 Port |
-| `model/operation.rs` | ~50 | `momus-convert/fhir.rs` | 🔜 Port |
-| `parse/package.rs` | ~200 | `momus-convert/fhir.rs` | 🔜 Port |
-| `parse/profile_resolver.rs` | ~200 | `momus-convert/fhir.rs` | 🔜 Port |
-| `generate/model.rs` | 373 | `momus-convert/fhir.rs` (FHIR test model) | 🔜 Port |
-| `generate/planner.rs` | 2383 | `momus-convert/fhir.rs` | 🔜 Port |
-| `generate/conformance.rs` | 902 | `momus-convert/fhir.rs` | 🔜 Port |
-| `generate/dependency_resolver.rs` | ~150 | `momus-core` (generic) + `momus-convert/fhir.rs` (FHIR-specific) | 🔜 Port |
-| `generate/value_resolver.rs` | ~200 | `momus-convert/fhir.rs` | 🔜 Port |
-| `generate/resource_generator/` | 2561 | `momus-convert/fhir.rs` | 🔜 Port |
-| `generate/bulk_data.rs` | 2972 | `momus-convert/fhir.rs` | 🔜 Port |
-| `generate/hcpd.rs` | ~200 | `momus-convert/fhir.rs` | 🔜 Port |
-| `generate/locality.rs` | ~100 | `momus-convert/fhir.rs` | 🔜 Port |
-| `runner/orchestrator.rs` | 1008 | `momus-convert/fhir.rs` (FHIR orchestrator) | 🔜 Port |
-| `runner/executor.rs` | 752 | `momus-core` (generic executor) | 🔜 Port |
-| `runner/response_assertions.rs` | 1042 | `momus-core` (generic assertions) + `momus-convert/fhir.rs` (FHIR-specific) | 🔜 Port |
-| `runner/validator.rs` | 570 | `momus-contract` (profile validation) | 🔜 Port |
-| `runner/bulk_loader.rs` | 1788 | `momus-convert/fhir.rs` | 🔜 Port |
-| `mock_server.rs` | 806 | `momus-mock` (stateful CRUD store) | 🔜 Port |
-| `main.rs` | ~200 | `momus-cli` (already wired) | ✅ Done |
-| `lib.rs` | 400 | `momus-convert/fhir.rs` (orchestration functions) | 🔜 Port |
-
-### Porting Strategy
-
-1. **Phase 1 (v0.2.0):** Port the core FHIR types, package parser, and test plan generator into `momus-convert/fhir.rs`. This makes `momus convert fhir package.tgz` produce a valid `TestPlan` JSON.
-
-2. **Phase 2 (v0.2.0):** Port the resource generator, dependency resolver, and value resolver. This enables `momus run` with FHIR-generated plans.
-
-3. **Phase 3 (v0.2.0):** Port the orchestrator, executor, and response assertions into the generic momus-core runner. Add FHIR-specific assertions as `JsonPath` predicates.
-
-4. **Phase 4 (v0.2.0):** Port the mock server's stateful CRUD store into `momus-mock`. Port the profile validator into `momus-contract`.
-
-5. **Phase 5 (v0.3.0):** Port bulk data generation, HCPD-specific generation, and locality data.
+|## FHIR Autotest Porting Status (Current)
+|
+|The following table maps every module from fhir-autotest to its destination in momus, reflecting the actual porting status as of v0.3.0:
+|
+|| fhir-autotest Module | Lines | Destination | Status |
+||---------------------|-------|-------------|--------|
+|| `config/models.rs` | 490 | `momus-core/src/config.rs` (generic `RunConfig`) | ✅ Ported (simplified) |
+|| `model/profile.rs` | 176 | `momus-convert/src/fhir/profile.rs` | ✅ Ported |
+|| `model/capability.rs` | 101 | `momus-convert/src/fhir/capability.rs` | ✅ Ported |
+|| `model/search_param.rs` | 38 | `momus-convert/src/fhir/search_param.rs` | ✅ Ported |
+|| `model/operation.rs` | 56 | `momus-convert/src/fhir/operation.rs` | ✅ Ported |
+|| `parse/package.rs` | 215 | `momus-convert/src/fhir/package.rs` | ✅ Ported |
+|| `parse/profile_resolver.rs` | 1025 | `momus-convert/src/fhir/profile_resolver.rs` | ✅ Ported |
+|| `generate/model.rs` | 335 | `momus-convert/src/fhir/test_model.rs` | ✅ Ported |
+|| `generate/planner.rs` | 1298 | `momus-convert/src/fhir/planner.rs` | ✅ Ported |
+|| `generate/conformance.rs` | 902 | `momus-convert/src/fhir/planner.rs` (merged) | ✅ Ported |
+|| `generate/dependency_resolver.rs` | 376 | `momus-core/src/deps.rs` (generic) | ✅ Ported |
+|| `generate/value_resolver.rs` | 312 | `momus-convert/src/fhir/` | ❌ **Not ported** |
+|| `generate/resource_generator/` | 2561 | `momus-convert/src/fhir/resource_gen.rs` | ✅ Ported (simplified — 507 lines vs 2561) |
+|| `generate/bulk_data.rs` | 2972 | `momus-convert/src/fhir/bulk_data.rs` | ✅ Ported |
+|| `generate/hcpd.rs` | 482 | `momus-convert/src/fhir/hcpd.rs` | ✅ Ported (merged with locality) |
+|| `generate/locality.rs` | ~100 | `momus-convert/src/fhir/hcpd.rs` (merged) | ✅ Ported |
+|| `runner/orchestrator.rs` | 1008 | `momus-core` (generic runner) | ❌ **Not ported** (momus-core has its own generic runner) |
+|| `runner/executor.rs` | 752 | `momus-core` (generic executor) | ❌ **Not ported** (momus-core has its own generic executor) |
+|| `runner/response_assertions.rs` | 570 | `momus-convert/src/fhir/assertions.rs` | ✅ Ported |
+|| `runner/validator.rs` | 316 | `momus-convert/src/fhir/validator.rs` | ✅ Ported |
+|| `runner/bulk_loader.rs` | 1788 | `momus-convert/src/fhir/bulk_loader.rs` | ✅ Ported |
+|| `mock_server.rs` | 806 | `momus-mock/src/store.rs` | ✅ Ported |
+|| `main.rs` | 142 | `momus-cli` (already wired) | ✅ Done |
+|| `lib.rs` (orchestration) | 400 | `momus-convert/src/fhir/mod.rs` | ✅ Ported (simplified — 125 lines) |
+|| `test_helpers.rs` | 195 | — | ❌ **Not ported** |
+|
+|### Remaining Gaps
+|
+|1. **`value_resolver.rs`** — The `extract_field_values()` function (312 lines) is referenced by `momus-convert/src/fhir/mod.rs` but the module doesn't exist in momus-convert. The fhir-autotest version extracts searchable field values from generated resources for use in test URLs.
+|
+|2. **Resource generator simplification** — The momus port (`resource_gen.rs`, 507 lines) is significantly simpler than the fhir-autotest original (2561 lines across 4 sub-modules). Missing features:
+|   - Identifier profile constraints (`find_identifier_system`, `find_identifier_type`, `apply_identifier_profile_constraints`)
+|   - Slice handling (`populate_required_slices`, `populate_extension_slices`, `apply_slices_for_path`)
+|   - MustSupport backbones and optional fields
+|   - Nested required fields at depth 2+
+|   - Base spec repeatability rules
+|   - HumanName slice support
+|   - Complex extension handling with sub-extensions
+|
+|3. **FHIR-specific config** — fhir-autotest's `TestConfig` (490 lines) with `ServerConfig`, `RepositoryConfig`, `OverrideConfig`, `DataGenerationConfig` is not ported. Momus-core has a simpler generic `RunConfig` (147 lines).
+|
+|4. **Orchestrator/Executor** — fhir-autotest's full test pipeline (parse → resolve → generate → setup → execute → validate → cleanup) is not ported. The momus-core generic runner handles basic plan execution but lacks FHIR-specific setup/teardown, bulk upload, and profile validation integration.
+|
+|5. **`test_helpers.rs`** — The test IG package builder is not ported, making it harder to write integration tests for the FHIR converter.
+|
+|### Porting Strategy (Updated)
+|
+|1. **Phase 1 (v0.2.0) — DONE:** Core FHIR types, package parser, test plan generator, resource generator, profile resolver, assertions, validator, mock server CRUD store.
+|
+|2. **Phase 2 (v0.3.0) — DONE:** Bulk data generation, HCPD/AU-specific generation, bulk loader, locality data.
+|
+|3. **Phase 3 (v0.3.0+):** Port `value_resolver.rs` for field value extraction. Enhance resource generator with slice handling, identifier constraints, and mustSupport support. Port FHIR-specific config types.
+|
+|4. **Phase 4 (v0.4.0):** Port orchestrator/executor pipeline for end-to-end FHIR test execution. Port `test_helpers.rs` for integration testing.
 
 ---
 
