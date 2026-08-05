@@ -9,6 +9,9 @@ AGENTS.md
 # Hermes agent workspace
 .hermes/
 
+# Zed agent workspace
+.agents/
+
 # Environment files
 .env
 .env.*
@@ -19,3 +22,7 @@ AGENTS.md
 
 # Rust backup files
 *.rs.bk
+
+# Petstore sample files (leave in history)
+petstore.json
+petstore.momus.json
