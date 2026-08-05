@@ -16,8 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
       - run: cargo check --all-targets
 
   fmt:
@@ -26,9 +24,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          components: rustfmt
       - run: cargo fmt --check
 
   clippy:
@@ -37,9 +32,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          components: clippy
       - run: cargo clippy --all-targets -- -D warnings
 
   test:
@@ -48,8 +40,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
       - run: cargo test --all-targets
 
   deny:
@@ -58,8 +48,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
       - uses: EmbarkStudios/cargo-deny-action@v2
 
   lychee:

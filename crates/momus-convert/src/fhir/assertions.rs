@@ -25,15 +25,14 @@ pub fn assert_response(
                     if let Some(actual_type) = body.get("type").and_then(|v| v.as_str()) {
                         if actual_type != expected_type {
                             errors.push(format!(
-                                "Bundle type is '{}', expected '{}'",
-                                actual_type, expected_type
+                                "Bundle type is '{actual_type}', expected '{expected_type}'"
                             ));
                         }
                     } else {
                         errors.push("Bundle has no 'type' field".to_string());
                     }
                 } else if rt != "OperationOutcome" {
-                    errors.push(format!("Expected Bundle, got resourceType '{}'", rt));
+                    errors.push(format!("Expected Bundle, got resourceType '{rt}'"));
                 }
             } else {
                 errors.push("Response has no resourceType".to_string());
@@ -51,16 +50,14 @@ pub fn assert_response(
                 && count < min
             {
                 errors.push(format!(
-                    "Bundle has {} entries, expected at least {}",
-                    count, min
+                    "Bundle has {count} entries, expected at least {min}"
                 ));
             }
             if let Some(max) = assertion.max_entries
                 && count > max
             {
                 errors.push(format!(
-                    "Bundle has {} entries, expected at most {}",
-                    count, max
+                    "Bundle has {count} entries, expected at most {max}"
                 ));
             }
 
@@ -101,8 +98,7 @@ pub fn assert_response(
 
                 if matching_entries.is_empty() {
                     errors.push(format!(
-                        "Expected at least one {} in Bundle for field assertion, found none",
-                        resource_type
+                        "Expected at least one {resource_type} in Bundle for field assertion, found none"
                     ));
                     continue;
                 }
@@ -114,14 +110,12 @@ pub fn assert_response(
                         match actual {
                             None => {
                                 errors.push(format!(
-                                    "{}: field '{}' not found in response",
-                                    resource_type, path
+                                    "{resource_type}: field '{path}' not found in response"
                                 ));
                             }
                             Some(val) if val != *expected_value => {
                                 errors.push(format!(
-                                    "{}: field '{}' expected {:?}, got {:?}",
-                                    resource_type, path, expected_value, val
+                                    "{resource_type}: field '{path}' expected {expected_value:?}, got {val:?}"
                                 ));
                             }
                             _ => {}
@@ -140,8 +134,7 @@ pub fn assert_response(
                 });
                 if !found {
                     errors.push(format!(
-                        "Expected Bundle to include '{}' resources from _include/_revinclude, but none found",
-                        include_type
+                        "Expected Bundle to include '{include_type}' resources from _include/_revinclude, but none found"
                     ));
                 }
             }
@@ -164,8 +157,7 @@ pub fn assert_response(
                     });
                     if !has_distinct {
                         errors.push(format!(
-                            "Expected _include/_revinclude to return at least one resource type distinct from '{}'",
-                            primary_type
+                            "Expected _include/_revinclude to return at least one resource type distinct from '{primary_type}'"
                         ));
                     }
                 }
@@ -204,8 +196,7 @@ pub fn assert_response(
                         && resource.get(field).is_some()
                     {
                         errors.push(format!(
-                            "Resource contains field '{}' which should be absent with _summary",
-                            field
+                            "Resource contains field '{field}' which should be absent with _summary"
                         ));
                     }
                 }
@@ -257,8 +248,7 @@ pub fn assert_response(
                                 .filter_map(|i| i.get("severity").and_then(|v| v.as_str()))
                                 .collect();
                             errors.push(format!(
-                                "Expected OperationOutcome with severity '{}', found: {:?}",
-                                expected_severity, severities
+                                "Expected OperationOutcome with severity '{expected_severity}', found: {severities:?}"
                             ));
                         }
                     }
@@ -275,8 +265,7 @@ pub fn assert_response(
         && body.get(key).is_none()
     {
         errors.push(format!(
-            "Expected response to contain key '{}', but it was not found",
-            key
+            "Expected response to contain key '{key}', but it was not found"
         ));
     }
 
@@ -322,8 +311,7 @@ pub fn assert_response(
                     let bundle_total = body.get("total").and_then(|v| v.as_i64()).unwrap_or(-1);
                     if bundle_total > 0 {
                         errors.push(format!(
-                            "Expected at least one {} in Bundle for required field check, found none (Bundle total={})",
-                            resource_type, bundle_total
+                            "Expected at least one {resource_type} in Bundle for required field check, found none (Bundle total={bundle_total})"
                         ));
                     }
                     continue;
@@ -335,8 +323,7 @@ pub fn assert_response(
                         let actual = resolve_json_path(resource, field_path);
                         if actual.is_none() {
                             errors.push(format!(
-                                "{}: mustSupport field '{}' not found in response (best-effort check)",
-                                resource_type, field_path
+                                "{resource_type}: mustSupport field '{field_path}' not found in response (best-effort check)"
                             ));
                         }
                     }
@@ -345,8 +332,7 @@ pub fn assert_response(
                 let bundle_total = body.get("total").and_then(|v| v.as_i64()).unwrap_or(-1);
                 if bundle_total > 0 {
                     errors.push(format!(
-                        "Expected Bundle with entries for {} required field check (Bundle total={})",
-                        resource_type, bundle_total
+                        "Expected Bundle with entries for {resource_type} required field check (Bundle total={bundle_total})"
                     ));
                 }
             }
@@ -435,7 +421,7 @@ mod tests {
             "entry": []
         });
         let errors = assert_response(&assertion, 200, &Some(body));
-        assert!(errors.is_empty(), "Expected no errors, got: {:?}", errors);
+        assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     }
 
     #[test]
@@ -469,7 +455,7 @@ mod tests {
             "entry": [{"resource": {"resourceType": "Patient", "id": "123"}}]
         });
         let errors = assert_response(&assertion, 200, &Some(body));
-        assert!(errors.is_empty(), "Expected no errors, got: {:?}", errors);
+        assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     }
 
     #[test]
@@ -487,7 +473,7 @@ mod tests {
             ]
         });
         let errors = assert_response(&assertion, 200, &Some(body));
-        assert!(errors.is_empty(), "Expected no errors, got: {:?}", errors);
+        assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     }
 
     #[test]
@@ -508,7 +494,7 @@ mod tests {
             ]
         });
         let errors = assert_response(&assertion, 200, &Some(body));
-        assert!(errors.is_empty(), "Expected no errors, got: {:?}", errors);
+        assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     }
 
     #[test]
@@ -530,7 +516,7 @@ mod tests {
             ]
         });
         let errors = assert_response(&assertion, 200, &Some(body));
-        assert!(errors.is_empty(), "Expected no errors, got: {:?}", errors);
+        assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     }
 
     #[test]
@@ -544,7 +530,7 @@ mod tests {
             "issue": [{"severity": "error", "code": "not-found"}]
         });
         let errors = assert_response(&assertion, 404, &Some(body));
-        assert!(errors.is_empty(), "Expected no errors, got: {:?}", errors);
+        assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     }
 
     #[test]
