@@ -29,5 +29,5 @@ jobs:
           PRS='${{ steps.release.outputs.prs }}'
           echo "$PRS" | jq -c '.[]' | while read pr; do
             PR_NUMBER=$(echo "$pr" | jq -r '.number')
-            gh pr merge "$PR_NUMBER" --auto --merge
+            gh pr merge "$PR_NUMBER" --repo "${{ github.repository }}" --auto --merge
           done
