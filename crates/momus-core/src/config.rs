@@ -41,6 +41,9 @@ pub struct MomusConfig {
     /// `momus diff` settings.
     #[serde(default)]
     pub diff: DiffConfig,
+    /// `momus plan` settings.
+    #[serde(default)]
+    pub plan: PlanConfig,
 }
 
 impl MomusConfig {
@@ -211,6 +214,9 @@ pub struct BenchConfig {
     /// Base URL override (overrides the plan's base_url).
     #[serde(default)]
     pub base_url: Option<String>,
+    /// Output directory for results.
+    #[serde(default = "default_output")]
+    pub output: PathBuf,
 }
 
 impl Default for BenchConfig {
@@ -223,6 +229,7 @@ impl Default for BenchConfig {
             warmup_requests: 0,
             timeout_secs: default_timeout(),
             base_url: None,
+            output: default_output(),
         }
     }
 }
@@ -246,6 +253,9 @@ pub struct FuzzConfig {
     /// Request timeout in seconds.
     #[serde(default = "default_timeout")]
     pub timeout_secs: u64,
+    /// Output directory for results.
+    #[serde(default = "default_output")]
+    pub output: PathBuf,
 }
 
 fn default_iterations() -> usize {
@@ -259,6 +269,7 @@ impl Default for FuzzConfig {
             mutators: vec![],
             base_url: None,
             timeout_secs: default_timeout(),
+            output: default_output(),
         }
     }
 }
@@ -362,6 +373,9 @@ pub struct ChaosConfig {
     /// Request timeout in seconds.
     #[serde(default = "default_timeout")]
     pub timeout_secs: u64,
+    /// Output directory for results.
+    #[serde(default = "default_output")]
+    pub output: PathBuf,
 }
 
 fn default_interval() -> u64 {
@@ -375,6 +389,7 @@ impl Default for ChaosConfig {
             base_url: None,
             interval_secs: default_interval(),
             timeout_secs: default_timeout(),
+            output: default_output(),
         }
     }
 }
@@ -398,6 +413,9 @@ pub struct ContractConfig {
     /// Request timeout in seconds.
     #[serde(default = "default_timeout")]
     pub timeout_secs: u64,
+    /// Output directory for results.
+    #[serde(default = "default_output")]
+    pub output: PathBuf,
 }
 
 impl Default for ContractConfig {
@@ -407,6 +425,7 @@ impl Default for ContractConfig {
             base_url: None,
             strict: false,
             timeout_secs: default_timeout(),
+            output: default_output(),
         }
     }
 }
@@ -436,6 +455,9 @@ pub struct GuardConfig {
     /// Request timeout in seconds.
     #[serde(default = "default_timeout")]
     pub timeout_secs: u64,
+    /// Output directory for results.
+    #[serde(default = "default_output")]
+    pub output: PathBuf,
 }
 
 fn default_true() -> bool {
@@ -451,6 +473,7 @@ impl Default for GuardConfig {
             check_leaks: true,
             check_exposed: true,
             timeout_secs: default_timeout(),
+            output: default_output(),
         }
     }
 }
@@ -480,6 +503,9 @@ pub struct DiffConfig {
     /// Request timeout in seconds.
     #[serde(default = "default_timeout")]
     pub timeout_secs: u64,
+    /// Output directory for results.
+    #[serde(default = "default_output")]
+    pub output: PathBuf,
 }
 
 impl Default for DiffConfig {
@@ -491,6 +517,27 @@ impl Default for DiffConfig {
             diff_bodies: true,
             diff_status: true,
             timeout_secs: default_timeout(),
+            output: default_output(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Plan config
+// ---------------------------------------------------------------------------
+
+/// Configuration for `momus plan`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanConfig {
+    /// Output directory for the plan display (default: ./output).
+    #[serde(default = "default_output")]
+    pub output: PathBuf,
+}
+
+impl Default for PlanConfig {
+    fn default() -> Self {
+        Self {
+            output: default_output(),
         }
     }
 }
