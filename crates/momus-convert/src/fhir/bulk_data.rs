@@ -112,16 +112,17 @@ pub fn generate_bulk_data(
             continue;
         }
         let type_ids = ids.get(resource_type).cloned().unwrap_or_default();
-        let path = data_dir.join(format!("{}.ndjson", resource_type));
+        let path = data_dir.join(format!("{resource_type}.ndjson"));
         let file = std::fs::File::create(&path)?;
         let mut writer = BufWriter::new(file);
         let mut written = 0u64;
 
         // Resolve the profile URL for this resource type: prefer the IG's
         // profile, fall back to the base FHIR profile.
-        let profile_url = profile_urls.get(resource_type).cloned().unwrap_or_else(|| {
-            format!("http://hl7.org/fhir/StructureDefinition/{}", resource_type)
-        });
+        let profile_url = profile_urls
+            .get(resource_type)
+            .cloned()
+            .unwrap_or_else(|| format!("http://hl7.org/fhir/StructureDefinition/{resource_type}"));
 
         for id in type_ids.iter() {
             let selected_profile = profile_urls
@@ -230,7 +231,7 @@ pub fn generate_supplement_resource(
     let profile_url = profile_urls
         .get(resource_type)
         .cloned()
-        .unwrap_or_else(|| format!("http://hl7.org/fhir/StructureDefinition/{}", resource_type));
+        .unwrap_or_else(|| format!("http://hl7.org/fhir/StructureDefinition/{resource_type}"));
 
     let selected_profile = profile_urls
         .get(resource_type)
@@ -287,7 +288,7 @@ fn normalize_supplement_references(value: &mut serde_json::Value) {
                     rtype
                 };
                 let new_id = format!("{}-1", concrete_type.to_lowercase());
-                *ref_val = serde_json::Value::String(format!("{}/{}", concrete_type, new_id));
+                *ref_val = serde_json::Value::String(format!("{concrete_type}/{new_id}"));
             }
             for v in obj.values_mut() {
                 normalize_supplement_references(v);
@@ -358,7 +359,7 @@ pub fn write_supplement_ndjson(
         let id = format!("{}-1", resource_type.to_lowercase());
 
         // Write to per-type NDJSON file
-        let type_path = data_dir.join(format!("{}.ndjson", resource_type));
+        let type_path = data_dir.join(format!("{resource_type}.ndjson"));
         let type_file = std::fs::File::create(&type_path)?;
         let mut type_writer = BufWriter::new(type_file);
         serde_json::to_writer(&mut type_writer, &resource)?;
@@ -472,7 +473,7 @@ pub fn generate_update_ndjson(ids: &IdStore, output_dir: &Path) -> Result<()> {
         }
 
         // Read the original NDJSON file for this type
-        let ndjson_path = data_dir.join(format!("{}.ndjson", resource_type));
+        let ndjson_path = data_dir.join(format!("{resource_type}.ndjson"));
         let contents = match std::fs::read_to_string(&ndjson_path) {
             Ok(c) => c,
             Err(_) => continue, // skip types that weren't written
@@ -788,7 +789,7 @@ fn provenance_target_for_id(
 
 fn random_ref(resource_type: &str, ids: &[String], rng: &mut impl Rng) -> String {
     if ids.is_empty() {
-        format!("{}/placeholder-1", resource_type)
+        format!("{resource_type}/placeholder-1")
     } else {
         let idx = rng.random_range(0..ids.len());
         format!("{}/{}", resource_type, ids[idx])
@@ -871,7 +872,7 @@ fn walk_for_mutables(
             let saved_len = prefix.len();
             for (i, item) in arr.iter().enumerate() {
                 if item.is_object() {
-                    let idx_str = format!("[{}]", i);
+                    let idx_str = format!("[{i}]");
                     prefix.push_str(&idx_str);
                     walk_for_mutables(item, prefix, candidates);
                     prefix.truncate(saved_len);
@@ -1376,16 +1377,14 @@ mod tests {
             let path = dir
                 .path()
                 .join("data")
-                .join(format!("{}.ndjson", resource_type));
-            assert!(path.exists(), "{}.ndjson should exist", resource_type);
+                .join(format!("{resource_type}.ndjson"));
+            assert!(path.exists(), "{resource_type}.ndjson should exist");
             let contents = std::fs::read_to_string(&path).expect("should read file");
             let lines: Vec<&str> = contents.lines().filter(|l| !l.is_empty()).collect();
             assert_eq!(
                 lines.len(),
                 *count as usize,
-                "{} should have {} lines",
-                resource_type,
-                count
+                "{resource_type} should have {count} lines"
             );
 
             for line in &lines {
@@ -1433,8 +1432,7 @@ mod tests {
                 .expect("should have expected prefix");
             assert!(
                 prac_ids.contains(&prac_id.to_string()),
-                "Practitioner reference {} should exist",
-                prac_id
+                "Practitioner reference {prac_id} should exist"
             );
 
             let org_ref = pr["organization"]["reference"]
@@ -1446,8 +1444,7 @@ mod tests {
                 .expect("should have expected prefix");
             assert!(
                 org_ids.contains(&org_id.to_string()),
-                "Organization reference {} should exist",
-                org_id
+                "Organization reference {org_id} should exist"
             );
         }
 
@@ -1485,13 +1482,11 @@ mod tests {
                 .expect("should have a float value");
             assert!(
                 (20.0..=60.0).contains(&lat),
-                "Latitude {} should be in US range",
-                lat
+                "Latitude {lat} should be in US range"
             );
             assert!(
                 (-130.0..=-60.0).contains(&lon),
-                "Longitude {} should be in US range",
-                lon
+                "Longitude {lon} should be in US range"
             );
         }
     }
@@ -2032,12 +2027,12 @@ mod tests {
             let path = dir
                 .path()
                 .join("data")
-                .join(format!("{}.ndjson", resource_type));
-            assert!(path.exists(), "{}.ndjson should exist", resource_type);
+                .join(format!("{resource_type}.ndjson"));
+            assert!(path.exists(), "{resource_type}.ndjson should exist");
             let contents = std::fs::read_to_string(&path).expect("should read file");
             let lines: Vec<&str> = contents.lines().filter(|l| !l.is_empty()).collect();
-            assert_eq!(lines.len(), 1, "{} should have 1 line", resource_type);
-            assert_eq!(ids.len(), 1, "{} should have 1 ID", resource_type);
+            assert_eq!(lines.len(), 1, "{resource_type} should have 1 line");
+            assert_eq!(ids.len(), 1, "{resource_type} should have 1 ID");
 
             let parsed: serde_json::Value =
                 serde_json::from_str(lines[0]).expect("should parse valid JSON");
@@ -2134,8 +2129,7 @@ mod tests {
         assert_eq!(
             lines.len(),
             total_bulk,
-            "update.ndjson should have {} lines",
-            total_bulk
+            "update.ndjson should have {total_bulk} lines"
         );
     }
 
@@ -2278,8 +2272,7 @@ mod tests {
             assert!(!last_updated.is_empty(), "meta.lastUpdated should be set");
             assert!(
                 last_updated.contains('T'),
-                "meta.lastUpdated should be an ISO timestamp, got: {}",
-                last_updated
+                "meta.lastUpdated should be an ISO timestamp, got: {last_updated}"
             );
         }
     }
@@ -2299,7 +2292,7 @@ mod tests {
         let order = bulk_data_creation_order(&counts);
 
         for t in counts.keys() {
-            assert!(order.contains(t), "{} should be in creation order", t);
+            assert!(order.contains(t), "{t} should be in creation order");
         }
 
         let org_idx = order

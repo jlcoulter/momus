@@ -146,7 +146,7 @@ fn get_field_path(path: &str, resource_type: &str) -> Option<String> {
     // Strip slice notation (e.g., "identifier:type" → "identifier")
     let field_name = if let Some((first, rest)) = field_part.split_once('.') {
         let first_clean = first.split(':').next().unwrap_or(first);
-        format!("{}.{}", first_clean, rest)
+        format!("{first_clean}.{rest}")
     } else {
         field_part
             .split(':')
@@ -259,7 +259,7 @@ mod tests {
             "name": [{"family": "Test", "given": ["Patient"]}]
         });
         let errors = validate_against_profile(&resource, &profile);
-        assert!(errors.is_empty(), "Expected no errors, got: {:?}", errors);
+        assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     }
 
     #[test]

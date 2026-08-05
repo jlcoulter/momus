@@ -139,7 +139,7 @@ impl MockServer {
                         }
 
                         let path = uri.split('?').next().unwrap_or(&uri);
-                        let route_key = format!("{} {}", method, path);
+                        let route_key = format!("{method} {path}");
                         match routes.get(&route_key) {
                             Some(resp) => {
                                 let mut response =
