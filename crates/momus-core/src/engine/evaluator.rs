@@ -254,6 +254,7 @@ pub fn evaluate_assertion(
 // Value predicate evaluation
 // ---------------------------------------------------------------------------
 
+#[inline]
 fn evaluate_value_predicate(
     name: &str,
     predicate: &ValuePredicate,
@@ -319,6 +320,7 @@ fn evaluate_value_predicate(
 // JSON predicate evaluation
 // ---------------------------------------------------------------------------
 
+#[inline]
 fn evaluate_json_predicate(
     path: &str,
     predicate: &JsonPredicate,
