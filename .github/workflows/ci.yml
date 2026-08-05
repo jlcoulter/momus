@@ -61,3 +61,13 @@ jobs:
         with:
           toolchain: stable
       - uses: EmbarkStudios/cargo-deny-action@v2
+
+  lychee:
+    name: Links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lycheeverse/lychee-action@v2
+        with:
+          args: "--config lychee.toml --no-progress **/*.md **/*.toml **/*.yaml"
+          fail: true
