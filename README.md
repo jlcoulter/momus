@@ -5,16 +5,6 @@
 [![Docs.rs](https://img.shields.io/docsrs/momus)](https://docs.rs/momus)
 [![Rust](https://img.shields.io/badge/rust-1.88+-blue.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![momus-core](https://img.shields.io/crates/v/momus-core.svg?label=momus-core)](https://crates.io/crates/momus-core)
-[![momus-mock](https://img.shields.io/crates/v/momus-mock.svg?label=momus-mock)](https://crates.io/crates/momus-mock)
-[![momus-convert](https://img.shields.io/crates/v/momus-convert.svg?label=momus-convert)](https://crates.io/crates/momus-convert)
-[![momus-bench](https://img.shields.io/crates/v/momus-bench.svg?label=momus-bench)](https://crates.io/crates/momus-bench)
-[![momus-fuzz](https://img.shields.io/crates/v/momus-fuzz.svg?label=momus-fuzz)](https://crates.io/crates/momus-fuzz)
-[![momus-chaos](https://img.shields.io/crates/v/momus-chaos.svg?label=momus-chaos)](https://crates.io/crates/momus-chaos)
-[![momus-contract](https://img.shields.io/crates/v/momus-contract.svg?label=momus-contract)](https://crates.io/crates/momus-contract)
-[![momus-guard](https://img.shields.io/crates/v/momus-guard.svg?label=momus-guard)](https://crates.io/crates/momus-guard)
-[![momus-diff](https://img.shields.io/crates/v/momus-diff.svg?label=momus-diff)](https://crates.io/crates/momus-diff)
-[![momus-cli](https://img.shields.io/crates/v/momus-cli.svg?label=momus-cli)](https://crates.io/crates/momus-cli)
 
 **Generic API test harness with a composable assertion AST.**
 
