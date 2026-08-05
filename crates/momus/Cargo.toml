@@ -23,3 +23,6 @@ momus-guard = { path = "../momus-guard", version = "0.3.4" }
 momus-diff = { path = "../momus-diff", version = "0.3.4" }
 serde_json = "1"
 anyhow = "1"
+
+[dev-dependencies]
+cargo-husky.workspace = true
