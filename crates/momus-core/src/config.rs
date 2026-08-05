@@ -54,11 +54,22 @@ impl MomusConfig {
     }
 
     /// Load a `MomusConfig` from a TOML file, returning default if file not found.
+    /// Logs a warning if the file exists but cannot be parsed.
     pub fn load_optional(path: &str) -> Self {
-        std::fs::read_to_string(path)
-            .ok()
-            .and_then(|content| toml::from_str(&content).ok())
-            .unwrap_or_default()
+        match std::fs::read_to_string(path) {
+            Ok(content) => match toml::from_str(&content) {
+                Ok(config) => config,
+                Err(e) => {
+                    tracing::warn!(
+                        "Config file '{}' has invalid TOML: {}. Using defaults.",
+                        path,
+                        e
+                    );
+                    Self::default()
+                }
+            },
+            Err(_) => Self::default(),
+        }
     }
 }
 

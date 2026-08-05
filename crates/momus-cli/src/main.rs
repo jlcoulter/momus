@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use momus_core::ast::*;
 use momus_core::config::MomusConfig;
@@ -22,12 +22,27 @@ enum BenchModeCli {
 #[derive(Parser)]
 #[command(
     name = "momus",
-    about = "Generic API test harness with a composable assertion AST"
+    about = "Generic API test harness with a composable assertion AST",
+    version,
+    long_about = "Momus is a domain-agnostic test runner for HTTP APIs.\n\
+                   Tests are defined as a JSON plan — a tree of steps (requests,\n\
+                   sequences, parallel blocks) with composable assertions on responses.\n\n\
+                   Configuration is loaded from:\n\
+                   1. --config <path> (explicit)\n\
+                   2. $MOMUS_CONFIG (env var)\n\
+                   3. ./momus.toml\n\
+                   4. ./.momus.toml\n\
+                   5. ~/.config/momus/config.toml\n\n\
+                   CLI flags override config file values."
 )]
 struct Cli {
-    /// Path to config.toml (optional). CLI flags override file values.
-    #[arg(long, global = true)]
+    /// Path to config.toml (optional). Searches default locations if not set.
+    #[arg(long, global = true, env = "MOMUS_CONFIG")]
     config: Option<String>,
+
+    /// Enable verbose output (sets RUST_LOG=momus=debug).
+    #[arg(short, long, global = true)]
+    verbose: bool,
 
     #[command(subcommand)]
     command: Commands,
@@ -51,8 +66,8 @@ enum Commands {
     },
     /// Validate a test plan JSON file.
     Validate {
-        /// Path to the test plan JSON file.
-        plan: PathBuf,
+        /// Path to the test plan JSON file (use - for stdin).
+        plan: String,
     },
     /// Start a mock server for testing.
     Mock {
@@ -123,6 +138,9 @@ enum Commands {
     /// Convert an API description into a test plan.
     Convert {
         /// Input format: openapi, postman, har, curl, graphql, grpc, fhir
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new([
+            "openapi", "postman", "har", "curl", "graphql", "grpc", "fhir",
+        ]))]
         format: String,
         /// Path to the input file (or curl command string for format=curl).
         input: String,
@@ -160,10 +178,29 @@ enum Commands {
         #[arg(long)]
         target: String,
     },
+    /// Generate a skeleton test plan or config file.
+    Init {
+        /// What to generate: plan, config
+        #[arg(default_value = "plan")]
+        template: String,
+        /// Output path (default: test-plan.json for plan, momus.toml for config).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let cli = Cli::parse();
+
+    // Set up tracing: verbose flag sets RUST_LOG=momus=debug if not already set
+    if cli.verbose && std::env::var("RUST_LOG").is_err() {
+        // SAFETY: Setting RUST_LOG before tracing is initialized is safe — no other
+        // thread is reading it yet, and we're at the start of main.
+        unsafe {
+            std::env::set_var("RUST_LOG", "momus=debug");
+        }
+    }
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
@@ -171,14 +208,8 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    let cli = Cli::parse();
-
-    // Load optional config file — all sections default if absent.
-    let cfg = cli
-        .config
-        .as_deref()
-        .map(MomusConfig::load_optional)
-        .unwrap_or_default();
+    // Load optional config file — search default locations if not specified
+    let cfg = load_config(cli.config.as_deref())?;
 
     match cli.command {
         Commands::Run {
@@ -187,19 +218,23 @@ async fn main() -> Result<()> {
             output,
             format,
         } => {
-            let content = if plan == "-" {
-                use std::io::Read;
-                let mut buf = String::new();
-                std::io::stdin().read_to_string(&mut buf)?;
-                buf
-            } else {
-                std::fs::read_to_string(&plan)?
-            };
-            let mut test_plan: TestPlan = serde_json::from_str(&content)?;
+            let content = read_plan_content(&plan)?;
+            let mut test_plan: TestPlan = serde_json::from_str(&content)
+                .with_context(|| format!("Failed to parse test plan '{}'", plan))?;
 
             // Config precedence: CLI > [run] section > [global] section
             if let Some(url) = base_url.or(cfg.run.base_url).or(cfg.global.base_url) {
                 test_plan.base_url = url;
+            }
+
+            // Apply global headers and timeout from config
+            if !cfg.global.headers.is_empty() {
+                for (k, v) in &cfg.global.headers {
+                    test_plan
+                        .default_headers
+                        .entry(k.clone())
+                        .or_insert_with(|| v.clone());
+                }
             }
 
             tracing::info!(
@@ -224,11 +259,12 @@ async fn main() -> Result<()> {
             if want_html {
                 let html = report.to_html();
                 if output.extension().and_then(|e| e.to_str()) == Some("html") {
+                    // --output is a file path
                     std::fs::create_dir_all(output.parent().unwrap_or(&output))?;
                     std::fs::write(&output, &html)?;
                     println!("HTML report written to: {}", output.display());
                 } else {
-                    // --format html but output is a directory — write report.html inside it
+                    // --output is a directory — write report.html inside it
                     std::fs::create_dir_all(&output)?;
                     let html_path = output.join("report.html");
                     std::fs::write(&html_path, &html)?;
@@ -238,7 +274,9 @@ async fn main() -> Result<()> {
                 println!("{}", report);
             }
 
-            std::fs::create_dir_all(&output)?;
+            // Write per-group results to output/results/
+            let results_dir = output.join("results");
+            std::fs::create_dir_all(&results_dir)?;
             report.write_results(&output)?;
             println!("\nResults written to: {}/results/", output.display());
 
@@ -249,8 +287,9 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Commands::Validate { plan } => {
-            let content = std::fs::read_to_string(&plan)?;
-            let test_plan: TestPlan = serde_json::from_str(&content)?;
+            let content = read_plan_content(&plan)?;
+            let test_plan: TestPlan = serde_json::from_str(&content)
+                .with_context(|| format!("Failed to parse test plan '{}'", plan))?;
             println!("✓ Valid test plan: '{}'", test_plan.name);
             println!("  Total tests: {}", test_plan.total_tests());
             println!("  Steps: {}", test_plan.steps.len());
@@ -332,8 +371,10 @@ async fn main() -> Result<()> {
             output,
             format,
         } => {
-            let content = std::fs::read_to_string(&plan)?;
-            let test_plan: TestPlan = serde_json::from_str(&content)?;
+            let content = std::fs::read_to_string(&plan)
+                .with_context(|| format!("Failed to read plan file '{}'", plan.display()))?;
+            let test_plan: TestPlan = serde_json::from_str(&content)
+                .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             // Config precedence: CLI > [bench] section > [global] section
             let base_url = base_url.or(cfg.bench.base_url).or(cfg.global.base_url);
@@ -396,8 +437,10 @@ async fn main() -> Result<()> {
             iterations,
             base_url,
         } => {
-            let content = std::fs::read_to_string(&plan)?;
-            let test_plan: TestPlan = serde_json::from_str(&content)?;
+            let content = std::fs::read_to_string(&plan)
+                .with_context(|| format!("Failed to read plan file '{}'", plan.display()))?;
+            let test_plan: TestPlan = serde_json::from_str(&content)
+                .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.fuzz.base_url).or(cfg.global.base_url);
 
@@ -411,8 +454,10 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Commands::Chaos { plan, base_url } => {
-            let content = std::fs::read_to_string(&plan)?;
-            let test_plan: TestPlan = serde_json::from_str(&content)?;
+            let content = std::fs::read_to_string(&plan)
+                .with_context(|| format!("Failed to read plan file '{}'", plan.display()))?;
+            let test_plan: TestPlan = serde_json::from_str(&content)
+                .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.chaos.base_url).or(cfg.global.base_url);
 
@@ -431,8 +476,10 @@ async fn main() -> Result<()> {
             spec,
             base_url,
         } => {
-            let content = std::fs::read_to_string(&plan)?;
-            let test_plan: TestPlan = serde_json::from_str(&content)?;
+            let content = std::fs::read_to_string(&plan)
+                .with_context(|| format!("Failed to read plan file '{}'", plan.display()))?;
+            let test_plan: TestPlan = serde_json::from_str(&content)
+                .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.contract.base_url).or(cfg.global.base_url);
 
@@ -446,8 +493,10 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Commands::Guard { plan, base_url } => {
-            let content = std::fs::read_to_string(&plan)?;
-            let test_plan: TestPlan = serde_json::from_str(&content)?;
+            let content = std::fs::read_to_string(&plan)
+                .with_context(|| format!("Failed to read plan file '{}'", plan.display()))?;
+            let test_plan: TestPlan = serde_json::from_str(&content)
+                .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let base_url = base_url.or(cfg.guard.base_url).or(cfg.global.base_url);
 
@@ -464,8 +513,10 @@ async fn main() -> Result<()> {
             baseline,
             target,
         } => {
-            let content = std::fs::read_to_string(&plan)?;
-            let test_plan: TestPlan = serde_json::from_str(&content)?;
+            let content = std::fs::read_to_string(&plan)
+                .with_context(|| format!("Failed to read plan file '{}'", plan.display()))?;
+            let test_plan: TestPlan = serde_json::from_str(&content)
+                .with_context(|| format!("Failed to parse test plan '{}'", plan.display()))?;
 
             let config = momus_diff::DiffConfig {
                 baseline_url: baseline,
@@ -476,5 +527,137 @@ async fn main() -> Result<()> {
             println!("{}", report);
             Ok(())
         }
+        Commands::Init { template, output } => {
+            match template.as_str() {
+                "plan" => {
+                    let path = output.unwrap_or_else(|| PathBuf::from("test-plan.json"));
+                    let skeleton = serde_json::json!({
+                        "name": "my test plan",
+                        "base_url": "http://localhost:8080",
+                        "default_headers": {
+                            "Accept": "application/json"
+                        },
+                        "steps": [
+                            {
+                                "type": "request",
+                                "name": "health",
+                                "method": "GET",
+                                "url": "/health",
+                                "assert": [
+                                    { "status": 200 },
+                                    { "valid_json": null }
+                                ]
+                            }
+                        ]
+                    });
+                    let json = serde_json::to_string_pretty(&skeleton)?;
+                    std::fs::write(&path, json)?;
+                    println!("✓ Skeleton test plan written to: {}", path.display());
+                }
+                "config" => {
+                    let path = output.unwrap_or_else(|| PathBuf::from("momus.toml"));
+                    let content = r#"# Momus Configuration
+# CLI flags override these values.
+
+[global]
+# Base URL for all requests (overrides the plan's base_url).
+# base_url = "http://localhost:8080"
+
+# Default headers sent with every request.
+# [global.headers]
+# Authorization = "Bearer your-token-here"
+
+# Request timeout in seconds (default: 30).
+# timeout_secs = 60
+
+[run]
+# Output directory for results (default: ./output).
+# output = "./results"
+
+[bench]
+# Execution mode: Steady, MaxThroughput, or Soak.
+# [bench.mode]
+# type = "Steady"
+# concurrency = 20
+# duration_secs = 60
+
+[fuzz]
+# Number of mutations to generate per input (default: 1000).
+# iterations = 5000
+
+[chaos]
+# How long to wait between experiments in seconds (default: 5).
+# interval_secs = 10
+
+[contract]
+# Path to the API spec file (OpenAPI YAML/JSON or GraphQL SDL).
+# spec_path = "./api-spec.yaml"
+# strict = true
+
+[guard]
+# Check for missing security headers (default: true).
+# check_headers = true
+# check_cors = true
+# check_leaks = true
+# check_exposed = true
+
+[diff]
+# Baseline environment URL (e.g. production).
+# baseline_url = "https://prod.example.com"
+# Target environment URL (e.g. staging).
+# target_url = "https://staging.example.com"
+"#;
+                    std::fs::write(&path, content)?;
+                    println!("✓ Skeleton config written to: {}", path.display());
+                }
+                other => {
+                    anyhow::bail!("Unknown template '{}'. Available: plan, config", other);
+                }
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Read plan content from a file path or stdin.
+fn read_plan_content(plan: &str) -> Result<String> {
+    if plan == "-" {
+        use std::io::Read;
+        let mut buf = String::new();
+        std::io::stdin().read_to_string(&mut buf)?;
+        Ok(buf)
+    } else {
+        std::fs::read_to_string(plan)
+            .with_context(|| format!("Failed to read plan file '{}'", plan))
+    }
+}
+
+/// Load config from explicit path, env var, or search default locations.
+fn load_config(explicit: Option<&str>) -> Result<MomusConfig> {
+    let path = match explicit {
+        Some(p) => Some(p.to_string()),
+        None => {
+            // Search default locations
+            let candidates = [
+                "momus.toml",
+                ".momus.toml",
+                &dirs::config_dir()
+                    .map(|d| d.join("momus").join("config.toml"))
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default(),
+            ];
+            candidates
+                .iter()
+                .find(|p| !p.is_empty() && std::path::Path::new(p).exists())
+                .map(|s| s.to_string())
+        }
+    };
+
+    match path {
+        Some(p) => {
+            tracing::debug!("Loading config from: {}", p);
+            MomusConfig::load(&p).with_context(|| format!("Failed to parse config file '{}'", p))
+        }
+        None => Ok(MomusConfig::default()),
     }
 }
