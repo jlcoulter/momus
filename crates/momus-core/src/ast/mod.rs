@@ -6,6 +6,7 @@
 /// - A **script** (inline code for custom logic)
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Write;
 
 pub mod assertion;
 
@@ -51,6 +52,59 @@ impl TestPlan {
     pub fn total_tests(&self) -> usize {
         self.steps.iter().map(|s| s.count_tests()).sum()
     }
+
+    /// Print a human-readable tree of all requests in the plan.
+    pub fn display_plan(&self) -> String {
+        let mut out = String::new();
+
+        writeln!(out, "Plan: {}", self.name).ok();
+        if !self.base_url.is_empty() {
+            writeln!(out, "Base URL: {}", self.base_url).ok();
+        }
+        if !self.default_headers.is_empty() {
+            writeln!(out, "Default headers:").ok();
+            for (k, v) in &self.default_headers {
+                writeln!(out, "  {}: {}", k, v).ok();
+            }
+        }
+
+        let mut total = 0usize;
+        let mut setup_count = 0usize;
+        let mut teardown_count = 0usize;
+
+        if !self.setup.is_empty() {
+            writeln!(out, "\n── Setup ──").ok();
+            for step in &self.setup {
+                setup_count += step.display(&mut out, 0);
+            }
+        }
+
+        if !self.steps.is_empty() {
+            writeln!(out, "\n── Tests ──").ok();
+            for step in &self.steps {
+                total += step.display(&mut out, 0);
+            }
+        }
+
+        if !self.teardown.is_empty() {
+            writeln!(out, "\n── Teardown ──").ok();
+            for step in &self.teardown {
+                teardown_count += step.display(&mut out, 0);
+            }
+        }
+
+        writeln!(
+            out,
+            "\nTotal requests: {} ({} setup, {} tests, {} teardown)",
+            setup_count + total + teardown_count,
+            setup_count,
+            total,
+            teardown_count,
+        )
+        .ok();
+
+        out
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -85,6 +139,59 @@ impl Step {
             Step::Parallel(steps) => steps.iter().map(|s| s.count_tests()).sum(),
             Step::Script(_) => 1,
             Step::Noop { .. } => 0,
+        }
+    }
+
+    /// Render this step into the output buffer, returning the number of leaf requests.
+    pub fn display(&self, out: &mut String, depth: usize) -> usize {
+        let indent = "  ".repeat(depth);
+        match self {
+            Step::Request(req) => {
+                let body_preview = match &req.body {
+                    Some(b) => {
+                        let s = serde_json::to_string(b).unwrap_or_default();
+                        if s.len() > 60 {
+                            format!("  {}", &s[..57])
+                        } else {
+                            format!("  {}", s)
+                        }
+                    }
+                    None => String::new(),
+                };
+                writeln!(out, "{}{}  {}{}", indent, req.method, req.url, body_preview,).ok();
+                1
+            }
+            Step::Sequence(seq) => {
+                writeln!(out, "{}── sequence: \"{}\" ──", indent, seq.name).ok();
+                let mut count = 0usize;
+                for step in &seq.steps {
+                    count += step.display(out, depth + 1);
+                }
+                count
+            }
+            Step::Parallel(steps) => {
+                writeln!(out, "{}── parallel ──", indent).ok();
+                let mut count = 0usize;
+                for step in steps {
+                    count += step.display(out, depth + 1);
+                }
+                count
+            }
+            Step::Script(script) => {
+                writeln!(
+                    out,
+                    "{}[script] {} ({})",
+                    indent, script.name, script.language
+                )
+                .ok();
+                0
+            }
+            Step::Noop { description } => {
+                if !description.is_empty() {
+                    writeln!(out, "{}[noop] {}", indent, description).ok();
+                }
+                0
+            }
         }
     }
 }
