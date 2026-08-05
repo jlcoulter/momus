@@ -247,6 +247,6 @@ pull requests.
 
 ---
 
-If you have questions or need help, feel free to open a
-[Discussion](https://github.com/jlcoulter/momus/discussions) or ask in the
+If you have questions or need help, feel free to open an
+[Issue](https://github.com/jlcoulter/momus/issues/new) or ask in the
 relevant pull request or issue.
