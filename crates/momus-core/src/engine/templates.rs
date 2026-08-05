@@ -86,7 +86,7 @@ fn resolve_env_templates(s: &mut String) {
 /// - `{random.string}` → random alphanumeric of length 8
 /// - `{random.string(N)}` → random alphanumeric of length N
 fn resolve_random_templates(s: &mut String) {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // {random.uuid}
     let re_uuid = regex::Regex::new(r"\{random\.uuid\}").unwrap();
@@ -101,7 +101,7 @@ fn resolve_random_templates(s: &mut String) {
             let lo: i64 = caps[1].parse().unwrap_or(0);
             let hi: i64 = caps[2].parse().unwrap_or(i64::MAX);
             if lo <= hi {
-                rng.gen_range(lo..=hi).to_string()
+                rng.random_range(lo..=hi).to_string()
             } else {
                 caps[0].to_string()
             }
@@ -112,7 +112,7 @@ fn resolve_random_templates(s: &mut String) {
     let re_int = regex::Regex::new(r"\{random\.int\}").unwrap();
     *s = re_int
         .replace_all(s, |_: &regex::Captures| {
-            rng.gen_range(0..=i64::MAX).to_string()
+            rng.random_range(0..=i64::MAX).to_string()
         })
         .to_string();
 
@@ -137,7 +137,7 @@ fn random_alphanumeric(rng: &mut impl Rng, len: usize) -> String {
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     (0..len)
         .map(|_| {
-            let idx = rng.gen_range(0..CHARSET.len());
+            let idx = rng.random_range(0..CHARSET.len());
             CHARSET[idx] as char
         })
         .collect()
