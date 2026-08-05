@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ## [0.6.1] - 2026-08-05
 
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.6.0
+## [0.6.1] - 2026-08-05
+
 ### 🚀 Features
 
 - Add feature gating for platform-specific chaos experiments (ConnectionReset, PacketLoss, ClockSkew) (#41)
