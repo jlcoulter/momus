@@ -699,4 +699,50 @@ mod tests {
         assert!(html.contains("Internal server error"));
         assert!(html.contains("</html>"));
     }
+
+    #[test]
+    fn snapshot_run_report() {
+        let report = RunReport {
+            plan_name: "my-test-plan".into(),
+            total: 5,
+            passed: 4,
+            failed: 1,
+            duration_ms: 1234,
+            groups: vec![TestGroupResult {
+                name: "group1".into(),
+                total: 5,
+                passed: 4,
+                failed: 1,
+                results: vec![
+                    TestResult {
+                        name: "test1".into(),
+                        passed: true,
+                        status_code: 200,
+                        request_method: "GET".into(),
+                        request_url: "/api/health".into(),
+                        request_headers: HashMap::new(),
+                        request_body: None,
+                        response_headers: HashMap::new(),
+                        response_body: None,
+                        assertion_results: vec![],
+                        errors: vec![],
+                    },
+                    TestResult {
+                        name: "test2".into(),
+                        passed: false,
+                        status_code: 500,
+                        request_method: "POST".into(),
+                        request_url: "/api/data".into(),
+                        request_headers: HashMap::new(),
+                        request_body: None,
+                        response_headers: HashMap::new(),
+                        response_body: None,
+                        assertion_results: vec![],
+                        errors: vec!["Internal server error".into()],
+                    },
+                ],
+            }],
+        };
+        insta::assert_json_snapshot!(report);
+    }
 }

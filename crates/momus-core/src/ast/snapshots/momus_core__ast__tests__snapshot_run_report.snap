@@ -1,0 +1,49 @@
+---
+source: crates/momus-core/src/ast/mod.rs
+expression: report
+---
+{
+  "plan_name": "my-test-plan",
+  "total": 5,
+  "passed": 4,
+  "failed": 1,
+  "groups": [
+    {
+      "name": "group1",
+      "passed": 4,
+      "failed": 1,
+      "total": 5,
+      "results": [
+        {
+          "name": "test1",
+          "passed": true,
+          "status_code": 200,
+          "request_method": "GET",
+          "request_url": "/api/health",
+          "request_headers": {},
+          "request_body": null,
+          "response_headers": {},
+          "response_body": null,
+          "assertion_results": [],
+          "errors": []
+        },
+        {
+          "name": "test2",
+          "passed": false,
+          "status_code": 500,
+          "request_method": "POST",
+          "request_url": "/api/data",
+          "request_headers": {},
+          "request_body": null,
+          "response_headers": {},
+          "response_body": null,
+          "assertion_results": [],
+          "errors": [
+            "Internal server error"
+          ]
+        }
+      ]
+    }
+  ],
+  "duration_ms": 1234
+}

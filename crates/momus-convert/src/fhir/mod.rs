@@ -212,3 +212,21 @@ pub fn generate_bulk_test_data(package_path: &str, count: u64, output_dir: &Path
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fhir::test_helpers;
+
+    #[test]
+    fn snapshot_fhir_test_plan() {
+        let pkg_bytes = test_helpers::create_test_ig_package();
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        use std::io::Write;
+        tmp.write_all(&pkg_bytes).unwrap();
+        let path = tmp.path().to_str().unwrap().to_string();
+
+        let plan = convert(&path).unwrap();
+        insta::assert_json_snapshot!(plan);
+    }
+}

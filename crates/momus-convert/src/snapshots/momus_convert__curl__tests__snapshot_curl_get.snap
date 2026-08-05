@@ -1,0 +1,28 @@
+---
+source: crates/momus-convert/src/curl.rs
+expression: plan
+---
+{
+  "name": "cURL: curl https://api.example.com/health",
+  "base_url": "",
+  "default_headers": {},
+  "steps": [
+    {
+      "type": "request",
+      "name": "curl_get",
+      "method": "GET",
+      "url": "https://api.example.com/health",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    }
+  ],
+  "setup": [],
+  "teardown": []
+}

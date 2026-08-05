@@ -418,6 +418,13 @@ paths:
     }
 
     #[test]
+    fn snapshot_openapi_plan() {
+        let (path, _dir) = create_test_spec();
+        let plan = convert(&path).unwrap();
+        insta::assert_json_snapshot!(plan);
+    }
+
+    #[test]
     fn test_sanitize_path() {
         assert_eq!(sanitize_path("/users/{id}"), "users_id");
         assert_eq!(sanitize_path("/api/v1/items"), "api_v1_items");

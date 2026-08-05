@@ -467,6 +467,17 @@ type Query {
     }
 
     #[test]
+    fn snapshot_graphql_plan() {
+        use std::io::Write;
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        write!(tmp, "{SAMPLE_SDL}").unwrap();
+        let path = tmp.path().to_str().unwrap().to_string();
+
+        let plan = convert(&path).unwrap();
+        insta::assert_json_snapshot!(plan);
+    }
+
+    #[test]
     fn plan_name_format() {
         use std::io::Write;
         let mut tmp = tempfile::NamedTempFile::new().unwrap();

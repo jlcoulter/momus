@@ -507,6 +507,20 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_curl_get() {
+        let plan = convert("curl https://api.example.com/health").unwrap();
+        insta::assert_json_snapshot!(plan);
+    }
+
+    #[test]
+    fn snapshot_curl_post_with_body() {
+        let plan = convert(
+            r#"curl -X POST https://api.example.com/users -H "Content-Type: application/json" -d '{"name":"test"}'"#,
+        )
+        .unwrap();
+        insta::assert_json_snapshot!(plan);
+    }
+    #[test]
     fn base64_encode_works() {
         assert_eq!(base64_encode("admin:secret"), "YWRtaW46c2VjcmV0");
         assert_eq!(base64_encode("user:pass"), "dXNlcjpwYXNz");
