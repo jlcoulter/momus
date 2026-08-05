@@ -229,7 +229,7 @@ fn extract_url(request: &Value) -> String {
             .unwrap_or("https");
 
         if !host.is_empty() {
-            return format!("{}://{}/{}", protocol, host, path);
+            return format!("{protocol}://{host}/{path}");
         }
     }
 
@@ -365,7 +365,7 @@ mod tests {
         let spec = create_test_collection();
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
         use std::io::Write;
-        write!(tmp, "{}", spec).unwrap();
+        write!(tmp, "{spec}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
         let plan = convert(&path).unwrap();
         assert_eq!(plan.name, "Postman: Test API");
@@ -377,7 +377,7 @@ mod tests {
         let spec = create_test_collection();
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
         use std::io::Write;
-        write!(tmp, "{}", spec).unwrap();
+        write!(tmp, "{spec}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
         let plan = convert(&path).unwrap();
         if let Step::Request(step) = &plan.steps[0] {
@@ -399,7 +399,7 @@ mod tests {
         let spec = create_test_collection();
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
         use std::io::Write;
-        write!(tmp, "{}", spec).unwrap();
+        write!(tmp, "{spec}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
         let plan = convert(&path).unwrap();
         if let Step::Request(step) = &plan.steps[1] {
@@ -416,7 +416,7 @@ mod tests {
         let spec = create_test_collection();
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
         use std::io::Write;
-        write!(tmp, "{}", spec).unwrap();
+        write!(tmp, "{spec}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
         let plan = convert(&path).unwrap();
         // Third step should be from the folder

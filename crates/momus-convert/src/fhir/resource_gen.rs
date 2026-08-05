@@ -345,7 +345,7 @@ fn populate_extension_slices(
         .iter()
         .filter(|e| {
             e.slice_name.is_some()
-                && e.path == format!("{}.extension", base_type)
+                && e.path == format!("{base_type}.extension")
                 && !e.type_.is_empty()
                 && e.type_[0].code == "Extension"
         })
@@ -578,13 +578,13 @@ fn populate_backbone_fields(
 ) {
     // First pass: populate required children (min > 0)
     for element in elements {
-        if !element.path.starts_with(&format!("{}.", parent_path)) {
+        if !element.path.starts_with(&format!("{parent_path}.")) {
             continue;
         }
 
         let suffix = element
             .path
-            .strip_prefix(&format!("{}.", parent_path))
+            .strip_prefix(&format!("{parent_path}."))
             .unwrap_or("");
         if suffix.contains('.') {
             continue; // Skip deeply nested paths in first pass
@@ -615,7 +615,7 @@ fn populate_backbone_fields(
 
         // For complex types, populate nested required fields
         if is_complex_type(type_code) {
-            let child_path = format!("{}.{}", parent_path, field_name);
+            let child_path = format!("{parent_path}.{field_name}");
             populate_nested_required_fields(
                 &mut value,
                 &child_path,
@@ -635,13 +635,13 @@ fn populate_backbone_fields(
 
     // Second pass: populate mustSupport children with min=0
     for element in elements {
-        if !element.path.starts_with(&format!("{}.", parent_path)) {
+        if !element.path.starts_with(&format!("{parent_path}.")) {
             continue;
         }
 
         let suffix = element
             .path
-            .strip_prefix(&format!("{}.", parent_path))
+            .strip_prefix(&format!("{parent_path}."))
             .unwrap_or("");
         if suffix.contains('.') {
             continue;
@@ -672,7 +672,7 @@ fn populate_backbone_fields(
         let mut value = generate_type_value(type_code);
 
         if is_complex_type(type_code) {
-            let child_path = format!("{}.{}", parent_path, field_name);
+            let child_path = format!("{parent_path}.{field_name}");
             populate_nested_required_fields(
                 &mut value,
                 &child_path,
@@ -706,13 +706,13 @@ fn populate_nested_required_fields(
 
     // First pass: populate required children (min > 0)
     for element in elements {
-        if !element.path.starts_with(&format!("{}.", parent_path)) {
+        if !element.path.starts_with(&format!("{parent_path}.")) {
             continue;
         }
 
         let suffix = element
             .path
-            .strip_prefix(&format!("{}.", parent_path))
+            .strip_prefix(&format!("{parent_path}."))
             .unwrap_or("");
         if suffix.contains('.') {
             continue;
@@ -748,13 +748,13 @@ fn populate_nested_required_fields(
 
     // Second pass: populate mustSupport children with min=0
     for element in elements {
-        if !element.path.starts_with(&format!("{}.", parent_path)) {
+        if !element.path.starts_with(&format!("{parent_path}.")) {
             continue;
         }
 
         let suffix = element
             .path
-            .strip_prefix(&format!("{}.", parent_path))
+            .strip_prefix(&format!("{parent_path}."))
             .unwrap_or("");
         if suffix.contains('.') {
             continue;
@@ -826,7 +826,7 @@ fn populate_must_support_optional_fields(
             && is_complex_type(&type_def.code)
         {
             let mut value = generate_type_value(&type_def.code);
-            let child_path = format!("{}.{}", base_type, path);
+            let child_path = format!("{base_type}.{path}");
             populate_nested_required_fields(
                 &mut value,
                 &child_path,
@@ -1026,8 +1026,8 @@ fn find_identifier_type(
 /// Find the fixed/pattern system URI for a named slice.
 fn find_slice_system(slice_name: &str, elements: &[ElementDefinition]) -> Option<String> {
     for el in elements {
-        let matches_slice = el.path.contains(&format!(":{}", slice_name))
-            || el.id.contains(&format!(":{}", slice_name));
+        let matches_slice = el.path.contains(&format!(":{slice_name}"))
+            || el.id.contains(&format!(":{slice_name}"));
 
         if !matches_slice {
             continue;
@@ -1048,8 +1048,8 @@ fn find_slice_system(slice_name: &str, elements: &[ElementDefinition]) -> Option
 /// Find the fixed use code for a HumanName slice.
 fn find_human_name_use(slice_name: &str, elements: &[ElementDefinition]) -> Option<String> {
     for el in elements {
-        let matches_slice = el.id.contains(&format!(":{}", slice_name))
-            || el.path.contains(&format!(":{}", slice_name));
+        let matches_slice = el.id.contains(&format!(":{slice_name}"))
+            || el.path.contains(&format!(":{slice_name}"));
 
         if !matches_slice {
             continue;
@@ -1272,7 +1272,7 @@ fn get_field_path(path: &str, resource_type: &str) -> Option<String> {
     let field_part = remainder.strip_prefix('.')?;
     let field_name = if let Some((first, rest)) = field_part.split_once('.') {
         let first_clean = first.split(':').next().unwrap_or(first);
-        format!("{}.{}", first_clean, rest)
+        format!("{first_clean}.{rest}")
     } else {
         field_part
             .split(':')

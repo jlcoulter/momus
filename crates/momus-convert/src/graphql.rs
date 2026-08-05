@@ -176,7 +176,7 @@ fn extract_fields(sdl: &str, type_name: &str) -> Vec<String> {
 /// }
 /// ```
 fn build_query_body(field: &str) -> String {
-    format!("query {{\n  {}\n}}", field)
+    format!("query {{\n  {field}\n}}")
 }
 
 /// Build a GraphQL mutation body for a given field.
@@ -188,7 +188,7 @@ fn build_query_body(field: &str) -> String {
 /// }
 /// ```
 fn build_mutation_body(field: &str) -> String {
-    format!("mutation {{\n  {}\n}}", field)
+    format!("mutation {{\n  {field}\n}}")
 }
 
 /// Minimal regex escaping for literal type names.
@@ -296,7 +296,7 @@ type HealthStatus {
     fn convert_sdl_to_test_plan() {
         use std::io::Write;
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", SAMPLE_SDL).unwrap();
+        write!(tmp, "{SAMPLE_SDL}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let plan = convert(&path).unwrap();
@@ -407,7 +407,7 @@ type Query {
 }
 "#;
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", sdl).unwrap();
+        write!(tmp, "{sdl}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let plan = convert(&path).unwrap();
@@ -430,7 +430,7 @@ type Mutation {
 }
 "#;
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", sdl).unwrap();
+        write!(tmp, "{sdl}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let plan = convert(&path).unwrap();
@@ -481,7 +481,7 @@ type Query {
     fn plan_name_format() {
         use std::io::Write;
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp, "{}", SAMPLE_SDL).unwrap();
+        write!(tmp, "{SAMPLE_SDL}").unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
 
         let plan = convert(&path).unwrap();

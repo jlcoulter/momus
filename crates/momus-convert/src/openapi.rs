@@ -292,7 +292,7 @@ fn parse_method(method: &str) -> Result<Method> {
         "PATCH" => Ok(Method::Patch),
         "HEAD" => Ok(Method::Head),
         "OPTIONS" => Ok(Method::Options),
-        other => anyhow::bail!("Unsupported HTTP method: {}", other),
+        other => anyhow::bail!("Unsupported HTTP method: {other}"),
     }
 }
 

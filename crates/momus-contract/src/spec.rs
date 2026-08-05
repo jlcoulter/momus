@@ -94,8 +94,7 @@ impl ParsedSpec {
             }
             SpecType::Unknown => {
                 anyhow::bail!(
-                    "Unknown spec type for '{}'. Supported: .yaml/.yml/.json (OpenAPI), .graphql/.gql/.sdl (GraphQL)",
-                    path
+                    "Unknown spec type for '{path}'. Supported: .yaml/.yml/.json (OpenAPI), .graphql/.gql/.sdl (GraphQL)"
                 );
             }
         }
@@ -252,7 +251,7 @@ impl OpenApiSpec {
                     endpoint: url.to_string(),
                     method: method_str,
                     status: status_code,
-                    description: format!("Endpoint not declared in spec: {} {}", method, path),
+                    description: format!("Endpoint not declared in spec: {method} {path}"),
                     severity: "error".to_string(),
                 });
                 return (violations, coverage);
@@ -348,8 +347,7 @@ impl OpenApiSpec {
                 method: method_str,
                 status: status_code,
                 description: format!(
-                    "Status code {} not declared in spec. Declared: {:?}",
-                    status_code, declared_codes
+                    "Status code {status_code} not declared in spec. Declared: {declared_codes:?}"
                 ),
                 severity: "error".to_string(),
             });
@@ -562,8 +560,7 @@ impl GraphQlSpec {
                 method: "POST".to_string(),
                 status: status_code,
                 description: format!(
-                    "GraphQL response missing 'data' or 'errors' field, got: {:?}",
-                    keys
+                    "GraphQL response missing 'data' or 'errors' field, got: {keys:?}"
                 ),
                 severity: "error".to_string(),
             });
@@ -601,8 +598,7 @@ impl GraphQlSpec {
                                 method: "POST".to_string(),
                                 status: status_code,
                                 description: format!(
-                                    "Non-nullable field '{}' is null in response",
-                                    field_name
+                                    "Non-nullable field '{field_name}' is null in response"
                                 ),
                                 severity: "error".to_string(),
                             });
@@ -616,10 +612,7 @@ impl GraphQlSpec {
                         endpoint: url.to_string(),
                         method: "POST".to_string(),
                         status: status_code,
-                        description: format!(
-                            "Undocumented field '{}' in response data",
-                            field_name
-                        ),
+                        description: format!("Undocumented field '{field_name}' in response data"),
                         severity: "info".to_string(),
                     });
                 }
@@ -634,7 +627,7 @@ impl GraphQlSpec {
                         endpoint: url.to_string(),
                         method: "POST".to_string(),
                         status: status_code,
-                        description: format!("GraphQL error #{}: {}", i, msg),
+                        description: format!("GraphQL error #{i}: {msg}"),
                         severity: "warning".to_string(),
                     });
                 }
@@ -682,7 +675,7 @@ fn collect_schema_paths(schema: &serde_json::Value, prefix: &str, paths: &mut Ve
         Some("object") => {
             if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
                 for (name, prop_schema) in properties {
-                    let path = format!("{}.{}", prefix, name);
+                    let path = format!("{prefix}.{name}");
                     paths.push(path.clone());
                     collect_schema_paths(prop_schema, &path, paths);
                 }
@@ -690,7 +683,7 @@ fn collect_schema_paths(schema: &serde_json::Value, prefix: &str, paths: &mut Ve
         }
         Some("array") => {
             if let Some(items) = schema.get("items") {
-                let path = format!("{}[]", prefix);
+                let path = format!("{prefix}[]");
                 collect_schema_paths(items, &path, paths);
             }
         }
@@ -718,7 +711,7 @@ fn collect_exercised_paths(value: &serde_json::Value, prefix: &str, paths: &mut 
     match value {
         serde_json::Value::Object(map) => {
             for (key, val) in map {
-                let path = format!("{}.{}", prefix, key);
+                let path = format!("{prefix}.{key}");
                 paths.push(path.clone());
                 collect_exercised_paths(val, &path, paths);
             }
@@ -726,7 +719,7 @@ fn collect_exercised_paths(value: &serde_json::Value, prefix: &str, paths: &mut 
         serde_json::Value::Array(arr) => {
             paths.push(prefix.to_string());
             for (i, val) in arr.iter().enumerate() {
-                let path = format!("{}[{}]", prefix, i);
+                let path = format!("{prefix}[{i}]");
                 paths.push(path.clone());
                 collect_exercised_paths(val, &path, paths);
             }
@@ -1133,8 +1126,7 @@ paths:
         );
         assert!(
             violations.is_empty(),
-            "Expected no violations, got: {:?}",
-            violations
+            "Expected no violations, got: {violations:?}"
         );
         assert!(!coverage.is_empty(), "Expected coverage data");
     }
@@ -1193,8 +1185,7 @@ paths:
         );
         assert!(
             violations.is_empty(),
-            "Expected no violations, got: {:?}",
-            violations
+            "Expected no violations, got: {violations:?}"
         );
     }
 
@@ -1277,8 +1268,7 @@ type User {
         );
         assert!(
             violations.is_empty(),
-            "Expected no violations, got: {:?}",
-            violations
+            "Expected no violations, got: {violations:?}"
         );
         assert!(!coverage.is_empty(), "Expected coverage data");
     }
