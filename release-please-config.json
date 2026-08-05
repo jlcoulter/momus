@@ -11,7 +11,7 @@
           "path": "Cargo.toml",
           "edits": [
             {
-              "search": "version = \"0\\.3\\.0\"",
+              "search": "version = \"\\d+\\.\\d+\\.\\d+\"",
               "replacement": "version = \"{{ version }}\""
             }
           ]
