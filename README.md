@@ -418,6 +418,10 @@ momus run fhir-tests.json --base-url https://fhir.example.com
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide, including
+setup, build steps, test/lint workflow, commit conventions, and PR workflow.
+
+
 ```bash
 # Run all tests
 cargo test --all-targets
@@ -428,6 +432,15 @@ cargo fmt --check
 # Lint
 cargo clippy --all-targets -- -D warnings
 ```
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for our security policy and instructions for reporting vulnerabilities.
+
+## Community
+
+This project is governed by a [Code of Conduct](CODE_OF_CONDUCT.md).
+By participating, you agree to uphold its terms.
 
 ## License
 

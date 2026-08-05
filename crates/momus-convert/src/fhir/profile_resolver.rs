@@ -162,7 +162,7 @@ fn download_profile(url: &str) -> Result<StructureDefinition> {
     let name = url
         .split('/')
         .next_back()
-        .ok_or_else(|| anyhow::anyhow!("Invalid profile URL: {}", url))?;
+        .ok_or_else(|| anyhow::anyhow!("Invalid profile URL: {url}"))?;
 
     let sources = vec![
         format!("https://packages.fhir.org/StructureDefinition/{}", name),
@@ -193,7 +193,7 @@ fn download_profile(url: &str) -> Result<StructureDefinition> {
         }
     }
 
-    anyhow::bail!("Could not download profile '{}' from any source", name)
+    anyhow::bail!("Could not download profile '{name}' from any source")
 }
 
 #[cfg(test)]
