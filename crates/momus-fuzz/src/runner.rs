@@ -110,7 +110,10 @@ pub async fn run_fuzz(plan: &TestPlan, config: &FuzzConfig) -> Result<FuzzReport
                 Method::Post => client.post(&url).json(mutated_body).send().await,
                 Method::Put => client.put(&url).json(mutated_body).send().await,
                 Method::Patch => client.patch(&url).json(mutated_body).send().await,
-                _ => client.post(&url).json(mutated_body).send().await,
+                Method::Get => client.get(&url).query(mutated_body).send().await,
+                Method::Delete => client.delete(&url).send().await,
+                Method::Head => client.head(&url).send().await,
+                Method::Options => client.request(reqwest::Method::OPTIONS, &url).send().await,
             };
 
             match result {
