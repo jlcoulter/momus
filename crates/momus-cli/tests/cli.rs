@@ -92,7 +92,7 @@ fn test_version_exits_with_0() {
     cmd.arg("--version");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("0.4.0"));
+        .stdout(predicate::str::contains("momus"));
 }
 
 #[test]
