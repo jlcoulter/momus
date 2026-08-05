@@ -1,6 +1,6 @@
 [workspace]
-# Don't publish — we handle that in a separate ordered workflow
-publish = false
+# release-plz publishes crates in dependency order automatically
+publish = true
 # Create GitHub releases
 git_release_enable = true
 # Use git-cliff for changelog generation
