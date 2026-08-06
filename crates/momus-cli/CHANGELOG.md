@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.7.0] - 2026-08-06
+
+### 🐛 Bug Fixes
+
+- Add property-based testing with proptest and snapshot testing with insta (#137)
+- Add property-based testing with proptest and snapshot testing with insta (#137)
+- Address clippy lints and update snapshot tests
+- Address PR review feedback — non_exhaustive enums, with_capacity, remove dead code
+- Inline format args for Rust 1.88+ compat, update snapshot
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.6.2
 ## [0.6.3] - 2026-08-05
 
 ### 🐛 Bug Fixes
