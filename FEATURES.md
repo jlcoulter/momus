@@ -30,6 +30,30 @@ This document catalogs every feature across all momus crates, organized by imple
 | `TestResult` with test_name, passed, status_code, errors | ✅ | |
 | `TestGroupResult` for grouped results | ✅ | |
 
+### TestSpec AST (✅ Complete)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `TestSpec` enum with `AllOf`/`OneOf` combinators | ✅ | Composable tree mirroring Assertion AST |
+| `DataSpec` with count and variations | ✅ | Controls resource generation |
+| `DataVariation` (HappyPath, Minimal, SpecialChars, Boundary, etc.) | ✅ | 7 variation types |
+| `CrudSpec` (create, read, update, delete, vread, patch, history) | ✅ | Configurable CRUD test generation |
+| `SearchSpec` (single, modifiers, prefixes, combo, include, revinclude) | ✅ | Configurable search test generation |
+| `NegativeSpec` (undeclared, invalid bodies, malformed) | ✅ | Configurable negative test generation |
+| `EdgeCaseSpec` (boundary, special chars, dangling refs) | ✅ | Configurable edge case generation |
+| `ConformanceSpec` (profile validation, mustSupport) | ✅ | Configurable conformance testing |
+| `OperationSpec`, `SecuritySpec`, `PerformanceSpec` | ✅ | Additional test categories |
+
+### ApiModel (✅ Complete)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `ApiModel` with name and resources | ✅ | Format-agnostic API representation |
+| `ResourceModel` with operations, search params, profiles | ✅ | |
+| `OperationModel` with method, path, body, responses | ✅ | |
+| `SearchParamModel` with type, modifiers, prefixes | ✅ | |
+| `BodyModel`, `ResponseModel` | ✅ | Request/response schemas |
+
 ### Assertion AST (✅ Complete)
 
 | Feature | Status | Notes |
@@ -78,6 +102,15 @@ This document catalogs every feature across all momus crates, organized by imple
 | Schema validation | ✅ | Wired via `jsonschema` crate |
 | ResponseTime measurement | ✅ | Wired in evaluator + runner |
 | Script step execution | 📋 | Not implemented |
+| `generate_test_plan()` — format-agnostic test generation | ✅ | Takes ApiModel + TestSpec + ResourceGenerator |
+| `ResourceGenerator` trait | ✅ | Interface for format-specific resource generation |
+| CRUD test generation (create, read, update, delete, vread, patch, history) | ✅ | |
+| Search test generation (single, modifiers, prefixes, combo, include, revinclude) | ✅ | |
+| Negative test generation (undeclared, invalid bodies, malformed) | ✅ | |
+| Edge case test generation (special chars, boundary, dangling refs) | ✅ | |
+| Conformance test generation (profile, mustSupport) | ✅ | |
+| Operation test generation | ✅ | |
+| Performance test generation (pagination) | ✅ | |
 
 ### Gaps (v0.2.0+)
 

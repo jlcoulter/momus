@@ -203,6 +203,63 @@ ScriptStep
 └── source: String
 ```
 
+### TestSpec AST (`momus_core::ast::test_spec`)
+
+The mirror image of the assertion AST: assertions describe what to check in a
+response, test specs describe what tests to generate from an API definition.
+
+```
+TestSpec (enum, composable tree)
+├── AllOf(Vec<TestSpec>)          — Run all sub-specs
+├── OneOf(Vec<TestSpec>)          — Run one sub-spec
+├── Data(DataSpec)                — Data generation parameters
+├── Crud(CrudSpec)                — CRUD test configuration
+├── Search(SearchSpec)            — Search/filter test configuration
+├── Operation(OperationSpec)      — Custom operation tests
+├── Negative(NegativeSpec)        — Negative/invalid input tests
+├── EdgeCase(EdgeCaseSpec)        — Boundary/special char tests
+├── Conformance(ConformanceSpec)  — Profile/schema validation
+├── Security(SecuritySpec)        — Auth/CORS/info leak tests
+└── Performance(PerformanceSpec)  — Response time/pagination tests
+
+DataSpec
+├── count: u64                    — Resources per type (default: 3)
+└── variations: Vec<DataVariation> — HappyPath, Minimal, SpecialChars, etc.
+```
+
+### ApiModel (`momus_core::ast::api_model`)
+
+Format-agnostic intermediate representation that any converter produces.
+The bridge between API definitions and the TestGenerator engine.
+
+```
+ApiModel
+├── name: String
+└── resources: Vec<ResourceModel>
+
+ResourceModel
+├── name: String
+├── profile_url: Option<String>
+├── operations: Vec<OperationModel>
+├── search_params: Vec<SearchParamModel>
+├── search_include: Vec<String>
+├── search_revinclude: Vec<String>
+└── supported_profiles: Vec<String>
+
+OperationModel
+├── name: String
+├── method: String
+├── path: String
+├── request_body: Option<BodyModel>
+└── responses: Vec<ResponseModel>
+
+SearchParamModel
+├── name: String
+├── param_type: String
+├── modifiers: Vec<String>
+└── prefixes: Vec<String>
+```
+
 ### Assertion AST (`momus_core::ast::assertion`)
 
 ```
@@ -227,6 +284,7 @@ Assertion (enum)
 - **`evaluator::evaluate_assertions`** — evaluates the assertion tree against a response. Includes a simple JSONPath resolver (supports `$.key`, `$.key.nested`, `$.key[*]`, `$.key[0]`)
 - **`templates::resolve_url`, `resolve_body`, `resolve_headers`** — template substitution for `{base_url}`, `{steps.<name>.*}`, `{env.VAR}`, and `{random.*}`
 - **`script::execute_script`** — executes `ScriptStep` nodes using the rhai scripting engine (7 tests)
+- **`test_generator::generate_test_plan`** — takes an `ApiModel` + `TestSpec` + `ResourceGenerator` and produces a `TestPlan`. Format-agnostic engine with sub-generators for CRUD, search, negative, edge case, conformance, operation, and performance tests.
 
 ### Key Design Decisions
 
@@ -236,13 +294,15 @@ Assertion (enum)
 - **The `ResponseTime` assertion variant** is wired in the evaluator and runner — it measures and asserts response duration.
 - **Script steps** are implemented using the rhai scripting engine with access to step response context.
 
-### Gaps to Fill (v0.5.0+)
+### Gaps to Fill (v0.6.0+)
 
 | Gap | Priority | Description |
 |-----|----------|-------------|
 | Full JSONPath | Medium | Replace simple JSONPath with `jsonpath-rust` or similar |
 | Script step improvements | Low | Add more built-in functions, sandboxing, timeout |
 | Report HTML output | Low | Enhance `RunReport::to_html()` with richer formatting |
+| Port other converters | Medium | Port OpenAPI, Postman, HAR, GraphQL converters to use TestGenerator engine |
+| TestSpec from CLI | Low | Allow passing custom TestSpec JSON via `--spec` flag |
 
 ---
 
@@ -377,30 +437,30 @@ IG Package (.tgz)
     │   ├── OperationDefinitions
     │   └── raw_resources (ValueSets, CodeSystems, etc.)
     │
-    ├── select_capability_statement() → CapabilityStatement
+    ├── api_model::package_to_api_model() → ApiModel
+    │   (converts FHIR CapabilityStatement to format-agnostic ApiModel)
     │
-    ├── resolve_parent_chain() — download missing parent profiles
-    │   from FHIR package registry, merge snapshots
+    ├── FhirResourceGenerator::new() → ResourceGenerator
+    │   (implements ResourceGenerator trait using StructureDefinitions)
     │
-    ├── extract_dependencies() → resolve_creation_order()
-    │   (topological sort via petgraph)
+    ├── TestSpec::AllOf([Data, Crud, Search, Negative, Conformance, ...])
+    │   (defines what tests to generate and with what data variations)
     │
-    ├── generate_resource_with_value_sets() per profile
-    │   (5-pass resource generation from StructureDefinitions)
+    ├── test_generator::generate_test_plan() → TestPlan
+    │   (format-agnostic engine: generates data, CRUD sequences, search
+    │    tests, negative tests, conformance tests, edge case tests)
     │
-    ├── generate_test_plan() → TestPlan
-    │   ├── CRUD tests (read, vread, create, update, delete, patch, history)
-    │   ├── Search tests (single param, modifiers, prefixes, near, combo, chained)
-    │   ├── Include tests (_include, _revinclude)
-    │   ├── Result param tests (_summary, _elements, _count, _sort, _has)
-    │   ├── Operation tests ($operation)
-    │   ├── Negative tests (undeclared interactions/params)
-    │   └── Conformance tests (mustSupport field presence)
+    ├── generate_fhir_specific_search_tests() → extra steps
+    │   (FHIR-specific: near, chained, _has search tests)
     │
-    └── Output: TestPlan JSON + generated resources
+    └── Output: TestPlan with setup steps + CRUD sequences + tests
 ```
 
-The orchestrator pipeline (`momus-convert/src/fhir/mod.rs`) is intentionally generic — it follows the same parse → resolve → generate → plan pattern as the original fhir-autotest but is simplified (125 lines vs 400). The momus-core generic runner handles plan execution; FHIR-specific setup/teardown, bulk upload, and profile validation are handled by the FHIR converter modules.
+The orchestrator pipeline (`momus-convert/src/fhir/mod.rs`) is now a thin
+composition layer (~30 lines) that wires the format-agnostic `TestGenerator`
+engine to FHIR-specific converters and resource generators. The old
+`planner.rs` (600+ lines of FHIR-specific test generation logic) is
+replaced by the generic engine.
 
 #### FHIR Model Types (ported from fhir-autotest)
 
