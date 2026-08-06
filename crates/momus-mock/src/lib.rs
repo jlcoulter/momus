@@ -5,6 +5,7 @@
 /// - Request recording for verification
 /// - Dynamic response generation via handler functions
 /// - Stateful CRUD store for resource-based APIs
+pub mod fhir;
 pub mod store;
 use axum::{
     Json, Router, extract::Request, http::StatusCode, response::IntoResponse, routing::any,

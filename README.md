@@ -228,6 +228,7 @@ Commands:
   contract  Validate API responses against an OpenAPI/GraphQL spec
   guard     Security scan a plan for common vulnerabilities
   diff      Diff responses between two environments
+  fhir      FHIR-specific operations (mock server, validate, generate)
 ```
 
 ### `momus run`
@@ -341,6 +342,24 @@ momus guard plan.json --base-url http://staging:8080
 momus diff plan.json --baseline https://api-v1.example.com --target https://api-v2.example.com
 ```
 
+### `momus fhir`
+
+FHIR-specific operations for working with FHIR Implementation Guide packages.
+
+```bash
+# Start a FHIR mock server with CRUD + search support
+momus fhir mock --port 8091
+
+# Validate a JSON resource against a profile from an IG package
+momus fhir validate ig-package.tgz --resource Patient.json --profile http://example.org/StructureDefinition/TestPatient
+
+# Validate with auto-detected profile (by resourceType)
+momus fhir validate ig-package.tgz --resource Patient.json
+
+# Generate bulk FHIR test data (NDJSON) from an IG package
+momus fhir generate ig-package.tgz --count 10 --output ./fhir-data
+```
+
 ## Project Structure
 
 ```text
@@ -370,6 +389,7 @@ momus/                          # workspace root
 │   │       ├── assertions.rs
 │   │       ├── validator.rs
 │   │       ├── planner.rs
+│   │       ├── response_assertions.rs
 │   │       ├── test_model.rs
 │   │       ├── valuesets.rs
 │   │       ├── bulk_data.rs
@@ -416,6 +436,15 @@ momus convert fhir ig.tar.gz -o fhir-tests.json
 
 # Run the generated tests
 momus run fhir-tests.json --base-url https://fhir.example.com
+
+# Start a FHIR mock server for testing without a real FHIR server
+momus fhir mock --port 8091
+
+# Validate a resource against a profile from an IG package
+momus fhir validate ig-package.tgz --resource Patient.json
+
+# Generate bulk FHIR test data (NDJSON) from an IG package
+momus fhir generate ig-package.tgz --count 100 --output ./fhir-data
 ```
 
 ## Development
