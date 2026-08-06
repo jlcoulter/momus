@@ -16,17 +16,17 @@ name = "momus"
 path = "src/main.rs"
 
 [dependencies]
-momus-core = { path = "../momus-core", version = "0.7.2" }
-momus-mock = { path = "../momus-mock", version = "0.7.2" }
-momus-convert = { path = "../momus-convert", version = "0.7.2", features = [
+momus-core = { path = "../momus-core", version = "0.7.3" }
+momus-mock = { path = "../momus-mock", version = "0.7.3" }
+momus-convert = { path = "../momus-convert", version = "0.7.3", features = [
     "openapi", "postman", "har", "curl", "graphql", "grpc", "fhir",
 ] }
-momus-bench = { path = "../momus-bench", version = "0.7.2" }
-momus-fuzz = { path = "../momus-fuzz", version = "0.7.2" }
-momus-chaos = { path = "../momus-chaos", version = "0.7.2" }
-momus-contract = { path = "../momus-contract", version = "0.7.2" }
-momus-guard = { path = "../momus-guard", version = "0.7.2" }
-momus-diff = { path = "../momus-diff", version = "0.7.2" }
+momus-bench = { path = "../momus-bench", version = "0.7.3" }
+momus-fuzz = { path = "../momus-fuzz", version = "0.7.3" }
+momus-chaos = { path = "../momus-chaos", version = "0.7.3" }
+momus-contract = { path = "../momus-contract", version = "0.7.3" }
+momus-guard = { path = "../momus-guard", version = "0.7.3" }
+momus-diff = { path = "../momus-diff", version = "0.7.3" }
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 serde_json = "1"
