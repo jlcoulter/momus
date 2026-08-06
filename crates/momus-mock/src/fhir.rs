@@ -44,13 +44,12 @@ async fn read_resource(
     Path((rtype, id)): Path<(String, String)>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let store = store.lock().unwrap();
-    if let Some(resources) = store.get(&rtype) {
-        if let Some(resource) = resources
+    if let Some(resources) = store.get(&rtype)
+        && let Some(resource) = resources
             .iter()
             .find(|r| r.get("id").and_then(|v| v.as_str()) == Some(&id))
-        {
-            return (StatusCode::OK, Json(resource.clone()));
-        }
+    {
+        return (StatusCode::OK, Json(resource.clone()));
     }
     (
         StatusCode::NOT_FOUND,
@@ -127,44 +126,42 @@ fn match_field(resource: &serde_json::Value, param: &str, value: &str) -> bool {
     let value_lower = value.to_lowercase();
 
     // Direct top-level match
-    if let Some(v) = resource.get(param) {
-        if json_contains(v, &value_lower) {
-            return true;
-        }
+    if let Some(v) = resource.get(param)
+        && json_contains(v, &value_lower)
+    {
+        return true;
     }
 
     // Token-style: check coding.code and coding.display
-    if param == "code" || param.ends_with("-code") {
-        if let Some(codings) = find_all_codings(resource) {
-            return codings.iter().any(|c| {
-                c.get("code")
-                    .or_else(|| c.get("display"))
-                    .and_then(|v| v.as_str())
-                    .map(|s| {
-                        s.to_lowercase() == value_lower || s.to_lowercase().contains(&value_lower)
-                    })
-                    .unwrap_or(false)
-            });
-        }
+    if (param == "code" || param.ends_with("-code"))
+        && let Some(codings) = find_all_codings(resource)
+    {
+        return codings.iter().any(|c| {
+            c.get("code")
+                .or_else(|| c.get("display"))
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| {
+                    s.to_lowercase() == value_lower || s.to_lowercase().contains(&value_lower)
+                })
+        });
     }
 
     // Name search: check HumanName arrays
-    if param == "name" || param == "family" || param == "given" {
-        if let Some(names) = resource.get("name").and_then(|n| n.as_array()) {
-            for name in names {
-                if let Some(family) = name.get("family").and_then(|f| f.as_str()) {
-                    if family.to_lowercase().contains(&value_lower) {
+    if (param == "name" || param == "family" || param == "given")
+        && let Some(names) = resource.get("name").and_then(|n| n.as_array())
+    {
+        for name in names {
+            if let Some(family) = name.get("family").and_then(|f| f.as_str())
+                && family.to_lowercase().contains(&value_lower)
+            {
+                return true;
+            }
+            if let Some(given) = name.get("given").and_then(|g| g.as_array()) {
+                for g in given {
+                    if g.as_str()
+                        .is_some_and(|s| s.to_lowercase().contains(&value_lower))
+                    {
                         return true;
-                    }
-                }
-                if let Some(given) = name.get("given").and_then(|g| g.as_array()) {
-                    for g in given {
-                        if g.as_str()
-                            .map(|s| s.to_lowercase().contains(&value_lower))
-                            .unwrap_or(false)
-                        {
-                            return true;
-                        }
                     }
                 }
             }
@@ -172,15 +169,14 @@ fn match_field(resource: &serde_json::Value, param: &str, value: &str) -> bool {
     }
 
     // Identifier search
-    if param == "identifier" {
-        if let Some(ids) = resource.get("identifier").and_then(|i| i.as_array()) {
-            return ids.iter().any(|id| {
-                id.get("value")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_lowercase().contains(&value_lower))
-                    .unwrap_or(false)
-            });
-        }
+    if param == "identifier"
+        && let Some(ids) = resource.get("identifier").and_then(|i| i.as_array())
+    {
+        return ids.iter().any(|id| {
+            id.get("value")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| s.to_lowercase().contains(&value_lower))
+        });
     }
 
     false
@@ -306,7 +302,9 @@ pub async fn start_fhir_mock_server(port: u16) -> anyhow::Result<SocketAddr> {
 
     let app = create_fhir_mock_app();
     tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
+        if let Err(e) = axum::serve(listener, app).await {
+            tracing::error!("FHIR mock server error: {e}");
+        }
     });
 
     // Give the server a moment to start accepting connections
