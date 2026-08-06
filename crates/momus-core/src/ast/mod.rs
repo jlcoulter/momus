@@ -25,6 +25,10 @@ fn html_escape(s: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+fn default_script_language() -> String {
+    "rhai".to_string()
+}
+
 // ---------------------------------------------------------------------------
 // Top-level plan
 // ---------------------------------------------------------------------------
@@ -82,7 +86,7 @@ impl TestPlan {
             }
         }
 
-        let mut total = 0usize;
+        let mut test_count = 0usize;
         let mut setup_count = 0usize;
         let mut teardown_count = 0usize;
 
@@ -96,7 +100,7 @@ impl TestPlan {
         if !self.steps.is_empty() {
             writeln!(out, "\n── Tests ──").ok();
             for step in &self.steps {
-                total += step.display(&mut out, 0);
+                test_count += step.display(&mut out, 0);
             }
         }
 
@@ -110,9 +114,9 @@ impl TestPlan {
         writeln!(
             out,
             "\nTotal requests: {} ({} setup, {} tests, {} teardown)",
-            setup_count + total + teardown_count,
+            setup_count + test_count + teardown_count,
             setup_count,
-            total,
+            test_count,
             teardown_count,
         )
         .ok();
@@ -134,7 +138,7 @@ pub enum Step {
     /// A named sequence of sub-steps (state flows between them).
     Sequence(SequenceStep),
     /// A group of steps run in parallel.
-    Parallel(Vec<Step>),
+    Parallel(ParallelStep),
     /// A script step for custom logic.
     Script(ScriptStep),
     /// A step that does nothing (useful for placeholders / disabled tests).
@@ -150,8 +154,8 @@ impl Step {
         match self {
             Step::Request(_) => 1,
             Step::Sequence(s) => s.steps.iter().map(|s| s.count_tests()).sum(),
-            Step::Parallel(steps) => steps.iter().map(|s| s.count_tests()).sum(),
-            Step::Script(_) => 1,
+            Step::Parallel(par) => par.steps.iter().map(|s| s.count_tests()).sum(),
+            Step::Script(_) => 0,
             Step::Noop { .. } => 0,
         }
     }
@@ -165,7 +169,9 @@ impl Step {
                     Some(b) => {
                         let s = serde_json::to_string(b).unwrap_or_default();
                         if s.len() > 60 {
-                            format!("  {}", &s[..57])
+                            // Safe UTF-8 truncation — take up to 57 chars without splitting
+                            let truncated: String = s.chars().take(57).collect();
+                            format!("  {truncated}")
                         } else {
                             format!("  {s}")
                         }
@@ -183,10 +189,10 @@ impl Step {
                 }
                 count
             }
-            Step::Parallel(steps) => {
+            Step::Parallel(par) => {
                 writeln!(out, "{indent}── parallel ──").ok();
                 let mut count = 0usize;
-                for step in steps {
+                for step in &par.steps {
                     count += step.display(out, depth + 1);
                 }
                 count
@@ -216,7 +222,7 @@ pub(crate) fn collect_request_steps<'a>(steps: &'a [Step], result: &mut Vec<&'a 
         match step {
             Step::Request(req) => result.push(req),
             Step::Sequence(seq) => collect_request_steps(&seq.steps, result),
-            Step::Parallel(children) => collect_request_steps(children, result),
+            Step::Parallel(par) => collect_request_steps(&par.steps, result),
             _ => {}
         }
     }
@@ -280,6 +286,17 @@ impl std::fmt::Display for Method {
 }
 
 // ---------------------------------------------------------------------------
+// Parallel step
+// ---------------------------------------------------------------------------
+
+/// A group of steps executed in parallel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParallelStep {
+    /// Sub-steps to execute concurrently.
+    pub steps: Vec<Step>,
+}
+
+// ---------------------------------------------------------------------------
 // Sequence step
 // ---------------------------------------------------------------------------
 
@@ -312,6 +329,7 @@ pub struct ScriptStep {
     /// Display name.
     pub name: String,
     /// The script language (e.g. "rhai", "js", "python").
+    #[serde(default = "default_script_language")]
     pub language: String,
     /// Inline script source.
     pub source: String,
@@ -713,33 +731,35 @@ mod tests {
 
         // Parallel counts recursively
         assert_eq!(
-            Step::Parallel(vec![
-                Step::Request(RequestStep {
-                    name: "r1".into(),
-                    method: Method::Get,
-                    url: "/".into(),
-                    headers: HashMap::new(),
-                    body: None,
-                    assert: vec![],
-                    save_as: String::new(),
-                    soft_fail: false,
-                }),
-                Step::Request(RequestStep {
-                    name: "r2".into(),
-                    method: Method::Post,
-                    url: "/".into(),
-                    headers: HashMap::new(),
-                    body: None,
-                    assert: vec![],
-                    save_as: String::new(),
-                    soft_fail: false,
-                }),
-            ])
+            Step::Parallel(ParallelStep {
+                steps: vec![
+                    Step::Request(RequestStep {
+                        name: "r1".into(),
+                        method: Method::Get,
+                        url: "/".into(),
+                        headers: HashMap::new(),
+                        body: None,
+                        assert: vec![],
+                        save_as: String::new(),
+                        soft_fail: false,
+                    }),
+                    Step::Request(RequestStep {
+                        name: "r2".into(),
+                        method: Method::Post,
+                        url: "/".into(),
+                        headers: HashMap::new(),
+                        body: None,
+                        assert: vec![],
+                        save_as: String::new(),
+                        soft_fail: false,
+                    }),
+                ],
+            })
             .count_tests(),
             2
         );
 
-        // Script counts as 1
+        // Script counts as 0 (no HTTP request to assert against)
         assert_eq!(
             Step::Script(ScriptStep {
                 name: "s".into(),
@@ -747,7 +767,7 @@ mod tests {
                 source: "print(42);".into(),
             })
             .count_tests(),
-            1
+            0
         );
 
         // Noop counts as 0
@@ -813,28 +833,30 @@ mod tests {
         assert!(out.is_empty());
 
         let mut out = String::new();
-        let count = Step::Parallel(vec![
-            Step::Request(RequestStep {
-                name: "r1".into(),
-                method: Method::Get,
-                url: "/a".into(),
-                headers: HashMap::new(),
-                body: None,
-                assert: vec![],
-                save_as: String::new(),
-                soft_fail: false,
-            }),
-            Step::Request(RequestStep {
-                name: "r2".into(),
-                method: Method::Post,
-                url: "/b".into(),
-                headers: HashMap::new(),
-                body: None,
-                assert: vec![],
-                save_as: String::new(),
-                soft_fail: false,
-            }),
-        ])
+        let count = Step::Parallel(ParallelStep {
+            steps: vec![
+                Step::Request(RequestStep {
+                    name: "r1".into(),
+                    method: Method::Get,
+                    url: "/a".into(),
+                    headers: HashMap::new(),
+                    body: None,
+                    assert: vec![],
+                    save_as: String::new(),
+                    soft_fail: false,
+                }),
+                Step::Request(RequestStep {
+                    name: "r2".into(),
+                    method: Method::Post,
+                    url: "/b".into(),
+                    headers: HashMap::new(),
+                    body: None,
+                    assert: vec![],
+                    save_as: String::new(),
+                    soft_fail: false,
+                }),
+            ],
+        })
         .display(&mut out, 0);
         assert_eq!(count, 2);
         assert!(out.contains("parallel"));
@@ -867,16 +889,18 @@ mod tests {
                 })],
                 continue_on_failure: false,
             }),
-            Step::Parallel(vec![Step::Request(RequestStep {
-                name: "r3".into(),
-                method: Method::Put,
-                url: "/".into(),
-                headers: HashMap::new(),
-                body: None,
-                assert: vec![],
-                save_as: String::new(),
-                soft_fail: false,
-            })]),
+            Step::Parallel(ParallelStep {
+                steps: vec![Step::Request(RequestStep {
+                    name: "r3".into(),
+                    method: Method::Put,
+                    url: "/".into(),
+                    headers: HashMap::new(),
+                    body: None,
+                    assert: vec![],
+                    save_as: String::new(),
+                    soft_fail: false,
+                })],
+            }),
             Step::Noop {
                 description: "skip".into(),
             },
@@ -1120,8 +1144,6 @@ mod tests {
 
     #[test]
     fn test_step_serialization_roundtrip() {
-        // Note: Step::Parallel(Vec<Step>) can't be serialized with serde tagged enum
-        // representation, so we test the other variants
         let steps = vec![
             Step::Request(RequestStep {
                 name: "r".into(),
@@ -1137,6 +1159,18 @@ mod tests {
                 name: "s".into(),
                 steps: vec![],
                 continue_on_failure: false,
+            }),
+            Step::Parallel(ParallelStep {
+                steps: vec![Step::Request(RequestStep {
+                    name: "r".into(),
+                    method: Method::Get,
+                    url: "/".into(),
+                    headers: HashMap::new(),
+                    body: None,
+                    assert: vec![],
+                    save_as: String::new(),
+                    soft_fail: false,
+                })],
             }),
             Step::Script(ScriptStep {
                 name: "s".into(),
