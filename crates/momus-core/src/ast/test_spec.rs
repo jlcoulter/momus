@@ -367,7 +367,7 @@ impl Default for ConformanceSpec {
 // ---------------------------------------------------------------------------
 
 /// Security test configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SecuritySpec {
     /// Test that auth is required for protected endpoints.
     #[serde(default)]
@@ -380,22 +380,12 @@ pub struct SecuritySpec {
     pub info_leak: bool,
 }
 
-impl Default for SecuritySpec {
-    fn default() -> Self {
-        Self {
-            auth_required: false,
-            cors: false,
-            info_leak: false,
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Performance tests
 // ---------------------------------------------------------------------------
 
 /// Performance test configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PerformanceSpec {
     /// Assert response time constraints.
     #[serde(default)]
@@ -403,15 +393,6 @@ pub struct PerformanceSpec {
     /// Test pagination (_count, _page, next links).
     #[serde(default)]
     pub pagination: bool,
-}
-
-impl Default for PerformanceSpec {
-    fn default() -> Self {
-        Self {
-            response_time: false,
-            pagination: false,
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

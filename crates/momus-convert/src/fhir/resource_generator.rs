@@ -143,7 +143,7 @@ fn remove_optional_fields(resource: &mut serde_json::Value, profile: &StructureD
                 return None;
             }
             // Extract the field name (e.g., "Patient.name" → "name")
-            path.split('.').last()
+            path.rsplit('.').next()
         })
         .collect();
 
@@ -181,8 +181,7 @@ fn remove_field_by_path(resource: &mut serde_json::Value, path: &str) {
 
     // Navigate to the parent and remove the last key
     let mut current = resource;
-    for i in 0..parts.len() - 1 {
-        let key = parts[i];
+    for key in &parts[..parts.len() - 1] {
         // Handle array indices like "name[0]"
         let (field, _index) = split_array_ref(key);
         current = match current.get_mut(field) {
@@ -275,8 +274,7 @@ fn set_field_to_boundary(resource: &mut serde_json::Value, field: &str, _index: 
     let parts: Vec<&str> = field.split('.').collect();
     let mut current = resource;
 
-    for i in 0..parts.len() - 1 {
-        let key = parts[i];
+    for key in &parts[..parts.len() - 1] {
         let (field_name, _index) = split_array_ref(key);
         current = match current.get_mut(field_name) {
             Some(val) => val,

@@ -586,25 +586,25 @@ fn generate_search_tests(api: &ApiModel, spec: &SearchSpec, data: &GeneratedData
             let resolved_value = resolve_search_value(sp, values, created_id);
 
             // --- Single param search ---
-            if spec.single_param {
-                if let Some(ref val) = resolved_value {
-                    steps.push(Step::Request(RequestStep {
-                        name: format!("search-{}-{}", rtype_lower, sp.name),
-                        method: Method::Get,
-                        url: format!("/{}?{}={}", rtype, sp.name, url_encode(val)),
-                        headers: HashMap::new(),
-                        body: None,
-                        assert: vec![
-                            Assertion::Status(200),
-                            Assertion::JsonPath {
-                                path: "$.resourceType".to_string(),
-                                predicate: JsonPredicate::Eq(serde_json::json!("Bundle")),
-                            },
-                        ],
-                        save_as: String::new(),
-                        soft_fail: false,
-                    }));
-                }
+            if spec.single_param
+                && let Some(ref val) = resolved_value
+            {
+                steps.push(Step::Request(RequestStep {
+                    name: format!("search-{}-{}", rtype_lower, sp.name),
+                    method: Method::Get,
+                    url: format!("/{}?{}={}", rtype, sp.name, url_encode(val)),
+                    headers: HashMap::new(),
+                    body: None,
+                    assert: vec![
+                        Assertion::Status(200),
+                        Assertion::JsonPath {
+                            path: "$.resourceType".to_string(),
+                            predicate: JsonPredicate::Eq(serde_json::json!("Bundle")),
+                        },
+                    ],
+                    save_as: String::new(),
+                    soft_fail: false,
+                }));
             }
 
             // --- Modifier tests ---
@@ -988,101 +988,96 @@ fn generate_edge_case_tests(
         let rtype_lower = rtype.to_lowercase();
 
         // --- Special characters test ---
-        if spec.special_characters {
-            // Generate a resource with special characters and POST it
-            if let Ok(mut resource) = generator.generate(rtype) {
-                generator.vary(&mut resource, &DataVariation::SpecialChars, 99);
-                if let Some(obj) = resource.as_object_mut() {
-                    obj.insert("id".to_string(), serde_json::json!("edge-special-chars"));
-                }
-
-                steps.push(Step::Request(RequestStep {
-                    name: format!("edge-{}-special-chars", rtype_lower),
-                    method: Method::Post,
-                    url: format!("/{rtype}"),
-                    headers: {
-                        let mut h = HashMap::new();
-                        h.insert("Content-Type".to_string(), "application/json".to_string());
-                        h
-                    },
-                    body: Some(resource),
-                    assert: vec![Assertion::Status(201)],
-                    save_as: String::new(),
-                    soft_fail: false,
-                }));
+        if spec.special_characters
+            && let Ok(mut resource) = generator.generate(rtype)
+        {
+            generator.vary(&mut resource, &DataVariation::SpecialChars, 99);
+            if let Some(obj) = resource.as_object_mut() {
+                obj.insert("id".to_string(), serde_json::json!("edge-special-chars"));
             }
+
+            steps.push(Step::Request(RequestStep {
+                name: format!("edge-{}-special-chars", rtype_lower),
+                method: Method::Post,
+                url: format!("/{rtype}"),
+                headers: {
+                    let mut h = HashMap::new();
+                    h.insert("Content-Type".to_string(), "application/json".to_string());
+                    h
+                },
+                body: Some(resource),
+                assert: vec![Assertion::Status(201)],
+                save_as: String::new(),
+                soft_fail: false,
+            }));
         }
 
         // --- Boundary values test ---
-        if spec.boundary_values {
-            if let Ok(mut resource) = generator.generate(rtype) {
-                generator.vary(
-                    &mut resource,
-                    &DataVariation::Boundary {
-                        field: String::new(),
-                    },
-                    99,
-                );
-                if let Some(obj) = resource.as_object_mut() {
-                    obj.insert("id".to_string(), serde_json::json!("edge-boundary"));
-                }
-
-                steps.push(Step::Request(RequestStep {
-                    name: format!("edge-{}-boundary", rtype_lower),
-                    method: Method::Post,
-                    url: format!("/{rtype}"),
-                    headers: {
-                        let mut h = HashMap::new();
-                        h.insert("Content-Type".to_string(), "application/json".to_string());
-                        h
-                    },
-                    body: Some(resource),
-                    assert: vec![Assertion::Status(201)],
-                    save_as: String::new(),
-                    soft_fail: false,
-                }));
+        if spec.boundary_values
+            && let Ok(mut resource) = generator.generate(rtype)
+        {
+            generator.vary(
+                &mut resource,
+                &DataVariation::Boundary {
+                    field: String::new(),
+                },
+                99,
+            );
+            if let Some(obj) = resource.as_object_mut() {
+                obj.insert("id".to_string(), serde_json::json!("edge-boundary"));
             }
+
+            steps.push(Step::Request(RequestStep {
+                name: format!("edge-{}-boundary", rtype_lower),
+                method: Method::Post,
+                url: format!("/{rtype}"),
+                headers: {
+                    let mut h = HashMap::new();
+                    h.insert("Content-Type".to_string(), "application/json".to_string());
+                    h
+                },
+                body: Some(resource),
+                assert: vec![Assertion::Status(201)],
+                save_as: String::new(),
+                soft_fail: false,
+            }));
         }
 
         // --- Dangling reference test ---
-        if spec.dangling_references {
-            if let Ok(mut resource) = generator.generate(rtype) {
-                // Add a reference to a non-existent resource
-                if let Some(obj) = resource.as_object_mut() {
-                    obj.insert(
-                        "subject".to_string(),
-                        serde_json::json!({
-                            "reference": "Patient/nonexistent-000"
-                        }),
-                    );
-                    obj.insert("id".to_string(), serde_json::json!("edge-dangling-ref"));
-                }
-
-                steps.push(Step::Request(RequestStep {
-                    name: format!("edge-{}-dangling-ref", rtype_lower),
-                    method: Method::Post,
-                    url: format!("/{rtype}"),
-                    headers: {
-                        let mut h = HashMap::new();
-                        h.insert("Content-Type".to_string(), "application/json".to_string());
-                        h
-                    },
-                    body: Some(resource),
-                    // Server may accept or reject dangling refs — accept either
-                    assert: vec![Assertion::StatusIn(vec![201, 202, 400, 422])],
-                    save_as: String::new(),
-                    soft_fail: false,
-                }));
+        if spec.dangling_references
+            && let Ok(mut resource) = generator.generate(rtype)
+        {
+            // Add a reference to a non-existent resource
+            if let Some(obj) = resource.as_object_mut() {
+                obj.insert(
+                    "subject".to_string(),
+                    serde_json::json!({
+                        "reference": "Patient/nonexistent-000"
+                    }),
+                );
+                obj.insert("id".to_string(), serde_json::json!("edge-dangling-ref"));
             }
+
+            steps.push(Step::Request(RequestStep {
+                name: format!("edge-{}-dangling-ref", rtype_lower),
+                method: Method::Post,
+                url: format!("/{rtype}"),
+                headers: {
+                    let mut h = HashMap::new();
+                    h.insert("Content-Type".to_string(), "application/json".to_string());
+                    h
+                },
+                body: Some(resource),
+                // Server may accept or reject dangling refs — accept either
+                assert: vec![Assertion::StatusIn(vec![201, 202, 400, 422])],
+                save_as: String::new(),
+                soft_fail: false,
+            }));
         }
     }
 
     Ok(steps)
 }
-
-// ---------------------------------------------------------------------------
-// Conformance test generation
-// ---------------------------------------------------------------------------
 
 /// Generate conformance tests from the API model.
 ///
@@ -1096,25 +1091,25 @@ fn generate_conformance_tests(api: &ApiModel, spec: &ConformanceSpec) -> Vec<Ste
         let rtype_lower = rtype.to_lowercase();
 
         // Conformance: search with _count=1 and verify profile
-        if spec.profile_validation {
-            if let Some(profile_url) = &resource_model.profile_url {
-                steps.push(Step::Request(RequestStep {
-                    name: format!("conformance-{}-profile", rtype_lower),
-                    method: Method::Get,
-                    url: format!("/{rtype}?_count=1"),
-                    headers: HashMap::new(),
-                    body: None,
-                    assert: vec![
-                        Assertion::Status(200),
-                        Assertion::JsonPath {
-                            path: "$.entry[0].resource.meta.profile[0]".to_string(),
-                            predicate: JsonPredicate::Eq(serde_json::json!(profile_url)),
-                        },
-                    ],
-                    save_as: String::new(),
-                    soft_fail: false,
-                }));
-            }
+        if spec.profile_validation
+            && let Some(profile_url) = &resource_model.profile_url
+        {
+            steps.push(Step::Request(RequestStep {
+                name: format!("conformance-{}-profile", rtype_lower),
+                method: Method::Get,
+                url: format!("/{rtype}?_count=1"),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![
+                    Assertion::Status(200),
+                    Assertion::JsonPath {
+                        path: "$.entry[0].resource.meta.profile[0]".to_string(),
+                        predicate: JsonPredicate::Eq(serde_json::json!(profile_url)),
+                    },
+                ],
+                save_as: String::new(),
+                soft_fail: false,
+            }));
         }
 
         // Conformance: mustSupport tests for each supported profile
