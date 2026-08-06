@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### ⚙️ Miscellaneous Tasks
 
 - Release v0.7.4
+- Release v0.7.5
+## [0.7.5] - 2026-08-06
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.7.4
 ## [0.7.4] - 2026-08-06
 
 ### ⚙️ Miscellaneous Tasks
