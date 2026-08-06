@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ## [0.7.0] - 2026-08-06
 
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.6.3
+## [0.7.0] - 2026-08-06
+
 ### 🐛 Bug Fixes
 
 - Add property-based testing with proptest and snapshot testing with insta (#137)
