@@ -37,6 +37,7 @@ use serde::{Deserialize, Serialize};
 /// combine sub-specs, while leaf nodes define specific test categories.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum TestSpec {
     // -- Combinators ---------------------------------------------------------
     /// Run all sub-specs (logical AND for test generation).
@@ -114,6 +115,7 @@ impl Default for DataSpec {
 /// | `ToBeDeleted` | Will be deleted during test — tests post-delete state |
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum DataVariation {
     /// All fields populated with valid values.
     HappyPath,

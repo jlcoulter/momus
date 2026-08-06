@@ -266,40 +266,6 @@ fn capitalize_first(s: &str) -> String {
     }
 }
 
-/// Vary string values in a generated FHIR resource by appending a suffix.
-///
-/// The resource generator is deterministic. For meaningful search tests we
-/// need resources with different values so that searching for a specific
-/// value returns a subset (not all resources).
-///
-/// This function walks the JSON tree and appends `-{idx}` to every string
-/// value that isnt a URL, profile reference, system URI, or UUID.
-fn vary_resource_values(resource: &mut serde_json::Value, idx: u64) {
-    let suffix = format!("-{idx}");
-    match resource {
-        serde_json::Value::String(s) => {
-            if !s.starts_with("http")
-                && !s.starts_with("urn:uuid:")
-                && !s.starts_with("mailto:")
-                && !s.starts_with("tel:")
-            {
-                s.push_str(&suffix);
-            }
-        }
-        serde_json::Value::Object(obj) => {
-            for val in obj.values_mut() {
-                vary_resource_values(val, idx);
-            }
-        }
-        serde_json::Value::Array(arr) => {
-            for val in arr.iter_mut() {
-                vary_resource_values(val, idx);
-            }
-        }
-        _ => {}
-    }
-}
-
 /// Generate seed data setup steps from a FHIR IG package.
 ///
 /// Generates valid profile-conformant FHIR resources and returns them as

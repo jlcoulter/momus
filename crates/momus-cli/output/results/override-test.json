@@ -9,12 +9,12 @@
       "passed": true,
       "status_code": 200,
       "request_method": "GET",
-      "request_url": "http://127.0.0.1:64271/health",
+      "request_url": "http://127.0.0.1:64365/health",
       "request_headers": {},
       "request_body": null,
       "response_headers": {
         "content-length": "15",
-        "date": "Thu, 06 Aug 2026 00:41:43 GMT",
+        "date": "Thu, 06 Aug 2026 00:52:33 GMT",
         "content-type": "application/json"
       },
       "response_body": {

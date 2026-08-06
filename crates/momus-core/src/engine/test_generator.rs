@@ -24,6 +24,7 @@
 /// ```
 use crate::ast::*;
 use anyhow::Result;
+use serde::Serialize;
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -66,7 +67,7 @@ pub trait ResourceGenerator {
 // ---------------------------------------------------------------------------
 
 /// A single generated resource with its metadata.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct GeneratedResource {
     /// Assigned resource ID.
     pub id: String,
@@ -80,13 +81,13 @@ pub struct GeneratedResource {
 ///
 /// Holds the resources, extracted field values, and created IDs
 /// that the sub-generators (CRUD, search, etc.) reference.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct GeneratedData {
-    /// Map of resource type → list of generated resources.
+    /// Map of resource type to list of generated resources.
     pub resources: HashMap<String, Vec<GeneratedResource>>,
-    /// Map of resource type → field values (from the first happy-path resource).
+    /// Map of resource type to field values (from the first happy-path resource).
     pub field_values: HashMap<String, HashMap<String, String>>,
-    /// Map of resource type → created ID (from the first happy-path resource).
+    /// Map of resource type to created ID (from the first happy-path resource).
     pub created_ids: HashMap<String, String>,
 }
 
@@ -227,9 +228,12 @@ pub fn generate_data(
     data_spec: &DataSpec,
     generator: &dyn ResourceGenerator,
 ) -> Result<GeneratedData> {
-    let mut resources: HashMap<String, Vec<GeneratedResource>> = HashMap::new();
-    let mut field_values: HashMap<String, HashMap<String, String>> = HashMap::new();
-    let mut created_ids: HashMap<String, String> = HashMap::new();
+    let resource_count = api.resources.len();
+    let mut resources: HashMap<String, Vec<GeneratedResource>> =
+        HashMap::with_capacity(resource_count);
+    let mut field_values: HashMap<String, HashMap<String, String>> =
+        HashMap::with_capacity(resource_count);
+    let mut created_ids: HashMap<String, String> = HashMap::with_capacity(resource_count);
 
     for resource_model in &api.resources {
         let rtype = &resource_model.name;
@@ -295,7 +299,14 @@ pub fn generate_data(
 /// Each resource is POSTed in dependency order (if the API model specifies
 /// a creation order) and saved under a named reference for downstream use.
 pub fn generate_setup_steps(api: &ApiModel, data: &GeneratedData) -> Vec<Step> {
-    let mut steps = Vec::new();
+    // Estimate total steps: sum of all resources across all types
+    let estimated: usize = api
+        .resources
+        .iter()
+        .filter_map(|r| data.resources.get(&r.name))
+        .map(|v| v.len())
+        .sum();
+    let mut steps = Vec::with_capacity(estimated);
 
     for resource_model in &api.resources {
         let rtype = &resource_model.name;

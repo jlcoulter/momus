@@ -16,7 +16,8 @@ use momus_core::ast::*;
 pub fn package_to_api_model(pkg: &IgPackage) -> ApiModel {
     let cs = select_capability_statement(pkg);
 
-    let mut resources = Vec::new();
+    let estimated: usize = cs.rest.iter().map(|r| r.resource.len()).sum();
+    let mut resources = Vec::with_capacity(estimated);
 
     for rest in &cs.rest {
         for resource in &rest.resource {

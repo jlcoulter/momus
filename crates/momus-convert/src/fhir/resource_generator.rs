@@ -33,11 +33,12 @@ impl FhirResourceGenerator {
         raw_resources: &HashMap<String, serde_json::Value>,
     ) -> Self {
         let value_set_systems = valuesets::build_value_set_system_map(raw_resources);
-        let owned: Vec<StructureDefinition> = structure_definitions.to_vec();
+        // Build index from the slice first, then clone
         let mut profile_index = HashMap::new();
-        for (i, sd) in owned.iter().enumerate() {
+        for (i, sd) in structure_definitions.iter().enumerate() {
             profile_index.insert(sd.base_type.clone(), i);
         }
+        let owned = structure_definitions.to_vec();
 
         Self {
             structure_definitions: owned,
@@ -110,6 +111,8 @@ impl ResourceGenerator for FhirResourceGenerator {
                     set_field_to_boundary(resource, field, index);
                 }
             }
+            // Future variations: no-op by default
+            _ => {}
         }
     }
 
