@@ -311,4 +311,149 @@ mod tests {
         assert!(!r.passed);
         assert_eq!(r.message.unwrap(), "got 404");
     }
+
+    #[test]
+    fn assertion_result_with_children() {
+        let r = AssertionResult {
+            description: "all of".into(),
+            passed: false,
+            message: Some("failed: status is 200".into()),
+            children: vec![AssertionResult::fail("status is 200", "got 404")],
+        };
+        assert!(!r.passed);
+        assert_eq!(r.children.len(), 1);
+        assert!(!r.children[0].passed);
+    }
+
+    #[test]
+    fn test_assertion_serialization_roundtrip() {
+        let assertions = vec![
+            Assertion::Status(200),
+            Assertion::StatusIn(vec![200, 304]),
+            Assertion::Header {
+                name: "content-type".into(),
+                predicate: ValuePredicate::Contains("json".into()),
+            },
+            Assertion::BodyLength(BodyLengthPredicate::Min(10)),
+            Assertion::JsonPath {
+                path: "$.resourceType".into(),
+                predicate: JsonPredicate::Eq(serde_json::json!("Patient")),
+            },
+            Assertion::Schema {
+                schema: serde_json::json!({"type": "object"}),
+            },
+            Assertion::ValidJson,
+            Assertion::ContentType("json".into()),
+            Assertion::ResponseTime(500),
+            Assertion::AllOf(vec![Assertion::Status(200), Assertion::ValidJson]),
+            Assertion::AnyOf(vec![Assertion::Status(200), Assertion::Status(304)]),
+            Assertion::Not(Box::new(Assertion::Status(404))),
+        ];
+
+        for assertion in &assertions {
+            let json = serde_json::to_string(assertion).unwrap();
+            let deserialized: Assertion = serde_json::from_str(&json).unwrap();
+            assert_eq!(
+                *assertion, deserialized,
+                "round-trip failed for {:?}",
+                assertion
+            );
+        }
+    }
+
+    #[test]
+    fn test_value_predicate_serialization_roundtrip() {
+        let predicates = vec![
+            ValuePredicate::Eq("value".into()),
+            ValuePredicate::Contains("sub".into()),
+            ValuePredicate::Regex("^pattern$".into()),
+            ValuePredicate::Present,
+            ValuePredicate::Absent,
+        ];
+
+        for predicate in &predicates {
+            let json = serde_json::to_string(predicate).unwrap();
+            let deserialized: ValuePredicate = serde_json::from_str(&json).unwrap();
+            assert_eq!(*predicate, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_json_predicate_serialization_roundtrip() {
+        let predicates = vec![
+            JsonPredicate::Exists,
+            JsonPredicate::NotExists,
+            JsonPredicate::Eq(serde_json::json!("test")),
+            JsonPredicate::NotEq(serde_json::json!(42)),
+            JsonPredicate::Cmp {
+                op: CmpOp::Gt,
+                value: serde_json::json!(10),
+            },
+            JsonPredicate::Length(LengthPredicate::Eq(3)),
+            JsonPredicate::Every(Box::new(JsonPredicate::Exists)),
+            JsonPredicate::Some(Box::new(JsonPredicate::Eq(serde_json::json!(1)))),
+            JsonPredicate::Count(CountPredicate::Min(1)),
+            JsonPredicate::Schema(serde_json::json!({"type": "object"})),
+        ];
+
+        for predicate in &predicates {
+            let json = serde_json::to_string(predicate).unwrap();
+            let deserialized: JsonPredicate = serde_json::from_str(&json).unwrap();
+            assert_eq!(*predicate, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_predicate_serialization_roundtrip() {
+        let predicates: Vec<BodyLengthPredicate> = vec![
+            BodyLengthPredicate::Eq(100),
+            BodyLengthPredicate::Min(10),
+            BodyLengthPredicate::Max(1000),
+            BodyLengthPredicate::Range { min: 10, max: 100 },
+        ];
+        for pred in &predicates {
+            let json = serde_json::to_string(pred).unwrap();
+            let deserialized: BodyLengthPredicate = serde_json::from_str(&json).unwrap();
+            assert_eq!(*pred, deserialized);
+        }
+
+        let length_preds: Vec<LengthPredicate> = vec![
+            LengthPredicate::Eq(5),
+            LengthPredicate::Min(1),
+            LengthPredicate::Max(10),
+            LengthPredicate::Range { min: 1, max: 10 },
+        ];
+        for pred in &length_preds {
+            let json = serde_json::to_string(pred).unwrap();
+            let deserialized: LengthPredicate = serde_json::from_str(&json).unwrap();
+            assert_eq!(*pred, deserialized);
+        }
+
+        let count_preds: Vec<CountPredicate> = vec![
+            CountPredicate::Eq(3),
+            CountPredicate::Min(0),
+            CountPredicate::Max(100),
+            CountPredicate::Range { min: 1, max: 5 },
+        ];
+        for pred in &count_preds {
+            let json = serde_json::to_string(pred).unwrap();
+            let deserialized: CountPredicate = serde_json::from_str(&json).unwrap();
+            assert_eq!(*pred, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_assertion_result_serialization_roundtrip() {
+        let result = AssertionResult {
+            description: "all of".into(),
+            passed: false,
+            message: Some("failed: status is 200".into()),
+            children: vec![AssertionResult::fail("status is 200", "got 404")],
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        let deserialized: AssertionResult = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.description, result.description);
+        assert_eq!(deserialized.passed, result.passed);
+        assert_eq!(deserialized.children.len(), result.children.len());
+    }
 }

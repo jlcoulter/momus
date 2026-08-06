@@ -1588,4 +1588,175 @@ mod tests {
         assert_eq!(plan.setup.len(), 3); // 3 setup steps
         assert!(!plan.steps.is_empty());
     }
+
+    #[test]
+    fn test_generate_operation_tests() {
+        let api = make_test_api();
+        let spec = OperationSpec { enabled: true };
+        let steps = generate_operation_tests(&api, &spec);
+        // The test API only has standard CRUD/search operations, so no custom ops
+        assert!(steps.is_empty());
+    }
+
+    #[test]
+    fn test_generate_edge_case_tests() {
+        let api = make_test_api();
+        let spec = EdgeCaseSpec {
+            boundary_values: true,
+            special_characters: true,
+            large_payloads: false,
+            concurrent_operations: false,
+            dangling_references: false,
+        };
+        let data = {
+            let data_spec = DataSpec::default();
+            let generator = MockGenerator;
+            generate_data(&api, &data_spec, &generator).unwrap()
+        };
+        let generator = MockGenerator;
+        let steps = generate_edge_case_tests(&api, &spec, &data, &generator).unwrap();
+        // Should have special chars + boundary tests
+        assert_eq!(steps.len(), 2);
+        assert!(steps[0].count_tests() > 0);
+    }
+
+    #[test]
+    fn test_generate_conformance_tests() {
+        let api = make_test_api();
+        let spec = ConformanceSpec {
+            profile_validation: true,
+            must_support: true,
+        };
+        let steps = generate_conformance_tests(&api, &spec);
+        // Patient has a profile_url, so profile_validation should produce 1 step
+        // No supported_profiles, so must_support produces 0 steps
+        assert_eq!(steps.len(), 1);
+        assert!(steps[0].count_tests() > 0);
+    }
+
+    #[test]
+    fn test_generate_security_tests() {
+        let api = make_test_api();
+        let spec = SecuritySpec::default();
+        let steps = generate_security_tests(&api, &spec);
+        // Security tests are a placeholder — returns empty
+        assert!(steps.is_empty());
+    }
+
+    #[test]
+    fn test_generate_performance_tests() {
+        let api = make_test_api();
+        let spec = PerformanceSpec {
+            response_time: false,
+            pagination: true,
+        };
+        let steps = generate_performance_tests(&api, &spec);
+        // Should have 1 pagination test for Patient
+        assert_eq!(steps.len(), 1);
+        assert!(steps[0].count_tests() > 0);
+    }
+
+    #[test]
+    fn test_generate_performance_tests_disabled() {
+        let api = make_test_api();
+        let spec = PerformanceSpec::default();
+        let steps = generate_performance_tests(&api, &spec);
+        assert!(steps.is_empty());
+    }
+
+    #[test]
+    fn test_generate_data_with_variations() {
+        let api = make_test_api();
+        let spec = DataSpec {
+            count: 8,
+            variations: vec![
+                DataVariation::HappyPath,
+                DataVariation::Minimal,
+                DataVariation::SpecialChars,
+                DataVariation::Boundary {
+                    field: "name".into(),
+                },
+                DataVariation::DuplicateValue {
+                    field: "name".into(),
+                },
+                DataVariation::MissingField {
+                    field: "status".into(),
+                },
+                DataVariation::ToBeDeleted,
+            ],
+        };
+        let generator = MockGenerator;
+        let data = generate_data(&api, &spec, &generator).unwrap();
+
+        let patient_resources = data.resources.get("Patient").unwrap();
+        assert_eq!(patient_resources.len(), 8);
+
+        // Verify all variation types are represented
+        let has_happy = patient_resources
+            .iter()
+            .any(|r| matches!(r.variation, DataVariation::HappyPath));
+        let has_minimal = patient_resources
+            .iter()
+            .any(|r| matches!(r.variation, DataVariation::Minimal));
+        let has_special = patient_resources
+            .iter()
+            .any(|r| matches!(r.variation, DataVariation::SpecialChars));
+        let has_boundary = patient_resources
+            .iter()
+            .any(|r| matches!(r.variation, DataVariation::Boundary { .. }));
+        let has_dup = patient_resources
+            .iter()
+            .any(|r| matches!(r.variation, DataVariation::DuplicateValue { .. }));
+        let has_missing = patient_resources
+            .iter()
+            .any(|r| matches!(r.variation, DataVariation::MissingField { .. }));
+        let has_deleted = patient_resources
+            .iter()
+            .any(|r| matches!(r.variation, DataVariation::ToBeDeleted));
+        assert!(has_happy, "should have HappyPath variation");
+        assert!(has_minimal, "should have Minimal variation");
+        assert!(has_special, "should have SpecialChars variation");
+        assert!(has_boundary, "should have Boundary variation");
+        assert!(has_dup, "should have DuplicateValue variation");
+        assert!(has_missing, "should have MissingField variation");
+        assert!(has_deleted, "should have ToBeDeleted variation");
+    }
+
+    #[test]
+    fn test_generate_data_with_duplicate_variation() {
+        let api = make_test_api();
+        let spec = DataSpec {
+            count: 2,
+            variations: vec![
+                DataVariation::HappyPath,
+                DataVariation::DuplicateValue {
+                    field: "name".into(),
+                },
+            ],
+        };
+        let generator = MockGenerator;
+        let data = generate_data(&api, &spec, &generator).unwrap();
+
+        let patient_resources = data.resources.get("Patient").unwrap();
+        assert_eq!(patient_resources.len(), 2);
+    }
+
+    #[test]
+    fn test_generate_data_with_missing_field_variation() {
+        let api = make_test_api();
+        let spec = DataSpec {
+            count: 2,
+            variations: vec![
+                DataVariation::HappyPath,
+                DataVariation::MissingField {
+                    field: "status".into(),
+                },
+            ],
+        };
+        let generator = MockGenerator;
+        let data = generate_data(&api, &spec, &generator).unwrap();
+
+        let patient_resources = data.resources.get("Patient").unwrap();
+        assert_eq!(patient_resources.len(), 2);
+    }
 }
