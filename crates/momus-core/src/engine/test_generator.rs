@@ -315,10 +315,10 @@ pub fn generate_setup_steps(api: &ApiModel, data: &GeneratedData) -> Vec<Step> {
         if let Some(type_resources) = data.resources.get(rtype) {
             for (i, gr) in type_resources.iter().enumerate() {
                 let idx = i + 1;
-                let save_name = format!("seed_{}_{}", rtype_lower, idx);
+                let save_name = format!("seed_{rtype_lower}_{idx}");
 
                 let step = RequestStep {
-                    name: format!("setup-create-{}-{}", rtype_lower, idx),
+                    name: format!("setup-create-{rtype_lower}-{idx}"),
                     method: Method::Post,
                     url: format!("/{rtype}"),
                     headers: {
@@ -359,7 +359,7 @@ fn generate_crud_tests(
     for resource_model in &api.resources {
         let rtype = &resource_model.name;
         let rtype_lower = rtype.to_lowercase();
-        let save_name = format!("seed_{}_1", rtype_lower);
+        let save_name = format!("seed_{rtype_lower}_1");
 
         // Check which operations are declared
         let has_create = resource_model
@@ -410,7 +410,7 @@ fn generate_crud_tests(
                 .map(|gr| gr.resource.clone());
 
             crud_steps.push(Step::Request(RequestStep {
-                name: format!("create-{}", rtype_lower),
+                name: format!("create-{rtype_lower}"),
                 method: Method::Post,
                 url: format!("/{rtype}"),
                 headers: {
@@ -428,7 +428,7 @@ fn generate_crud_tests(
         // Read step
         if has_read {
             crud_steps.push(Step::Request(RequestStep {
-                name: format!("read-{}", rtype_lower),
+                name: format!("read-{rtype_lower}"),
                 method: Method::Get,
                 url: format!("/{rtype}/{{steps.{save_name}.id}}"),
                 headers: HashMap::new(),
@@ -448,7 +448,7 @@ fn generate_crud_tests(
                 .map(|gr| gr.resource.clone());
 
             crud_steps.push(Step::Request(RequestStep {
-                name: format!("update-{}", rtype_lower),
+                name: format!("update-{rtype_lower}"),
                 method: Method::Put,
                 url: format!("/{rtype}/{{steps.{save_name}.id}}"),
                 headers: {
@@ -466,7 +466,7 @@ fn generate_crud_tests(
         // Patch step
         if has_patch {
             crud_steps.push(Step::Request(RequestStep {
-                name: format!("patch-{}", rtype_lower),
+                name: format!("patch-{rtype_lower}"),
                 method: Method::Patch,
                 url: format!("/{rtype}/{{steps.{save_name}.id}}"),
                 headers: {
@@ -491,7 +491,7 @@ fn generate_crud_tests(
         // Vread step (version read)
         if has_vread {
             crud_steps.push(Step::Request(RequestStep {
-                name: format!("vread-{}", rtype_lower),
+                name: format!("vread-{rtype_lower}"),
                 method: Method::Get,
                 url: format!("/{rtype}/{{steps.{save_name}.id}}/_history/1"),
                 headers: HashMap::new(),
@@ -505,7 +505,7 @@ fn generate_crud_tests(
         // History instance step
         if has_history_instance {
             crud_steps.push(Step::Request(RequestStep {
-                name: format!("history-instance-{}", rtype_lower),
+                name: format!("history-instance-{rtype_lower}"),
                 method: Method::Get,
                 url: format!("/{rtype}/{{steps.{save_name}.id}}/_history"),
                 headers: HashMap::new(),
@@ -519,7 +519,7 @@ fn generate_crud_tests(
         // History type step
         if has_history_type {
             crud_steps.push(Step::Request(RequestStep {
-                name: format!("history-type-{}", rtype_lower),
+                name: format!("history-type-{rtype_lower}"),
                 method: Method::Get,
                 url: format!("/{rtype}/_history"),
                 headers: HashMap::new(),
@@ -533,7 +533,7 @@ fn generate_crud_tests(
         // Delete step — last in sequence
         if has_delete {
             crud_steps.push(Step::Request(RequestStep {
-                name: format!("delete-{}", rtype_lower),
+                name: format!("delete-{rtype_lower}"),
                 method: Method::Delete,
                 url: format!("/{rtype}/{{steps.{save_name}.id}}"),
                 headers: HashMap::new(),
@@ -738,7 +738,7 @@ fn generate_search_tests(api: &ApiModel, spec: &SearchSpec, data: &GeneratedData
                     result_param.replace('=', "_").replace(':', "-")
                 ),
                 method: Method::Get,
-                url: format!("/{}?{}", rtype, result_param),
+                url: format!("/{rtype}?{result_param}"),
                 headers: HashMap::new(),
                 body: None,
                 assert: vec![Assertion::Status(200)],
@@ -751,9 +751,9 @@ fn generate_search_tests(api: &ApiModel, spec: &SearchSpec, data: &GeneratedData
         if spec.include {
             for include in &resource_model.search_include {
                 steps.push(Step::Request(RequestStep {
-                    name: format!("search-{}-include-{}", rtype_lower, include),
+                    name: format!("search-{rtype_lower}-include-{include}"),
                     method: Method::Get,
-                    url: format!("/{}?_include={}", rtype, include),
+                    url: format!("/{rtype}?_include={include}"),
                     headers: HashMap::new(),
                     body: None,
                     assert: vec![Assertion::Status(200)],
@@ -767,9 +767,9 @@ fn generate_search_tests(api: &ApiModel, spec: &SearchSpec, data: &GeneratedData
         if spec.revinclude {
             for revinclude in &resource_model.search_revinclude {
                 steps.push(Step::Request(RequestStep {
-                    name: format!("search-{}-revinclude-{}", rtype_lower, revinclude),
+                    name: format!("search-{rtype_lower}-revinclude-{revinclude}"),
                     method: Method::Get,
-                    url: format!("/{}?_revinclude={}", rtype, revinclude),
+                    url: format!("/{rtype}?_revinclude={revinclude}"),
                     headers: HashMap::new(),
                     body: None,
                     assert: vec![Assertion::Status(200)],
@@ -905,7 +905,7 @@ fn generate_negative_tests(api: &ApiModel, spec: &NegativeSpec) -> Vec<Step> {
                     };
 
                     steps.push(Step::Request(RequestStep {
-                        name: format!("negative-{}-undeclared-{}", rtype_lower, interaction),
+                        name: format!("negative-{rtype_lower}-undeclared-{interaction}"),
                         method: method_enum,
                         url,
                         headers: HashMap::new(),
@@ -923,7 +923,7 @@ fn generate_negative_tests(api: &ApiModel, spec: &NegativeSpec) -> Vec<Step> {
         if spec.invalid_bodies {
             // Test with empty body
             steps.push(Step::Request(RequestStep {
-                name: format!("negative-{}-empty-body", rtype_lower),
+                name: format!("negative-{rtype_lower}-empty-body"),
                 method: Method::Post,
                 url: format!("/{rtype}"),
                 headers: {
@@ -939,7 +939,7 @@ fn generate_negative_tests(api: &ApiModel, spec: &NegativeSpec) -> Vec<Step> {
 
             // Test with wrong resource type
             steps.push(Step::Request(RequestStep {
-                name: format!("negative-{}-wrong-type", rtype_lower),
+                name: format!("negative-{rtype_lower}-wrong-type"),
                 method: Method::Post,
                 url: format!("/{rtype}"),
                 headers: {
@@ -960,7 +960,7 @@ fn generate_negative_tests(api: &ApiModel, spec: &NegativeSpec) -> Vec<Step> {
             // (This would need to be a raw HTTP request — skip for now)
             // Test with wrong Content-Type
             steps.push(Step::Request(RequestStep {
-                name: format!("negative-{}-wrong-content-type", rtype_lower),
+                name: format!("negative-{rtype_lower}-wrong-content-type"),
                 method: Method::Post,
                 url: format!("/{rtype}"),
                 headers: {
@@ -1008,7 +1008,7 @@ fn generate_edge_case_tests(
             }
 
             steps.push(Step::Request(RequestStep {
-                name: format!("edge-{}-special-chars", rtype_lower),
+                name: format!("edge-{rtype_lower}-special-chars"),
                 method: Method::Post,
                 url: format!("/{rtype}"),
                 headers: {
@@ -1039,7 +1039,7 @@ fn generate_edge_case_tests(
             }
 
             steps.push(Step::Request(RequestStep {
-                name: format!("edge-{}-boundary", rtype_lower),
+                name: format!("edge-{rtype_lower}-boundary"),
                 method: Method::Post,
                 url: format!("/{rtype}"),
                 headers: {
@@ -1070,7 +1070,7 @@ fn generate_edge_case_tests(
             }
 
             steps.push(Step::Request(RequestStep {
-                name: format!("edge-{}-dangling-ref", rtype_lower),
+                name: format!("edge-{rtype_lower}-dangling-ref"),
                 method: Method::Post,
                 url: format!("/{rtype}"),
                 headers: {
@@ -1106,7 +1106,7 @@ fn generate_conformance_tests(api: &ApiModel, spec: &ConformanceSpec) -> Vec<Ste
             && let Some(profile_url) = &resource_model.profile_url
         {
             steps.push(Step::Request(RequestStep {
-                name: format!("conformance-{}-profile", rtype_lower),
+                name: format!("conformance-{rtype_lower}-profile"),
                 method: Method::Get,
                 url: format!("/{rtype}?_count=1"),
                 headers: HashMap::new(),
@@ -1128,7 +1128,7 @@ fn generate_conformance_tests(api: &ApiModel, spec: &ConformanceSpec) -> Vec<Ste
             for profile_url in &resource_model.supported_profiles {
                 let profile_name = profile_url.rsplit('/').next().unwrap_or(profile_url);
                 steps.push(Step::Request(RequestStep {
-                    name: format!("conformance-{}-mustsupport-{}", rtype_lower, profile_name),
+                    name: format!("conformance-{rtype_lower}-mustsupport-{profile_name}"),
                     method: Method::Get,
                     url: format!("/{rtype}?_count=1"),
                     headers: HashMap::new(),
@@ -1213,7 +1213,7 @@ fn generate_performance_tests(api: &ApiModel, spec: &PerformanceSpec) -> Vec<Ste
 
             // Test _count=1 pagination
             steps.push(Step::Request(RequestStep {
-                name: format!("perf-{}-count-1", rtype_lower),
+                name: format!("perf-{rtype_lower}-count-1"),
                 method: Method::Get,
                 url: format!("/{rtype}?_count=1"),
                 headers: HashMap::new(),
