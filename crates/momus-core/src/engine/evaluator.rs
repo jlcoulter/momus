@@ -606,6 +606,18 @@ mod tests {
     }
 
     #[test]
+    fn test_status_in_fail() {
+        let result = evaluate_assertion(
+            &Assertion::StatusIn(vec![200, 304]),
+            500,
+            &HashMap::new(),
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
     fn test_header_present() {
         let mut headers = HashMap::new();
         headers.insert("content-type".into(), "application/json".into());
@@ -617,6 +629,167 @@ mod tests {
             0,
         );
         assert!(result.passed);
+    }
+
+    #[test]
+    fn test_header_present_fail() {
+        let result = evaluate_assertion(
+            &Assertion::header("x-missing", ValuePredicate::Present),
+            200,
+            &HashMap::new(),
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+        assert!(result.message.unwrap().contains("not present"));
+    }
+
+    #[test]
+    fn test_header_absent() {
+        let result = evaluate_assertion(
+            &Assertion::header("x-missing", ValuePredicate::Absent),
+            200,
+            &HashMap::new(),
+            &None,
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_header_absent_fail() {
+        let mut headers = HashMap::new();
+        headers.insert("x-present".into(), "value".into());
+        let result = evaluate_assertion(
+            &Assertion::header("x-present", ValuePredicate::Absent),
+            200,
+            &headers,
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_header_contains() {
+        let mut headers = HashMap::new();
+        headers.insert("content-type".into(), "application/fhir+json".into());
+        let result = evaluate_assertion(
+            &Assertion::header("content-type", ValuePredicate::Contains("fhir".into())),
+            200,
+            &headers,
+            &None,
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_header_contains_fail() {
+        let mut headers = HashMap::new();
+        headers.insert("content-type".into(), "application/xml".into());
+        let result = evaluate_assertion(
+            &Assertion::header("content-type", ValuePredicate::Contains("json".into())),
+            200,
+            &headers,
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_header_contains_missing_header() {
+        let result = evaluate_assertion(
+            &Assertion::header("x-missing", ValuePredicate::Contains("val".into())),
+            200,
+            &HashMap::new(),
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_header_regex() {
+        let mut headers = HashMap::new();
+        headers.insert("x-request-id".into(), "req-abc-123".into());
+        let result = evaluate_assertion(
+            &Assertion::header("x-request-id", ValuePredicate::Regex("^req-".into())),
+            200,
+            &headers,
+            &None,
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_header_regex_fail() {
+        let mut headers = HashMap::new();
+        headers.insert("x-request-id".into(), "abc-123".into());
+        let result = evaluate_assertion(
+            &Assertion::header("x-request-id", ValuePredicate::Regex("^req-".into())),
+            200,
+            &headers,
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_header_regex_invalid() {
+        let mut headers = HashMap::new();
+        headers.insert("x-id".into(), "value".into());
+        let result = evaluate_assertion(
+            &Assertion::header("x-id", ValuePredicate::Regex("[".into())),
+            200,
+            &headers,
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+        assert!(result.message.unwrap().contains("invalid regex"));
+    }
+
+    #[test]
+    fn test_header_regex_missing_header() {
+        let result = evaluate_assertion(
+            &Assertion::header("x-missing", ValuePredicate::Regex("^val".into())),
+            200,
+            &HashMap::new(),
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_header_eq_fail_wrong_value() {
+        let mut headers = HashMap::new();
+        headers.insert("x-request-id".into(), "abc-123".into());
+        let result = evaluate_assertion(
+            &Assertion::header("x-request-id", ValuePredicate::Eq("wrong".into())),
+            200,
+            &headers,
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_header_eq_fail_missing_header() {
+        let result = evaluate_assertion(
+            &Assertion::header("x-missing", ValuePredicate::Eq("value".into())),
+            200,
+            &HashMap::new(),
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+        assert!(result.message.unwrap().contains("not present"));
     }
 
     #[test]
@@ -676,6 +849,193 @@ mod tests {
     }
 
     #[test]
+    fn test_json_path_eq_fail() {
+        let body = json!({"total": 42});
+        let result = evaluate_assertion(
+            &Assertion::json_path_eq("$.total", json!(99)),
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_eq_no_body() {
+        let result = evaluate_assertion(
+            &Assertion::json_path_eq("$.total", json!(42)),
+            200,
+            &HashMap::new(),
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_not_eq() {
+        let body = json!({"total": 42});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.total".into(),
+                predicate: JsonPredicate::NotEq(json!(99)),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_not_eq_fail() {
+        let body = json!({"total": 42});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.total".into(),
+                predicate: JsonPredicate::NotEq(json!(42)),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_not_eq_path_not_found() {
+        let body = json!({"a": 1});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.missing".into(),
+                predicate: JsonPredicate::NotEq(json!(42)),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_cmp_lt() {
+        let body = json!({"value": 5});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.value".into(),
+                predicate: JsonPredicate::Cmp {
+                    op: CmpOp::Lt,
+                    value: json!(10),
+                },
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_cmp_ge() {
+        let body = json!({"value": 10});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.value".into(),
+                predicate: JsonPredicate::Cmp {
+                    op: CmpOp::Ge,
+                    value: json!(10),
+                },
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_cmp_le() {
+        let body = json!({"value": 5});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.value".into(),
+                predicate: JsonPredicate::Cmp {
+                    op: CmpOp::Le,
+                    value: json!(10),
+                },
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_cmp_fail() {
+        let body = json!({"value": 20});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.value".into(),
+                predicate: JsonPredicate::Cmp {
+                    op: CmpOp::Lt,
+                    value: json!(10),
+                },
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_cmp_non_numeric() {
+        let body = json!({"value": "not a number"});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.value".into(),
+                predicate: JsonPredicate::Cmp {
+                    op: CmpOp::Gt,
+                    value: json!(10),
+                },
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_cmp_path_not_found() {
+        let body = json!({"a": 1});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.missing".into(),
+                predicate: JsonPredicate::Cmp {
+                    op: CmpOp::Gt,
+                    value: json!(10),
+                },
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
     fn test_json_path_array_wildcard() {
         let body = json!({
             "entry": [
@@ -694,6 +1054,309 @@ mod tests {
             0,
         );
         assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_length_eq() {
+        let body = json!([1, 2, 3]);
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$[*]".into(),
+                predicate: JsonPredicate::Length(LengthPredicate::Eq(3)),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_length_min() {
+        let body = json!([1, 2, 3]);
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$[*]".into(),
+                predicate: JsonPredicate::Length(LengthPredicate::Min(2)),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_length_max() {
+        let body = json!([1, 2, 3]);
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$[*]".into(),
+                predicate: JsonPredicate::Length(LengthPredicate::Max(5)),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_length_range() {
+        let body = json!([1, 2, 3]);
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$[*]".into(),
+                predicate: JsonPredicate::Length(LengthPredicate::Range { min: 2, max: 5 }),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_length_fail() {
+        let body = json!([1, 2, 3]);
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$[*]".into(),
+                predicate: JsonPredicate::Length(LengthPredicate::Eq(5)),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_count_min() {
+        let body = json!({"items": [1, 2, 3]});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.items[*]".into(),
+                predicate: JsonPredicate::Count(CountPredicate::Min(2)),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_count_max() {
+        let body = json!({"items": [1, 2, 3]});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.items[*]".into(),
+                predicate: JsonPredicate::Count(CountPredicate::Max(5)),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_count_range() {
+        let body = json!({"items": [1, 2, 3]});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.items[*]".into(),
+                predicate: JsonPredicate::Count(CountPredicate::Range { min: 2, max: 5 }),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_count_fail() {
+        let body = json!({"items": [1, 2, 3]});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.items[*]".into(),
+                predicate: JsonPredicate::Count(CountPredicate::Eq(5)),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_schema_pass() {
+        let schema = json!({"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]});
+        let body = json!({"data": {"name": "test"}});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.data".into(),
+                predicate: JsonPredicate::Schema(schema),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_schema_fail() {
+        let schema = json!({"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]});
+        let body = json!({"data": {"age": 42}});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.data".into(),
+                predicate: JsonPredicate::Schema(schema),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_schema_path_not_found() {
+        let schema = json!({"type": "object"});
+        let body = json!({"a": 1});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.missing".into(),
+                predicate: JsonPredicate::Schema(schema),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_every_empty_results() {
+        let body = json!({"items": []});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.items[*]".into(),
+                predicate: JsonPredicate::Every(Box::new(JsonPredicate::Eq(json!(1)))),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_json_path_every_fail() {
+        let body = json!({"items": [1, 2, -1]});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.items[*]".into(),
+                predicate: JsonPredicate::Every(Box::new(JsonPredicate::Cmp {
+                    op: CmpOp::Gt,
+                    value: json!(0),
+                })),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_some_empty_results() {
+        let body = json!({"items": []});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.items[*]".into(),
+                predicate: JsonPredicate::Some(Box::new(JsonPredicate::Eq(json!(1)))),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_some_fail() {
+        let body = json!({"items": [1, 2, 3]});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.items[*]".into(),
+                predicate: JsonPredicate::Some(Box::new(JsonPredicate::Eq(json!(99)))),
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_exists_fail() {
+        let body = json!({"a": 1});
+        let result = evaluate_assertion(
+            &Assertion::json_path_exists("$.missing"),
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_not_exists_fail() {
+        let body = json!({"a": 1});
+        let result = evaluate_assertion(
+            &Assertion::JsonPath {
+                path: "$.a".into(),
+                predicate: JsonPredicate::NotExists,
+            },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_json_path_no_body() {
+        let result = evaluate_assertion(
+            &Assertion::json_path_exists("$.a"),
+            200,
+            &HashMap::new(),
+            &None,
+            0,
+        );
+        assert!(!result.passed);
     }
 
     #[test]
@@ -742,6 +1405,24 @@ mod tests {
     }
 
     #[test]
+    fn test_any_of_fail() {
+        let result = evaluate_assertion(
+            &Assertion::AnyOf(vec![Assertion::Status(200), Assertion::Status(304)]),
+            500,
+            &HashMap::new(),
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_any_of_empty() {
+        let result = evaluate_assertion(&Assertion::AnyOf(vec![]), 200, &HashMap::new(), &None, 0);
+        assert!(!result.passed);
+    }
+
+    #[test]
     fn test_not() {
         let result = evaluate_assertion(
             &Assertion::Not(Box::new(Assertion::Status(404))),
@@ -754,11 +1435,100 @@ mod tests {
     }
 
     #[test]
+    fn test_not_fail() {
+        let result = evaluate_assertion(
+            &Assertion::Not(Box::new(Assertion::Status(200))),
+            200,
+            &HashMap::new(),
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_all_of_empty() {
+        let result = evaluate_assertion(&Assertion::AllOf(vec![]), 200, &HashMap::new(), &None, 0);
+        assert!(result.passed);
+    }
+
+    #[test]
     fn test_content_type() {
         let mut headers = HashMap::new();
         headers.insert("content-type".into(), "application/fhir+json".into());
         let result = evaluate_assertion(&Assertion::content_type("json"), 200, &headers, &None, 0);
         assert!(result.passed);
+    }
+
+    #[test]
+    fn test_content_type_fail() {
+        let mut headers = HashMap::new();
+        headers.insert("content-type".into(), "application/xml".into());
+        let result = evaluate_assertion(&Assertion::content_type("json"), 200, &headers, &None, 0);
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_valid_json() {
+        let body = json!({"key": "value"});
+        let result =
+            evaluate_assertion(&Assertion::ValidJson, 200, &HashMap::new(), &Some(body), 0);
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_schema_validation_pass() {
+        let schema = json!({"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]});
+        let body = json!({"name": "test"});
+        let result = evaluate_assertion(
+            &Assertion::Schema { schema },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_schema_validation_fail() {
+        let schema = json!({"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]});
+        let body = json!({"age": 42});
+        let result = evaluate_assertion(
+            &Assertion::Schema { schema },
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_schema_validation_no_body() {
+        let schema = json!({"type": "object"});
+        let result = evaluate_assertion(
+            &Assertion::Schema { schema },
+            200,
+            &HashMap::new(),
+            &None,
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_schema_validation_invalid_schema() {
+        let result = evaluate_assertion(
+            &Assertion::Schema {
+                schema: json!("not a schema"),
+            },
+            200,
+            &HashMap::new(),
+            &Some(json!({"key": "value"})),
+            0,
+        );
+        assert!(!result.passed);
     }
 
     #[test]
@@ -769,6 +1539,110 @@ mod tests {
             200,
             &HashMap::new(),
             &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_body_length_eq() {
+        let body = json!({"a": "b"});
+        let len = body.to_string().len();
+        let result = evaluate_assertion(
+            &Assertion::BodyLength(BodyLengthPredicate::Eq(len)),
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_body_length_eq_fail() {
+        let body = json!({"a": "b"});
+        let result = evaluate_assertion(
+            &Assertion::BodyLength(BodyLengthPredicate::Eq(999)),
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_body_length_max() {
+        let body = json!({"a": "b"});
+        let result = evaluate_assertion(
+            &Assertion::BodyLength(BodyLengthPredicate::Max(100)),
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_body_length_max_fail() {
+        let body = json!({"a": "b"});
+        let result = evaluate_assertion(
+            &Assertion::BodyLength(BodyLengthPredicate::Max(1)),
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_body_length_range() {
+        let body = json!({"a": "b"});
+        let result = evaluate_assertion(
+            &Assertion::BodyLength(BodyLengthPredicate::Range { min: 5, max: 15 }),
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_body_length_range_fail_below() {
+        let body = json!({"a": "b"});
+        let result = evaluate_assertion(
+            &Assertion::BodyLength(BodyLengthPredicate::Range { min: 100, max: 200 }),
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_body_length_range_fail_above() {
+        let body = json!({"a": "b"});
+        let result = evaluate_assertion(
+            &Assertion::BodyLength(BodyLengthPredicate::Range { min: 1, max: 3 }),
+            200,
+            &HashMap::new(),
+            &Some(body),
+            0,
+        );
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_body_length_empty_body() {
+        let result = evaluate_assertion(
+            &Assertion::BodyLength(BodyLengthPredicate::Eq(0)),
+            200,
+            &HashMap::new(),
+            &None,
             0,
         );
         assert!(result.passed);
@@ -901,6 +1775,41 @@ mod tests {
         assert!(results.is_empty());
     }
 
+    #[test]
+    fn test_resolve_json_path_recursive_descent() {
+        let v = json!({"a": {"b": {"c": 1}}});
+        let results = resolve_json_path(&v, "$..c");
+        assert_eq!(results, vec![json!(1)]);
+    }
+
+    #[test]
+    fn test_resolve_json_path_filter() {
+        let v = json!({"items": [{"x": 1}, {"x": 2}, {"x": 3}]});
+        let results = resolve_json_path(&v, "$.items[?(@.x>1)].x");
+        assert_eq!(results, vec![json!(2), json!(3)]);
+    }
+
+    #[test]
+    fn test_resolve_json_path_union() {
+        let v = json!(["a", "b", "c"]);
+        let results = resolve_json_path(&v, "$[0,2]");
+        assert_eq!(results, vec![json!("a"), json!("c")]);
+    }
+
+    #[test]
+    fn test_resolve_json_path_slice() {
+        let v = json!([1, 2, 3, 4, 5]);
+        let results = resolve_json_path(&v, "$[1:4]");
+        assert_eq!(results, vec![json!(2), json!(3), json!(4)]);
+    }
+
+    #[test]
+    fn test_resolve_json_path_invalid() {
+        let v = json!({"a": 1});
+        let results = resolve_json_path(&v, "[[invalid");
+        assert!(results.is_empty());
+    }
+
     // -------------------------------------------------------------------------
     // Property-based tests with proptest
     // -------------------------------------------------------------------------
@@ -925,6 +1834,108 @@ mod tests {
 
             assert_eq!(direct.passed, indirect.passed,
                 "Not(Not(Status({status_code}))) should be equivalent to Status({status_code})");
+        }
+
+        /// AllOf with a single element should be equivalent to that element.
+        #[test]
+        fn prop_all_of_single_element(
+            status_code in 100u16..599u16,
+        ) {
+            let inner = Assertion::Status(status_code);
+            let all_of = Assertion::AllOf(vec![inner.clone()]);
+
+            let direct = evaluate_assertion(&inner, status_code, &HashMap::new(), &None, 0);
+            let indirect = evaluate_assertion(&all_of, status_code, &HashMap::new(), &None, 0);
+
+            assert_eq!(direct.passed, indirect.passed,
+                "AllOf([Status({status_code})]) should be equivalent to Status({status_code})");
+        }
+
+        /// AnyOf with a single element should be equivalent to that element.
+        #[test]
+        fn prop_any_of_single_element(
+            status_code in 100u16..599u16,
+        ) {
+            let inner = Assertion::Status(status_code);
+            let any_of = Assertion::AnyOf(vec![inner.clone()]);
+
+            let direct = evaluate_assertion(&inner, status_code, &HashMap::new(), &None, 0);
+            let indirect = evaluate_assertion(&any_of, status_code, &HashMap::new(), &None, 0);
+
+            assert_eq!(direct.passed, indirect.passed,
+                "AnyOf([Status({status_code})]) should be equivalent to Status({status_code})");
+        }
+
+        /// Not(AllOf([a, b])) should be equivalent to AnyOf([Not(a), Not(b)]) (De Morgan's law).
+        #[test]
+        fn prop_de_morgan_all_of(
+            code1 in 100u16..599u16,
+            code2 in 100u16..599u16,
+            actual in 100u16..599u16,
+        ) {
+            let a = Assertion::Status(code1);
+            let b = Assertion::Status(code2);
+            let not_all = Assertion::Not(Box::new(Assertion::AllOf(vec![a.clone(), b.clone()])));
+            let any_not = Assertion::AnyOf(vec![
+                Assertion::Not(Box::new(a.clone())),
+                Assertion::Not(Box::new(b.clone())),
+            ]);
+
+            let r1 = evaluate_assertion(&not_all, actual, &HashMap::new(), &None, 0);
+            let r2 = evaluate_assertion(&any_not, actual, &HashMap::new(), &None, 0);
+
+            assert_eq!(r1.passed, r2.passed,
+                "De Morgan: Not(AllOf([a, b])) should equal AnyOf([Not(a), Not(b)]) for status codes {code1}, {code2}, actual {actual}");
+        }
+
+        /// Not(AnyOf([a, b])) should be equivalent to AllOf([Not(a), Not(b)]) (De Morgan's law).
+        #[test]
+        fn prop_de_morgan_any_of(
+            code1 in 100u16..599u16,
+            code2 in 100u16..599u16,
+            actual in 100u16..599u16,
+        ) {
+            let a = Assertion::Status(code1);
+            let b = Assertion::Status(code2);
+            let not_any = Assertion::Not(Box::new(Assertion::AnyOf(vec![a.clone(), b.clone()])));
+            let all_not = Assertion::AllOf(vec![
+                Assertion::Not(Box::new(a.clone())),
+                Assertion::Not(Box::new(b.clone())),
+            ]);
+
+            let r1 = evaluate_assertion(&not_any, actual, &HashMap::new(), &None, 0);
+            let r2 = evaluate_assertion(&all_not, actual, &HashMap::new(), &None, 0);
+
+            assert_eq!(r1.passed, r2.passed,
+                "De Morgan: Not(AnyOf([a, b])) should equal AllOf([Not(a), Not(b)]) for status codes {code1}, {code2}, actual {actual}");
+        }
+
+        /// ResponseTime should pass when time <= max and fail when time > max.
+        #[test]
+        fn prop_response_time_boundary(
+            max_millis in 0u64..10000u64,
+            actual_time in 0u64..20000u64,
+        ) {
+            let assertion = Assertion::ResponseTime(max_millis);
+            let result = evaluate_assertion(&assertion, 200, &HashMap::new(), &None, actual_time);
+
+            let expected_pass = actual_time <= max_millis;
+            assert_eq!(result.passed, expected_pass,
+                "ResponseTime({max_millis}ms) should pass when actual {actual_time}ms <= {max_millis}ms");
+        }
+
+        /// StatusIn should pass when the actual status is in the list.
+        #[test]
+        fn prop_status_in(
+            actual in 100u16..599u16,
+        ) {
+            let codes = vec![200u16, 201, 204, 304, 400, 404, 500];
+            let assertion = Assertion::StatusIn(codes.clone());
+            let result = evaluate_assertion(&assertion, actual, &HashMap::new(), &None, 0);
+
+            let expected_pass = codes.contains(&actual);
+            assert_eq!(result.passed, expected_pass,
+                "StatusIn({codes:?}) should pass for {actual}");
         }
     }
 }

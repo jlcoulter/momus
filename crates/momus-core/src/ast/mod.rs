@@ -654,7 +654,562 @@ mod tests {
     fn method_display() {
         assert_eq!(Method::Get.to_string(), "GET");
         assert_eq!(Method::Post.to_string(), "POST");
+        assert_eq!(Method::Put.to_string(), "PUT");
         assert_eq!(Method::Delete.to_string(), "DELETE");
+        assert_eq!(Method::Patch.to_string(), "PATCH");
+        assert_eq!(Method::Head.to_string(), "HEAD");
+        assert_eq!(Method::Options.to_string(), "OPTIONS");
+    }
+
+    #[test]
+    fn test_step_count_tests() {
+        // Request counts as 1
+        assert_eq!(
+            Step::Request(RequestStep {
+                name: "r".into(),
+                method: Method::Get,
+                url: "/".into(),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![],
+                save_as: String::new(),
+                soft_fail: false,
+            })
+            .count_tests(),
+            1
+        );
+
+        // Sequence counts recursively
+        assert_eq!(
+            Step::Sequence(SequenceStep {
+                name: "seq".into(),
+                steps: vec![
+                    Step::Request(RequestStep {
+                        name: "r1".into(),
+                        method: Method::Get,
+                        url: "/".into(),
+                        headers: HashMap::new(),
+                        body: None,
+                        assert: vec![],
+                        save_as: String::new(),
+                        soft_fail: false,
+                    }),
+                    Step::Request(RequestStep {
+                        name: "r2".into(),
+                        method: Method::Post,
+                        url: "/".into(),
+                        headers: HashMap::new(),
+                        body: None,
+                        assert: vec![],
+                        save_as: String::new(),
+                        soft_fail: false,
+                    }),
+                ],
+                continue_on_failure: false,
+            })
+            .count_tests(),
+            2
+        );
+
+        // Parallel counts recursively
+        assert_eq!(
+            Step::Parallel(vec![
+                Step::Request(RequestStep {
+                    name: "r1".into(),
+                    method: Method::Get,
+                    url: "/".into(),
+                    headers: HashMap::new(),
+                    body: None,
+                    assert: vec![],
+                    save_as: String::new(),
+                    soft_fail: false,
+                }),
+                Step::Request(RequestStep {
+                    name: "r2".into(),
+                    method: Method::Post,
+                    url: "/".into(),
+                    headers: HashMap::new(),
+                    body: None,
+                    assert: vec![],
+                    save_as: String::new(),
+                    soft_fail: false,
+                }),
+            ])
+            .count_tests(),
+            2
+        );
+
+        // Script counts as 1
+        assert_eq!(
+            Step::Script(ScriptStep {
+                name: "s".into(),
+                language: "rhai".into(),
+                source: "print(42);".into(),
+            })
+            .count_tests(),
+            1
+        );
+
+        // Noop counts as 0
+        assert_eq!(
+            Step::Noop {
+                description: "skip".into()
+            }
+            .count_tests(),
+            0
+        );
+        assert_eq!(
+            Step::Noop {
+                description: String::new()
+            }
+            .count_tests(),
+            0
+        );
+    }
+
+    #[test]
+    fn test_step_display() {
+        let mut out = String::new();
+        let count = Step::Request(RequestStep {
+            name: "r".into(),
+            method: Method::Get,
+            url: "/test".into(),
+            headers: HashMap::new(),
+            body: None,
+            assert: vec![],
+            save_as: String::new(),
+            soft_fail: false,
+        })
+        .display(&mut out, 0);
+        assert_eq!(count, 1);
+        assert!(out.contains("GET"));
+        assert!(out.contains("/test"));
+
+        let mut out = String::new();
+        let count = Step::Script(ScriptStep {
+            name: "my-script".into(),
+            language: "rhai".into(),
+            source: "print(42);".into(),
+        })
+        .display(&mut out, 0);
+        assert_eq!(count, 0);
+        assert!(out.contains("my-script"));
+        assert!(out.contains("rhai"));
+
+        let mut out = String::new();
+        let count = Step::Noop {
+            description: "placeholder".into(),
+        }
+        .display(&mut out, 0);
+        assert_eq!(count, 0);
+        assert!(out.contains("placeholder"));
+
+        let mut out = String::new();
+        let count = Step::Noop {
+            description: String::new(),
+        }
+        .display(&mut out, 0);
+        assert_eq!(count, 0);
+        assert!(out.is_empty());
+
+        let mut out = String::new();
+        let count = Step::Parallel(vec![
+            Step::Request(RequestStep {
+                name: "r1".into(),
+                method: Method::Get,
+                url: "/a".into(),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![],
+                save_as: String::new(),
+                soft_fail: false,
+            }),
+            Step::Request(RequestStep {
+                name: "r2".into(),
+                method: Method::Post,
+                url: "/b".into(),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![],
+                save_as: String::new(),
+                soft_fail: false,
+            }),
+        ])
+        .display(&mut out, 0);
+        assert_eq!(count, 2);
+        assert!(out.contains("parallel"));
+    }
+
+    #[test]
+    fn test_collect_request_steps() {
+        let steps = vec![
+            Step::Request(RequestStep {
+                name: "r1".into(),
+                method: Method::Get,
+                url: "/".into(),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![],
+                save_as: String::new(),
+                soft_fail: false,
+            }),
+            Step::Sequence(SequenceStep {
+                name: "seq".into(),
+                steps: vec![Step::Request(RequestStep {
+                    name: "r2".into(),
+                    method: Method::Post,
+                    url: "/".into(),
+                    headers: HashMap::new(),
+                    body: None,
+                    assert: vec![],
+                    save_as: String::new(),
+                    soft_fail: false,
+                })],
+                continue_on_failure: false,
+            }),
+            Step::Parallel(vec![Step::Request(RequestStep {
+                name: "r3".into(),
+                method: Method::Put,
+                url: "/".into(),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![],
+                save_as: String::new(),
+                soft_fail: false,
+            })]),
+            Step::Noop {
+                description: "skip".into(),
+            },
+        ];
+        let mut result = Vec::new();
+        collect_request_steps(&steps, &mut result);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].name, "r1");
+        assert_eq!(result[1].name, "r2");
+        assert_eq!(result[2].name, "r3");
+    }
+
+    #[test]
+    fn test_plan_request_steps() {
+        let plan = TestPlan {
+            name: "test".into(),
+            base_url: String::new(),
+            default_headers: HashMap::new(),
+            setup: vec![Step::Request(RequestStep {
+                name: "setup".into(),
+                method: Method::Post,
+                url: "/setup".into(),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![],
+                save_as: String::new(),
+                soft_fail: false,
+            })],
+            steps: vec![Step::Request(RequestStep {
+                name: "test".into(),
+                method: Method::Get,
+                url: "/test".into(),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![],
+                save_as: String::new(),
+                soft_fail: false,
+            })],
+            teardown: vec![Step::Request(RequestStep {
+                name: "teardown".into(),
+                method: Method::Delete,
+                url: "/teardown".into(),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![],
+                save_as: String::new(),
+                soft_fail: false,
+            })],
+        };
+        let steps = plan.request_steps();
+        assert_eq!(steps.len(), 3);
+        assert_eq!(steps[0].name, "setup");
+        assert_eq!(steps[1].name, "test");
+        assert_eq!(steps[2].name, "teardown");
+    }
+
+    #[test]
+    fn test_plan_display_plan() {
+        let plan = TestPlan {
+            name: "my-plan".into(),
+            base_url: "http://example.com".into(),
+            default_headers: HashMap::from([("Authorization".into(), "Bearer token".into())]),
+            setup: vec![],
+            steps: vec![Step::Request(RequestStep {
+                name: "r1".into(),
+                method: Method::Get,
+                url: "/health".into(),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![],
+                save_as: String::new(),
+                soft_fail: false,
+            })],
+            teardown: vec![],
+        };
+        let display = plan.display_plan();
+        assert!(display.contains("my-plan"));
+        assert!(display.contains("http://example.com"));
+        assert!(display.contains("Authorization"));
+        assert!(display.contains("Bearer token"));
+        assert!(display.contains("GET"));
+        assert!(display.contains("/health"));
+    }
+
+    #[test]
+    fn test_run_report_display() {
+        let report = RunReport {
+            plan_name: "test".into(),
+            total: 2,
+            passed: 1,
+            failed: 1,
+            duration_ms: 500,
+            groups: vec![TestGroupResult {
+                name: "group1".into(),
+                total: 2,
+                passed: 1,
+                failed: 1,
+                results: vec![
+                    TestResult {
+                        name: "pass".into(),
+                        passed: true,
+                        status_code: 200,
+                        request_method: "GET".into(),
+                        request_url: "/ok".into(),
+                        request_headers: HashMap::new(),
+                        request_body: None,
+                        response_headers: HashMap::new(),
+                        response_body: None,
+                        assertion_results: vec![],
+                        errors: vec![],
+                    },
+                    TestResult {
+                        name: "fail".into(),
+                        passed: false,
+                        status_code: 500,
+                        request_method: "POST".into(),
+                        request_url: "/err".into(),
+                        request_headers: HashMap::new(),
+                        request_body: None,
+                        response_headers: HashMap::new(),
+                        response_body: None,
+                        assertion_results: vec![],
+                        errors: vec!["server error".into()],
+                    },
+                ],
+            }],
+        };
+        let display = report.to_string();
+        assert!(display.contains("group1"));
+        assert!(display.contains("GET"));
+        assert!(display.contains("/ok"));
+        assert!(display.contains("POST"));
+        assert!(display.contains("/err"));
+        assert!(display.contains("server error"));
+        assert!(display.contains("Total: 2"));
+        assert!(display.contains("Passed: 1"));
+        assert!(display.contains("Failed: 1"));
+        assert!(display.contains("500ms"));
+    }
+
+    #[test]
+    fn test_html_escape() {
+        assert_eq!(html_escape("hello"), "hello");
+        assert_eq!(html_escape("a&b"), "a&amp;b");
+        assert_eq!(html_escape("<tag>"), "&lt;tag&gt;");
+        assert_eq!(html_escape("\"quote\""), "&quot;quote&quot;");
+        assert_eq!(html_escape("'single'"), "&#39;single&#39;");
+        assert_eq!(
+            html_escape("a&b<c>d\"e'f"),
+            "a&amp;b&lt;c&gt;d&quot;e&#39;f"
+        );
+    }
+
+    #[test]
+    fn test_run_report_empty_groups() {
+        let report = RunReport {
+            plan_name: "empty".into(),
+            total: 0,
+            passed: 0,
+            failed: 0,
+            duration_ms: 0,
+            groups: vec![],
+        };
+        let html = report.to_html();
+        assert!(html.contains("0 tests"));
+        assert!(html.contains("100.0%")); // pass rate defaults to 100% when total is 0
+    }
+
+    #[test]
+    fn test_test_plan_serialization_roundtrip() {
+        let plan = TestPlan {
+            name: "test-plan".into(),
+            base_url: "http://localhost".into(),
+            default_headers: HashMap::from([("Authorization".into(), "token".into())]),
+            steps: vec![
+                Step::Request(RequestStep {
+                    name: "r1".into(),
+                    method: Method::Get,
+                    url: "/health".into(),
+                    headers: HashMap::new(),
+                    body: None,
+                    assert: vec![Assertion::Status(200)],
+                    save_as: String::new(),
+                    soft_fail: false,
+                }),
+                Step::Sequence(SequenceStep {
+                    name: "seq".into(),
+                    steps: vec![Step::Request(RequestStep {
+                        name: "r2".into(),
+                        method: Method::Post,
+                        url: "/data".into(),
+                        headers: HashMap::new(),
+                        body: Some(serde_json::json!({"key": "value"})),
+                        assert: vec![],
+                        save_as: "response".into(),
+                        soft_fail: true,
+                    })],
+                    continue_on_failure: true,
+                }),
+                Step::Script(ScriptStep {
+                    name: "script".into(),
+                    language: "rhai".into(),
+                    source: "print(42);".into(),
+                }),
+                Step::Noop {
+                    description: "placeholder".into(),
+                },
+            ],
+            setup: vec![],
+            teardown: vec![],
+        };
+
+        let json = serde_json::to_string_pretty(&plan).unwrap();
+        let deserialized: TestPlan = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.name, plan.name);
+        assert_eq!(deserialized.base_url, plan.base_url);
+        assert_eq!(deserialized.steps.len(), plan.steps.len());
+        assert_eq!(deserialized.total_tests(), plan.total_tests());
+    }
+
+    #[test]
+    fn test_test_spec_serialization_roundtrip() {
+        // Test leaf variants individually (AllOf with Vec is a serde tagged enum limitation)
+        let specs = vec![
+            test_spec::TestSpec::Data(test_spec::DataSpec::default()),
+            test_spec::TestSpec::Crud(test_spec::CrudSpec::default()),
+            test_spec::TestSpec::Search(test_spec::SearchSpec::default()),
+            test_spec::TestSpec::Negative(test_spec::NegativeSpec::default()),
+            test_spec::TestSpec::EdgeCase(test_spec::EdgeCaseSpec::default()),
+            test_spec::TestSpec::Conformance(test_spec::ConformanceSpec::default()),
+            test_spec::TestSpec::Security(test_spec::SecuritySpec::default()),
+            test_spec::TestSpec::Performance(test_spec::PerformanceSpec::default()),
+            test_spec::TestSpec::Operation(test_spec::OperationSpec::default()),
+        ];
+
+        for spec in &specs {
+            let json = serde_json::to_string_pretty(spec).unwrap();
+            let _deserialized: test_spec::TestSpec = serde_json::from_str(&json).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_step_serialization_roundtrip() {
+        // Note: Step::Parallel(Vec<Step>) can't be serialized with serde tagged enum
+        // representation, so we test the other variants
+        let steps = vec![
+            Step::Request(RequestStep {
+                name: "r".into(),
+                method: Method::Get,
+                url: "/".into(),
+                headers: HashMap::new(),
+                body: None,
+                assert: vec![],
+                save_as: String::new(),
+                soft_fail: false,
+            }),
+            Step::Sequence(SequenceStep {
+                name: "s".into(),
+                steps: vec![],
+                continue_on_failure: false,
+            }),
+            Step::Script(ScriptStep {
+                name: "s".into(),
+                language: "js".into(),
+                source: "console.log('hi')".into(),
+            }),
+            Step::Noop {
+                description: "skip".into(),
+            },
+        ];
+
+        for step in &steps {
+            let json = serde_json::to_string(step).unwrap();
+            let deserialized: Step = serde_json::from_str(&json).unwrap();
+            assert_eq!(deserialized.count_tests(), step.count_tests());
+        }
+    }
+
+    #[test]
+    fn test_method_serialization_roundtrip() {
+        let methods = vec![
+            Method::Get,
+            Method::Post,
+            Method::Put,
+            Method::Delete,
+            Method::Patch,
+            Method::Head,
+            Method::Options,
+        ];
+
+        for method in &methods {
+            let json = serde_json::to_string(method).unwrap();
+            let deserialized: Method = serde_json::from_str(&json).unwrap();
+            assert_eq!(*method, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_run_report_serialization_roundtrip() {
+        let report = RunReport {
+            plan_name: "test".into(),
+            total: 2,
+            passed: 1,
+            failed: 1,
+            duration_ms: 500,
+            groups: vec![TestGroupResult {
+                name: "g1".into(),
+                total: 2,
+                passed: 1,
+                failed: 1,
+                results: vec![TestResult {
+                    name: "t1".into(),
+                    passed: true,
+                    status_code: 200,
+                    request_method: "GET".into(),
+                    request_url: "/ok".into(),
+                    request_headers: HashMap::new(),
+                    request_body: None,
+                    response_headers: HashMap::new(),
+                    response_body: None,
+                    assertion_results: vec![],
+                    errors: vec![],
+                }],
+            }],
+        };
+
+        let json = serde_json::to_string(&report).unwrap();
+        let deserialized: RunReport = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.plan_name, report.plan_name);
+        assert_eq!(deserialized.total, report.total);
+        assert_eq!(deserialized.passed, report.passed);
+        assert_eq!(deserialized.failed, report.failed);
+        assert_eq!(deserialized.groups.len(), report.groups.len());
     }
 
     #[test]
