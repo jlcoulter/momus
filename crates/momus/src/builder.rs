@@ -240,7 +240,7 @@ impl SequenceStepBuilder {
 
 /// Create a parallel step group.
 pub fn parallel(steps: Vec<Step>) -> Step {
-    Step::Parallel(steps)
+    Step::Parallel(ParallelStep { steps })
 }
 
 /// Create a no-op step (placeholder / disabled test).

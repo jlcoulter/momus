@@ -159,9 +159,10 @@ async fn execute_steps(steps: &[Step], ctx: &mut RunContext) -> Result<Vec<TestR
                 let sub_results = execute_sequence(seq, ctx).await?;
                 results.extend(sub_results);
             }
-            Step::Parallel(parallel_steps) => {
+            Step::Parallel(par) => {
                 // Execute parallel steps concurrently
-                let futures: Vec<_> = parallel_steps
+                let futures: Vec<_> = par
+                    .steps
                     .iter()
                     .map(|s| execute_parallel_step(s, ctx))
                     .collect();
@@ -306,8 +307,9 @@ async fn execute_sequence(seq: &SequenceStep, ctx: &mut RunContext) -> Result<Ve
                 vec![execute_request(req, ctx).await?]
             }
             Step::Sequence(sub_seq) => Box::pin(execute_sequence(sub_seq, ctx)).await?,
-            Step::Parallel(parallel_steps) => {
-                let futures: Vec<_> = parallel_steps
+            Step::Parallel(par) => {
+                let futures: Vec<_> = par
+                    .steps
                     .iter()
                     .map(|s| execute_parallel_step(s, ctx))
                     .collect();
