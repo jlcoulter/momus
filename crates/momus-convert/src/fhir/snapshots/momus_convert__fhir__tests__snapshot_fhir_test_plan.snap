@@ -1,31 +1,197 @@
 ---
 source: crates/momus-convert/src/fhir/mod.rs
-assertion_line: 229
 expression: plan
 ---
 {
-  "name": "FHIR IG: 2 groups, 63 tests from test.json",
+  "name": "FHIR IG: 2 resources, 49 tests from test.json",
   "base_url": "",
   "default_headers": {},
   "steps": [
     {
+      "type": "sequence",
+      "name": "patient-crud",
+      "steps": [
+        {
+          "type": "request",
+          "name": "create-patient",
+          "method": "POST",
+          "url": "/Patient",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "id": "patient-001",
+            "identifier": [
+              {
+                "system": "http://example.org/id",
+                "value": "gen-001"
+              }
+            ],
+            "meta": {
+              "profile": [
+                "http://example.org/StructureDefinition/TestPatient"
+              ]
+            },
+            "name": [
+              {
+                "family": "GeneratedFamily",
+                "given": [
+                  "GeneratedGiven"
+                ]
+              }
+            ],
+            "resourceType": "Patient"
+          },
+          "assert": [
+            {
+              "status": 201
+            }
+          ],
+          "save_as": "seed_patient_1",
+          "soft_fail": false
+        },
+        {
+          "type": "request",
+          "name": "read-patient",
+          "method": "GET",
+          "url": "/Patient/{steps.seed_patient_1.id}",
+          "headers": {},
+          "body": null,
+          "assert": [
+            {
+              "status": 200
+            }
+          ],
+          "save_as": "",
+          "soft_fail": false
+        },
+        {
+          "type": "request",
+          "name": "update-patient",
+          "method": "PUT",
+          "url": "/Patient/{steps.seed_patient_1.id}",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "id": "patient-001",
+            "identifier": [
+              {
+                "system": "http://example.org/id",
+                "value": "gen-001"
+              }
+            ],
+            "meta": {
+              "profile": [
+                "http://example.org/StructureDefinition/TestPatient"
+              ]
+            },
+            "name": [
+              {
+                "family": "GeneratedFamily",
+                "given": [
+                  "GeneratedGiven"
+                ]
+              }
+            ],
+            "resourceType": "Patient"
+          },
+          "assert": [
+            {
+              "status": 200
+            }
+          ],
+          "save_as": "",
+          "soft_fail": false
+        },
+        {
+          "type": "request",
+          "name": "delete-patient",
+          "method": "DELETE",
+          "url": "/Patient/{steps.seed_patient_1.id}",
+          "headers": {},
+          "body": null,
+          "assert": [
+            {
+              "status": 204
+            }
+          ],
+          "save_as": "",
+          "soft_fail": false
+        }
+      ],
+      "continue_on_failure": true
+    },
+    {
+      "type": "sequence",
+      "name": "observation-crud",
+      "steps": [
+        {
+          "type": "request",
+          "name": "create-observation",
+          "method": "POST",
+          "url": "/Observation",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "code": {
+              "coding": [
+                {
+                  "code": "gen",
+                  "system": "http://example.org/code"
+                }
+              ],
+              "text": "generated"
+            },
+            "id": "observation-001",
+            "meta": {
+              "profile": [
+                "http://example.org/StructureDefinition/TestObservation"
+              ]
+            },
+            "resourceType": "Observation",
+            "status": "final",
+            "subject": {
+              "reference": "Unknown/placeholder"
+            }
+          },
+          "assert": [
+            {
+              "status": 201
+            }
+          ],
+          "save_as": "seed_observation_1",
+          "soft_fail": false
+        },
+        {
+          "type": "request",
+          "name": "read-observation",
+          "method": "GET",
+          "url": "/Observation/{steps.seed_observation_1.id}",
+          "headers": {},
+          "body": null,
+          "assert": [
+            {
+              "status": 200
+            }
+          ],
+          "save_as": "",
+          "soft_fail": false
+        }
+      ],
+      "continue_on_failure": true
+    },
+    {
       "type": "request",
-      "name": "read-patient",
+      "name": "search-patient-name-missing-true",
       "method": "GET",
-      "url": "/Patient/{id}",
+      "url": "/Patient?name:missing=true",
       "headers": {},
       "body": null,
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -33,99 +199,14 @@ expression: plan
     },
     {
       "type": "request",
-      "name": "create-patient",
-      "method": "POST",
-      "url": "/Patient",
-      "headers": {
-        "Content-Type": "application/json"
-      },
-      "body": {
-        "resourceType": "Patient"
-      },
-      "assert": [
-        {
-          "status": 201
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "update-patient",
-      "method": "PUT",
-      "url": "/Patient/{id}",
-      "headers": {
-        "Content-Type": "application/json"
-      },
-      "body": {
-        "resourceType": "Patient"
-      },
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "delete-patient",
-      "method": "DELETE",
-      "url": "/Patient/{id}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 204
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-name",
+      "name": "search-patient-name-missing-false",
       "method": "GET",
-      "url": "/Patient?name={name}",
+      "url": "/Patient?name:missing=false",
       "headers": {},
       "body": null,
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -133,22 +214,14 @@ expression: plan
     },
     {
       "type": "request",
-      "name": "search-patient-name-Missing",
+      "name": "search-patient-birthdate-missing-true",
       "method": "GET",
-      "url": "/Patient?name::missing={name}",
+      "url": "/Patient?birthdate:missing=true",
       "headers": {},
       "body": null,
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -156,22 +229,14 @@ expression: plan
     },
     {
       "type": "request",
-      "name": "search-patient-name-Exact",
+      "name": "search-patient-birthdate-missing-false",
       "method": "GET",
-      "url": "/Patient?name::exact={name}",
+      "url": "/Patient?birthdate:missing=false",
       "headers": {},
       "body": null,
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -179,321 +244,14 @@ expression: plan
     },
     {
       "type": "request",
-      "name": "search-patient-name-Contains",
+      "name": "search-patient-name-negative-NONEXISTENT",
       "method": "GET",
-      "url": "/Patient?name::contains={name}",
+      "url": "/Patient?name=NONEXISTENT",
       "headers": {},
       "body": null,
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-name-chained",
-      "method": "GET",
-      "url": "/Patient?patient.name={value}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-birthdate",
-      "method": "GET",
-      "url": "/Patient?birthdate={birthdate}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-birthdate-Missing",
-      "method": "GET",
-      "url": "/Patient?birthdate::missing={birthdate}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-birthdate-Eq",
-      "method": "GET",
-      "url": "/Patient?birthdate=eq{birthdate}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-birthdate-Ne",
-      "method": "GET",
-      "url": "/Patient?birthdate=ne{birthdate}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-birthdate-Gt",
-      "method": "GET",
-      "url": "/Patient?birthdate=gt{birthdate}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-birthdate-Lt",
-      "method": "GET",
-      "url": "/Patient?birthdate=lt{birthdate}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-birthdate-Ge",
-      "method": "GET",
-      "url": "/Patient?birthdate=ge{birthdate}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-birthdate-Le",
-      "method": "GET",
-      "url": "/Patient?birthdate=le{birthdate}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-birthdate-Sa",
-      "method": "GET",
-      "url": "/Patient?birthdate=sa{birthdate}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-birthdate-Eb",
-      "method": "GET",
-      "url": "/Patient?birthdate=eb{birthdate}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-birthdate-Ap",
-      "method": "GET",
-      "url": "/Patient?birthdate=ap{birthdate}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-patient-name-birthdate-combo",
-      "method": "GET",
-      "url": "/Patient?name={name}&birthdate={birthdate}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -509,14 +267,6 @@ expression: plan
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -532,14 +282,6 @@ expression: plan
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -555,14 +297,6 @@ expression: plan
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -578,14 +312,6 @@ expression: plan
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -601,14 +327,6 @@ expression: plan
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -624,14 +342,6 @@ expression: plan
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -647,14 +357,6 @@ expression: plan
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -670,14 +372,6 @@ expression: plan
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -693,14 +387,6 @@ expression: plan
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -716,14 +402,6 @@ expression: plan
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -739,14 +417,6 @@ expression: plan
       "assert": [
         {
           "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
-            }
-          }
         }
       ],
       "save_as": "",
@@ -754,7 +424,379 @@ expression: plan
     },
     {
       "type": "request",
-      "name": "conformance-patient-mustsupport",
+      "name": "search-observation-category-missing-true",
+      "method": "GET",
+      "url": "/Observation?category:missing=true",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-category-missing-false",
+      "method": "GET",
+      "url": "/Observation?category:missing=false",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-code-missing-true",
+      "method": "GET",
+      "url": "/Observation?code:missing=true",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-code-missing-false",
+      "method": "GET",
+      "url": "/Observation?code:missing=false",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-category-negative-NONEXISTENT",
+      "method": "GET",
+      "url": "/Observation?category=NONEXISTENT",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-_summary_true",
+      "method": "GET",
+      "url": "/Observation?_summary=true",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-_count_1",
+      "method": "GET",
+      "url": "/Observation?_count=1",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-_elements_id",
+      "method": "GET",
+      "url": "/Observation?_elements=id",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-_sort__id",
+      "method": "GET",
+      "url": "/Observation?_sort=_id",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-_filter_name eq test",
+      "method": "GET",
+      "url": "/Observation?_filter=name eq test",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-_tag_http-//example.org/tag|test",
+      "method": "GET",
+      "url": "/Observation?_tag=http://example.org/tag|test",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-_profile_http-//example.org/StructureDefinition/Test",
+      "method": "GET",
+      "url": "/Observation?_profile=http://example.org/StructureDefinition/Test",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-_security_http-//example.org/security|test",
+      "method": "GET",
+      "url": "/Observation?_security=http://example.org/security|test",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-_type_Patient",
+      "method": "GET",
+      "url": "/Observation?_type=Patient",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-_language_en",
+      "method": "GET",
+      "url": "/Observation?_language=en",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-observation-_has-Provenance-target",
+      "method": "GET",
+      "url": "/Observation?_has:Provenance:target",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "negative-patient-empty-body",
+      "method": "POST",
+      "url": "/Patient",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {},
+      "assert": [
+        {
+          "status_in": [
+            400,
+            422
+          ]
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "negative-patient-wrong-type",
+      "method": "POST",
+      "url": "/Patient",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "resourceType": "Unknown"
+      },
+      "assert": [
+        {
+          "status_in": [
+            400,
+            422
+          ]
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "negative-observation-undeclared-update",
+      "method": "PUT",
+      "url": "/Observation/nonexistent",
+      "headers": {},
+      "body": {
+        "resourceType": "Observation"
+      },
+      "assert": [
+        {
+          "status_in": [
+            400,
+            401,
+            403,
+            404,
+            405,
+            422,
+            501
+          ]
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "negative-observation-undeclared-delete",
+      "method": "DELETE",
+      "url": "/Observation/nonexistent",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status_in": [
+            400,
+            401,
+            403,
+            404,
+            405,
+            422,
+            501
+          ]
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "negative-observation-empty-body",
+      "method": "POST",
+      "url": "/Observation",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {},
+      "assert": [
+        {
+          "status_in": [
+            400,
+            422
+          ]
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "negative-observation-wrong-type",
+      "method": "POST",
+      "url": "/Observation",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "resourceType": "Unknown"
+      },
+      "assert": [
+        {
+          "status_in": [
+            400,
+            422
+          ]
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "conformance-patient-profile",
       "method": "GET",
       "url": "/Patient?_count=1",
       "headers": {},
@@ -765,7 +807,7 @@ expression: plan
         },
         {
           "json_path": {
-            "path": "$.meta.profile[0]",
+            "path": "$.entry[0].resource.meta.profile[0]",
             "predicate": {
               "eq": "http://hl7.org/fhir/StructureDefinition/Patient"
             }
@@ -788,9 +830,9 @@ expression: plan
         },
         {
           "json_path": {
-            "path": "$.meta.profile[0]",
+            "path": "$.entry[0].resource.meta.profile",
             "predicate": {
-              "eq": "http://example.org/StructureDefinition/TestPatient"
+              "every": "exists"
             }
           }
         }
@@ -800,379 +842,7 @@ expression: plan
     },
     {
       "type": "request",
-      "name": "read-observation",
-      "method": "GET",
-      "url": "/Observation/{id}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "create-observation",
-      "method": "POST",
-      "url": "/Observation",
-      "headers": {
-        "Content-Type": "application/json"
-      },
-      "body": {
-        "resourceType": "Observation"
-      },
-      "assert": [
-        {
-          "status": 201
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-category",
-      "method": "GET",
-      "url": "/Observation?category={category}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-category-Missing",
-      "method": "GET",
-      "url": "/Observation?category::missing={category}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-category-Not",
-      "method": "GET",
-      "url": "/Observation?category::not={category}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-category-Text",
-      "method": "GET",
-      "url": "/Observation?category::text={category}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-category-Above",
-      "method": "GET",
-      "url": "/Observation?category::above={category}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-category-Below",
-      "method": "GET",
-      "url": "/Observation?category::below={category}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-code",
-      "method": "GET",
-      "url": "/Observation?code={code}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-code-Missing",
-      "method": "GET",
-      "url": "/Observation?code::missing={code}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-code-Not",
-      "method": "GET",
-      "url": "/Observation?code::not={code}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-code-Text",
-      "method": "GET",
-      "url": "/Observation?code::text={code}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-code-Above",
-      "method": "GET",
-      "url": "/Observation?code::above={code}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-code-Below",
-      "method": "GET",
-      "url": "/Observation?code::below={code}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-category-code-combo",
-      "method": "GET",
-      "url": "/Observation?category={category}&code={code}",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-_summary_true",
-      "method": "GET",
-      "url": "/Observation?_summary=true",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-_count_1",
+      "name": "conformance-observation-profile",
       "method": "GET",
       "url": "/Observation?_count=1",
       "headers": {},
@@ -1183,252 +853,7 @@ expression: plan
         },
         {
           "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-_elements_id",
-      "method": "GET",
-      "url": "/Observation?_elements=id",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-_sort__id",
-      "method": "GET",
-      "url": "/Observation?_sort=_id",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-_filter_name eq test",
-      "method": "GET",
-      "url": "/Observation?_filter=name eq test",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-_tag_http-//example.org/tag|test",
-      "method": "GET",
-      "url": "/Observation?_tag=http://example.org/tag|test",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-_profile_http-//example.org/StructureDefinition/Test",
-      "method": "GET",
-      "url": "/Observation?_profile=http://example.org/StructureDefinition/Test",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-_security_http-//example.org/security|test",
-      "method": "GET",
-      "url": "/Observation?_security=http://example.org/security|test",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-_type_Patient",
-      "method": "GET",
-      "url": "/Observation?_type=Patient",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-_language_en",
-      "method": "GET",
-      "url": "/Observation?_language=en",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "search-observation-_has-Provenance-target",
-      "method": "GET",
-      "url": "/Observation?_has:Provenance:target",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
-            "predicate": {
-              "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
-            }
-          }
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "negative-observation-undeclared-update",
-      "method": "PUT",
-      "url": "/Observation/nonexistent",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 0
-        }
-      ],
-      "save_as": "",
-      "soft_fail": false
-    },
-    {
-      "type": "request",
-      "name": "conformance-observation-mustsupport",
-      "method": "GET",
-      "url": "/Observation?_count=1",
-      "headers": {},
-      "body": null,
-      "assert": [
-        {
-          "status": 200
-        },
-        {
-          "json_path": {
-            "path": "$.meta.profile[0]",
+            "path": "$.entry[0].resource.meta.profile[0]",
             "predicate": {
               "eq": "http://hl7.org/fhir/StructureDefinition/Observation"
             }
@@ -1451,17 +876,264 @@ expression: plan
         },
         {
           "json_path": {
-            "path": "$.meta.profile[0]",
+            "path": "$.entry[0].resource.meta.profile",
             "predicate": {
-              "eq": "http://example.org/StructureDefinition/TestObservation"
+              "every": "exists"
             }
           }
         }
       ],
       "save_as": "",
       "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "search-patient-name-chained",
+      "method": "GET",
+      "url": "/Patient?Patient.name={value}",
+      "headers": {},
+      "body": null,
+      "assert": [
+        {
+          "status": 200
+        }
+      ],
+      "save_as": "",
+      "soft_fail": false
     }
   ],
-  "setup": [],
+  "setup": [
+    {
+      "type": "request",
+      "name": "setup-create-patient-1",
+      "method": "POST",
+      "url": "/Patient",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "id": "patient-001",
+        "identifier": [
+          {
+            "system": "http://example.org/id",
+            "value": "gen-001"
+          }
+        ],
+        "meta": {
+          "profile": [
+            "http://example.org/StructureDefinition/TestPatient"
+          ]
+        },
+        "name": [
+          {
+            "family": "GeneratedFamily",
+            "given": [
+              "GeneratedGiven"
+            ]
+          }
+        ],
+        "resourceType": "Patient"
+      },
+      "assert": [
+        {
+          "status": 201
+        }
+      ],
+      "save_as": "seed_patient_1",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "setup-create-patient-2",
+      "method": "POST",
+      "url": "/Patient",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "id": "patient-002",
+        "identifier": [
+          {
+            "system": "http://example.org/id",
+            "value": "gen-001"
+          }
+        ],
+        "meta": {
+          "profile": [
+            "http://example.org/StructureDefinition/TestPatient"
+          ]
+        },
+        "name": [
+          {
+            "family": "GeneratedFamily",
+            "given": [
+              "GeneratedGiven"
+            ]
+          }
+        ],
+        "resourceType": "Patient"
+      },
+      "assert": [
+        {
+          "status": 201
+        }
+      ],
+      "save_as": "seed_patient_2",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "setup-create-patient-3",
+      "method": "POST",
+      "url": "/Patient",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "id": "patient-003",
+        "identifier": [
+          {
+            "system": "http://example.org/id",
+            "value": "gen-001"
+          }
+        ],
+        "meta": {
+          "profile": [
+            "http://example.org/StructureDefinition/TestPatient"
+          ]
+        },
+        "name": [
+          {
+            "family": "GeneratedFamily",
+            "given": [
+              "GeneratedGiven"
+            ]
+          }
+        ],
+        "resourceType": "Patient"
+      },
+      "assert": [
+        {
+          "status": 201
+        }
+      ],
+      "save_as": "seed_patient_3",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "setup-create-observation-1",
+      "method": "POST",
+      "url": "/Observation",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "code": {
+          "coding": [
+            {
+              "code": "gen",
+              "system": "http://example.org/code"
+            }
+          ],
+          "text": "generated"
+        },
+        "id": "observation-001",
+        "meta": {
+          "profile": [
+            "http://example.org/StructureDefinition/TestObservation"
+          ]
+        },
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "Unknown/placeholder"
+        }
+      },
+      "assert": [
+        {
+          "status": 201
+        }
+      ],
+      "save_as": "seed_observation_1",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "setup-create-observation-2",
+      "method": "POST",
+      "url": "/Observation",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "code": {
+          "coding": [
+            {
+              "code": "gen",
+              "system": "http://example.org/code"
+            }
+          ],
+          "text": "generated"
+        },
+        "id": "observation-002",
+        "meta": {
+          "profile": [
+            "http://example.org/StructureDefinition/TestObservation"
+          ]
+        },
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "Unknown/placeholder"
+        }
+      },
+      "assert": [
+        {
+          "status": 201
+        }
+      ],
+      "save_as": "seed_observation_2",
+      "soft_fail": false
+    },
+    {
+      "type": "request",
+      "name": "setup-create-observation-3",
+      "method": "POST",
+      "url": "/Observation",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "code": {
+          "coding": [
+            {
+              "code": "gen",
+              "system": "http://example.org/code"
+            }
+          ],
+          "text": "generated"
+        },
+        "id": "observation-003",
+        "meta": {
+          "profile": [
+            "http://example.org/StructureDefinition/TestObservation"
+          ]
+        },
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "Unknown/placeholder"
+        }
+      },
+      "assert": [
+        {
+          "status": 201
+        }
+      ],
+      "save_as": "seed_observation_3",
+      "soft_fail": false
+    }
+  ],
   "teardown": []
 }

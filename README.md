@@ -358,6 +358,8 @@ momus/                          # workspace root
 │   │   ├── grpc.rs             #   gRPC proto → TestPlan
 │   │   └── fhir/               #   FHIR IG → TestPlan
 │   │       ├── mod.rs
+│   │       ├── api_model.rs     #   FHIR → ApiModel converter
+│   │       ├── resource_generator.rs  #   FHIR ResourceGenerator impl
 │   │       ├── package.rs
 │   │       ├── profile.rs
 │   │       ├── profile_resolver.rs
