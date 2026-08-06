@@ -211,7 +211,7 @@ fn generate_fhir_specific_search_tests(api: &ApiModel, pkg: &package::IgPackage)
                         steps.push(Step::Request(RequestStep {
                             name: format!("search-{}-{}-chained", rtype_lower, sp.name),
                             method: Method::Get,
-                            url: format!("/{}?{}={{value}}", rtype, chain_param),
+                            url: format!("/{rtype}?{chain_param}={{value}}"),
                             headers: HashMap::new(),
                             body: None,
                             assert: vec![Assertion::Status(200)],
