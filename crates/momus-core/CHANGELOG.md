@@ -17,6 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Address clippy lints and update snapshot tests
 - Address PR review feedback — non_exhaustive enums, with_capacity, remove dead code
 - Inline format args for Rust 1.88+ compat, update snapshot
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.6.3
+## [0.7.0] - 2026-08-06
+
+### 🚀 Features
+
+- Add TestSpec AST and TestGenerator engine for format-agnostic test generation
+
+### 🐛 Bug Fixes
+
+- Address clippy lints and update snapshot tests
+- Address PR review feedback — non_exhaustive enums, with_capacity, remove dead code
+- Inline format args for Rust 1.88+ compat, update snapshot
 ## [0.6.3] - 2026-08-05
 
 ### 🐛 Bug Fixes
