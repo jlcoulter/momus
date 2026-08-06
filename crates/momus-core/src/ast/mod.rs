@@ -8,9 +8,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Write;
 
+pub mod api_model;
 pub mod assertion;
+pub mod test_spec;
 
+pub use api_model::*;
 pub use assertion::*;
+pub use test_spec::*;
 
 /// Escape HTML special characters for safe embedding in HTML output.
 fn html_escape(s: &str) -> String {
