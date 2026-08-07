@@ -20,6 +20,7 @@ pub mod profile;
 pub mod profile_resolver;
 pub mod resource_gen;
 pub mod resource_generator;
+pub mod response_assertions;
 pub mod search_param;
 pub mod test_helpers;
 pub mod test_model;
@@ -384,6 +385,64 @@ pub fn generate_bulk_test_data(package_path: &str, count: u64, output_dir: &Path
     bulk_data::generate_update_ndjson(&all_ids, output_dir)?;
 
     tracing::info!("Bulk test data written to {}/data/", output_dir.display());
+
+    Ok(())
+}
+
+/// Validate a JSON resource against a profile from an IG package.
+///
+/// Parses the IG package, finds the matching profile (by explicit URL or
+/// auto-detected by resource type), and validates the resource against it.
+pub fn validate_resource(
+    package_path: &str,
+    resource_path: &str,
+    profile_url: Option<&str>,
+) -> anyhow::Result<()> {
+    let pkg = package::parse_package(package_path)?;
+    let resource_content = std::fs::read_to_string(resource_path)?;
+    let resource: serde_json::Value = serde_json::from_str(&resource_content)?;
+
+    let resource_type = resource
+        .get("resourceType")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Resource JSON missing 'resourceType' field"))?;
+
+    // Find the profile
+    let profile = if let Some(url) = profile_url {
+        pkg.structure_definitions
+            .iter()
+            .find(|sd| sd.url == url)
+            .ok_or_else(|| anyhow::anyhow!("Profile '{}' not found in IG package", url))?
+    } else {
+        // Auto-detect by resource type
+        pkg.structure_definitions
+            .iter()
+            .find(|sd| sd.base_type == resource_type)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No profile found for resource type '{}'. Specify --profile explicitly.",
+                    resource_type
+                )
+            })?
+    };
+
+    let errors = validator::validate_against_profile(&resource, profile);
+
+    if errors.is_empty() {
+        println!(
+            "Validation passed for {} against {}",
+            resource_type, profile.url
+        );
+    } else {
+        println!(
+            "Validation failed for {} against {}:",
+            resource_type, profile.url
+        );
+        for err in &errors {
+            println!("  - {}", err);
+        }
+        anyhow::bail!("Validation failed with {} error(s)", errors.len());
+    }
 
     Ok(())
 }

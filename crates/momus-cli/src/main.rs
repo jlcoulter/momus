@@ -249,8 +249,33 @@ enum Commands {
         #[arg(long, default_value = "./output")]
         output: PathBuf,
     },
+    /// FHIR-specific operations (mock server, validate, generate).
+    #[command(subcommand)]
+    Fhir(FhirCommands),
+}
+
+/// FHIR-specific subcommands.
+#[derive(Subcommand)]
+enum FhirCommands {
+    /// Start a FHIR mock server with CRUD + search support.
+    Mock {
+        /// Port to listen on (0 = random).
+        #[arg(long, default_value = "0")]
+        port: u16,
+    },
+    /// Validate a JSON resource against a profile from an IG package.
+    Validate {
+        /// Path to the IG package (.tgz).
+        package: String,
+        /// Path to the resource JSON file to validate.
+        #[arg(short, long)]
+        resource: String,
+        /// Profile canonical URL to validate against (optional — auto-detect by resource type).
+        #[arg(long)]
+        profile: Option<String>,
+    },
     /// Generate bulk FHIR test data (NDJSON) from an IG package.
-    FhirGenerate {
+    Generate {
         /// Path to the FHIR IG package (.tgz).
         package: String,
         /// Number of resources to generate per type (default: 10).
@@ -953,19 +978,43 @@ async fn main() -> Result<()> {
             }
             Ok(())
         }
-        Commands::FhirGenerate {
-            package,
-            count,
-            output,
-        } => {
-            std::fs::create_dir_all(&output)?;
-            momus_convert::generate_fhir_bulk_test_data(&package, count, &output)?;
-            println!(
-                "✓ FHIR bulk test data written to {}/data/",
-                output.display()
-            );
-            Ok(())
-        }
+        Commands::Fhir(cmd) => match cmd {
+            FhirCommands::Mock { port } => {
+                let addr = momus_mock::fhir::start_fhir_mock_server(port).await?;
+                println!("FHIR mock server listening on http://{addr}");
+                println!("Endpoints:");
+                println!("  POST   /fhir/{{type}}        — create resource");
+                println!("  GET    /fhir/{{type}}        — search resources");
+                println!("  GET    /fhir/{{type}}/{{id}}  — read resource");
+                println!("  PUT    /fhir/{{type}}/{{id}}  — update resource");
+                println!("  DELETE /fhir/{{type}}/{{id}}  — delete resource");
+                println!("Press Ctrl+C to stop.");
+                // Keep the server running
+                tokio::signal::ctrl_c().await?;
+                Ok(())
+            }
+            FhirCommands::Validate {
+                package,
+                resource,
+                profile,
+            } => {
+                momus_convert::fhir_validate_resource(&package, &resource, profile.as_deref())?;
+                Ok(())
+            }
+            FhirCommands::Generate {
+                package,
+                count,
+                output,
+            } => {
+                std::fs::create_dir_all(&output)?;
+                momus_convert::generate_fhir_bulk_test_data(&package, count, &output)?;
+                println!(
+                    "✓ FHIR bulk test data written to {}/data/",
+                    output.display()
+                );
+                Ok(())
+            }
+        },
     }
 }
 

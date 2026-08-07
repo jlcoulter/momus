@@ -102,6 +102,21 @@ pub fn generate_fhir_bulk_test_data(
     fhir::generate_bulk_test_data(package_path, count, output_dir)
 }
 
+/// Validate a JSON resource against a profile from an IG package.
+///
+/// Parses the IG package, finds the matching profile (by explicit URL or
+/// auto-detected by resource type), and validates the resource against it.
+///
+/// Only available when the `fhir` feature is enabled.
+#[cfg(feature = "fhir")]
+pub fn fhir_validate_resource(
+    package_path: &str,
+    resource_path: &str,
+    profile_url: Option<&str>,
+) -> Result<()> {
+    fhir::validate_resource(package_path, resource_path, profile_url)
+}
+
 // ---------------------------------------------------------------------------
 // Feature-gated modules — each converts one format to a TestPlan
 // ---------------------------------------------------------------------------
