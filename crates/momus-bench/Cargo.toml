@@ -12,7 +12,7 @@ keywords = ["testing", "api", "http", "benchmark", "load-testing"]
 categories = ["development-tools::testing", "web-programming::http-client"]
 
 [dependencies]
-momus-core = { path = "../momus-core", version = "0.7.14" }
+momus-core = { path = "../momus-core", version = "0.7.15" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
