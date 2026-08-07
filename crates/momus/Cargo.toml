@@ -12,15 +12,15 @@ keywords = ["testing", "api", "http", "assertions", "jsonpath"]
 categories = ["development-tools::testing", "web-programming::http-client"]
 
 [dependencies]
-momus-core = { path = "../momus-core", version = "0.7.27" }
-momus-mock = { path = "../momus-mock", version = "0.7.27" }
-momus-convert = { path = "../momus-convert", version = "0.7.27" }
-momus-bench = { path = "../momus-bench", version = "0.7.27" }
-momus-fuzz = { path = "../momus-fuzz", version = "0.7.27" }
-momus-chaos = { path = "../momus-chaos", version = "0.7.27" }
-momus-contract = { path = "../momus-contract", version = "0.7.27" }
-momus-guard = { path = "../momus-guard", version = "0.7.27" }
-momus-diff = { path = "../momus-diff", version = "0.7.27" }
+momus-core = { path = "../momus-core", version = "0.7.28" }
+momus-mock = { path = "../momus-mock", version = "0.7.28" }
+momus-convert = { path = "../momus-convert", version = "0.7.28" }
+momus-bench = { path = "../momus-bench", version = "0.7.28" }
+momus-fuzz = { path = "../momus-fuzz", version = "0.7.28" }
+momus-chaos = { path = "../momus-chaos", version = "0.7.28" }
+momus-contract = { path = "../momus-contract", version = "0.7.28" }
+momus-guard = { path = "../momus-guard", version = "0.7.28" }
+momus-diff = { path = "../momus-diff", version = "0.7.28" }
 serde_json = "1"
 anyhow = "1"
 
