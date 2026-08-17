@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"strings"
@@ -51,6 +52,35 @@ type Source struct {
 // from local archives.
 type PackageLoader interface {
 	Load(ctx context.Context, source Source) (*Package, error)
+}
+
+var logLevel = &slog.LevelVar{}
+
+var logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
+
+// SetDebug toggles verbose debug logging for this package.
+func SetDebug(enabled bool) {
+	if enabled {
+		logLevel.Set(slog.LevelDebug)
+		return
+	}
+	logLevel.Set(slog.LevelInfo)
+}
+
+// SetLogger overrides the logger used by this package.
+func SetLogger(l *slog.Logger) {
+	if l == nil {
+		return
+	}
+	logger = l
+}
+
+func debug(msg string, args ...any) {
+	logger.Debug(msg, args...)
+}
+
+func warn(msg string, args ...any) {
+	logger.Warn(msg, args...)
 }
 
 type packageManifest struct {
@@ -127,6 +157,8 @@ type searchParameterJSON struct {
 
 // ReadPackage reads a FHIR package from a .tgz archive.
 func ReadPackage(packagePath string) (*Package, error) {
+	debug("reading package archive", "packagePath", packagePath)
+
 	file, err := os.Open(packagePath)
 	if err != nil {
 		return nil, fmt.Errorf("open package: %w", err)
@@ -141,6 +173,10 @@ func ReadPackage(packagePath string) (*Package, error) {
 
 	tr := tar.NewReader(gzr)
 	pkg := &Package{}
+	entriesRead := 0
+	jsonEntries := 0
+	decodedResources := 0
+	skippedResources := 0
 
 	for {
 		header, err := tr.Next()
@@ -150,14 +186,19 @@ func ReadPackage(packagePath string) (*Package, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read archive entry: %w", err)
 		}
+		entriesRead++
+		debug("archive entry", "name", header.Name, "type", header.Typeflag, "size", header.Size)
 
 		if header.Typeflag != tar.TypeReg {
+			debug("skipping non-regular entry", "name", header.Name)
 			continue
 		}
 
 		if !strings.HasSuffix(strings.ToLower(header.Name), ".json") {
+			debug("skipping non-json entry", "name", header.Name)
 			continue
 		}
+		jsonEntries++
 
 		contents, err := io.ReadAll(tr)
 		if err != nil {
@@ -167,21 +208,36 @@ func ReadPackage(packagePath string) (*Package, error) {
 
 		base := strings.ToLower(path.Base(header.Name))
 		if base == "package.json" {
+			debug("decoding manifest", "name", header.Name)
 			if err := decodeManifest(contents, pkg); err != nil {
 				return nil, fmt.Errorf("decode manifest %s: %w", header.Name, err)
 			}
+			debug("manifest decoded", "name", pkg.Name, "version", pkg.Version, "dependencies", len(pkg.Dependencies))
 			continue
 		}
 
 		res, err := decodeResource(contents)
 		if err != nil {
 			// Non-FHIR JSON files may exist in package archives; skip those.
+			skippedResources++
+			debug("skipping non-fhir-or-invalid-json resource", "name", header.Name, "error", err)
 			continue
 		}
 		if res != nil {
 			pkg.Resources = append(pkg.Resources, res)
+			decodedResources++
+			debug("decoded resource", "name", header.Name, "type", fmt.Sprintf("%T", res))
+		} else {
+			skippedResources++
+			debug("skipping unsupported FHIR resource", "name", header.Name)
 		}
 	}
+
+	if pkg.Name == "" {
+		warn("package name is empty after archive read", "packagePath", packagePath)
+	}
+
+	debug("package read complete", "entries", entriesRead, "jsonEntries", jsonEntries, "decodedResources", decodedResources, "skippedResources", skippedResources, "dependencies", len(pkg.Dependencies))
 
 	return pkg, nil
 }

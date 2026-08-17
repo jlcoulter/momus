@@ -19,19 +19,44 @@ func NewRegistryBuilder() *RegistryBuilder {
 // Unknown resource types are skipped.
 func (b *RegistryBuilder) Build(p *Package) (*registry.Registry, error) {
 	r := registry.New()
+	if p == nil {
+		debug("registry build requested with nil package")
+		return r, nil
+	}
+
+	debug("building registry", "packageName", p.Name, "packageVersion", p.Version, "resources", len(p.Resources))
+
+	var sdCount, vsCount, csCount, spCount, capCount, skipped int
 	for _, res := range p.Resources {
 		switch v := res.(type) {
 		case *model.StructureDefinition:
 			r.AddStructureDefinition(v)
+			sdCount++
 		case *model.ValueSet:
 			r.AddValueSet(v)
+			vsCount++
 		case *model.CodeSystem:
 			r.AddCodeSystem(v)
+			csCount++
 		case *model.SearchParameter:
 			r.AddSearchParameter(v)
+			spCount++
 		case *model.CapabilityStatement:
 			r.AddCapabilityStatement(v)
+			capCount++
+		default:
+			skipped++
+			debug("registry skipping unsupported resource type", "type", res)
 		}
 	}
+
+	debug("registry build complete",
+		"structureDefinitions", sdCount,
+		"valueSets", vsCount,
+		"codeSystems", csCount,
+		"searchParameters", spCount,
+		"capabilityStatements", capCount,
+		"skipped", skipped,
+	)
 	return r, nil
 }

@@ -14,12 +14,18 @@ import (
 const version = "0.0.0"
 
 func main() {
+	var debug bool
+
 	rootCmd := &cobra.Command{
 		Use:   "momus",
 		Short: "API and FHIR conformance testing framework",
 	}
 
 	rootCmd.Version = version
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "enable verbose debug logging")
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		fhirpackage.SetDebug(debug)
+	}
 
 	packageCmd := &cobra.Command{
 		Use:   "package",
