@@ -5,7 +5,20 @@
 // package name is "fhirpackage" because "package" is a reserved word.
 package fhirpackage
 
-import "context"
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path"
+	"strings"
+
+	"github.com/jlcoulter/momus/internal/fhir/model"
+)
 
 // Package is a loaded FHIR package.
 type Package struct {
@@ -38,4 +51,368 @@ type Source struct {
 // from local archives.
 type PackageLoader interface {
 	Load(ctx context.Context, source Source) (*Package, error)
+}
+
+type packageManifest struct {
+	Name         string               `json:"name"`
+	Version      string               `json:"version"`
+	Dependencies map[string]string    `json:"dependencies"`
+	DepsArray    []manifestDependency `json:"dependsOn"`
+}
+
+// manifestDependency is a single dependency in a package manifest.
+type manifestDependency struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+// resourceEnvelope is a minimal representation of a FHIR resource, used to
+// determine the resource type before decoding into a more specific struct.
+type resourceEnvelope struct {
+	ResourceType string `json:"resourceType"`
+}
+
+// structureDefinitionJSON is a minimal representation of a FHIR StructureDefinition resource.
+type structureDefinitionJSON struct {
+	URL            string `json:"url"`
+	Version        string `json:"version"`
+	Name           string `json:"name"`
+	Title          string `json:"title"`
+	Type           string `json:"type"`
+	BaseDefinition string `json:"baseDefinition"`
+	Kind           string `json:"kind"`
+	Derivation     string `json:"derivation"`
+	Snapshot       struct {
+		Element []map[string]any `json:"element"`
+	} `json:"snapshot"`
+	Differential struct {
+		Element []map[string]any `json:"element"`
+	} `json:"differential"`
+}
+
+// valueSetJSON is a minimal representation of a FHIR ValueSet resource.
+type valueSetJSON struct {
+	URL     string `json:"url"`
+	Version string `json:"version"`
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+}
+
+// codeSystemJSON is a minimal representation of a FHIR CodeSystem resource.
+type codeSystemJSON struct {
+	URL     string `json:"url"`
+	Version string `json:"version"`
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+}
+
+// capabilityStatementJSON is a minimal representation of a FHIR CapabilityStatement resource.
+type capabilityStatementJSON struct {
+	URL         string `json:"url"`
+	Version     string `json:"version"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	FhirVersion string `json:"fhirVersion"`
+}
+
+// searchParameterJSON is a minimal representation of a FHIR SearchParameter resource.
+type searchParameterJSON struct {
+	URL        string   `json:"url"`
+	Name       string   `json:"name"`
+	Code       string   `json:"code"`
+	Base       []string `json:"base"`
+	Type       string   `json:"type"`
+	Expression string   `json:"expression"`
+}
+
+// ReadPackage reads a FHIR package from a .tgz archive.
+func ReadPackage(packagePath string) (*Package, error) {
+	file, err := os.Open(packagePath)
+	if err != nil {
+		return nil, fmt.Errorf("open package: %w", err)
+	}
+	defer file.Close()
+
+	gzr, err := gzip.NewReader(file)
+	if err != nil {
+		return nil, fmt.Errorf("create gzip reader: %w", err)
+	}
+	defer gzr.Close()
+
+	tr := tar.NewReader(gzr)
+	pkg := &Package{}
+
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break // End of archive
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read archive entry: %w", err)
+		}
+
+		if header.Typeflag != tar.TypeReg {
+			continue
+		}
+
+		if !strings.HasSuffix(strings.ToLower(header.Name), ".json") {
+			continue
+		}
+
+		contents, err := io.ReadAll(tr)
+		if err != nil {
+			return nil, fmt.Errorf("read archive entry content: %w", err)
+		}
+		contents = normalizeJSON(contents)
+
+		base := strings.ToLower(path.Base(header.Name))
+		if base == "package.json" {
+			if err := decodeManifest(contents, pkg); err != nil {
+				return nil, fmt.Errorf("decode manifest %s: %w", header.Name, err)
+			}
+			continue
+		}
+
+		res, err := decodeResource(contents)
+		if err != nil {
+			// Non-FHIR JSON files may exist in package archives; skip those.
+			continue
+		}
+		if res != nil {
+			pkg.Resources = append(pkg.Resources, res)
+		}
+	}
+
+	return pkg, nil
+}
+
+// decodeManifest decodes a package manifest from JSON into a Package struct.
+func decodeManifest(data []byte, pkg *Package) error {
+	var m packageManifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+
+	pkg.Name = m.Name
+	pkg.Version = m.Version
+
+	if len(m.Dependencies) > 0 {
+		for name, version := range m.Dependencies {
+			pkg.Dependencies = append(pkg.Dependencies, Dependency{Name: name, Version: version})
+		}
+	}
+
+	if len(m.DepsArray) > 0 {
+		for _, dep := range m.DepsArray {
+			if dep.Name == "" {
+				continue
+			}
+			pkg.Dependencies = append(pkg.Dependencies, Dependency{Name: dep.Name, Version: dep.Version})
+		}
+	}
+
+	return nil
+}
+
+// decodeResource decodes a FHIR resource from JSON into a specific struct based on its resourceType.
+func decodeResource(data []byte) (any, error) {
+	var env resourceEnvelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		return nil, err
+	}
+
+	switch env.ResourceType {
+	case "StructureDefinition":
+		var sd structureDefinitionJSON
+		if err := json.Unmarshal(data, &sd); err != nil {
+			return nil, err
+		}
+		elements := sd.Snapshot.Element
+		if len(elements) == 0 {
+			elements = sd.Differential.Element
+		}
+		return &model.StructureDefinition{
+			URL:            sd.URL,
+			Version:        sd.Version,
+			Name:           sd.Name,
+			Title:          sd.Title,
+			Type:           sd.Type,
+			BaseDefinition: sd.BaseDefinition,
+			Kind:           sd.Kind,
+			Derivation:     sd.Derivation,
+			Elements:       decodeElementDefinitions(elements),
+		}, nil
+	case "ValueSet":
+		var vs valueSetJSON
+		if err := json.Unmarshal(data, &vs); err != nil {
+			return nil, err
+		}
+		return &model.ValueSet{URL: vs.URL, Version: vs.Version, Name: vs.Name, Status: vs.Status}, nil
+	case "CodeSystem":
+		var cs codeSystemJSON
+		if err := json.Unmarshal(data, &cs); err != nil {
+			return nil, err
+		}
+		return &model.CodeSystem{URL: cs.URL, Version: cs.Version, Name: cs.Name, Status: cs.Status}, nil
+	case "CapabilityStatement":
+		var cs capabilityStatementJSON
+		if err := json.Unmarshal(data, &cs); err != nil {
+			return nil, err
+		}
+		return &model.CapabilityStatement{
+			URL:         cs.URL,
+			Version:     cs.Version,
+			Name:        cs.Name,
+			Status:      cs.Status,
+			FhirVersion: cs.FhirVersion,
+		}, nil
+	case "SearchParameter":
+		var sp searchParameterJSON
+		if err := json.Unmarshal(data, &sp); err != nil {
+			return nil, err
+		}
+		return &model.SearchParameter{
+			URL:        sp.URL,
+			Name:       sp.Name,
+			Code:       sp.Code,
+			Base:       sp.Base,
+			Type:       sp.Type,
+			Expression: sp.Expression,
+		}, nil
+	default:
+		return nil, nil
+	}
+}
+
+// decodeElementDefinitions decodes a slice of raw element definitions into a slice of model.ElementDefinition.
+func decodeElementDefinitions(rawElements []map[string]any) []model.ElementDefinition {
+	defs := make([]model.ElementDefinition, 0, len(rawElements))
+	for _, elem := range rawElements {
+		def := model.ElementDefinition{
+			ID:          stringField(elem, "id"),
+			Path:        stringField(elem, "path"),
+			Name:        lastPathPart(stringField(elem, "path")),
+			Min:         intField(elem, "min"),
+			Max:         stringField(elem, "max"),
+			MustSupport: boolField(elem, "mustSupport"),
+			SliceName:   stringField(elem, "sliceName"),
+		}
+
+		if t, ok := elem["type"].([]any); ok {
+			for _, rawType := range t {
+				m, ok := rawType.(map[string]any)
+				if !ok {
+					continue
+				}
+				def.Types = append(def.Types, model.ElementType{
+					Code:          stringField(m, "code"),
+					Profile:       stringSliceField(m, "profile"),
+					TargetProfile: stringSliceField(m, "targetProfile"),
+				})
+			}
+		}
+
+		if b, ok := elem["binding"].(map[string]any); ok {
+			def.Binding = &model.Binding{
+				Strength: stringField(b, "strength"),
+				ValueSet: stringField(b, "valueSet"),
+			}
+		}
+
+		def.Profile = stringSliceField(elem, "profile")
+		def.TargetProfile = stringSliceField(elem, "targetProfile")
+
+		for k, v := range elem {
+			if strings.HasPrefix(k, "fixed") {
+				def.Fixed = v
+			}
+			if strings.HasPrefix(k, "pattern") {
+				def.Pattern = v
+			}
+		}
+
+		defs = append(defs, def)
+	}
+	return defs
+}
+
+// stringField retrieves a string field from a map, returning an empty string if the key is not present or not a string.
+func stringField(m map[string]any, key string) string {
+	v, ok := m[key]
+	if !ok {
+		return ""
+	}
+	s, _ := v.(string)
+	return s
+}
+
+// intField retrieves an integer field from a map, returning 0 if the key is not present or not a number.
+func intField(m map[string]any, key string) int {
+	v, ok := m[key]
+	if !ok {
+		return 0
+	}
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	default:
+		return 0
+	}
+}
+
+// boolField retrieves a boolean field from a map, returning false if the key is not present or not a boolean.
+func boolField(m map[string]any, key string) bool {
+	v, ok := m[key]
+	if !ok {
+		return false
+	}
+	b, _ := v.(bool)
+	return b
+}
+
+// stringSliceField retrieves a slice of strings from a map, returning nil if the key is not present or not a slice of strings.
+func stringSliceField(m map[string]any, key string) []string {
+	v, ok := m[key]
+	if !ok {
+		return nil
+	}
+
+	arr, ok := v.([]any)
+	if !ok {
+		if s, ok := v.(string); ok {
+			return []string{s}
+		}
+		return nil
+	}
+
+	out := make([]string, 0, len(arr))
+	for _, item := range arr {
+		s, ok := item.(string)
+		if ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// lastPathPart returns the last part of a path, stripping any file extension.
+func lastPathPart(s string) string {
+	idx := strings.LastIndex(s, "/")
+	if idx >= 0 && idx+1 < len(s) {
+		s = s[idx+1:]
+	}
+	idx = strings.LastIndex(s, ".")
+	if idx > 0 {
+		s = s[:idx]
+	}
+	return s
+}
+
+// normalizeJSON trims whitespace and removes a UTF-8 BOM from the beginning of JSON data.
+func normalizeJSON(data []byte) []byte {
+	// Some package files are UTF-8 JSON with BOM; strip it before decoding.
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
+	return bytes.TrimSpace(data)
 }

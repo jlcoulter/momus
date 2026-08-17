@@ -17,3 +17,6 @@ vendor/
 
 # OS
 .DS_Store
+
+# FHIR
+package.tgz

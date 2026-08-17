@@ -3,44 +3,53 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
+
+	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
+	"github.com/spf13/cobra"
 )
 
 // version is the Momus version. Bumped as part of releases.
 const version = "0.0.0"
 
 func main() {
-	fs := flag.NewFlagSet("momus", flag.ContinueOnError)
-
-	showVersion := fs.Bool("version", false, "print the Momus version and exit")
-
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), `momus - API and FHIR conformance testing framework
-
-Usage:
-  momus [flags]
-
-Momus is currently in early scaffolding. This command is the module entry
-point; no functional subcommands exist yet.
-
-Flags:
-`)
-		fs.PrintDefaults()
+	rootCmd := &cobra.Command{
+		Use:   "momus",
+		Short: "API and FHIR conformance testing framework",
 	}
 
-	if err := fs.Parse(os.Args[1:]); err != nil {
-		if err == flag.ErrHelp {
-			os.Exit(0)
-		}
-		os.Exit(2)
+	rootCmd.Version = version
+
+	packageCmd := &cobra.Command{
+		Use:   "package",
+		Short: "FHIR package operations",
 	}
 
-	if *showVersion {
-		fmt.Printf("momus %s\n", version)
-		return
+	loadCmd := &cobra.Command{
+		Use:   "load <path-to-package.tgz>",
+		Short: "Load and decode a FHIR package archive",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pkg, err := fhirpackage.ReadPackage(args[0])
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("Loaded package %s@%s with %d dependencies and %d resources\n",
+				pkg.Name,
+				pkg.Version,
+				len(pkg.Dependencies),
+				len(pkg.Resources),
+			)
+			return nil
+		},
 	}
 
-	fs.Usage()
+	packageCmd.AddCommand(loadCmd)
+	rootCmd.AddCommand(packageCmd)
+
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }

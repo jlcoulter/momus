@@ -11,7 +11,7 @@ is implemented yet.
 
 The following capabilities are planned but **not yet implemented**:
 
-- FHIR Implementation Guide (IG) loading and package/dependency resolution
+- Full FHIR package dependency resolution (recursive dependency loading)
 - A normalised FHIR Registry of profiles, value sets, code systems, and
   search parameters
 - Profile resolution and inheritance, element trees, cardinality, slicing,
@@ -25,6 +25,14 @@ The following capabilities are planned but **not yet implemented**:
 What exists today is the architecture that these will grow into. See
 [`docs/architecture.md`](docs/architecture.md) for the layering and design
 decisions.
+
+Currently implemented:
+
+- Local FHIR package `.tgz` loading via CLI
+- Package manifest parsing (`name`, `version`, `dependencies`)
+- Normalisation of core FHIR resources into internal model types:
+  `StructureDefinition`, `ValueSet`, `CodeSystem`, `CapabilityStatement`,
+  and `SearchParameter`
 
 ## Layout
 
@@ -52,6 +60,28 @@ Run the CLI entry point:
 
 ```sh
 go run ./cmd/momus --help
+```
+
+## CLI
+
+Momus uses a Cobra-based CLI.
+
+Show top-level help:
+
+```sh
+go run ./cmd/momus --help
+```
+
+Load a local FHIR package archive (`.tgz`):
+
+```sh
+go run ./cmd/momus package load package.tgz
+```
+
+Example output:
+
+```text
+Loaded package au.gov.digitalhealth.fhir.hcpd@26.0.0 with 7 dependencies and 55 resources
 ```
 
 ## License
