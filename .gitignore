@@ -1,0 +1,19 @@
+# Build artifacts
+/momus
+/cmd/momus/momus
+*.exe
+*.test
+*.out
+
+# Go
+coverage.*
+*.prof
+vendor/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
