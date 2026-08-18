@@ -53,6 +53,9 @@ Currently implemented:
   executed test result carries the source constraint (id, profile, path,
   domain, variant, expected outcome), and coverage reports list both the
   covered and uncovered requirements
+- Registry-backed `DataRequirement` -> `Dataset` generator and a
+  dependency-ordered server `Provisioner`, separating data generation from
+  test execution
 - Generic dependency DAG planning for resource execution ordering
 - AST generation from coverage requirements with setup/capture scaffolding
 - Minimal assertion parser/evaluator (`status in [..]`)

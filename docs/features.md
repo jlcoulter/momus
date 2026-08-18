@@ -111,17 +111,22 @@ its source constraint through the executed test and into the report:
 
 ## 6. Resource `Generator` and `Dataset` implementation
 
-**Status: `internal/fhir/resource` and `internal/fhir/provisioning` are
-interface-only stubs; body synthesis is inline in AST generation.**
+**Status: implemented.** `internal/fhir/resource` now provides
+`NewGenerator(reg)` — a registry-backed `DatasetGenerator` that turns a
+`DataRequirement` into a concrete `Dataset`: it populates required elements
+from resolved profiles, honours cardinality (instance count), applies
+equals-constraints to field values, generates relationship targets, and wires
+references into the bodies and `Dataset.Relationships`.
 
-Implement the `Generator` interface so `DataRequirement` values produce a
-`Dataset` of concrete resources with references, and implement a
-`Provisioner` that writes datasets to the target server ahead of execution.
-This separates data from execution as the architecture requires, and lets one
-dataset serve multiple positive/negative/boundary plans.
+`internal/fhir/provisioning` now provides `New(baseURL, options)` — a
+`ServerProvisioner` that PUTs each dataset resource to
+`{baseURL}/{type}/{id}`, ordered so referenced targets are created before
+their dependents, with configurable client/auth/headers. It records the
+server-assigned id and ETag on each instance.
 
-Why sixth: it only pays off once generation (4) is real, and it unlocks
-multi-plan reuse and pre-provisioned fixtures for stateful workflows.
+This separates data from execution as the architecture requires: one dataset
+can serve multiple positive/negative/boundary plans, and datasets can be
+provisioned ahead of test execution.
 
 ## 7. Interaction and pairwise coverage
 

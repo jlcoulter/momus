@@ -605,11 +605,12 @@ covered.
 - `internal/fhir/package` — package loading and registry building.
 - `internal/fhir/registry` — immutable FHIR/API knowledge index.
 - `internal/fhir/terminology` — terminology expansion and lookup.
-- `internal/fhir/resource` — resource generator interface.
+- `internal/fhir/resource` — resource `Generator` (registry-backed
+        `DatasetGenerator` turns `DataRequirement`s into concrete `Dataset`s).
 - `internal/fhir/planner` — planner interface and `TestPlan` (interface-only
-        stub pending stage 6).
-- `internal/fhir/provisioning` — provisioner interface (interface-only stub
-        pending stage 6).
+        stub pending stage 8).
+- `internal/fhir/provisioning` — `Provisioner` (`ServerProvisioner` PUTs a
+        `Dataset` to the server, dependency-ordered).
 - `internal/test/coverage` — coverage requirements, derivation, evaluation,
         and reporting.
 - `internal/test/generation` — positive, negative, and boundary generation.
