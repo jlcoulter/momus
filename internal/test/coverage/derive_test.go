@@ -155,6 +155,42 @@ func TestDerivePlanScopeAndPruningOptions(t *testing.T) {
 	}
 }
 
+func TestDerivePlanSkipsNonResourceStructureDefinitions(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/patient-profile",
+		Type: "Patient",
+		Kind: "resource",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 1, Max: "1"},
+		},
+	})
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://hl7.org/fhir/StructureDefinition/Extension",
+		Type: "Extension",
+		Kind: "complex-type",
+		Elements: []model.ElementDefinition{
+			{Path: "Extension", Min: 0, Max: "*"},
+			{Path: "Extension.valueString", Min: 0, Max: "1"},
+		},
+	})
+
+	plan, err := DerivePlan(r, DeriveOptions{IncludeOptional: true})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+
+	if len(plan.Requirements) != 2 {
+		t.Fatalf("got %d requirements, want 2", len(plan.Requirements))
+	}
+	for _, req := range plan.Requirements {
+		if req.ResourceType != "Patient" {
+			t.Fatalf("unexpected resource type %q in requirement %s", req.ResourceType, req.ID)
+		}
+	}
+}
+
 func TestDerivePlanIncludesDependencyTargetsFromElementMetadata(t *testing.T) {
 	r := registry.New()
 	r.AddStructureDefinition(&model.StructureDefinition{

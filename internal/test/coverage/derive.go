@@ -63,6 +63,10 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 		if profile == nil {
 			continue
 		}
+		if profile.Kind != "" && !strings.EqualFold(profile.Kind, "resource") {
+			trackPruned(plan, PruneReasonResourceFiltered)
+			continue
+		}
 		if len(includeResources) > 0 {
 			if _, ok := includeResources[strings.ToLower(profile.Type)]; !ok {
 				trackPruned(plan, PruneReasonResourceFiltered)

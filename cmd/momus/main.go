@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
@@ -55,6 +56,7 @@ func main() {
 	var includeOptional bool
 	var includeLowValuePaths bool
 	var baseURL string
+	var capabilityBaseURL string
 	var scopeToCapability bool
 	var failOnUncovered bool
 
@@ -168,7 +170,7 @@ func main() {
 			if outputPath == "" {
 				fmt.Println(string(out))
 			} else {
-				if err := os.WriteFile(outputPath, append(out, '\n'), 0o644); err != nil {
+				if err := writeOutputFile(outputPath, append(out, '\n')); err != nil {
 					return fmt.Errorf("write coverage plan to %s: %w", outputPath, err)
 				}
 			}
@@ -231,7 +233,7 @@ func main() {
 				return err
 			}
 
-			coverageResourceTypes, coverageProfileURLs, preferredProfilesByResource, err := resourceScopeForRun(cmd, includeResourceTypes, includeProfileURLs, baseURL, scopeToCapability, apiBearerToken, apiBasicUsername, apiBasicPassword)
+			coverageResourceTypes, coverageProfileURLs, preferredProfilesByResource, err := resourceScopeForRun(cmd, includeResourceTypes, includeProfileURLs, baseURL, capabilityBaseURL, scopeToCapability, apiBearerToken, apiBasicUsername, apiBasicPassword)
 			if err != nil {
 				return err
 			}
@@ -265,7 +267,7 @@ func main() {
 			if outputPath == "" {
 				fmt.Println(string(out))
 			} else {
-				if err := os.WriteFile(outputPath, append(out, '\n'), 0o644); err != nil {
+				if err := writeOutputFile(outputPath, append(out, '\n')); err != nil {
 					return fmt.Errorf("write AST plan to %s: %w", outputPath, err)
 				}
 			}
@@ -288,6 +290,7 @@ func main() {
 	astCmd.Flags().BoolVar(&includeOptional, "include-optional", false, "include optional non-mustSupport elements")
 	astCmd.Flags().BoolVar(&includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
 	astCmd.Flags().StringVar(&baseURL, "base-url", "", "target FHIR base URL for request nodes")
+	astCmd.Flags().StringVar(&capabilityBaseURL, "capability-base-url", "", "optional alternate FHIR base URL to fetch CapabilityStatement metadata for scope/profile selection")
 
 	runCmd := &cobra.Command{
 		Use:   "run <path-to-package.tgz>",
@@ -323,7 +326,7 @@ func main() {
 				return err
 			}
 
-			capabilityResourceTypes, capabilityProfileURLs, preferredProfilesByResource, err := resourceScopeForRun(cmd, includeResourceTypes, includeProfileURLs, baseURL, scopeToCapability, apiBearerToken, apiBasicUsername, apiBasicPassword)
+			capabilityResourceTypes, capabilityProfileURLs, preferredProfilesByResource, err := resourceScopeForRun(cmd, includeResourceTypes, includeProfileURLs, baseURL, capabilityBaseURL, scopeToCapability, apiBearerToken, apiBasicUsername, apiBasicPassword)
 			if err != nil {
 				return err
 			}
@@ -373,7 +376,7 @@ func main() {
 			if outputPath == "" {
 				fmt.Println(string(out))
 			} else {
-				if err := os.WriteFile(outputPath, append(out, '\n'), 0o644); err != nil {
+				if err := writeOutputFile(outputPath, append(out, '\n')); err != nil {
 					return fmt.Errorf("write test report to %s: %w", outputPath, err)
 				}
 			}
@@ -391,6 +394,7 @@ func main() {
 			fmt.Printf("Contractual coverage: %.1f%% (%d/%d)\n", coverageEvaluation.CoveragePercent, coverageEvaluation.CoveredRequirements, coverageEvaluation.TotalRequirements)
 			if coverageEvaluation.UncoveredRequirements > 0 {
 				fmt.Printf("Uncovered contractual obligations: %d\n", coverageEvaluation.UncoveredRequirements)
+				printCoverageGapSummary(coverageEvaluation)
 				for idx, req := range coverageEvaluation.Uncovered {
 					if idx >= 10 {
 						break
@@ -420,6 +424,7 @@ func main() {
 	runCmd.Flags().BoolVar(&scopeToCapability, "scope-to-capability", true, "limit derivation to CapabilityStatement server resources that support create")
 	runCmd.Flags().BoolVar(&failOnUncovered, "fail-on-uncovered", false, "return non-zero exit code when contractual coverage has uncovered obligations")
 	runCmd.Flags().StringVar(&baseURL, "base-url", "", "target FHIR base URL for request execution")
+	runCmd.Flags().StringVar(&capabilityBaseURL, "capability-base-url", "", "optional alternate FHIR base URL to fetch CapabilityStatement metadata for scope/profile selection")
 	runCmd.Flags().StringVar(&apiBearerToken, "api-bearer-token", "", "bearer token used for API requests during coverage run")
 	runCmd.Flags().StringVar(&apiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during coverage run")
 	runCmd.Flags().StringVar(&apiBasicPassword, "api-basic-password", "", "basic auth password used for API requests during coverage run")
@@ -437,11 +442,15 @@ func main() {
 	}
 }
 
-func resourceScopeForRun(cmd *cobra.Command, includeResourceTypes, includeProfileURLs []string, baseURL string, scopeToCapability bool, bearerToken, basicUsername, basicPassword string) ([]string, []string, map[string][]string, error) {
+func resourceScopeForRun(cmd *cobra.Command, includeResourceTypes, includeProfileURLs []string, baseURL, capabilityBaseURL string, scopeToCapability bool, bearerToken, basicUsername, basicPassword string) ([]string, []string, map[string][]string, error) {
 	if !scopeToCapability {
 		return includeResourceTypes, includeProfileURLs, nil, nil
 	}
-	capabilityStatement, err := testcoverage.FetchCapabilityStatement(cmd.Context(), baseURL, testcoverage.CapabilityFetchOptions{
+	metadataBaseURL := strings.TrimSpace(capabilityBaseURL)
+	if metadataBaseURL == "" {
+		metadataBaseURL = baseURL
+	}
+	capabilityStatement, err := testcoverage.FetchCapabilityStatement(cmd.Context(), metadataBaseURL, testcoverage.CapabilityFetchOptions{
 		BearerToken:   bearerToken,
 		BasicUsername: basicUsername,
 		BasicPassword: basicPassword,
@@ -452,6 +461,13 @@ func resourceScopeForRun(cmd *cobra.Command, includeResourceTypes, includeProfil
 	capabilityTypes := testcoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, true)
 	capabilityProfiles := testcoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, true)
 	capabilityProfilesByResource := testcoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, true)
+	if len(capabilityTypes) == 0 {
+		// Some CapabilityStatements omit per-resource create interactions.
+		// Fall back to server-declared resource/profile scope instead of unscoped derivation.
+		capabilityTypes = testcoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, false)
+		capabilityProfiles = testcoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, false)
+		capabilityProfilesByResource = testcoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, false)
+	}
 	if len(capabilityProfiles) > 0 {
 		return intersectCaseInsensitive(includeResourceTypes, capabilityTypes), intersectCaseInsensitive(includeProfileURLs, capabilityProfiles), capabilityProfilesByResource, nil
 	}
@@ -497,4 +513,69 @@ func marshalCoverageRunOutput(report *testrunner.Report, evaluation testcoverage
 	}
 	payload["coverage"] = evaluation
 	return json.MarshalIndent(payload, "", "  ")
+}
+
+func printCoverageGapSummary(evaluation testcoverage.EvaluationReport) {
+	for _, domain := range sortedDomainKeys(evaluation.ByDomain) {
+		summary := evaluation.ByDomain[domain]
+		if summary.Uncovered <= 0 {
+			continue
+		}
+		fmt.Printf("  Domain %s: %d uncovered\n", domain, summary.Uncovered)
+	}
+	for _, resourceType := range sortedStringKeys(evaluation.ByResourceType) {
+		summary := evaluation.ByResourceType[resourceType]
+		if summary.Uncovered <= 0 {
+			continue
+		}
+		fmt.Printf("  Resource %s: %d uncovered\n", resourceType, summary.Uncovered)
+	}
+	for _, variant := range sortedVariantKeys(evaluation.ByVariant) {
+		summary := evaluation.ByVariant[variant]
+		if summary.Uncovered <= 0 {
+			continue
+		}
+		fmt.Printf("  Variant %s: %d uncovered\n", variant, summary.Uncovered)
+	}
+}
+
+func sortedDomainKeys(m map[testcoverage.CoverageDomain]testcoverage.DomainCoverageSummary) []testcoverage.CoverageDomain {
+	keys := make([]testcoverage.CoverageDomain, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i] < keys[j]
+	})
+	return keys
+}
+
+func sortedVariantKeys(m map[testcoverage.CoverageVariant]testcoverage.DomainCoverageSummary) []testcoverage.CoverageVariant {
+	keys := make([]testcoverage.CoverageVariant, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i] < keys[j]
+	})
+	return keys
+}
+
+func sortedStringKeys(m map[string]testcoverage.DomainCoverageSummary) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func writeOutputFile(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(path, data, 0o644)
 }
