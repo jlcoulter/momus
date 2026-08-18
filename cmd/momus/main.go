@@ -465,15 +465,6 @@ func main() {
 			requirementCases, setupCases := countRequirementAndSetupCases(report.Cases)
 			fmt.Printf("Executed %d cases: %d passed, %d failed (%d requirement cases + %d setup cases)\n",
 				report.Total, report.Passed, report.Failed, requirementCases, setupCases)
-			if report.Diagnostics != nil && len(report.Diagnostics.TopSignatures) > 0 {
-				fmt.Printf("Top failure signatures (%d OperationOutcome failures):\n", report.Diagnostics.OperationOutcomeFailures)
-				for i, sig := range report.Diagnostics.TopSignatures {
-					fmt.Printf("  %d. %s (count=%d, req=%s)\n", i+1, sig.Signature, sig.Count, sig.ExampleRequirementID)
-				}
-				if report.Diagnostics.LikelyAuthFailure && report.Diagnostics.Hint != "" {
-					fmt.Printf("Hint: %s\n", report.Diagnostics.Hint)
-				}
-			}
 			fmt.Printf("Contractual coverage: %.1f%% (%d/%d)\n", coverageEvaluation.CoveragePercent, coverageEvaluation.CoveredRequirements, coverageEvaluation.TotalRequirements)
 			if requirementCases != coverageEvaluation.TotalRequirements {
 				fmt.Printf("WARNING: generated %d requirement cases but the plan defines %d obligations; check for duplicate or missing requirements\n", requirementCases, coverageEvaluation.TotalRequirements)
