@@ -58,6 +58,11 @@ Currently implemented:
   variant, with example requirement IDs and a plain-language hint, so a large
   run can be navigated to tell broken generated tests apart from server
   defects
+- Coverage reporting surfaces: JSON report (`--output`), console summary, and
+  an HTML report with drill-down navigation (`--html`) showing overall
+  coverage, per-domain percentages, and per-domain / per-resource / per-variant
+  lists where every executed item shows pass/fail and expands to its assertion,
+  request URL/body, and response body
 - Interaction (pairwise) coverage: the plan carries an interaction `Strength`
   (1 = individual, 2 = pairwise); at strength 2 pairwise obligations between
   accept requirements on the same profile are derived as an `interaction`
@@ -305,7 +310,8 @@ Execute generated tests with the minimal runner and output a JSON result report:
 ```sh
 go run ./cmd/momus coverage run package.tgz \
   --base-url http://localhost:8080/fhir \
-  --output ./test-results.json
+  --output ./test-results.json \
+  --html ./coverage.html
 ```
 
 Example summary output:
@@ -313,7 +319,14 @@ Example summary output:
 ```text
 Executed 42 cases: 40 passed, 2 failed
 Test report written to ./test-results.json
+HTML report written to ./coverage.html
 ```
+
+The `--html` flag writes an HTML coverage report with drill-down navigation:
+overall contractual coverage, per-domain percentages always visible, and
+per-domain / per-resource / per-variant lists where every executed item shows a
+pass/fail badge and expands to its assertion, request URL, request body, and
+response body.
 
 Generate realistic bulk data as NDJSON (newline-delimited JSON, the FHIR Bulk
 Data `$export` format):

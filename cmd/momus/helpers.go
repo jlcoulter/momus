@@ -189,6 +189,35 @@ func compactFailure(c testrunner.CaseResult) map[string]any {
 	return m
 }
 
+// htmlItems converts executed runner cases into HTML report items carrying
+// pass/fail status and, for drill-down, their assertion and request/response
+// detail. Setup scaffolding cases (no trace) are excluded.
+func htmlItems(cases []testrunner.CaseResult) []testcoverage.HTMLItem {
+	out := make([]testcoverage.HTMLItem, 0, len(cases))
+	for _, c := range cases {
+		if c.Trace == nil {
+			continue
+		}
+		item := testcoverage.HTMLItem{
+			ID:         c.RequirementID,
+			Domain:     c.Trace.Domain,
+			Resource:   c.Trace.ResourceType,
+			Variant:    c.Trace.Variant,
+			Expression: c.Expression,
+			Passed:     c.Passed,
+			StatusCode: c.StatusCode,
+		}
+		if c.Debug != nil {
+			item.RequestMethod = c.Debug.RequestMethod
+			item.RequestURL = c.Debug.RequestURL
+			item.RequestBody = c.Debug.RequestBody
+			item.ResponseBody = c.Debug.ResponseBody
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
 func countRequirementAndSetupCases(cases []testrunner.CaseResult) (requirement, setup int) {
 	seenReq := make(map[string]struct{})
 	seenSetup := make(map[string]struct{})

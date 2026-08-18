@@ -15,6 +15,7 @@ type config struct {
 
 	// Output
 	outputPath string
+	htmlReport string
 
 	// Derivation scoping
 	includeResourceTypes []string

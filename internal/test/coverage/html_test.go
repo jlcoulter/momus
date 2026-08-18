@@ -1,0 +1,52 @@
+package coverage
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestRenderHTMLIncludesDrillDownItems(t *testing.T) {
+	evaluation := EvaluationReport{
+		TotalRequirements:     3,
+		CoveredRequirements:   1,
+		UncoveredRequirements: 2,
+		CoveragePercent:       33.333,
+		ByDomain: map[CoverageDomain]DomainCoverageSummary{
+			CoverageDomainCardinality: {Total: 2, Covered: 1, Uncovered: 1, CoveragePercent: 50},
+			CoverageDomainDatatype:    {Total: 1, Covered: 0, Uncovered: 1, CoveragePercent: 0},
+		},
+	}
+
+	items := []HTMLItem{
+		{ID: "req-1", Domain: "cardinality", Resource: "Patient", Variant: "missing-required", Expression: "status in [200]", Passed: false, StatusCode: 422, RequestMethod: "PUT", RequestURL: "http://localhost/fhir/Patient", RequestBody: `{"status":"final"}`, ResponseBody: `{"resourceType":"OperationOutcome"}`},
+		{ID: "req-2", Domain: "datatype", Resource: "Patient", Variant: "datatype-valid", Expression: "status in [200]", Passed: true, StatusCode: 200, RequestMethod: "GET", RequestURL: "http://localhost/fhir/Patient/1"},
+	}
+
+	out, err := RenderHTML(evaluation, items)
+	if err != nil {
+		t.Fatalf("RenderHTML returned error: %v", err)
+	}
+	html := string(out)
+	for _, want := range []string{
+		"<title>Momus Coverage Report</title>",
+		"33.3%",
+		"By Domain",
+		"By Resource Type",
+		"By Variant",
+		"cardinality",
+		"datatype",
+		"req-1",
+		"req-2",
+		"PASS",
+		"FAIL",
+		"http://localhost/fhir/Patient",
+		"status in [200]",
+		"OperationOutcome",
+		"Request Body",
+		"Response Body",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("HTML report missing %q\n%s", want, html)
+		}
+	}
+}

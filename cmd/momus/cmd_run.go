@@ -108,7 +108,9 @@ func newRunCmd(cfg *config) *cobra.Command {
 				BearerToken:   cfg.apiBearerToken,
 				BasicUsername: cfg.apiBasicUsername,
 				BasicPassword: cfg.apiBasicPassword,
-				IncludeDebug:  cfg.debug,
+				// Capture request/response detail whenever an HTML report is
+				// requested, so failed cases can drill down into them.
+				IncludeDebug: cfg.debug || cfg.htmlReport != "",
 			})
 			if err != nil {
 				return err
@@ -122,6 +124,17 @@ func newRunCmd(cfg *config) *cobra.Command {
 				})
 			}
 			coverageEvaluation := testcoverage.EvaluateCoverage(coveragePlan, executed)
+
+			if cfg.htmlReport != "" {
+				html, err := testcoverage.RenderHTML(coverageEvaluation, htmlItems(report.Cases))
+				if err != nil {
+					return fmt.Errorf("render html report: %w", err)
+				}
+				if err := writeOutputFile(cfg.htmlReport, html); err != nil {
+					return fmt.Errorf("write html report to %s: %w", cfg.htmlReport, err)
+				}
+				fmt.Printf("HTML report written to %s\n", cfg.htmlReport)
+			}
 
 			out, err := marshalCoverageRunOutput(report, coverageEvaluation, cfg.includeCases)
 			if err != nil {
@@ -169,6 +182,7 @@ func newRunCmd(cfg *config) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.downloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
 	cmd.Flags().StringVar(&cfg.conflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
 	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write test result report JSON to a file")
+	cmd.Flags().StringVar(&cfg.htmlReport, "html", "", "write an HTML coverage report with drill-down to a file")
 	cmd.Flags().StringSliceVar(&cfg.includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable)")
 	cmd.Flags().StringSliceVar(&cfg.includeProfileURLs, "include-profile-url", nil, "include only these profile canonical URLs (repeatable)")
 	cmd.Flags().StringSliceVar(&cfg.excludePathPrefixes, "exclude-path-prefix", nil, "exclude element paths by prefix (repeatable)")

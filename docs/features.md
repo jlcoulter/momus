@@ -225,12 +225,13 @@ workflows and the runner (9) to execute them efficiently.
 
 ## 11. Coverage reporting surfaces
 
-**Status: JSON report plus console summary exist; domain percentages print
-only on gaps.**
-
-Produce the architecture's illustrative report: per-domain percentages
-always visible, overall contractual coverage, and explicit uncovered
-obligation lists, in both machine (JSON) and human (console/HTML) forms.
+**Status: implemented.** `coverage run` produces the architecture's coverage
+report in three forms: a JSON report (`--output`), a console summary, and an
+HTML report with drill-down navigation (`--html <path>`). The HTML report
+shows the overall contractual coverage and per-domain percentages always
+visible, and its per-domain / per-resource / per-variant sections list every
+executed item with a pass/fail badge; each item expands to its assertion,
+request URL, request body, and response body.
 
 Why eleventh: reporting is only as meaningful as the domains behind it; by
 this point the report has real content to show.
