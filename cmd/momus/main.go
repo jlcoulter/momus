@@ -4,11 +4,14 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
 	testconstraint "github.com/jlcoulter/momus/internal/fhir/constraint"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
@@ -518,6 +521,14 @@ func resourceScopeForRun(cmd *cobra.Command, includeResourceTypes, includeProfil
 		BasicPassword: basicPassword,
 	})
 	if err != nil {
+		// When the target server is not reachable, fall back to the loaded
+		// package as the source of truth rather than failing the run. Other
+		// errors (a reachable server returning an auth or protocol error) are
+		// surfaced so misconfiguration is not silently ignored.
+		if isServerUnavailable(err) {
+			fmt.Fprintf(os.Stderr, "WARNING: target server unreachable (%v); falling back to package definitions as source of truth\n", err)
+			return includeResourceTypes, includeProfileURLs, nil, nil
+		}
 		return nil, nil, nil, err
 	}
 	capabilityTypes := testcoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, true)
@@ -537,6 +548,34 @@ func resourceScopeForRun(cmd *cobra.Command, includeResourceTypes, includeProfil
 		return includeResourceTypes, includeProfileURLs, capabilityProfilesByResource, nil
 	}
 	return intersectCaseInsensitive(includeResourceTypes, capabilityTypes), includeProfileURLs, capabilityProfilesByResource, nil
+}
+
+// isServerUnavailable reports whether a fetch error means the target server
+// could not be reached, as opposed to a reachable server returning an
+// application/protocol error.
+func isServerUnavailable(err error) bool {
+	if err == nil {
+		return false
+	}
+	for _, target := range []error{
+		syscall.ECONNREFUSED,
+		syscall.ECONNRESET,
+		syscall.ENETUNREACH,
+		syscall.EHOSTUNREACH,
+	} {
+		if errors.Is(err, target) {
+			return true
+		}
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	return false
 }
 
 func intersectCaseInsensitive(requested, available []string) []string {
