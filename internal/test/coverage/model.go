@@ -28,7 +28,40 @@ type CoverageRequirement struct {
 	Max          string          `json:"max"`
 }
 
+// DeriveOptions controls which profile elements become coverage obligations.
+type DeriveOptions struct {
+	IncludeResourceTypes []string
+	IncludeProfileURLs   []string
+	ExcludePathPrefixes  []string
+	MustSupportOnly      bool
+	IncludeOptional      bool
+	IncludeLowValuePaths bool
+}
+
+// PruneReason describes why an element was excluded from derivation.
+type PruneReason string
+
+const (
+	PruneReasonResourceFiltered    PruneReason = "resource-filtered"
+	PruneReasonProfileFiltered     PruneReason = "profile-filtered"
+	PruneReasonRootPath            PruneReason = "root-path"
+	PruneReasonLowValuePath        PruneReason = "low-value-path"
+	PruneReasonExcludedPathPrefix  PruneReason = "excluded-path-prefix"
+	PruneReasonMustSupportFiltered PruneReason = "must-support-filtered"
+	PruneReasonOptionalFiltered    PruneReason = "optional-filtered"
+)
+
+// CoverageSummary provides explainability for a derived plan.
+type CoverageSummary struct {
+	TotalRequirements int                     `json:"totalRequirements"`
+	ByDomain          map[CoverageDomain]int  `json:"byDomain"`
+	ByResourceType    map[string]int          `json:"byResourceType"`
+	ByVariant         map[CoverageVariant]int `json:"byVariant"`
+	PrunedByReason    map[PruneReason]int     `json:"prunedByReason"`
+}
+
 // CoveragePlan is the list of obligations derived from selected contracts.
 type CoveragePlan struct {
 	Requirements []CoverageRequirement `json:"requirements"`
+	Summary      CoverageSummary       `json:"summary"`
 }

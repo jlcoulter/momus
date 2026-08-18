@@ -60,17 +60,11 @@ func TestDeriveMVPPlanPatientNameOptionalSingle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeriveMVPPlan returned error: %v", err)
 	}
-	if len(plan.Requirements) != 1 {
-		t.Fatalf("got %d requirements, want 1", len(plan.Requirements))
+	if len(plan.Requirements) != 0 {
+		t.Fatalf("got %d requirements, want 0", len(plan.Requirements))
 	}
-	if !hasVariant(plan, CoverageVariantValidMin) {
-		t.Fatal("expected valid-min requirement")
-	}
-	if hasVariant(plan, CoverageVariantMissingRequired) {
-		t.Fatal("did not expect missing-required requirement")
-	}
-	if hasVariant(plan, CoverageVariantMultipleValues) {
-		t.Fatal("did not expect multiple-values requirement")
+	if plan.Summary.PrunedByReason[PruneReasonOptionalFiltered] == 0 {
+		t.Fatal("expected optional-filtered prune reason")
 	}
 }
 
@@ -91,6 +85,73 @@ func TestDeriveMVPPlanDerivesWithoutPatientProfiles(t *testing.T) {
 	}
 	if len(plan.Requirements) != 2 {
 		t.Fatalf("got %d requirements, want 2", len(plan.Requirements))
+	}
+}
+
+func TestDerivePlanIncludeOptional(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/patient-profile",
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 0, Max: "1"},
+		},
+	})
+
+	plan, err := DerivePlan(r, DeriveOptions{IncludeOptional: true})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+	if len(plan.Requirements) != 1 {
+		t.Fatalf("got %d requirements, want 1", len(plan.Requirements))
+	}
+	if !hasVariant(plan, CoverageVariantValidMin) {
+		t.Fatal("expected valid-min requirement")
+	}
+}
+
+func TestDerivePlanScopeAndPruningOptions(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/patient-profile",
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.identifier", Min: 0, Max: "*", MustSupport: true},
+			{Path: "Patient.meta", Min: 0, Max: "1", MustSupport: true},
+			{Path: "Patient.name", Min: 1, Max: "*"},
+		},
+	})
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/observation-profile",
+		Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation.status", Min: 1, Max: "1", MustSupport: true},
+		},
+	})
+
+	plan, err := DerivePlan(r, DeriveOptions{
+		IncludeResourceTypes: []string{"Patient"},
+		MustSupportOnly:      true,
+		ExcludePathPrefixes:  []string{"Patient.meta"},
+	})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+
+	if len(plan.Requirements) != 2 {
+		t.Fatalf("got %d requirements, want 2", len(plan.Requirements))
+	}
+	if plan.Summary.ByResourceType["Patient"] != 2 {
+		t.Fatalf("got patient summary count %d, want 2", plan.Summary.ByResourceType["Patient"])
+	}
+	if plan.Summary.PrunedByReason[PruneReasonResourceFiltered] == 0 {
+		t.Fatal("expected resource-filtered prune reason")
+	}
+	if plan.Summary.PrunedByReason[PruneReasonExcludedPathPrefix] == 0 {
+		t.Fatal("expected excluded-path-prefix prune reason")
 	}
 }
 

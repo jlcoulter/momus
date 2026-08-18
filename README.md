@@ -145,11 +145,21 @@ Derive an MVP coverage plan from resolved package constraints:
 go run ./cmd/momus coverage derive package.tgz
 ```
 
+Derivation defaults are intentionally practical:
+
+- Includes required elements (`min > 0`)
+- Includes `mustSupport` elements
+- Excludes optional non-`mustSupport` elements unless `--include-optional` is set
+- Excludes low-value infrastructure paths (such as `meta`, `text`, `language`) unless `--include-low-value-paths` is set
+
 Example output:
 
 ```text
 Derived 3 coverage requirements from 10 resolved packages
 - cardinality: 3
+Resource types: 1, variants: 3
+Pruned elements:
+- optional-filtered: 42
 ```
 
 The command also prints the JSON coverage plan to stdout by default.
@@ -158,6 +168,15 @@ Write the plan to a file:
 
 ```sh
 go run ./cmd/momus coverage derive package.tgz --output ./coverage-plan.json
+```
+
+Scope derivation to specific contracts:
+
+```sh
+go run ./cmd/momus coverage derive package.tgz \
+  --include-resource Observation \
+  --include-profile-url http://hl7.org/fhir/StructureDefinition/Observation \
+  --exclude-path-prefix Observation.meta
 ```
 
 ## License

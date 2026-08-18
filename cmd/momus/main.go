@@ -42,6 +42,12 @@ func main() {
 	var downloadDir string
 	var conflictPolicy string
 	var outputPath string
+	var includeResourceTypes []string
+	var includeProfileURLs []string
+	var excludePathPrefixes []string
+	var mustSupportOnly bool
+	var includeOptional bool
+	var includeLowValuePaths bool
 
 	loadCmd := &cobra.Command{
 		Use:   "load <path-to-package.tgz>",
@@ -133,7 +139,14 @@ func main() {
 				return err
 			}
 
-			plan, err := testcoverage.DeriveMVPPlan(reg)
+			plan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
+				IncludeResourceTypes: includeResourceTypes,
+				IncludeProfileURLs:   includeProfileURLs,
+				ExcludePathPrefixes:  excludePathPrefixes,
+				MustSupportOnly:      mustSupportOnly,
+				IncludeOptional:      includeOptional,
+				IncludeLowValuePaths: includeLowValuePaths,
+			})
 			if err != nil {
 				return err
 			}
@@ -151,14 +164,16 @@ func main() {
 				}
 			}
 
-			domainCounts := make(map[testcoverage.CoverageDomain]int)
-			for _, req := range plan.Requirements {
-				domainCounts[req.Domain]++
-			}
-
 			fmt.Printf("Derived %d coverage requirements from %d resolved packages\n", len(plan.Requirements), len(graph.Packages))
-			for domain, count := range domainCounts {
+			for domain, count := range plan.Summary.ByDomain {
 				fmt.Printf("- %s: %d\n", domain, count)
+			}
+			fmt.Printf("Resource types: %d, variants: %d\n", len(plan.Summary.ByResourceType), len(plan.Summary.ByVariant))
+			if len(plan.Summary.PrunedByReason) > 0 {
+				fmt.Println("Pruned elements:")
+				for reason, count := range plan.Summary.PrunedByReason {
+					fmt.Printf("- %s: %d\n", reason, count)
+				}
 			}
 			if outputPath != "" {
 				fmt.Printf("Coverage plan written to %s\n", outputPath)
@@ -170,6 +185,12 @@ func main() {
 	deriveCmd.Flags().StringVar(&downloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
 	deriveCmd.Flags().StringVar(&conflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
 	deriveCmd.Flags().StringVar(&outputPath, "output", "", "write derived coverage plan JSON to a file")
+	deriveCmd.Flags().StringSliceVar(&includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable)")
+	deriveCmd.Flags().StringSliceVar(&includeProfileURLs, "include-profile-url", nil, "include only these profile canonical URLs (repeatable)")
+	deriveCmd.Flags().StringSliceVar(&excludePathPrefixes, "exclude-path-prefix", nil, "exclude element paths by prefix (repeatable)")
+	deriveCmd.Flags().BoolVar(&mustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
+	deriveCmd.Flags().BoolVar(&includeOptional, "include-optional", false, "include optional non-mustSupport elements")
+	deriveCmd.Flags().BoolVar(&includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
 
 	packageCmd.AddCommand(loadCmd)
 	packageCmd.AddCommand(resolveCmd)
