@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
+	testast "github.com/jlcoulter/momus/internal/test/ast"
 	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
 	"github.com/spf13/cobra"
 )
@@ -48,6 +49,7 @@ func main() {
 	var mustSupportOnly bool
 	var includeOptional bool
 	var includeLowValuePaths bool
+	var baseURL string
 
 	loadCmd := &cobra.Command{
 		Use:   "load <path-to-package.tgz>",
@@ -192,9 +194,93 @@ func main() {
 	deriveCmd.Flags().BoolVar(&includeOptional, "include-optional", false, "include optional non-mustSupport elements")
 	deriveCmd.Flags().BoolVar(&includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
 
+	astCmd := &cobra.Command{
+		Use:   "ast <path-to-package.tgz>",
+		Short: "Generate a test AST from derived coverage requirements",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rootPath := args[0]
+			searchDir := depsDir
+			if searchDir == "" {
+				searchDir = filepath.Dir(rootPath)
+			}
+			cacheDir := downloadDir
+			if cacheDir == "" {
+				cacheDir = filepath.Join(searchDir, ".momus", "packages")
+			}
+
+			graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
+				DepsDir:        searchDir,
+				DownloadDir:    cacheDir,
+				ConflictPolicy: fhirpackage.ConflictPolicy(conflictPolicy),
+			})
+			if err != nil {
+				return err
+			}
+
+			builder := fhirpackage.NewRegistryBuilder()
+			reg, err := builder.BuildFromPackages(graph.Packages)
+			if err != nil {
+				return err
+			}
+
+			coveragePlan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
+				IncludeResourceTypes: includeResourceTypes,
+				IncludeProfileURLs:   includeProfileURLs,
+				ExcludePathPrefixes:  excludePathPrefixes,
+				MustSupportOnly:      mustSupportOnly,
+				IncludeOptional:      includeOptional,
+				IncludeLowValuePaths: includeLowValuePaths,
+			})
+			if err != nil {
+				return err
+			}
+
+			astPlan, err := testast.GenerateFromCoveragePlan(coveragePlan, testast.BuildOptions{BaseURL: baseURL})
+			if err != nil {
+				return err
+			}
+			encoded, err := testast.EncodePlan(astPlan)
+			if err != nil {
+				return err
+			}
+
+			out, err := json.MarshalIndent(encoded, "", "  ")
+			if err != nil {
+				return fmt.Errorf("marshal AST plan: %w", err)
+			}
+
+			if outputPath == "" {
+				fmt.Println(string(out))
+			} else {
+				if err := os.WriteFile(outputPath, append(out, '\n'), 0o644); err != nil {
+					return fmt.Errorf("write AST plan to %s: %w", outputPath, err)
+				}
+			}
+
+			fmt.Printf("Generated AST with %d requirement cases from %d resolved packages\n", len(coveragePlan.Requirements), len(graph.Packages))
+			if outputPath != "" {
+				fmt.Printf("AST plan written to %s\n", outputPath)
+			}
+			return nil
+		},
+	}
+	astCmd.Flags().StringVar(&depsDir, "deps-dir", "", "directory to search for dependency package archives (.tgz/.tar.gz)")
+	astCmd.Flags().StringVar(&downloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
+	astCmd.Flags().StringVar(&conflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
+	astCmd.Flags().StringVar(&outputPath, "output", "", "write generated AST plan JSON to a file")
+	astCmd.Flags().StringSliceVar(&includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable)")
+	astCmd.Flags().StringSliceVar(&includeProfileURLs, "include-profile-url", nil, "include only these profile canonical URLs (repeatable)")
+	astCmd.Flags().StringSliceVar(&excludePathPrefixes, "exclude-path-prefix", nil, "exclude element paths by prefix (repeatable)")
+	astCmd.Flags().BoolVar(&mustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
+	astCmd.Flags().BoolVar(&includeOptional, "include-optional", false, "include optional non-mustSupport elements")
+	astCmd.Flags().BoolVar(&includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
+	astCmd.Flags().StringVar(&baseURL, "base-url", "", "target FHIR base URL for request nodes")
+
 	packageCmd.AddCommand(loadCmd)
 	packageCmd.AddCommand(resolveCmd)
 	coverageCmd.AddCommand(deriveCmd)
+	coverageCmd.AddCommand(astCmd)
 	rootCmd.AddCommand(packageCmd)
 	rootCmd.AddCommand(coverageCmd)
 

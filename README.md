@@ -179,6 +179,21 @@ go run ./cmd/momus coverage derive package.tgz \
   --exclude-path-prefix Observation.meta
 ```
 
+Generate a test AST from derived coverage requirements:
+
+```sh
+go run ./cmd/momus coverage ast package.tgz --output ./test-ast.json
+```
+
+Optionally include a base URL for request nodes:
+
+```sh
+go run ./cmd/momus coverage ast package.tgz \
+  --base-url http://localhost:8080/fhir \
+  --include-resource Observation \
+  --output ./test-ast.json
+```
+
 ## License
 
 See [LICENSE](LICENSE).

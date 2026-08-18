@@ -6,6 +6,12 @@ type Node interface {
 	node()
 }
 
+// Plan is a serializable test plan artifact.
+type Plan struct {
+	Version string `json:"version"`
+	Root    Node   `json:"root"`
+}
+
 // Sequence runs its steps in order; later steps depend on earlier ones.
 type Sequence struct {
 	Steps []Node
@@ -32,8 +38,9 @@ type Capture struct {
 
 // Assert is a test assertion against a result.
 type Assert struct {
-	Description string
-	// Expression is intentionally minimal for now.
+	Description   string
+	RequirementID string
+	Expression    string
 }
 
 func (*Sequence) node() {}
