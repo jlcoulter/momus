@@ -10,7 +10,7 @@ func TestDataRequirementExpressesObservationConstraint(t *testing.T) {
 		Constraints: []Constraint{
 			{Path: "Observation.component.code.coding.code", Operator: OpEquals, Value: "1234-5"},
 		},
-		Cardinality: AtLeastOne(),
+		Cardinality: CardinalityRequirement{Min: 1, Max: -1},
 	}
 
 	if req.Resource.Type != "Observation" {

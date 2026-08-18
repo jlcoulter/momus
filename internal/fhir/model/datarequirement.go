@@ -36,18 +36,6 @@ type CardinalityRequirement struct {
 // Exactly requires exactly n resources.
 func Exactly(n int) CardinalityRequirement { return CardinalityRequirement{Min: n, Max: n} }
 
-// AtLeast requires at least n resources.
-func AtLeast(n int) CardinalityRequirement { return CardinalityRequirement{Min: n, Max: -1} }
-
-// AtMost requires at most n resources.
-func AtMost(n int) CardinalityRequirement { return CardinalityRequirement{Min: 0, Max: n} }
-
-// AtLeastOne requires one or more resources.
-func AtLeastOne() CardinalityRequirement { return AtLeast(1) }
-
-// Any requires zero or more resources.
-func Any() CardinalityRequirement { return CardinalityRequirement{Min: 0, Max: -1} }
-
 // DataRequirement is a declarative description of FHIR data that a test
 // needs. It is the bridge between test planning and resource generation.
 type DataRequirement struct {

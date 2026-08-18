@@ -59,7 +59,7 @@ func keys(m map[string]*model.ResourceInstance) []string {
 
 func TestGeneratePopulatesRequiredElements(t *testing.T) {
 	reg := testRegistry(t)
-	gen := NewGenerator(reg)
+	gen := NewGeneratorWithOptions(reg, Options{})
 
 	ds, err := gen.Generate(context.Background(), model.DataRequirement{
 		Resource:    model.ResourceRequirement{Type: "Observation", Profile: []string{obsProfile}},
@@ -84,7 +84,7 @@ func TestGeneratePopulatesRequiredElements(t *testing.T) {
 
 func TestGenerateWiresRelationshipReference(t *testing.T) {
 	reg := testRegistry(t)
-	gen := NewGenerator(reg)
+	gen := NewGeneratorWithOptions(reg, Options{})
 
 	ds, err := gen.Generate(context.Background(), model.DataRequirement{
 		ID:          "obs-with-subject",
@@ -131,7 +131,7 @@ func TestGenerateWiresRelationshipReference(t *testing.T) {
 
 func TestGenerateHonoursCardinality(t *testing.T) {
 	reg := testRegistry(t)
-	gen := NewGenerator(reg)
+	gen := NewGeneratorWithOptions(reg, Options{})
 
 	ds, err := gen.Generate(context.Background(), model.DataRequirement{
 		Resource:    model.ResourceRequirement{Type: "Observation", Profile: []string{obsProfile}},
@@ -150,7 +150,7 @@ func TestGenerateHonoursCardinality(t *testing.T) {
 
 func TestGenerateAppliesEqualsConstraints(t *testing.T) {
 	reg := testRegistry(t)
-	gen := NewGenerator(reg)
+	gen := NewGeneratorWithOptions(reg, Options{})
 
 	ds, err := gen.Generate(context.Background(), model.DataRequirement{
 		Resource:    model.ResourceRequirement{Type: "Observation", Profile: []string{obsProfile}},
@@ -167,11 +167,11 @@ func TestGenerateAppliesEqualsConstraints(t *testing.T) {
 }
 
 func TestGenerateRequiresRegistryAndType(t *testing.T) {
-	if _, err := NewGenerator(nil).Generate(context.Background(), model.DataRequirement{}); err == nil {
+	if _, err := NewGeneratorWithOptions(nil, Options{}).Generate(context.Background(), model.DataRequirement{}); err == nil {
 		t.Fatal("expected error for nil registry")
 	}
 	reg := testRegistry(t)
-	if _, err := NewGenerator(reg).Generate(context.Background(), model.DataRequirement{}); err == nil {
+	if _, err := NewGeneratorWithOptions(reg, Options{}).Generate(context.Background(), model.DataRequirement{}); err == nil {
 		t.Fatal("expected error for missing resource type")
 	}
 }
@@ -183,7 +183,7 @@ func TestGenerateExhaustiveIncludesRequiredAndAddsOptionals(t *testing.T) {
 		Cardinality: model.Exactly(1),
 	}
 
-	genDefault := NewGenerator(reg)
+	genDefault := NewGeneratorWithOptions(reg, Options{})
 	dsDefault, err := genDefault.Generate(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Generate returned error: %v", err)
@@ -222,7 +222,7 @@ func TestGenerateExhaustiveIncludesRequiredAndAddsOptionals(t *testing.T) {
 
 func TestGenerateDefaultOmitsOptionalElements(t *testing.T) {
 	reg := testRegistry(t)
-	gen := NewGenerator(reg)
+	gen := NewGeneratorWithOptions(reg, Options{})
 
 	ds, err := gen.Generate(context.Background(), model.DataRequirement{
 		Resource:    model.ResourceRequirement{Type: "Observation", Profile: []string{obsProfile}},

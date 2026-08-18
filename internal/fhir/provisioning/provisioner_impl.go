@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -45,27 +44,6 @@ func New(baseURL string, options *Options) *ServerProvisioner {
 		opts.HTTPClient = &http.Client{Timeout: 30 * time.Second}
 	}
 	return &ServerProvisioner{baseURL: baseURL, options: opts}
-}
-
-// Provision writes every resource in ds to the server, creating targets before
-// their dependents, and records each server-assigned id on the instance.
-func (p *ServerProvisioner) Provision(ctx context.Context, ds *model.Dataset) error {
-	if p.baseURL == "" {
-		return errors.New("provisioner requires a base URL")
-	}
-	if ds == nil {
-		return nil
-	}
-	for _, id := range provisionOrder(ds) {
-		instance := ds.Resources[id]
-		if instance == nil {
-			continue
-		}
-		if err := p.provisionInstance(ctx, instance); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // Result reports the outcome of a best-effort provisioning pass.

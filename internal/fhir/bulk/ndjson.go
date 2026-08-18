@@ -6,12 +6,10 @@ package bulk
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"sort"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 )
@@ -44,36 +42,6 @@ func (wr *Writer) WriteInstance(inst *model.ResourceInstance) error {
 	return wr.w.WriteByte('\n')
 }
 
-// WriteDataset writes every resource in ds as an NDJSON line. Ordering is
-// deterministic (by local ID) so the same dataset always yields the same byte
-// stream regardless of map iteration order.
-func (wr *Writer) WriteDataset(ds *model.Dataset) error {
-	if ds == nil {
-		return errors.New("bulk: dataset is required")
-	}
-	ids := make([]string, 0, len(ds.Resources))
-	for id := range ds.Resources {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		if err := wr.WriteInstance(ds.Resources[id]); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// WriteDatasets writes every resource across all datasets in order.
-func (wr *Writer) WriteDatasets(datasets []*model.Dataset) error {
-	for _, ds := range datasets {
-		if err := wr.WriteDataset(ds); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // WriteInstances writes the given resource instances as NDJSON lines, in
 // order.
 func (wr *Writer) WriteInstances(instances []*model.ResourceInstance) error {
@@ -88,33 +56,4 @@ func (wr *Writer) WriteInstances(instances []*model.ResourceInstance) error {
 // Close flushes pending output to the underlying writer.
 func (wr *Writer) Close() error {
 	return wr.w.Flush()
-}
-
-// EncodeDataset serialises ds to NDJSON bytes using the same deterministic
-// ordering as WriteDataset. It is a convenience for callers that want an
-// in-memory buffer rather than streaming.
-func EncodeDataset(ds *model.Dataset) ([]byte, error) {
-	if ds == nil {
-		return nil, errors.New("bulk: dataset is required")
-	}
-	var buf bytes.Buffer
-	w := NewWriter(&buf)
-	if err := w.WriteDataset(ds); err != nil {
-		return nil, err
-	}
-	if err := w.Close(); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-// Count reports the total number of resources across datasets.
-func Count(datasets []*model.Dataset) int {
-	total := 0
-	for _, ds := range datasets {
-		if ds != nil {
-			total += len(ds.Resources)
-		}
-	}
-	return total
 }

@@ -10,12 +10,6 @@ import (
 	"github.com/jlcoulter/momus/internal/test/ast"
 )
 
-// Provisioner writes a generated Dataset to a target FHIR server ahead of
-// execution.
-type Provisioner interface {
-	Provision(ctx context.Context, dataset *model.Dataset) error
-}
-
 // DefaultPlanner turns data requirements into a TestPlan. It generates a
 // Dataset via the Generator and lays out an executable AST that provisions the
 // dataset in dependency order (targets before dependents), choosing Parallel

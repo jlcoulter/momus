@@ -67,14 +67,6 @@ func SetDebug(enabled bool) {
 	logLevel.Set(slog.LevelInfo)
 }
 
-// SetLogger overrides the logger used by this package.
-func SetLogger(l *slog.Logger) {
-	if l == nil {
-		return
-	}
-	logger = l
-}
-
 func debug(msg string, args ...any) {
 	logger.Debug(msg, args...)
 }

@@ -15,16 +15,6 @@ func NewRegistryBuilder() *RegistryBuilder {
 	return &RegistryBuilder{}
 }
 
-// Build loads every resource in p into a freshly created Registry.
-// Unknown resource types are skipped.
-func (b *RegistryBuilder) Build(p *Package) (*registry.Registry, error) {
-	if p == nil {
-		debug("registry build requested with nil package")
-		return registry.New(), nil
-	}
-	return b.BuildFromPackages([]*Package{p})
-}
-
 // BuildFromPackages loads every resource from pkgs into a freshly created
 // Registry. Unknown resource types are skipped.
 func (b *RegistryBuilder) BuildFromPackages(pkgs []*Package) (*registry.Registry, error) {

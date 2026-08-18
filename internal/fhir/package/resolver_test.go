@@ -18,7 +18,7 @@ func TestResolveLocalPackageGraphLinear(t *testing.T) {
 	writePackageArchive(t, dir, "b.pkg", "1.0.0", map[string]string{"c.pkg": "1.0.0"})
 	writePackageArchive(t, dir, "c.pkg", "1.0.0", nil)
 
-	graph, err := ResolveLocalPackageGraph(rootPath, dir)
+	graph, err := ResolveLocalPackageGraphWithOptions(rootPath, ResolveOptions{DepsDir: dir, ConflictPolicy: ConflictPolicyRootWins})
 	if err != nil {
 		t.Fatalf("ResolveLocalPackageGraph returned error: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestResolveLocalPackageGraphDiamondDeDupes(t *testing.T) {
 	writePackageArchive(t, dir, "c.pkg", "1.0.0", map[string]string{"d.pkg": "1.0.0"})
 	writePackageArchive(t, dir, "d.pkg", "1.0.0", nil)
 
-	graph, err := ResolveLocalPackageGraph(rootPath, dir)
+	graph, err := ResolveLocalPackageGraphWithOptions(rootPath, ResolveOptions{DepsDir: dir, ConflictPolicy: ConflictPolicyRootWins})
 	if err != nil {
 		t.Fatalf("ResolveLocalPackageGraph returned error: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestResolveLocalPackageGraphCycle(t *testing.T) {
 	rootPath := writePackageArchive(t, dir, "a.pkg", "1.0.0", map[string]string{"b.pkg": "1.0.0"})
 	writePackageArchive(t, dir, "b.pkg", "1.0.0", map[string]string{"a.pkg": "1.0.0"})
 
-	graph, err := ResolveLocalPackageGraph(rootPath, dir)
+	graph, err := ResolveLocalPackageGraphWithOptions(rootPath, ResolveOptions{DepsDir: dir, ConflictPolicy: ConflictPolicyRootWins})
 	if err != nil {
 		t.Fatalf("ResolveLocalPackageGraph returned error: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestResolveLocalPackageGraphMissingDependency(t *testing.T) {
 
 	rootPath := writePackageArchive(t, dir, "a.pkg", "1.0.0", map[string]string{"missing.pkg": "1.0.0"})
 
-	_, err := ResolveLocalPackageGraph(rootPath, dir)
+	_, err := ResolveLocalPackageGraphWithOptions(rootPath, ResolveOptions{DepsDir: dir, ConflictPolicy: ConflictPolicyRootWins})
 	if err == nil {
 		t.Fatal("expected missing dependency error, got nil")
 	}
@@ -128,7 +128,7 @@ func TestResolveLocalPackageGraphRootWinsConflictPolicy(t *testing.T) {
 	writePackageArchive(t, dir, "b.pkg", "1.0.0", nil)
 	writePackageArchive(t, dir, "c.pkg", "1.0.0", map[string]string{"b.pkg": "1.0.0"})
 
-	graph, err := ResolveLocalPackageGraph(rootPath, dir)
+	graph, err := ResolveLocalPackageGraphWithOptions(rootPath, ResolveOptions{DepsDir: dir, ConflictPolicy: ConflictPolicyRootWins})
 	if err != nil {
 		t.Fatalf("ResolveLocalPackageGraph returned error: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestResolveLocalPackageGraphFetchesMissingDependencyRemotely(t *testing.T) 
 		httpClient = oldClient
 	}()
 
-	graph, err := ResolveLocalPackageGraphWithDownloadDir(rootPath, dir, downloadDir)
+	graph, err := ResolveLocalPackageGraphWithOptions(rootPath, ResolveOptions{DepsDir: dir, DownloadDir: downloadDir, ConflictPolicy: ConflictPolicyRootWins})
 	if err != nil {
 		t.Fatalf("ResolveLocalPackageGraph returned error: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestResolveLocalPackageGraphResolvesCurrentVersionRemotely(t *testing.T) {
 		httpClient = oldClient
 	}()
 
-	graph, err := ResolveLocalPackageGraphWithDownloadDir(rootPath, dir, downloadDir)
+	graph, err := ResolveLocalPackageGraphWithOptions(rootPath, ResolveOptions{DepsDir: dir, DownloadDir: downloadDir, ConflictPolicy: ConflictPolicyRootWins})
 	if err != nil {
 		t.Fatalf("ResolveLocalPackageGraph returned error: %v", err)
 	}
@@ -305,86 +305,6 @@ func TestResolveLocalPackageGraphResolvesCurrentVersionRemotely(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(downloadDir, "b.pkg-2.0.1.tgz")); err != nil {
 		t.Fatalf("expected downloaded dependency archive in download dir: %v", err)
-	}
-}
-
-func TestResolveLocalPackageGraphUsesRegistryBasicAuth(t *testing.T) {
-	dir := t.TempDir()
-	downloadDir := filepath.Join(dir, ".momus", "packages")
-	rootPath := writePackageArchive(t, dir, "a.pkg", "1.0.0", map[string]string{"b.pkg": "1.0.0"})
-	remoteArchive := buildTestPackageArchiveAtPath(t, filepath.Join(t.TempDir(), "b.pkg-1.0.0.tgz"), map[string]any{
-		"package/package.json": map[string]any{
-			"name":         "b.pkg",
-			"version":      "1.0.0",
-			"dependencies": map[string]string{},
-		},
-		"package/ValueSet-b.pkg.json": map[string]any{
-			"resourceType": "ValueSet",
-			"url":          "http://example.org/ValueSet/b.pkg",
-			"version":      "1.0.0",
-			"name":         "b.pkgValueSet",
-			"status":       "active",
-		},
-	})
-	remoteBytes, err := os.ReadFile(remoteArchive)
-	if err != nil {
-		t.Fatalf("failed to read remote archive fixture: %v", err)
-	}
-
-	var metadataAuthOK bool
-	var tarballAuthOK bool
-	var serverURL string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		u, p, ok := r.BasicAuth()
-		authOK := ok && u == "alice" && p == "secret"
-		switch r.URL.Path {
-		case "/b.pkg":
-			metadataAuthOK = authOK
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write(mustMarshalJSON(t, map[string]any{
-				"dist-tags": map[string]any{"latest": "1.0.0"},
-				"versions": map[string]any{
-					"1.0.0": map[string]any{
-						"version": "1.0.0",
-						"dist": map[string]any{
-							"tarball": serverURL + "/tarballs/b.pkg-1.0.0.tgz",
-						},
-					},
-				},
-			}))
-		case "/tarballs/b.pkg-1.0.0.tgz":
-			tarballAuthOK = authOK
-			w.Header().Set("Content-Type", "application/gzip")
-			_, _ = w.Write(remoteBytes)
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	serverURL = server.URL
-	defer server.Close()
-
-	oldBaseURLs := packageRegistryBaseURLs
-	oldClient := httpClient
-	packageRegistryBaseURLs = []string{server.URL}
-	httpClient = server.Client()
-	SetRegistryBasicAuth("alice", "secret")
-	defer func() {
-		packageRegistryBaseURLs = oldBaseURLs
-		httpClient = oldClient
-		SetRegistryBasicAuth("", "")
-		SetRegistryBearerToken("")
-	}()
-
-	graph, err := ResolveLocalPackageGraphWithDownloadDir(rootPath, dir, downloadDir)
-	if err != nil {
-		t.Fatalf("ResolveLocalPackageGraph returned error: %v", err)
-	}
-
-	got := packageIDs(graph)
-	want := []string{"b.pkg@1.0.0", "a.pkg@1.0.0"}
-	assertStringSliceEqual(t, got, want)
-	if !metadataAuthOK || !tarballAuthOK {
-		t.Fatalf("expected basic auth on metadata and tarball requests, got metadata=%v tarball=%v", metadataAuthOK, tarballAuthOK)
 	}
 }
 

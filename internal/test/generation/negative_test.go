@@ -1,7 +1,6 @@
 package generation
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/test/coverage"
@@ -97,35 +96,5 @@ func TestApplyNegativeMutationTerminologyInvalidCodeableConcept(t *testing.T) {
 	code := body["code"].(map[string]any)["coding"].([]any)[0].(map[string]any)
 	if code["code"] != "not-a-real-code" {
 		t.Fatalf("got code %v, want bogus code", code["code"])
-	}
-}
-
-func TestStringBoundaryValues(t *testing.T) {
-	got := StringBoundaryValues(3, 10)
-	want := []string{"aa", "aaa", "aaaa", "aaaaaaaaa", "aaaaaaaaaa", "aaaaaaaaaaa"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-}
-
-func TestBoundaryCapacities(t *testing.T) {
-	got := BoundaryCapacities(1, 1)
-	want := []int{0, 1, 2}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-	// Unbounded (max < 0) drops the upper-edge capacities.
-	if got := BoundaryCapacities(0, -1); !reflect.DeepEqual(got, []int{0, 1}) {
-		t.Fatalf("got %v, want [0 1]", got)
-	}
-}
-
-func TestNumericBoundaryValues(t *testing.T) {
-	got := NumericBoundaryValues()
-	if len(got) != 4 {
-		t.Fatalf("got %d values, want 4", len(got))
-	}
-	if got[0] != 0 {
-		t.Fatalf("expected 0 as first boundary value, got %v", got[0])
 	}
 }

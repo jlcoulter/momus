@@ -8,71 +8,7 @@ import (
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
-	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
-
-func TestResourceTypesFromCapabilityStatementsRequireCreate(t *testing.T) {
-	r := registry.New()
-	r.AddCapabilityStatement(&model.CapabilityStatement{
-		URL: "http://example.org/CapabilityStatement/server",
-		Rest: []model.CapabilityStatementRest{
-			{
-				Mode: "server",
-				Resource: []model.CapabilityStatementRestResource{
-					{Type: "Patient", Interaction: []model.CapabilityStatementInteraction{{Code: "read"}, {Code: "create"}}},
-					{Type: "Observation", Interaction: []model.CapabilityStatementInteraction{{Code: "read"}}},
-				},
-			},
-		},
-	})
-
-	got := ResourceTypesFromCapabilityStatements(r, true)
-	want := []string{"Patient"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-}
-
-func TestResourceTypesFromCapabilityStatementsIncludesAllWhenCreateNotRequired(t *testing.T) {
-	r := registry.New()
-	r.AddCapabilityStatement(&model.CapabilityStatement{
-		URL: "http://example.org/CapabilityStatement/server",
-		Rest: []model.CapabilityStatementRest{
-			{
-				Mode: "server",
-				Resource: []model.CapabilityStatementRestResource{
-					{Type: "Patient", Interaction: []model.CapabilityStatementInteraction{{Code: "read"}}},
-					{Type: "Observation", Interaction: []model.CapabilityStatementInteraction{{Code: "search-type"}}},
-				},
-			},
-		},
-	})
-
-	got := ResourceTypesFromCapabilityStatements(r, false)
-	want := []string{"Observation", "Patient"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-}
-
-func TestResourceTypesFromCapabilityStatementsIgnoresNonServerMode(t *testing.T) {
-	r := registry.New()
-	r.AddCapabilityStatement(&model.CapabilityStatement{
-		URL: "http://example.org/CapabilityStatement/client",
-		Rest: []model.CapabilityStatementRest{
-			{
-				Mode: "client",
-				Resource: []model.CapabilityStatementRestResource{
-					{Type: "Patient", Interaction: []model.CapabilityStatementInteraction{{Code: "create"}}},
-				},
-			},
-		},
-	})
-
-	if got := ResourceTypesFromCapabilityStatements(r, true); got != nil {
-		t.Fatalf("got %v, want nil", got)
-	}
-}
 
 func TestSupportedProfileURLsFromCapabilityStatement(t *testing.T) {
 	cs := &model.CapabilityStatement{

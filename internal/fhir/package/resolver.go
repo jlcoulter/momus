@@ -68,38 +68,6 @@ type registryHTTPAuth struct {
 
 var registryAuth registryHTTPAuth
 
-// SetRegistryBasicAuth configures HTTP basic auth for remote registry requests.
-func SetRegistryBasicAuth(username, password string) {
-	registryAuth.BasicUsername = username
-	registryAuth.BasicPassword = password
-}
-
-// SetRegistryBearerToken configures bearer auth for remote registry requests.
-func SetRegistryBearerToken(token string) {
-	registryAuth.BearerToken = token
-}
-
-// ResolveLocalPackageGraph resolves the root package and all transitive
-// dependencies using archives discovered in depsDir and remote registry
-// downloads when needed.
-func ResolveLocalPackageGraph(rootArchivePath, depsDir string) (*ResolvedGraph, error) {
-	return ResolveLocalPackageGraphWithOptions(rootArchivePath, ResolveOptions{
-		DepsDir:        depsDir,
-		ConflictPolicy: ConflictPolicyRootWins,
-	})
-}
-
-// ResolveLocalPackageGraphWithDownloadDir resolves the root package and all
-// transitive dependencies using archives discovered in depsDir, downloading
-// missing dependencies into downloadDir.
-func ResolveLocalPackageGraphWithDownloadDir(rootArchivePath, depsDir, downloadDir string) (*ResolvedGraph, error) {
-	return ResolveLocalPackageGraphWithOptions(rootArchivePath, ResolveOptions{
-		DepsDir:        depsDir,
-		DownloadDir:    downloadDir,
-		ConflictPolicy: ConflictPolicyRootWins,
-	})
-}
-
 // ResolveLocalPackageGraphWithOptions resolves the root package and all
 // transitive dependencies using the provided options.
 func ResolveLocalPackageGraphWithOptions(rootArchivePath string, options ResolveOptions) (*ResolvedGraph, error) {

@@ -208,9 +208,9 @@ func TestRegistryBuilderBuildRoutesSupportedResourceTypes(t *testing.T) {
 		},
 	}
 
-	r, err := builder.Build(pkg)
+	r, err := builder.BuildFromPackages([]*Package{pkg})
 	if err != nil {
-		t.Fatalf("Build returned error: %v", err)
+		t.Fatalf("BuildFromPackages returned error: %v", err)
 	}
 
 	if _, ok := r.StructureDefinition("http://example.org/StructureDefinition/a"); !ok {

@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
-	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
 
 // CapabilityFetchOptions configures live CapabilityStatement retrieval.
@@ -19,36 +18,6 @@ type CapabilityFetchOptions struct {
 	BearerToken   string
 	BasicUsername string
 	BasicPassword string
-}
-
-// ResourceTypesFromCapabilityStatements returns unique resource types advertised
-// by loaded CapabilityStatements. When requireCreateInteraction is true, only
-// resource types that support the create interaction are returned.
-func ResourceTypesFromCapabilityStatements(r *registry.Registry, requireCreateInteraction bool) []string {
-	if r == nil {
-		return nil
-	}
-
-	types := make(map[string]struct{})
-	for _, cs := range r.CapabilityStatements() {
-		if cs == nil {
-			continue
-		}
-		for _, resourceType := range ResourceTypesFromCapabilityStatement(cs, requireCreateInteraction) {
-			types[resourceType] = struct{}{}
-		}
-	}
-
-	if len(types) == 0 {
-		return nil
-	}
-
-	out := make([]string, 0, len(types))
-	for resourceType := range types {
-		out = append(out, resourceType)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // ResourceTypesFromCapabilityStatement returns resource types advertised by a single CapabilityStatement.

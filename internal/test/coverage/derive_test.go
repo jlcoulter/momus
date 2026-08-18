@@ -27,9 +27,9 @@ func TestDeriveMVPPlanPatientNameOneToMany(t *testing.T) {
 		},
 	})
 
-	plan, err := DeriveMVPPlan(r)
+	plan, err := DerivePlan(r, DeriveOptions{})
 	if err != nil {
-		t.Fatalf("DeriveMVPPlan returned error: %v", err)
+		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 	if len(plan.Requirements) != 21 {
 		t.Fatalf("got %d requirements, want 21", len(plan.Requirements))
@@ -57,9 +57,9 @@ func TestDeriveMVPPlanPatientNameOptionalSingle(t *testing.T) {
 		},
 	})
 
-	plan, err := DeriveMVPPlan(r)
+	plan, err := DerivePlan(r, DeriveOptions{})
 	if err != nil {
-		t.Fatalf("DeriveMVPPlan returned error: %v", err)
+		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 	if len(plan.Requirements) != 8 {
 		t.Fatalf("got %d requirements, want 8", len(plan.Requirements))
@@ -80,9 +80,9 @@ func TestDeriveMVPPlanDerivesWithoutPatientProfiles(t *testing.T) {
 		},
 	})
 
-	plan, err := DeriveMVPPlan(r)
+	plan, err := DerivePlan(r, DeriveOptions{})
 	if err != nil {
-		t.Fatalf("DeriveMVPPlan returned error: %v", err)
+		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 	if len(plan.Requirements) != 10 {
 		t.Fatalf("got %d requirements, want 10", len(plan.Requirements))
@@ -269,7 +269,7 @@ func TestDerivePlanPrunesOptionalReferenceDependencies(t *testing.T) {
 
 func TestDeriveMVPPlanFailsWithoutStructureDefinitions(t *testing.T) {
 	r := registry.New()
-	if _, err := DeriveMVPPlan(r); err == nil {
+	if _, err := DerivePlan(r, DeriveOptions{}); err == nil {
 		t.Fatal("expected error when no structure definitions exist")
 	}
 }

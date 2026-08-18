@@ -36,11 +36,6 @@ type DatasetGenerator struct {
 	exhaustive bool
 }
 
-// NewGenerator returns a DatasetGenerator backed by reg.
-func NewGenerator(reg *registry.Registry) *DatasetGenerator {
-	return NewGeneratorWithOptions(reg, Options{})
-}
-
 // NewGeneratorWithOptions returns a DatasetGenerator backed by reg with the
 // given options applied.
 func NewGeneratorWithOptions(reg *registry.Registry, opts Options) *DatasetGenerator {

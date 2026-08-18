@@ -38,8 +38,9 @@ func TestProvisionWritesTargetsBeforeDependents(t *testing.T) {
 	}
 
 	p := New(server.URL, &Options{HTTPClient: server.Client()})
-	if err := p.Provision(context.Background(), ds); err != nil {
-		t.Fatalf("Provision returned error: %v", err)
+	res := p.ProvisionAll(context.Background(), ds)
+	if !res.Complete() {
+		t.Fatalf("provisioning incomplete: %d provisioned, %d failed", res.Provisioned, res.Failed)
 	}
 
 	// Patient (target) must be PUT before Observation (dependent).
@@ -77,8 +78,8 @@ func TestProvisionSendsFhirJSONContentType(t *testing.T) {
 			"pat": {LocalID: "pat", ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": "pat"}},
 		},
 	}
-	if err := New(server.URL, &Options{HTTPClient: server.Client()}).Provision(context.Background(), ds); err != nil {
-		t.Fatalf("Provision returned error: %v", err)
+	if res := New(server.URL, &Options{HTTPClient: server.Client()}).ProvisionAll(context.Background(), ds); !res.Complete() {
+		t.Fatalf("provisioning incomplete: %d failed", res.Failed)
 	}
 	if gotContentType != "application/fhir+json" {
 		t.Fatalf("got content-type %q, want application/fhir+json", gotContentType)
@@ -98,8 +99,8 @@ func TestProvisionAppliesBearerToken(t *testing.T) {
 			"pat": {LocalID: "pat", ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": "pat"}},
 		},
 	}
-	if err := New(server.URL, &Options{HTTPClient: server.Client(), BearerToken: "secret"}).Provision(context.Background(), ds); err != nil {
-		t.Fatalf("Provision returned error: %v", err)
+	if res := New(server.URL, &Options{HTTPClient: server.Client(), BearerToken: "secret"}).ProvisionAll(context.Background(), ds); !res.Complete() {
+		t.Fatalf("provisioning incomplete: %d failed", res.Failed)
 	}
 	if gotAuth != "Bearer secret" {
 		t.Fatalf("got authorization %q, want Bearer secret", gotAuth)
@@ -118,8 +119,9 @@ func TestProvisionReturnsErrorOnNon2xx(t *testing.T) {
 			"pat": {LocalID: "pat", ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": "pat"}},
 		},
 	}
-	if err := New(server.URL, &Options{HTTPClient: server.Client()}).Provision(context.Background(), ds); err == nil {
-		t.Fatal("expected error for non-2xx response")
+	res := New(server.URL, &Options{HTTPClient: server.Client()}).ProvisionAll(context.Background(), ds)
+	if res.Failed == 0 {
+		t.Fatal("expected failure for non-2xx response")
 	}
 }
 
@@ -155,8 +157,9 @@ func TestProvisionAllReportsPartialSuccess(t *testing.T) {
 }
 
 func TestProvisionRequiresBaseURL(t *testing.T) {
-	if err := New("", nil).Provision(context.Background(), &model.Dataset{}); err == nil {
-		t.Fatal("expected error for empty base URL")
+	res := New("", nil).ProvisionAll(context.Background(), &model.Dataset{})
+	if res.Complete() {
+		t.Fatal("expected incomplete provisioning for empty base URL")
 	}
 }
 
@@ -173,8 +176,8 @@ func TestProvisionSendsResourceBody(t *testing.T) {
 			"pat": {LocalID: "pat", ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": "pat", "name": "x"}},
 		},
 	}
-	if err := New(server.URL, &Options{HTTPClient: server.Client()}).Provision(context.Background(), ds); err != nil {
-		t.Fatalf("Provision returned error: %v", err)
+	if res := New(server.URL, &Options{HTTPClient: server.Client()}).ProvisionAll(context.Background(), ds); !res.Complete() {
+		t.Fatalf("provisioning incomplete: %d failed", res.Failed)
 	}
 	if got["name"] != "x" {
 		t.Fatalf("got body %v, expected name=x", got)

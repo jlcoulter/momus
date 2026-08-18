@@ -21,12 +21,6 @@ var defaultLowValueSegments = map[string]struct{}{
 	"language":      {},
 }
 
-// DeriveMVPPlan derives the initial contractual coverage obligations from
-// the constraint model across every loaded StructureDefinition element.
-func DeriveMVPPlan(r *registry.Registry) (*CoveragePlan, error) {
-	return DerivePlan(r, DefaultDeriveOptions())
-}
-
 // DerivePlan derives contractual coverage obligations from the constraint
 // model using the provided options.
 //
@@ -272,14 +266,6 @@ func deriveInteractionObligations(plan *CoveragePlan, seen map[string]struct{}) 
 				plan.Summary.Interactions++
 			}
 		}
-	}
-}
-
-// DefaultDeriveOptions returns the practical default derivation policy.
-func DefaultDeriveOptions() DeriveOptions {
-	return DeriveOptions{
-		IncludeOptional: false,
-		Strength:        1,
 	}
 }
 
