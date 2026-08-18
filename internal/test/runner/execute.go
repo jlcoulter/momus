@@ -60,6 +60,9 @@ type FailureSignature struct {
 	Expression           string `json:"expression,omitempty"`
 	Location             string `json:"location,omitempty"`
 	Diagnostics          string `json:"diagnostics,omitempty"`
+	RootCauseCategory    string `json:"rootCauseCategory,omitempty"`
+	Confidence           string `json:"confidence,omitempty"`
+	TriageRole           string `json:"triageRole,omitempty"`
 	ExampleRequirementID string `json:"exampleRequirementId,omitempty"`
 	ExampleDescription   string `json:"exampleDescription,omitempty"`
 }
@@ -537,15 +540,97 @@ func (e *executor) buildDiagnosticsSummary() *DiagnosticsSummary {
 	if len(top) > maxTop {
 		top = top[:maxTop]
 	}
+	failedSetupResources := collectFailedSetupResources(e.report.Cases)
+	likelyAuth := isLikelyAuthFailure(top, e.report.Failed)
+	for idx := range top {
+		category, confidence, role := classifyFailureSignature(top[idx], failedSetupResources, likelyAuth)
+		top[idx].RootCauseCategory = category
+		top[idx].Confidence = confidence
+		top[idx].TriageRole = role
+	}
 	summary := &DiagnosticsSummary{
 		OperationOutcomeFailures: e.ooFailures,
 		TopSignatures:            top,
 	}
-	if isLikelyAuthFailure(top, e.report.Failed) {
+	if likelyAuth {
 		summary.LikelyAuthFailure = true
 		summary.Hint = "All failures look authentication-related. Provide API credentials with --api-basic-username/--api-basic-password or --api-bearer-token."
 	}
 	return summary
+}
+
+var missingResourcePattern = regexp.MustCompile(`(?i)resource\s+([A-Za-z][A-Za-z0-9]*)/([^\s,]+)\s+not\s+found`)
+
+func collectFailedSetupResources(cases []CaseResult) map[string]struct{} {
+	if len(cases) == 0 {
+		return nil
+	}
+	failed := make(map[string]struct{})
+	for _, c := range cases {
+		if c.Passed {
+			continue
+		}
+		resourceType, ok := setupResourceTypeFromRequirementID(c.RequirementID)
+		if !ok {
+			continue
+		}
+		key := strings.ToLower(resourceType) + "/momus-setup-" + strings.ToLower(resourceType)
+		failed[key] = struct{}{}
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	return failed
+}
+
+func setupResourceTypeFromRequirementID(requirementID string) (string, bool) {
+	if !strings.HasPrefix(requirementID, "setup:") {
+		return "", false
+	}
+	resourceType := strings.TrimSpace(strings.TrimPrefix(requirementID, "setup:"))
+	if resourceType == "" {
+		return "", false
+	}
+	return resourceType, true
+}
+
+func classifyFailureSignature(sig FailureSignature, failedSetupResources map[string]struct{}, likelyAuth bool) (category, confidence, role string) {
+	combined := strings.ToLower(strings.TrimSpace(sig.Signature + " " + sig.Diagnostics))
+	if likelyAuth || sig.StatusCode == http.StatusUnauthorized || sig.StatusCode == http.StatusForbidden {
+		return "authentication", "high", "root"
+	}
+	if strings.Contains(combined, "unresolved setup reference") {
+		return "setup-dependency-ordering", "high", "root"
+	}
+	if missingKey, ok := extractMissingResourceKey(combined); ok {
+		if _, failed := failedSetupResources[missingKey]; failed {
+			return "missing-dependent-resource", "high", "dependent"
+		}
+		return "missing-dependent-resource", "medium", "root"
+	}
+	if sig.StatusCode == http.StatusPreconditionFailed || strings.Contains(combined, "constraint failed") || strings.Contains(combined, "minimum required") || strings.Contains(combined, "fixed to") {
+		return "profile-validation", "high", "root"
+	}
+	if sig.StatusCode == http.StatusMethodNotAllowed || sig.StatusCode == http.StatusNotImplemented {
+		return "server-capability", "high", "root"
+	}
+	if sig.StatusCode >= 500 {
+		return "server-error", "medium", "root"
+	}
+	return "unknown", "low", "unknown"
+}
+
+func extractMissingResourceKey(text string) (string, bool) {
+	matches := missingResourcePattern.FindStringSubmatch(text)
+	if len(matches) != 3 {
+		return "", false
+	}
+	resourceType := strings.TrimSpace(matches[1])
+	resourceID := strings.TrimSpace(matches[2])
+	if resourceType == "" || resourceID == "" {
+		return "", false
+	}
+	return strings.ToLower(resourceType) + "/" + strings.ToLower(resourceID), true
 }
 
 func isLikelyAuthFailure(top []FailureSignature, failedCount int) bool {

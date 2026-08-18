@@ -424,4 +424,62 @@ func TestExecuteMarksLikelyAuthFailureWhenAllFailuresMatchAuthSignature(t *testi
 	if report.Diagnostics.Hint == "" {
 		t.Fatalf("expected auth hint to be populated")
 	}
+	if len(report.Diagnostics.TopSignatures) != 1 {
+		t.Fatalf("expected one top signature, got %d", len(report.Diagnostics.TopSignatures))
+	}
+	sig := report.Diagnostics.TopSignatures[0]
+	if sig.RootCauseCategory != "authentication" || sig.Confidence != "high" || sig.TriageRole != "root" {
+		t.Fatalf("unexpected auth signature triage metadata: %+v", sig)
+	}
+}
+
+func TestExecuteTagsMissingDependentResourceAsCascadeDependent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/Practitioner/momus-setup-practitioner":
+			w.WriteHeader(http.StatusPreconditionFailed)
+			_, _ = w.Write([]byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"processing","diagnostics":"Practitioner.active: minimum required = 1"}]}`))
+		case "/Composition/c-1":
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"processing","diagnostics":"HAPI-1094: Resource Practitioner/momus-setup-practitioner not found, specified in path: Composition.author"}]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodPut, URL: "/Practitioner/momus-setup-practitioner", Body: map[string]any{"resourceType": "Practitioner", "id": "momus-setup-practitioner"}},
+		&ast.Assert{Description: "seed practitioner", RequirementID: "setup:Practitioner", Expression: "status in [200,201]"},
+		&ast.Request{Method: http.MethodPut, URL: "/Composition/c-1", Body: map[string]any{"resourceType": "Composition", "id": "c-1", "author": []any{map[string]any{"reference": "Practitioner/momus-setup-practitioner"}}}},
+		&ast.Assert{Description: "create composition", RequirementID: "req-composition", Expression: "status in [200,201]"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{BaseURL: server.URL, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Diagnostics == nil {
+		t.Fatalf("expected diagnostics summary in report")
+	}
+	dependentSig := findSignatureContaining(report.Diagnostics.TopSignatures, "HAPI-1094")
+	if dependentSig == nil {
+		t.Fatalf("expected HAPI-1094 signature in diagnostics: %+v", report.Diagnostics.TopSignatures)
+	}
+	if dependentSig.TriageRole != "dependent" {
+		t.Fatalf("expected dependent triage role, got %+v", *dependentSig)
+	}
+	if dependentSig.RootCauseCategory != "missing-dependent-resource" || dependentSig.Confidence != "high" {
+		t.Fatalf("unexpected dependent triage metadata: %+v", *dependentSig)
+	}
+}
+
+func findSignatureContaining(signatures []FailureSignature, needle string) *FailureSignature {
+	needle = strings.ToLower(needle)
+	for idx := range signatures {
+		if strings.Contains(strings.ToLower(signatures[idx].Signature), needle) || strings.Contains(strings.ToLower(signatures[idx].Diagnostics), needle) {
+			return &signatures[idx]
+		}
+	}
+	return nil
 }
