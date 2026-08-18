@@ -111,12 +111,15 @@ its source constraint through the executed test and into the report:
 
 ## 6. Resource `Generator` and `Dataset` implementation
 
-**Status: implemented.** `internal/fhir/resource` now provides
-`NewGenerator(reg)` — a registry-backed `DatasetGenerator` that turns a
-`DataRequirement` into a concrete `Dataset`: it populates required elements
-from resolved profiles, honours cardinality (instance count), applies
-equals-constraints to field values, generates relationship targets, and wires
-references into the bodies and `Dataset.Relationships`.
+**Status: building blocks implemented and tested; pipeline wiring is a
+requirement of feature 8.**
+
+`internal/fhir/resource` now provides `NewGenerator(reg)` — a
+registry-backed `DatasetGenerator` that turns a `DataRequirement` into a
+concrete `Dataset`: it populates required elements from resolved profiles,
+honours cardinality (instance count), applies equals-constraints to field
+values, generates relationship targets, and wires references into the bodies
+and `Dataset.Relationships`.
 
 `internal/fhir/provisioning` now provides `New(baseURL, options)` — a
 `ServerProvisioner` that PUTs each dataset resource to
@@ -124,9 +127,12 @@ references into the bodies and `Dataset.Relationships`.
 their dependents, with configurable client/auth/headers. It records the
 server-assigned id and ETag on each instance.
 
-This separates data from execution as the architecture requires: one dataset
-can serve multiple positive/negative/boundary plans, and datasets can be
-provisioned ahead of test execution.
+Both are exercised only by unit tests today. They are **not yet wired into
+the `coverage run` pipeline**, which still synthesises request bodies inline
+and PUTs them directly. Making the Generator and Provisioner usable in the
+product flow — generating a `Dataset` from the planner's `DataRequirement`s,
+provisioning it ahead of execution, then running the `TestPlan` against that
+provisioned state — is a binding requirement of feature 8 (see below).
 
 ## 7. Interaction and pairwise coverage
 
@@ -148,11 +154,22 @@ currently doubles as the planner.**
 
 Implement `Planner` to turn data requirements and datasets into a `TestPlan`,
 choosing `Sequence` vs `Parallel` nodes based on dependency analysis rather
-than purely topological levels. This is also where `DataRequirement` and
-`Dataset` become first-class in the pipeline (they are currently bypassed).
+than purely topological levels.
 
-Why eighth: it depends on the `Generator`/`Provisioner` work (6) and is the
-integration point for execution-flow features.
+This is where `DataRequirement` and `Dataset` become first-class in the
+pipeline (they are currently bypassed) and where the feature-6 building
+blocks get wired in. Concrete requirements:
+
+- The `Planner` emits `DataRequirement`s; the feature-6 `Generator`
+  (`resource.NewGenerator`) turns them into a concrete `Dataset`.
+- The feature-6 `Provisioner` (`provisioning.New`) provisions that `Dataset`
+  to the server ahead of execution.
+- `coverage run` executes the generated `TestPlan` against that provisioned
+  state instead of synthesising request bodies inline. One `Dataset` must be
+  able to serve multiple plans.
+
+Why eighth: it depends on the `Generator`/`Provisioner` building blocks (6)
+and is the integration point for execution-flow features.
 
 ## 9. Runner concurrency
 

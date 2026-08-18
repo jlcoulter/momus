@@ -54,8 +54,8 @@ Currently implemented:
   domain, variant, expected outcome), and coverage reports list both the
   covered and uncovered requirements
 - Registry-backed `DataRequirement` -> `Dataset` generator and a
-  dependency-ordered server `Provisioner`, separating data generation from
-  test execution
+  dependency-ordered server `Provisioner` (building blocks, tested in
+  isolation; pipeline wiring lands with the planner, feature 8)
 - Generic dependency DAG planning for resource execution ordering
 - AST generation from coverage requirements with setup/capture scaffolding
 - Minimal assertion parser/evaluator (`status in [..]`)
