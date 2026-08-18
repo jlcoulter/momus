@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -26,6 +27,15 @@ import (
 
 // version is the Momus version. Bumped as part of releases.
 const version = "0.0.0"
+
+// abstractResourceTypes are FHIR types with kind "resource" that are abstract
+// base types and cannot be instantiated as concrete data.
+var abstractResourceTypes = map[string]bool{
+	"Resource":          true,
+	"DomainResource":    true,
+	"CanonicalResource": true,
+	"MetadataResource":  true,
+}
 
 func main() {
 	var debug bool
@@ -69,6 +79,8 @@ func main() {
 	var interactionStrength int
 	var includeCases bool
 	var exhaustiveGen bool
+	var bulkCount int
+	var bulkPerTypeCounts []string
 
 	loadCmd := &cobra.Command{
 		Use:   "load <path-to-package.tgz>",
@@ -486,32 +498,25 @@ func main() {
 				return err
 			}
 
-			plan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
-				IncludeResourceTypes: includeResourceTypes,
-				IncludeProfileURLs:   includeProfileURLs,
-				ExcludePathPrefixes:  excludePathPrefixes,
-				MustSupportOnly:      mustSupportOnly,
-				IncludeOptional:      includeOptional,
-				IncludeLowValuePaths: includeLowValuePaths,
-				Strength:             interactionStrength,
-			})
-			if err != nil {
-				return err
-			}
-
-			requirements, err := testcoverage.PlanToDataRequirements(plan)
-			if err != nil {
-				return err
+			resourceTypes := includeResourceTypes
+			if len(resourceTypes) == 0 {
+				seen := make(map[string]bool)
+				for _, sd := range reg.StructureDefinitions() {
+					if sd.Type == "" || sd.Kind != "resource" || abstractResourceTypes[sd.Type] {
+						continue
+					}
+					if !seen[sd.Type] {
+						seen[sd.Type] = true
+						resourceTypes = append(resourceTypes, sd.Type)
+					}
+				}
+				sort.Strings(resourceTypes)
 			}
 
 			generator := fhirresource.NewGeneratorWithOptions(reg, fhirresource.Options{Exhaustive: exhaustiveGen})
-			datasets := make([]*model.Dataset, 0, len(requirements))
-			for _, req := range requirements {
-				ds, err := generator.Generate(cmd.Context(), req)
-				if err != nil {
-					return err
-				}
-				datasets = append(datasets, ds)
+			corpus, err := generator.GenerateCorpus(cmd.Context(), resourceTypes, bulkCount, parsePerTypeCounts(bulkPerTypeCounts))
+			if err != nil {
+				return err
 			}
 
 			var out io.Writer = os.Stdout
@@ -531,14 +536,15 @@ func main() {
 			}
 
 			w := testbulk.NewWriter(out)
-			if err := w.WriteDatasets(datasets); err != nil {
+			instances := testbulk.Link([]*model.Dataset{corpus})
+			if err := w.WriteInstances(instances); err != nil {
 				return err
 			}
 			if err := w.Close(); err != nil {
 				return err
 			}
 
-			fmt.Printf("Generated NDJSON bulk data: %d resources from %d requirements\n", testbulk.Count(datasets), len(requirements))
+			fmt.Printf("Generated NDJSON bulk data: %d resources across %d resource types\n", len(instances), len(resourceTypes))
 			if outputPath != "" {
 				fmt.Printf("Bulk data written to %s\n", outputPath)
 			}
@@ -550,6 +556,8 @@ func main() {
 	bulkCmd.Flags().StringVar(&conflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
 	bulkCmd.Flags().StringVar(&outputPath, "output", "", "write NDJSON bulk data to a file")
 	bulkCmd.Flags().BoolVar(&exhaustiveGen, "exhaustive", true, "populate optional elements to produce fuller, more complete resources")
+	bulkCmd.Flags().IntVar(&bulkCount, "count", 25, "number of resources to generate per resource type")
+	bulkCmd.Flags().StringSliceVar(&bulkPerTypeCounts, "per-type", nil, "per-type resource counts as Type=Count (repeatable); overrides --count")
 	bulkCmd.Flags().StringSliceVar(&includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable)")
 	bulkCmd.Flags().StringSliceVar(&includeProfileURLs, "include-profile-url", nil, "include only these profile canonical URLs (repeatable)")
 	bulkCmd.Flags().StringSliceVar(&excludePathPrefixes, "exclude-path-prefix", nil, "exclude element paths by prefix (repeatable)")
@@ -872,4 +880,23 @@ func writeOutputFile(path string, data []byte) error {
 		}
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+// parsePerTypeCounts parses repeatable Type=Count overrides into a map. Values
+// that cannot be parsed as counts are ignored.
+func parsePerTypeCounts(entries []string) map[string]int {
+	out := make(map[string]int)
+	for _, entry := range entries {
+		idx := strings.LastIndex(entry, "=")
+		if idx <= 0 || idx == len(entry)-1 {
+			continue
+		}
+		typ := strings.TrimSpace(entry[:idx])
+		count, err := strconv.Atoi(strings.TrimSpace(entry[idx+1:]))
+		if err != nil || typ == "" {
+			continue
+		}
+		out[typ] = count
+	}
+	return out
 }

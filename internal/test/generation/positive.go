@@ -243,7 +243,9 @@ func populateOptionalChildren(value map[string]any, node *model.ElementNode, reg
 			continue
 		}
 		propName := propertyNameForNode(child)
-		if propName == "" {
+		if propName == "" || propName == "id" {
+			// Skip the resource/element id: ids are assigned by the generator or
+			// the target server and must not be synthesised.
 			continue
 		}
 		optional := child.Definition.Min <= 0 && !hasRequiredSlices(child) && !hasContractSignal(child)

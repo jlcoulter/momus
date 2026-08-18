@@ -67,6 +67,10 @@ Currently implemented:
 - Registry-backed `DataRequirement` -> `Dataset` generator and a
   dependency-ordered server `Provisioner` (building blocks, tested in
   isolation; pipeline wiring lands with the planner, feature 8)
+- Bulk NDJSON data generation (`coverage bulk`): a realistic corpus of
+  resources across resource types with exhaustive, realistic values and
+  references wired into a distributed, coherent web (dependents spread over
+  shared targets rather than all pointing at one instance)
 - Generic dependency DAG planning for resource execution ordering
 - AST generation from coverage requirements with setup/capture scaffolding
 - Minimal assertion parser/evaluator (`status in [..]`)
@@ -263,6 +267,44 @@ Example summary output:
 ```text
 Executed 42 cases: 40 passed, 2 failed
 Test report written to ./test-results.json
+```
+
+Generate realistic bulk data as NDJSON (newline-delimited JSON, the FHIR Bulk
+Data `$export` format):
+
+```sh
+go run ./cmd/momus coverage bulk package.tgz --output ./data.ndjson
+```
+
+The generator produces a configurable number of instances per resource type
+with exhaustive, realistic values (terminology bindings resolved to real codes,
+realistic names/dates/identifiers) and wires references into a distributed,
+coherent web: dependents are spread across the available targets so several
+resources share a common target (e.g. many `HealthcareService`s reference a
+handful of `Organization`s) rather than everything pointing at one instance.
+
+Example output:
+
+```text
+Generated NDJSON bulk data: 3675 resources across 146 resource types
+```
+
+Key options:
+
+- `--count N` — resources to generate per type (default `25`)
+- `--per-type Type=Count` — per-type counts, overriding `--count` (repeatable)
+- `--include-resource Type` — only generate these types (repeatable);
+  referenced target types are pulled in automatically so all references resolve
+- `--exhaustive` — populate optional elements with realistic values (default `true`)
+- `--output path` — write NDJSON to a file (parent directories are created)
+
+Generate a targeted, realistic subset, e.g. 10 organizations supporting 25
+healthcare services:
+
+```sh
+go run ./cmd/momus coverage bulk package.tgz --output ./data.ndjson \
+  --include-resource Organization --include-resource HealthcareService \
+  --per-type Organization=10 --per-type HealthcareService=25
 ```
 
 ### Coverage Pipeline (MVP)

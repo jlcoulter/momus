@@ -85,7 +85,9 @@ func populateChildren(body map[string]any, node *model.ElementNode, reg *registr
 			continue
 		}
 		propName := nodePropertyName(child)
-		if propName == "" {
+		if propName == "" || propName == "id" {
+			// Skip the resource/element id: ids are assigned by the generator or
+			// the target server and must not be synthesised.
 			continue
 		}
 		if child.Definition == nil {

@@ -237,6 +237,25 @@ func TestGenerateDefaultOmitsOptionalElements(t *testing.T) {
 	}
 }
 
+func TestGenerateExhaustivePreservesResourceID(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewGeneratorWithOptions(reg, Options{Exhaustive: true})
+
+	ds, err := gen.Generate(context.Background(), model.DataRequirement{
+		Resource:    model.ResourceRequirement{Type: "Observation", Profile: []string{obsProfile}},
+		Cardinality: model.Exactly(1),
+	})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+	obs := requireInstance(t, ds, "momus-Observation")
+	// The resource id must stay the generator-assigned local id, not be
+	// overwritten by synthesising the optional element-level id.
+	if obs.Resource["id"] != "momus-Observation" {
+		t.Fatalf("resource id = %v, want momus-Observation", obs.Resource["id"])
+	}
+}
+
 func sortedKeys(m map[string]any) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

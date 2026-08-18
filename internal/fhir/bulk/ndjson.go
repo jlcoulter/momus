@@ -74,6 +74,17 @@ func (wr *Writer) WriteDatasets(datasets []*model.Dataset) error {
 	return nil
 }
 
+// WriteInstances writes the given resource instances as NDJSON lines, in
+// order.
+func (wr *Writer) WriteInstances(instances []*model.ResourceInstance) error {
+	for _, inst := range instances {
+		if err := wr.WriteInstance(inst); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Close flushes pending output to the underlying writer.
 func (wr *Writer) Close() error {
 	return wr.w.Flush()

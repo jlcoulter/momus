@@ -13,6 +13,22 @@ import (
 	"github.com/jlcoulter/momus/internal/test/runner"
 )
 
+func TestParsePerTypeCounts(t *testing.T) {
+	got := parsePerTypeCounts([]string{"Organization=10", "HealthcareService=25", "bad", "=3", "Patient="})
+	if got["Organization"] != 10 {
+		t.Fatalf("Organization = %d, want 10", got["Organization"])
+	}
+	if got["HealthcareService"] != 25 {
+		t.Fatalf("HealthcareService = %d, want 25", got["HealthcareService"])
+	}
+	if _, ok := got["bad"]; ok {
+		t.Fatalf("expected malformed entry to be ignored, got %v", got)
+	}
+	if _, ok := got["Patient"]; ok {
+		t.Fatalf("expected empty-count entry to be ignored")
+	}
+}
+
 func TestMarshalCoverageRunOutputReadableSummary(t *testing.T) {
 	report := &runner.Report{
 		Total:  3,
