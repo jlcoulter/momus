@@ -20,6 +20,7 @@ type ElementNode struct {
 type SliceNode struct {
 	Name       string
 	Definition *ElementDefinition
+	Children   map[string]*ElementNode
 }
 
 // ResolvedProfile is a profile whose elements have been resolved into both
@@ -51,7 +52,7 @@ func NewResolvedProfile(canonical, resourceType string, defs []ElementDefinition
 // "Observation"); all other elements are nested beneath it according to
 // their dot-separated canonical paths.
 //
-// Elements that carry a SliceName are attached to their parent's Slices map
+// Elements that carry a SliceName are attached to the sliced element node's Slices map
 // and do not replace the base element's definition.
 func BuildElementTree(defs []ElementDefinition) (root *ElementNode, byPath map[string]*ElementNode) {
 	byPath = make(map[string]*ElementNode)
@@ -69,7 +70,6 @@ func BuildElementTree(defs []ElementDefinition) (root *ElementNode, byPath map[s
 		}
 
 		cur := root
-		var parent *ElementNode
 		for i := 1; i < len(segments); i++ {
 			child := cur.Children[segments[i]]
 			if child == nil {
@@ -78,15 +78,32 @@ func BuildElementTree(defs []ElementDefinition) (root *ElementNode, byPath map[s
 				cur.Children[segments[i]] = child
 				byPath[path] = child
 			}
-			parent = cur
 			cur = child
 		}
 
 		if def.SliceName != "" {
-			if parent != nil {
-				parent.Slices[def.SliceName] = &SliceNode{Name: def.SliceName, Definition: def}
+			if cur != nil {
+				slice := cur.Slices[def.SliceName]
+				if slice == nil {
+					slice = newSliceNode(def.SliceName)
+					cur.Slices[def.SliceName] = slice
+				}
+				slice.Definition = def
 			}
 			continue
+		}
+
+		slicePath, sliceName, sliceTail, hasSliceContext := parseSliceContext(def.ID, def.Path)
+		if hasSliceContext {
+			if owner, ok := byPath[slicePath]; ok {
+				slice := owner.Slices[sliceName]
+				if slice == nil {
+					slice = newSliceNode(sliceName)
+					owner.Slices[sliceName] = slice
+				}
+				attachSliceChildDefinition(slice, sliceTail, def)
+				continue
+			}
 		}
 
 		cur.Definition = def
@@ -94,6 +111,55 @@ func BuildElementTree(defs []ElementDefinition) (root *ElementNode, byPath map[s
 	}
 
 	return root, byPath
+}
+
+func newSliceNode(name string) *SliceNode {
+	return &SliceNode{Name: name, Children: make(map[string]*ElementNode)}
+}
+
+func parseSliceContext(id, path string) (slicePath string, sliceName string, tail []string, ok bool) {
+	if id == "" || path == "" || !strings.Contains(id, ":") {
+		return "", "", nil, false
+	}
+	idSegments := strings.Split(id, ".")
+	pathSegments := strings.Split(path, ".")
+	for idx, segment := range idSegments {
+		parts := strings.SplitN(segment, ":", 2)
+		if len(parts) != 2 || parts[1] == "" {
+			continue
+		}
+		if idx >= len(pathSegments) {
+			return "", "", nil, false
+		}
+		slicePath = strings.Join(pathSegments[:idx+1], ".")
+		sliceName = parts[1]
+		tail = pathSegments[idx+1:]
+		return slicePath, sliceName, tail, true
+	}
+	return "", "", nil, false
+}
+
+func attachSliceChildDefinition(slice *SliceNode, tail []string, def *ElementDefinition) {
+	if slice == nil || def == nil {
+		return
+	}
+	if len(tail) == 0 {
+		return
+	}
+	children := slice.Children
+	var cur *ElementNode
+	for i, segment := range tail {
+		child := children[segment]
+		if child == nil {
+			child = newNode(segment, def.Path)
+			children[segment] = child
+		}
+		cur = child
+		children = child.Children
+		if i == len(tail)-1 {
+			cur.Definition = def
+		}
+	}
 }
 
 func newNode(name, path string) *ElementNode {
