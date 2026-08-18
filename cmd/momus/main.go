@@ -18,6 +18,7 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	fhirplanner "github.com/jlcoulter/momus/internal/fhir/planner"
+	provisioning "github.com/jlcoulter/momus/internal/fhir/provisioning"
 	fhirresource "github.com/jlcoulter/momus/internal/fhir/resource"
 	testast "github.com/jlcoulter/momus/internal/test/ast"
 	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
@@ -391,6 +392,33 @@ func main() {
 			})
 			if err != nil {
 				return err
+			}
+
+			// Feature 8: generate the backing data through the planner and
+			// provision it ahead of execution, so tests run against real
+			// provisioned state rather than purely inline-synthesised bodies.
+			requirements, err := testcoverage.PlanToDataRequirements(coveragePlan)
+			if err != nil {
+				return err
+			}
+			generator := fhirresource.NewGeneratorWithOptions(reg, fhirresource.Options{Exhaustive: exhaustiveGen})
+			planner := fhirplanner.NewDefaultPlanner(generator)
+			testPlan, err := planner.Plan(cmd.Context(), fhirplanner.Input{BaseURL: baseURL, Requirements: requirements})
+			if err != nil {
+				return err
+			}
+			provisioner := provisioning.New(baseURL, &provisioning.Options{
+				BearerToken:   apiBearerToken,
+				BasicUsername: apiBasicUsername,
+				BasicPassword: apiBasicPassword,
+			})
+			// Data seeding is essential to achieve full coverage success, so the
+			// user must be told when the dataset was not fully uploaded.
+			seed := provisioner.ProvisionAll(cmd.Context(), testPlan.Dataset)
+			if !seed.Complete() {
+				fmt.Printf("WARNING: dataset seeding incomplete — %d of %d resources uploaded; failed: %v. Data seeding is essential to achieve full coverage success. Fix the failing resources and re-run.\n", seed.Provisioned, seed.Provisioned+seed.Failed, seed.FailedIDs)
+			} else {
+				fmt.Printf("Dataset seeded: %d resources uploaded ahead of execution\n", seed.Provisioned)
 			}
 
 			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: interactionStrength, Exhaustive: exhaustiveGen})

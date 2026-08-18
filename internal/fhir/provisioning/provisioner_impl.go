@@ -68,6 +68,46 @@ func (p *ServerProvisioner) Provision(ctx context.Context, ds *model.Dataset) er
 	return nil
 }
 
+// Result reports the outcome of a best-effort provisioning pass.
+type Result struct {
+	// Provisioned is the number of resources successfully uploaded.
+	Provisioned int
+	// Failed is the number of resources the server rejected.
+	Failed int
+	// FailedIDs lists the local ids of the failed resources, in provisioning
+	// order.
+	FailedIDs []string
+}
+
+// Complete reports whether every resource in the dataset was provisioned.
+func (r *Result) Complete() bool {
+	return r != nil && r.Failed == 0 && r.Provisioned > 0
+}
+
+// ProvisionAll attempts to upload every resource in ds, in dependency order
+// (targets before dependents), continuing past per-resource failures and
+// recording them so the caller can report exactly what was seeded and what was
+// not.
+func (p *ServerProvisioner) ProvisionAll(ctx context.Context, ds *model.Dataset) *Result {
+	res := &Result{}
+	if p.baseURL == "" || ds == nil {
+		return res
+	}
+	for _, id := range provisionOrder(ds) {
+		instance := ds.Resources[id]
+		if instance == nil {
+			continue
+		}
+		if err := p.provisionInstance(ctx, instance); err != nil {
+			res.Failed++
+			res.FailedIDs = append(res.FailedIDs, id)
+			continue
+		}
+		res.Provisioned++
+	}
+	return res
+}
+
 func (p *ServerProvisioner) provisionInstance(ctx context.Context, instance *model.ResourceInstance) error {
 	body, err := json.Marshal(instance.Resource)
 	if err != nil {

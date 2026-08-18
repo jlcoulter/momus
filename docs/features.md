@@ -182,6 +182,9 @@ requirements into a true `TestPlan`.
   feature-6 `Provisioner` (`provisioning.New`).
 - Exposed via `coverage plan` (`planner.Plan`), which emits the executable
   `TestPlan` AST from the derived data requirements.
+- `coverage run` now uses the planner: it derives data requirements, builds the
+  `TestPlan` via `planner.Plan`, provisions the `Dataset` ahead of execution,
+  then executes the generated plan against that provisioned state.
 
 ## 9. Runner concurrency
 

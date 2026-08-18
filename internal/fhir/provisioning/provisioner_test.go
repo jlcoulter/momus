@@ -123,6 +123,37 @@ func TestProvisionReturnsErrorOnNon2xx(t *testing.T) {
 	}
 }
 
+func TestProvisionAllReportsPartialSuccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/Patient/pat" {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	ds := &model.Dataset{
+		Resources: map[string]*model.ResourceInstance{
+			"ok":  {LocalID: "ok", ResourceType: "Observation", Resource: map[string]any{"resourceType": "Observation", "id": "ok"}},
+			"pat": {LocalID: "pat", ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": "pat"}},
+		},
+	}
+	res := New(server.URL, &Options{HTTPClient: server.Client()}).ProvisionAll(context.Background(), ds)
+	if res.Provisioned != 1 {
+		t.Fatalf("Provisioned = %d, want 1", res.Provisioned)
+	}
+	if res.Failed != 1 {
+		t.Fatalf("Failed = %d, want 1", res.Failed)
+	}
+	if len(res.FailedIDs) != 1 || res.FailedIDs[0] != "pat" {
+		t.Fatalf("FailedIDs = %v, want [pat]", res.FailedIDs)
+	}
+	if res.Complete() {
+		t.Fatal("Complete should be false when a resource failed")
+	}
+}
+
 func TestProvisionRequiresBaseURL(t *testing.T) {
 	if err := New("", nil).Provision(context.Background(), &model.Dataset{}); err == nil {
 		t.Fatal("expected error for empty base URL")
