@@ -23,6 +23,12 @@ func TestEvaluateCoverageAllCovered(t *testing.T) {
 	if domain := report.ByDomain[CoverageDomainCardinality]; domain.Total != 2 || domain.Covered != 2 || domain.Uncovered != 0 {
 		t.Fatalf("unexpected cardinality summary: %+v", domain)
 	}
+	if resource := report.ByResourceType["Patient"]; resource.Total != 2 || resource.Covered != 2 || resource.Uncovered != 0 {
+		t.Fatalf("unexpected resource summary: %+v", resource)
+	}
+	if variant := report.ByVariant[CoverageVariantValidMin]; variant.Total != 1 || variant.Covered != 1 || variant.Uncovered != 0 {
+		t.Fatalf("unexpected valid-min summary: %+v", variant)
+	}
 }
 
 func TestEvaluateCoveragePartiallyCovered(t *testing.T) {
@@ -46,6 +52,12 @@ func TestEvaluateCoveragePartiallyCovered(t *testing.T) {
 	}
 	if report.CoveragePercent != 50 {
 		t.Fatalf("got coverage percent %.2f, want 50", report.CoveragePercent)
+	}
+	if resource := report.ByResourceType["Patient"]; resource.Total != 2 || resource.Covered != 1 || resource.Uncovered != 1 {
+		t.Fatalf("unexpected resource summary: %+v", resource)
+	}
+	if variant := report.ByVariant[CoverageVariantMissingRequired]; variant.Total != 1 || variant.Covered != 0 || variant.Uncovered != 1 {
+		t.Fatalf("unexpected missing-required summary: %+v", variant)
 	}
 }
 

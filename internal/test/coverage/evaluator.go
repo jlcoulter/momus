@@ -5,7 +5,9 @@ import "sort"
 // EvaluateCoverage computes contractual coverage for executed requirement results.
 func EvaluateCoverage(plan *CoveragePlan, executed []ExecutedRequirementResult) EvaluationReport {
 	report := EvaluationReport{
-		ByDomain: make(map[CoverageDomain]DomainCoverageSummary),
+		ByDomain:       make(map[CoverageDomain]DomainCoverageSummary),
+		ByResourceType: make(map[string]DomainCoverageSummary),
+		ByVariant:      make(map[CoverageVariant]DomainCoverageSummary),
 	}
 	if plan == nil || len(plan.Requirements) == 0 {
 		report.CoveragePercent = 100
@@ -44,22 +46,40 @@ func EvaluateCoverage(plan *CoveragePlan, executed []ExecutedRequirementResult) 
 	for _, reqID := range requirementIDs {
 		req := requirementsByID[reqID]
 		domain := report.ByDomain[req.Domain]
+		resource := report.ByResourceType[req.ResourceType]
+		variant := report.ByVariant[req.Variant]
 		domain.Total++
+		resource.Total++
+		variant.Total++
 		if passedByID[reqID] {
 			report.CoveredRequirements++
 			domain.Covered++
+			resource.Covered++
+			variant.Covered++
 		} else {
 			report.UncoveredRequirements++
 			domain.Uncovered++
+			resource.Uncovered++
+			variant.Uncovered++
 			report.Uncovered = append(report.Uncovered, req)
 		}
 		report.ByDomain[req.Domain] = domain
+		report.ByResourceType[req.ResourceType] = resource
+		report.ByVariant[req.Variant] = variant
 	}
 
 	report.CoveragePercent = coveragePercent(report.CoveredRequirements, report.TotalRequirements)
 	for domain, summary := range report.ByDomain {
 		summary.CoveragePercent = coveragePercent(summary.Covered, summary.Total)
 		report.ByDomain[domain] = summary
+	}
+	for resourceType, summary := range report.ByResourceType {
+		summary.CoveragePercent = coveragePercent(summary.Covered, summary.Total)
+		report.ByResourceType[resourceType] = summary
+	}
+	for variant, summary := range report.ByVariant {
+		summary.CoveragePercent = coveragePercent(summary.Covered, summary.Total)
+		report.ByVariant[variant] = summary
 	}
 	return report
 }

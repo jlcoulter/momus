@@ -16,10 +16,12 @@ type DomainCoverageSummary struct {
 
 // EvaluationReport compares planned obligations against execution outcomes.
 type EvaluationReport struct {
-	TotalRequirements     int                                      `json:"totalRequirements"`
-	CoveredRequirements   int                                      `json:"coveredRequirements"`
-	UncoveredRequirements int                                      `json:"uncoveredRequirements"`
-	CoveragePercent       float64                                  `json:"coveragePercent"`
-	ByDomain              map[CoverageDomain]DomainCoverageSummary `json:"byDomain,omitempty"`
-	Uncovered             []CoverageRequirement                    `json:"uncovered,omitempty"`
+	TotalRequirements     int                                       `json:"totalRequirements"`
+	CoveredRequirements   int                                       `json:"coveredRequirements"`
+	UncoveredRequirements int                                       `json:"uncoveredRequirements"`
+	CoveragePercent       float64                                   `json:"coveragePercent"`
+	ByDomain              map[CoverageDomain]DomainCoverageSummary  `json:"byDomain,omitempty"`
+	ByResourceType        map[string]DomainCoverageSummary          `json:"byResourceType,omitempty"`
+	ByVariant             map[CoverageVariant]DomainCoverageSummary `json:"byVariant,omitempty"`
+	Uncovered             []CoverageRequirement                     `json:"uncovered,omitempty"`
 }
