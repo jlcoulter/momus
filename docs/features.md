@@ -188,11 +188,12 @@ requirements into a true `TestPlan`.
 
 ## 9. Runner concurrency
 
-**Status: `Parallel` nodes execute sequentially ("minimal runner behavior").**
-
-Execute `Parallel` subtrees concurrently (e.g. with `golang.org/x/sync/errgroup`),
-with per-branch variable scoping so captures do not race, and aggregate the
-report deterministically.
+**Status: implemented.** `Parallel` nodes now execute their branches
+concurrently (goroutines + `WaitGroup`), each branch running in an isolated
+`executor` with its own variable/created scope and report, so concurrent
+captures and request-state do not race. Branch results (cases, pass/fail counts,
+captured variables, created resources, and failure-signature diagnostics) are
+merged back deterministically in branch order.
 
 Why ninth: concurrency before the planner can express intent (8) is risk
 without reward. The registry is already documented as concurrency-safe, so

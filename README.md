@@ -84,7 +84,9 @@ Currently implemented:
   `TestPlan` so one dataset can back multiple plans
 - AST generation from coverage requirements with setup/capture scaffolding
 - Minimal assertion parser/evaluator (`status in [..]`)
-- Minimal runner that executes AST requests/assertions and emits JSON test reports
+- Minimal runner that executes AST requests/assertions and emits JSON test reports;
+  `Parallel` branches run concurrently with per-branch variable scoping and
+  deterministic result aggregation
 
 ## Layout
 

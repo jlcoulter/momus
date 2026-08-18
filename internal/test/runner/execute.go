@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jlcoulter/momus/internal/test/assertions"
@@ -155,13 +156,7 @@ func (e *executor) runNode(node ast.Node) error {
 		}
 		return nil
 	case *ast.Parallel:
-		// Minimal runner behavior: execute in-order even for parallel nodes.
-		for _, step := range n.Steps {
-			if err := e.runNode(step); err != nil {
-				return err
-			}
-		}
-		return nil
+		return e.runParallel(n.Steps)
 	case *ast.Request:
 		res, err := e.executeRequest(n)
 		e.lastResult = res
@@ -177,6 +172,103 @@ func (e *executor) runNode(node ast.Node) error {
 	default:
 		return fmt.Errorf("unsupported AST node type %T", node)
 	}
+}
+
+// runParallel executes each branch of a Parallel node concurrently. Each branch
+// runs in its own executor with an isolated variable/created scope and its own
+// report, so concurrent captures and request-state do not race. Results are
+// merged back into the parent deterministically, in branch order.
+func (e *executor) runParallel(steps []ast.Node) error {
+	if len(steps) == 0 {
+		return nil
+	}
+	children := make([]*executor, len(steps))
+	for i := range steps {
+		children[i] = e.child()
+	}
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var firstErr error
+	for i := range steps {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			err := children[i].runNode(steps[i])
+			mu.Lock()
+			if err != nil && firstErr == nil {
+				firstErr = err
+			}
+			mu.Unlock()
+		}(i)
+	}
+	wg.Wait()
+
+	for _, child := range children {
+		e.merge(child)
+	}
+	return firstErr
+}
+
+// child returns an isolated execution context for a parallel branch: it shares
+// the immutable configuration and context, snapshots the current variables and
+// created resources, and starts with a fresh request state and report.
+func (e *executor) child() *executor {
+	variables := make(map[string]any, len(e.variables))
+	for k, v := range e.variables {
+		variables[k] = v
+	}
+	created := make(map[string]struct{}, len(e.created))
+	for k := range e.created {
+		created[k] = struct{}{}
+	}
+	return &executor{
+		ctx:           e.ctx,
+		client:        e.client,
+		baseURL:       e.baseURL,
+		bearerToken:   e.bearerToken,
+		basicUsername: e.basicUsername,
+		basicPassword: e.basicPassword,
+		includeDebug:  e.includeDebug,
+		report:        &Report{Cases: make([]CaseResult, 0)},
+		variables:     variables,
+		created:       created,
+		failuresBySig: make(map[string]*FailureSignature),
+	}
+}
+
+// merge folds a parallel branch's results back into the parent deterministically
+// (in branch order): cases/pass/fail counts, captured variables, created
+// resources, and failure-signature diagnostics. The parent's request state is
+// taken from the last branch, matching sequential ordering.
+func (e *executor) merge(child *executor) {
+	e.report.Cases = append(e.report.Cases, child.report.Cases...)
+	e.report.Passed += child.report.Passed
+	e.report.Failed += child.report.Failed
+
+	for k, v := range child.variables {
+		e.variables[k] = v
+	}
+	for k := range child.created {
+		e.created[k] = struct{}{}
+	}
+	for k, sig := range child.failuresBySig {
+		if existing, ok := e.failuresBySig[k]; ok {
+			existing.Count += sig.Count
+			if existing.ExampleRequirementID == "" {
+				existing.ExampleRequirementID = sig.ExampleRequirementID
+			}
+			continue
+		}
+		e.failuresBySig[k] = sig
+	}
+	e.ooFailures += child.ooFailures
+
+	// The last branch's request state wins, matching the previous in-order run.
+	e.lastResult = child.lastResult
+	e.hasResult = child.hasResult
+	e.lastErr = child.lastErr
+	e.lastDebug = child.lastDebug
 }
 
 func (e *executor) executeRequest(reqNode *ast.Request) (assertions.Result, error) {
