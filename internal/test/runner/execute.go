@@ -346,7 +346,7 @@ func (e *executor) executeRequest(reqNode *ast.Request) (assertions.Result, erro
 		}
 	}
 
-	return assertions.Result{StatusCode: resp.StatusCode, Body: body, Variables: variables}, nil
+	return assertions.Result{StatusCode: resp.StatusCode, Body: body, Headers: resp.Header, Variables: variables}, nil
 }
 
 func isSetupRequest(url string) bool {

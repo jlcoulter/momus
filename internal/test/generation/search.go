@@ -18,8 +18,28 @@ func buildSearchCase(req coverage.CoverageRequirement, options BuildOptions) ast
 			URL:     requestURL,
 			Headers: map[string]string{"X-Momus-Requirement-ID": req.ID},
 		},
-		buildRequirementAssert(req),
+		searchAssert(req),
 	}}
+}
+
+// searchAssert builds the assertion for a search obligation. Multiple-results
+// uses a body assertion on the returned Bundle total.
+func searchAssert(req coverage.CoverageRequirement) *ast.Assert {
+	if req.Variant == coverage.CoverageVariantSearchMultipleResults {
+		return &ast.Assert{
+			Description:   "server returns multiple search results",
+			RequirementID: req.ID,
+			Expression:    "body.total >= 2",
+			Trace: &ast.Trace{
+				ProfileURL:   req.ProfileURL,
+				ResourceType: req.ResourceType,
+				Domain:       string(req.Domain),
+				Variant:      string(req.Variant),
+				Expected:     "accept",
+			},
+		}
+	}
+	return buildRequirementAssert(req)
 }
 
 // searchQueryValue returns the query value to exercise for a search obligation.

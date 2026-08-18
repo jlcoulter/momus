@@ -214,9 +214,10 @@ requests (valid / no-results / invalid-value).
   type. Custom operations are not yet derived.
 - State/transition coverage: reading and deleting nonexistent resources (404),
   and a full create -> read -> update -> read -> delete -> read(404) sequence.
-- Search coverage: valid, no-results, invalid value derived for every indexed
-  `SearchParameter`. Remaining: multiple-results assertion (needs `Bundle.total`
-  evaluation, feature 12), modifiers, and pairwise parameter combinations.
+- Search coverage: valid, no-results, invalid value, and multiple-results
+  (`body.total >= 2` via the feature-12 assertion engine) are derived for every
+  indexed `SearchParameter`. Remaining: modifiers and pairwise parameter
+  combinations.
 
 Why tenth: these domains extend coverage beyond resource validation into
 behavioural conformance. They need the planner (8) to express multi-step
@@ -236,17 +237,18 @@ this point the report has real content to show.
 
 ## 12. Assertion expression engine
 
-**Status: only `status in [200,201]` is supported.**
+**Status: implemented.** The assertion grammar now supports, beyond `status in
+[...]`:
 
-Grow the assertion grammar (or adopt JSONPath/FHIRPath evaluation) so
-assertions can inspect response bodies, headers, and captured variables —
-required to express expected outcomes for negative tests ("validation failure
-on path X") rather than just status codes.
+- `body.<path> <op> <value>` — compare a JSON response-body value (dotted
+  paths with array indices, e.g. `body.issue[0].severity`)
+- `header.<name> <op> <value>` — inspect response headers
+- `variable.<name> <op> <value>` — inspect captured variables
+- Operators `==`, `!=`, `<`, `<=`, `>`, `>=`; values may be numbers, quoted
+  strings, `true`/`false`, or `null`
 
-Why twelfth: negative and state coverage (4, 10) already function with
-status assertions; richer expressions raise fidelity but are not blocking.
-Listing it late keeps it honest, though small increments may land earlier as
-needed by 4 and 10.
+This powers search multiple-results (`body.total >= 2`) and lets negative tests
+assert the shape of an `OperationOutcome` rather than only a status code.
 
 ## 13. OpenAPI contract support
 

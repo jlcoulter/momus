@@ -55,9 +55,10 @@ const (
 	CoverageVariantInteractionPair CoverageVariant = "interaction-pair"
 
 	// Search domain.
-	CoverageVariantSearchValid        CoverageVariant = "search-valid"
-	CoverageVariantSearchNoResults    CoverageVariant = "search-no-results"
-	CoverageVariantSearchInvalidValue CoverageVariant = "search-invalid-value"
+	CoverageVariantSearchValid           CoverageVariant = "search-valid"
+	CoverageVariantSearchNoResults       CoverageVariant = "search-no-results"
+	CoverageVariantSearchInvalidValue    CoverageVariant = "search-invalid-value"
+	CoverageVariantSearchMultipleResults CoverageVariant = "search-multiple-results"
 
 	// Operation domain.
 	CoverageVariantOperationRead    CoverageVariant = "operation-read"

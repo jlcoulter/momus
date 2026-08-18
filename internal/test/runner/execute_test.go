@@ -11,6 +11,27 @@ import (
 	"github.com/jlcoulter/momus/internal/test/ast"
 )
 
+func TestExecuteEvaluatesBodyAssertion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","total":3}`))
+	}))
+	defer server.Close()
+
+	plan := &ast.Plan{Root: &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodGet, URL: server.URL + "/Observation"},
+		&ast.Assert{Description: "multiple", RequirementID: "search-multi", Expression: "body.total >= 2"},
+	}}}
+	report, err := Execute(context.Background(), plan.Root, ExecuteOptions{})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Total != 1 || report.Passed != 1 || report.Failed != 0 {
+		t.Fatalf("report = %+v, want 1 passed", report)
+	}
+}
+
 func TestExecuteProducesReport(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/Patient/test-1" && r.Method == http.MethodPut {

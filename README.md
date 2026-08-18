@@ -68,7 +68,8 @@ Currently implemented:
   `_lastUpdated`, `_profile`, `_tag`, `_security`, `_source`, `_content`,
   `_text`, `_filter`, `_query`) and resource-specific search parameters are
   derived as `search`-domain obligations for every scoped resource type and
-  exercised as GET search requests (valid / no-results / invalid-value)
+  exercised as GET search requests (valid / no-results / invalid-value /
+  multiple-results via `body.total`)
 - Operation, state, and CRUD coverage: read / update / patch / delete / history
   operations, negative state transitions (GET / DELETE a nonexistent resource),
   and a full create-read-update-read-delete-read(404) sequence are derived per
@@ -87,7 +88,9 @@ Currently implemented:
   `Sequence`, targets before dependents), and attaches the `Dataset` to the
   `TestPlan` so one dataset can back multiple plans
 - AST generation from coverage requirements with setup/capture scaffolding
-- Minimal assertion parser/evaluator (`status in [..]`)
+- Assertion expression engine: `status in [..]` plus `body.<path>`, `header.<name>`,
+  and `variable.<name>` comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`) so
+  assertions can inspect response bodies, headers, and captured variables
 - Minimal runner that executes AST requests/assertions and emits JSON test reports;
   `Parallel` branches run concurrently with per-branch variable scoping and
   deterministic result aggregation

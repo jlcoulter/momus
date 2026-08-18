@@ -312,6 +312,7 @@ func appendSearchObligations(plan *CoveragePlan, seen map[string]struct{}, c con
 		CoverageVariantSearchValid,
 		CoverageVariantSearchNoResults,
 		CoverageVariantSearchInvalidValue,
+		CoverageVariantSearchMultipleResults,
 	} {
 		appendRequirement(plan, seen, CoverageRequirement{
 			ID:           fmt.Sprintf("search|%s|%s|%s", resourceType, c.SearchCode, variant),
