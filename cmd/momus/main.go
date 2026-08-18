@@ -230,7 +230,7 @@ func main() {
 				return err
 			}
 
-			coverageResourceTypes, coverageProfileURLs, err := resourceScopeForRun(cmd, includeResourceTypes, includeProfileURLs, baseURL, scopeToCapability, apiBearerToken, apiBasicUsername, apiBasicPassword)
+			coverageResourceTypes, coverageProfileURLs, preferredProfilesByResource, err := resourceScopeForRun(cmd, includeResourceTypes, includeProfileURLs, baseURL, scopeToCapability, apiBearerToken, apiBasicUsername, apiBasicPassword)
 			if err != nil {
 				return err
 			}
@@ -247,7 +247,7 @@ func main() {
 				return err
 			}
 
-			astPlan, err := testast.GenerateFromCoveragePlan(coveragePlan, testast.BuildOptions{BaseURL: baseURL})
+			astPlan, err := testast.GenerateFromCoveragePlan(coveragePlan, testast.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource})
 			if err != nil {
 				return err
 			}
@@ -322,7 +322,7 @@ func main() {
 				return err
 			}
 
-			capabilityResourceTypes, capabilityProfileURLs, err := resourceScopeForRun(cmd, includeResourceTypes, includeProfileURLs, baseURL, scopeToCapability, apiBearerToken, apiBasicUsername, apiBasicPassword)
+			capabilityResourceTypes, capabilityProfileURLs, preferredProfilesByResource, err := resourceScopeForRun(cmd, includeResourceTypes, includeProfileURLs, baseURL, scopeToCapability, apiBearerToken, apiBasicUsername, apiBasicPassword)
 			if err != nil {
 				return err
 			}
@@ -339,7 +339,7 @@ func main() {
 				return err
 			}
 
-			astPlan, err := testast.GenerateFromCoveragePlan(coveragePlan, testast.BuildOptions{BaseURL: baseURL})
+			astPlan, err := testast.GenerateFromCoveragePlan(coveragePlan, testast.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource})
 			if err != nil {
 				return err
 			}
@@ -369,6 +369,15 @@ func main() {
 			}
 
 			fmt.Printf("Executed %d cases: %d passed, %d failed\n", report.Total, report.Passed, report.Failed)
+			if report.Diagnostics != nil && len(report.Diagnostics.TopSignatures) > 0 {
+				fmt.Printf("Top failure signatures (%d OperationOutcome failures):\n", report.Diagnostics.OperationOutcomeFailures)
+				for i, sig := range report.Diagnostics.TopSignatures {
+					fmt.Printf("  %d. %s (count=%d, req=%s)\n", i+1, sig.Signature, sig.Count, sig.ExampleRequirementID)
+				}
+				if report.Diagnostics.LikelyAuthFailure && report.Diagnostics.Hint != "" {
+					fmt.Printf("Hint: %s\n", report.Diagnostics.Hint)
+				}
+			}
 			if outputPath != "" {
 				fmt.Printf("Test report written to %s\n", outputPath)
 			}
@@ -404,9 +413,9 @@ func main() {
 	}
 }
 
-func resourceScopeForRun(cmd *cobra.Command, includeResourceTypes, includeProfileURLs []string, baseURL string, scopeToCapability bool, bearerToken, basicUsername, basicPassword string) ([]string, []string, error) {
+func resourceScopeForRun(cmd *cobra.Command, includeResourceTypes, includeProfileURLs []string, baseURL string, scopeToCapability bool, bearerToken, basicUsername, basicPassword string) ([]string, []string, map[string][]string, error) {
 	if !scopeToCapability {
-		return includeResourceTypes, includeProfileURLs, nil
+		return includeResourceTypes, includeProfileURLs, nil, nil
 	}
 	capabilityStatement, err := testcoverage.FetchCapabilityStatement(cmd.Context(), baseURL, testcoverage.CapabilityFetchOptions{
 		BearerToken:   bearerToken,
@@ -414,17 +423,18 @@ func resourceScopeForRun(cmd *cobra.Command, includeResourceTypes, includeProfil
 		BasicPassword: basicPassword,
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	capabilityTypes := testcoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, true)
 	capabilityProfiles := testcoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, true)
+	capabilityProfilesByResource := testcoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, true)
 	if len(capabilityProfiles) > 0 {
-		return intersectCaseInsensitive(includeResourceTypes, capabilityTypes), intersectCaseInsensitive(includeProfileURLs, capabilityProfiles), nil
+		return intersectCaseInsensitive(includeResourceTypes, capabilityTypes), intersectCaseInsensitive(includeProfileURLs, capabilityProfiles), capabilityProfilesByResource, nil
 	}
 	if len(capabilityTypes) == 0 {
-		return includeResourceTypes, includeProfileURLs, nil
+		return includeResourceTypes, includeProfileURLs, capabilityProfilesByResource, nil
 	}
-	return intersectCaseInsensitive(includeResourceTypes, capabilityTypes), includeProfileURLs, nil
+	return intersectCaseInsensitive(includeResourceTypes, capabilityTypes), includeProfileURLs, capabilityProfilesByResource, nil
 }
 
 func intersectCaseInsensitive(requested, available []string) []string {
