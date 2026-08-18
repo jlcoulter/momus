@@ -76,6 +76,95 @@ func TestReadPackageLoadsManifestAndResources(t *testing.T) {
 	}
 }
 
+func TestReadPackageDecodesElementExamples(t *testing.T) {
+	archivePath := buildTestPackageArchive(t, map[string]any{
+		"package/package.json": map[string]any{
+			"name":    "example.fhir.pkg",
+			"version": "1.2.3",
+		},
+		"package/StructureDefinition-test.json": map[string]any{
+			"resourceType":   "StructureDefinition",
+			"url":            "http://example.org/StructureDefinition/test",
+			"version":        "1.0.0",
+			"name":           "TestStructureDefinition",
+			"type":           "Observation",
+			"baseDefinition": "http://hl7.org/fhir/StructureDefinition/Observation",
+			"kind":           "resource",
+			"derivation":     "constraint",
+			"snapshot": map[string]any{
+				"element": []map[string]any{
+					{"id": "Observation", "path": "Observation", "min": 0, "max": "*"},
+					{"id": "Observation.valueString", "path": "Observation.valueString", "min": 0, "max": "1", "type": []map[string]any{{"code": "string"}}, "example": []map[string]any{{"label": "General", "valueString": "hello"}}},
+				},
+			},
+		},
+	})
+
+	pkg, err := ReadPackage(archivePath)
+	if err != nil {
+		t.Fatalf("ReadPackage returned error: %v", err)
+	}
+	var sd *model.StructureDefinition
+	for _, res := range pkg.Resources {
+		if candidate, ok := res.(*model.StructureDefinition); ok {
+			sd = candidate
+			break
+		}
+	}
+	if sd == nil {
+		t.Fatal("expected structure definition resource")
+	}
+	if len(sd.Elements) < 2 {
+		t.Fatalf("got %d elements, want at least 2", len(sd.Elements))
+	}
+	if len(sd.Elements[1].Examples) != 1 || sd.Elements[1].Examples[0] != "hello" {
+		t.Fatalf("got examples %+v, want [hello]", sd.Elements[1].Examples)
+	}
+}
+
+func TestReadPackageDecodesElementBaseMax(t *testing.T) {
+	archivePath := buildTestPackageArchive(t, map[string]any{
+		"package/package.json": map[string]any{
+			"name":    "example.fhir.pkg",
+			"version": "1.2.3",
+		},
+		"package/StructureDefinition-test.json": map[string]any{
+			"resourceType": "StructureDefinition",
+			"url":          "http://example.org/StructureDefinition/test-base-max",
+			"version":      "1.0.0",
+			"name":         "TestBaseMax",
+			"type":         "Organization",
+			"snapshot": map[string]any{
+				"element": []map[string]any{
+					{"id": "Organization", "path": "Organization", "min": 0, "max": "*"},
+					{"id": "Organization.address", "path": "Organization.address", "min": 1, "max": "1", "base": map[string]any{"path": "Organization.address", "min": 0, "max": "*"}},
+				},
+			},
+		},
+	})
+
+	pkg, err := ReadPackage(archivePath)
+	if err != nil {
+		t.Fatalf("ReadPackage returned error: %v", err)
+	}
+	var sd *model.StructureDefinition
+	for _, res := range pkg.Resources {
+		if candidate, ok := res.(*model.StructureDefinition); ok {
+			sd = candidate
+			break
+		}
+	}
+	if sd == nil {
+		t.Fatal("expected structure definition resource")
+	}
+	if len(sd.Elements) < 2 {
+		t.Fatalf("got %d elements, want at least 2", len(sd.Elements))
+	}
+	if sd.Elements[1].BaseMax != "*" {
+		t.Fatalf("got base max %q, want *", sd.Elements[1].BaseMax)
+	}
+}
+
 func TestReadPackageHandlesBOMManifest(t *testing.T) {
 	archivePath := buildTestPackageArchiveWithRawFiles(t, map[string][]byte{
 		"package/package.json": withUTF8BOM(mustMarshalJSON(t, map[string]any{

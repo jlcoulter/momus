@@ -121,6 +121,32 @@ type valueSetJSON struct {
 	Version string `json:"version"`
 	Name    string `json:"name"`
 	Status  string `json:"status"`
+	Compose struct {
+		Include []struct {
+			System  string `json:"system"`
+			Concept []struct {
+				Code    string `json:"code"`
+				Display string `json:"display"`
+			} `json:"concept"`
+		} `json:"include"`
+	} `json:"compose"`
+	Expansion struct {
+		Contains []struct {
+			System   string `json:"system"`
+			Code     string `json:"code"`
+			Display  string `json:"display"`
+			Contains []struct {
+				System   string `json:"system"`
+				Code     string `json:"code"`
+				Display  string `json:"display"`
+				Contains []struct {
+					System  string `json:"system"`
+					Code    string `json:"code"`
+					Display string `json:"display"`
+				} `json:"contains"`
+			} `json:"contains"`
+		} `json:"contains"`
+	} `json:"expansion"`
 }
 
 type codeSystemJSON struct {
@@ -128,6 +154,18 @@ type codeSystemJSON struct {
 	Version string `json:"version"`
 	Name    string `json:"name"`
 	Status  string `json:"status"`
+	Concept []struct {
+		Code    string `json:"code"`
+		Display string `json:"display"`
+		Concept []struct {
+			Code    string `json:"code"`
+			Display string `json:"display"`
+			Concept []struct {
+				Code    string `json:"code"`
+				Display string `json:"display"`
+			} `json:"concept"`
+		} `json:"concept"`
+	} `json:"concept"`
 }
 
 type capabilityStatementJSON struct {
@@ -305,13 +343,28 @@ func decodeResource(data []byte) (any, error) {
 		if err := json.Unmarshal(data, &vs); err != nil {
 			return nil, err
 		}
-		return &model.ValueSet{URL: vs.URL, Version: vs.Version, Name: vs.Name, Status: vs.Status}, nil
+		includes := make([]model.ValueSetInclude, 0, len(vs.Compose.Include))
+		for _, include := range vs.Compose.Include {
+			concepts := make([]model.ConceptReference, 0, len(include.Concept))
+			for _, concept := range include.Concept {
+				concepts = append(concepts, model.ConceptReference{Code: concept.Code, Display: concept.Display})
+			}
+			includes = append(includes, model.ValueSetInclude{System: include.System, Concepts: concepts})
+		}
+		return &model.ValueSet{
+			URL:               vs.URL,
+			Version:           vs.Version,
+			Name:              vs.Name,
+			Status:            vs.Status,
+			ComposeIncludes:   includes,
+			ExpansionContains: decodeExpansionContains(vs.Expansion.Contains),
+		}, nil
 	case "CodeSystem":
 		var cs codeSystemJSON
 		if err := json.Unmarshal(data, &cs); err != nil {
 			return nil, err
 		}
-		return &model.CodeSystem{URL: cs.URL, Version: cs.Version, Name: cs.Name, Status: cs.Status}, nil
+		return &model.CodeSystem{URL: cs.URL, Version: cs.Version, Name: cs.Name, Status: cs.Status, Concepts: decodeCodeSystemConcepts(cs.Concept)}, nil
 	case "CapabilityStatement":
 		var cs capabilityStatementJSON
 		if err := json.Unmarshal(data, &cs); err != nil {
@@ -373,6 +426,7 @@ func decodeElementDefinitions(rawElements []map[string]any) []model.ElementDefin
 			Name:        lastPathPart(stringField(elem, "path")),
 			Min:         intField(elem, "min"),
 			Max:         stringField(elem, "max"),
+			BaseMax:     stringField(mapField(elem, "base"), "max"),
 			MustSupport: boolField(elem, "mustSupport"),
 			SliceName:   stringField(elem, "sliceName"),
 		}
@@ -398,6 +452,10 @@ func decodeElementDefinitions(rawElements []map[string]any) []model.ElementDefin
 			}
 		}
 
+		if rawConstraints, ok := elem["constraint"].([]any); ok {
+			def.Constraints = decodeConstraints(rawConstraints)
+		}
+
 		def.Profile = stringSliceField(elem, "profile")
 		def.TargetProfile = stringSliceField(elem, "targetProfile")
 
@@ -410,9 +468,105 @@ func decodeElementDefinitions(rawElements []map[string]any) []model.ElementDefin
 			}
 		}
 
+		if rawExamples, ok := elem["example"].([]any); ok {
+			def.Examples = decodeExamples(rawExamples)
+		}
+
 		defs = append(defs, def)
 	}
 	return defs
+}
+
+func decodeConstraints(rawConstraints []any) []model.ElementConstraint {
+	constraints := make([]model.ElementConstraint, 0, len(rawConstraints))
+	for _, raw := range rawConstraints {
+		constraintMap, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		constraints = append(constraints, model.ElementConstraint{
+			Key:        stringField(constraintMap, "key"),
+			Severity:   stringField(constraintMap, "severity"),
+			Human:      stringField(constraintMap, "human"),
+			Expression: stringField(constraintMap, "expression"),
+			Source:     stringField(constraintMap, "source"),
+		})
+	}
+	return constraints
+}
+
+func decodeExamples(rawExamples []any) []any {
+	examples := make([]any, 0, len(rawExamples))
+	for _, raw := range rawExamples {
+		exampleMap, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		for key, value := range exampleMap {
+			if strings.HasPrefix(key, "value") {
+				examples = append(examples, value)
+				break
+			}
+		}
+	}
+	return examples
+}
+
+func decodeExpansionContains(raw []struct {
+	System   string `json:"system"`
+	Code     string `json:"code"`
+	Display  string `json:"display"`
+	Contains []struct {
+		System   string `json:"system"`
+		Code     string `json:"code"`
+		Display  string `json:"display"`
+		Contains []struct {
+			System  string `json:"system"`
+			Code    string `json:"code"`
+			Display string `json:"display"`
+		} `json:"contains"`
+	} `json:"contains"`
+}) []model.ValueSetExpansionContains {
+	out := make([]model.ValueSetExpansionContains, 0, len(raw))
+	for _, entry := range raw {
+		childContains := make([]model.ValueSetExpansionContains, 0, len(entry.Contains))
+		for _, child := range entry.Contains {
+			grandChildren := make([]model.ValueSetExpansionContains, 0, len(child.Contains))
+			for _, grandChild := range child.Contains {
+				grandChildren = append(grandChildren, model.ValueSetExpansionContains{System: grandChild.System, Code: grandChild.Code, Display: grandChild.Display})
+			}
+			childContains = append(childContains, model.ValueSetExpansionContains{System: child.System, Code: child.Code, Display: child.Display, Contains: grandChildren})
+		}
+		out = append(out, model.ValueSetExpansionContains{System: entry.System, Code: entry.Code, Display: entry.Display, Contains: childContains})
+	}
+	return out
+}
+
+func decodeCodeSystemConcepts(raw []struct {
+	Code    string `json:"code"`
+	Display string `json:"display"`
+	Concept []struct {
+		Code    string `json:"code"`
+		Display string `json:"display"`
+		Concept []struct {
+			Code    string `json:"code"`
+			Display string `json:"display"`
+		} `json:"concept"`
+	} `json:"concept"`
+}) []model.CodeSystemConcept {
+	out := make([]model.CodeSystemConcept, 0, len(raw))
+	for _, concept := range raw {
+		children := make([]model.CodeSystemConcept, 0, len(concept.Concept))
+		for _, child := range concept.Concept {
+			grandChildren := make([]model.CodeSystemConcept, 0, len(child.Concept))
+			for _, grandChild := range child.Concept {
+				grandChildren = append(grandChildren, model.CodeSystemConcept{Code: grandChild.Code, Display: grandChild.Display})
+			}
+			children = append(children, model.CodeSystemConcept{Code: child.Code, Display: child.Display, Concepts: grandChildren})
+		}
+		out = append(out, model.CodeSystemConcept{Code: concept.Code, Display: concept.Display, Concepts: children})
+	}
+	return out
 }
 
 // stringField retrieves a string field from a map, returning an empty string if the key is not present or not a string.
@@ -449,6 +603,15 @@ func boolField(m map[string]any, key string) bool {
 	}
 	b, _ := v.(bool)
 	return b
+}
+
+func mapField(m map[string]any, key string) map[string]any {
+	v, ok := m[key]
+	if !ok {
+		return nil
+	}
+	child, _ := v.(map[string]any)
+	return child
 }
 
 // stringSliceField retrieves a slice of strings from a map, returning nil if the key is not present or not a slice of strings.
