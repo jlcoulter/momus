@@ -4,8 +4,9 @@ Momus is a testing framework/tool for API and FHIR conformance testing.
 
 This repository is a fresh, production-oriented implementation of Momus.
 The current state is an **early MVP**: key end-to-end vertical slices are
-implemented for package loading, dependency resolution, coverage derivation,
-AST generation, and minimal test execution/reporting.
+implemented for package loading, dependency resolution, the constraint
+model, coverage derivation, AST generation, and minimal test
+execution/reporting.
 
 ## Status
 
@@ -36,6 +37,10 @@ Currently implemented:
 - Normalisation of core FHIR resources into internal model types:
   `StructureDefinition`, `ValueSet`, `CodeSystem`, `CapabilityStatement`,
   and `SearchParameter`
+- Constraint model (`internal/fhir/constraint`): normalised, `Kind`-typed
+  contractual rules derived from the registry, with stable identifiers
+  (`cardinality`, `datatype`, `terminology`, `invariant`, `reference`,
+  `fixed`, `pattern`, `search`, `interaction`)
 - MVP coverage derivation from resolved profile cardinality constraints
 - Generic dependency DAG planning for resource execution ordering
 - AST generation from coverage requirements with setup/capture scaffolding
@@ -46,8 +51,8 @@ Currently implemented:
 
 ```
 cmd/momus/          CLI entry point (minimal; --help / --version)
-internal/fhir/      FHIR model, package loading, registry, terminology,
-                    resource generation, planner, provisioning
+internal/fhir/      FHIR model, constraint model, package loading, registry,
+                    terminology, resource generation, planner, provisioning
 internal/test/      test AST, assertions, runner
 internal/openapi/   OpenAPI testing support (future)
 docs/               architecture documentation
@@ -183,6 +188,24 @@ go run ./cmd/momus coverage derive package.tgz \
   --exclude-path-prefix Observation.meta
 ```
 
+Derive the constraint model (the normalised set of contractual rules
+underlying coverage):
+
+```sh
+go run ./cmd/momus coverage constraints package.tgz
+```
+
+This walks every StructureDefinition, SearchParameter, and
+CapabilityStatement in the resolved graph and emits cardinality, datatype,
+terminology, invariant, reference, fixed, pattern, search, and interaction
+constraints as JSON, each with a stable identifier.
+
+Write the constraints to a file:
+
+```sh
+go run ./cmd/momus coverage constraints package.tgz --output ./constraints.json
+```
+
 Generate a test AST from derived coverage requirements:
 
 ```sh
@@ -222,6 +245,11 @@ The current executable MVP pipeline is:
 3. Build resource dependency DAG (internal planner)
 4. Generate dependency-aware AST (`coverage ast`)
 5. Execute AST and emit result report (`coverage run`)
+
+The constraint model (`coverage constraints`) is the normalised intermediate
+representation between the registry and coverage: contractual rules are
+derived once and can later anchor per-domain coverage obligations and test
+traceability.
 
 Dependency-chain behavior in the current AST/runner implementation:
 

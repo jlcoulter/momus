@@ -166,6 +166,22 @@ func (r *Registry) SearchParameter(resourceType, code string) (*model.SearchPara
 	return sp, ok
 }
 
+// SearchParameters returns every distinct indexed SearchParameter.
+func (r *Registry) SearchParameters() []*model.SearchParameter {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	seen := make(map[*model.SearchParameter]struct{}, len(r.searchParameters))
+	out := make([]*model.SearchParameter, 0, len(r.searchParameters))
+	for _, sp := range r.searchParameters {
+		if _, ok := seen[sp]; ok {
+			continue
+		}
+		seen[sp] = struct{}{}
+		out = append(out, sp)
+	}
+	return out
+}
+
 // SearchParametersForResource returns all SearchParameters for a resource
 // type.
 func (r *Registry) SearchParametersForResource(resourceType string) []*model.SearchParameter {

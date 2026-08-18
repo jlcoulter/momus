@@ -10,20 +10,17 @@ architectural boundary it touches.
 
 ## 1. Constraint model
 
-**Status: not started.** Currently the coverage derivation reads
-`ElementDefinition` cardinality directly and hard-codes a single domain
-(`cardinality`) with three variants. There is no intermediate representation
-of "testable rule".
+**Status: implemented.** `internal/fhir/constraint` now defines the
+constraint model: a flat, `Kind`-discriminated `Constraint` type with a
+stable `ID` (via `constraint.ID`), and `constraint.Derive`, which normalises
+StructureDefinition elements, SearchParameters, and CapabilityStatements into
+cardinality, datatype, terminology, invariant, reference, fixed, pattern,
+search, and interaction constraints. Derivation is deterministic,
+de-duplicated by ID, and sorted. Exposed via `momus coverage constraints`.
 
-Build the constraint model as the bridge between the registry and coverage:
-
-- A `Constraint` type per rule kind: cardinality, datatype, terminology
-  binding, invariant (FHIRPath expression), reference/target-profile, fixed
-  and pattern values.
-- Derivation of constraints from `StructureDefinition` elements, search
-  parameters, and CapabilityStatement interactions.
-- Constraint IDs stable enough to anchor coverage requirements and test
-  traceability.
+This is the bridge between the registry and coverage. It is not yet wired
+into coverage derivation; consuming constraints to emit per-domain coverage
+obligations is feature 2.
 
 Why first: every downstream feature (all coverage domains, generation
 variants, reporting) keys off constraints. Without this layer each new domain

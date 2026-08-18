@@ -167,6 +167,13 @@ The registry knows definitions. The constraint model represents testable
 rules extracted from those definitions. The registry does not decide test
 coverage directly.
 
+The constraint model is implemented in `internal/fhir/constraint` as a flat,
+`Kind`-discriminated `Constraint` type with a stable `ID` used to anchor
+coverage requirements and test traceability. `constraint.Derive` walks every
+indexed StructureDefinition, SearchParameter, and CapabilityStatement and
+normalises them into cardinality, datatype, terminology, invariant,
+reference, fixed, pattern, search, and interaction constraints.
+
 ## Coverage as a first-class concept
 
 Coverage is not a side effect of running tests. It is a first-class
@@ -593,6 +600,8 @@ covered.
 
 - `cmd/momus` — CLI entry point.
 - `internal/fhir/model` — normalised FHIR domain model (no I/O, no execution).
+- `internal/fhir/constraint` — constraint model: normalised, `Kind`-typed
+        contractual rules derived from the registry.
 - `internal/fhir/package` — package loading and registry building.
 - `internal/fhir/registry` — immutable FHIR/API knowledge index.
 - `internal/fhir/terminology` — terminology expansion and lookup.
