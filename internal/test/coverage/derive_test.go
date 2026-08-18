@@ -3,6 +3,7 @@ package coverage
 import (
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/fhir/constraint"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -280,4 +281,124 @@ func hasVariant(plan *CoveragePlan, variant CoverageVariant) bool {
 		}
 	}
 	return false
+}
+
+func TestDerivePlanEmitMultiDomainObligations(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/observation",
+		Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{
+				Path:  "Observation.status",
+				Min:   1,
+				Max:   "1",
+				Types: []model.ElementType{{Code: "code"}},
+				Binding: &model.Binding{
+					Strength: "required",
+					ValueSet: "http://hl7.org/fhir/ValueSet/observation-status",
+				},
+				Constraints: []model.ElementConstraint{{Key: "obs-1", Severity: "error", Expression: "status.exists()"}},
+			},
+			{Path: "Observation.subject", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Patient|4.0.1"}}}},
+		},
+	})
+
+	plan, err := DerivePlan(r, DeriveOptions{})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+
+	for _, v := range []CoverageVariant{
+		CoverageVariantDatatypeValid,
+		CoverageVariantDatatypeInvalidLexical,
+		CoverageVariantDatatypeWrongJSONType,
+		CoverageVariantDatatypeNull,
+	} {
+		if !hasVariant(plan, v) {
+			t.Fatalf("expected datatype variant %s", v)
+		}
+	}
+	for _, v := range []CoverageVariant{
+		CoverageVariantTerminologyValid,
+		CoverageVariantTerminologyInvalid,
+		CoverageVariantTerminologyAbsent,
+	} {
+		if !hasVariant(plan, v) {
+			t.Fatalf("expected terminology variant %s", v)
+		}
+	}
+	if !hasVariant(plan, CoverageVariantInvariantSatisfies) || !hasVariant(plan, CoverageVariantInvariantViolates) {
+		t.Fatal("expected invariant satisfies and violates variants")
+	}
+	for _, v := range []CoverageVariant{
+		CoverageVariantReferenceValid,
+		CoverageVariantReferenceWrongTarget,
+		CoverageVariantReferenceDangling,
+	} {
+		if !hasVariant(plan, v) {
+			t.Fatalf("expected reference variant %s", v)
+		}
+	}
+	if plan.Summary.ByDomain[CoverageDomainDatatype] == 0 || plan.Summary.ByDomain[CoverageDomainTerminology] == 0 || plan.Summary.ByDomain[CoverageDomainInvariant] == 0 || plan.Summary.ByDomain[CoverageDomainReference] == 0 {
+		t.Fatalf("missing domain summaries: %+v", plan.Summary.ByDomain)
+	}
+}
+
+func TestDerivePlanAnchorsRequirementToConstraintID(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/observation",
+		Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+
+	plan, err := DerivePlan(r, DeriveOptions{})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+
+	wantID := constraint.ID("http://example.org/StructureDefinition/observation", "Observation.value", string(constraint.KindDatatype), "string")
+	for _, req := range plan.Requirements {
+		if req.ElementPath != "Observation.value" || req.Domain != CoverageDomainDatatype {
+			continue
+		}
+		if req.ConstraintID != wantID {
+			t.Fatalf("requirement %s anchored to constraint %q, want %q", req.ID, req.ConstraintID, wantID)
+		}
+	}
+}
+
+func TestDerivePlanRequiredSliceStructureObligation(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/patient",
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.contact", Min: 0, Max: "*"},
+			{Path: "Patient.contact", Min: 1, Max: "1", SliceName: "primary"},
+		},
+	})
+
+	plan, err := DerivePlan(r, DeriveOptions{})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+
+	if !hasVariant(plan, CoverageVariantStructureSlicePresent) {
+		t.Fatal("expected structure-slice-present obligation")
+	}
+	for _, req := range plan.Requirements {
+		if req.Domain == CoverageDomainStructure {
+			if req.ConstraintID != constraint.ID("http://example.org/StructureDefinition/patient", "Patient.contact", "structure") {
+				t.Fatalf("unexpected structure constraint id %q", req.ConstraintID)
+			}
+		}
+	}
 }

@@ -5,20 +5,53 @@ type CoverageDomain string
 
 const (
 	CoverageDomainCardinality CoverageDomain = "cardinality"
+	CoverageDomainDatatype    CoverageDomain = "datatype"
+	CoverageDomainTerminology CoverageDomain = "terminology"
+	CoverageDomainStructure   CoverageDomain = "structure"
+	CoverageDomainInvariant   CoverageDomain = "invariant"
+	CoverageDomainReference   CoverageDomain = "reference"
 )
 
 // CoverageVariant identifies a specific test obligation type for a domain.
+//
+// Variants are globally unique (they are domain-prefixed) because they are
+// used as map keys in coverage summaries and evaluation reports.
 type CoverageVariant string
 
 const (
+	// Cardinality domain.
 	CoverageVariantValidMin        CoverageVariant = "valid-min"
 	CoverageVariantMissingRequired CoverageVariant = "missing-required"
 	CoverageVariantMultipleValues  CoverageVariant = "multiple-values"
+
+	// Datatype domain.
+	CoverageVariantDatatypeValid          CoverageVariant = "datatype-valid"
+	CoverageVariantDatatypeInvalidLexical CoverageVariant = "datatype-invalid-lexical"
+	CoverageVariantDatatypeWrongJSONType  CoverageVariant = "datatype-wrong-json-type"
+	CoverageVariantDatatypeNull           CoverageVariant = "datatype-null"
+
+	// Terminology domain.
+	CoverageVariantTerminologyValid   CoverageVariant = "terminology-valid"
+	CoverageVariantTerminologyInvalid CoverageVariant = "terminology-invalid"
+	CoverageVariantTerminologyAbsent  CoverageVariant = "terminology-absent"
+
+	// Structure domain.
+	CoverageVariantStructureSlicePresent CoverageVariant = "structure-slice-present"
+
+	// Invariant domain.
+	CoverageVariantInvariantSatisfies CoverageVariant = "invariant-satisfies"
+	CoverageVariantInvariantViolates  CoverageVariant = "invariant-violates"
+
+	// Reference domain.
+	CoverageVariantReferenceValid       CoverageVariant = "reference-valid"
+	CoverageVariantReferenceWrongTarget CoverageVariant = "reference-wrong-target"
+	CoverageVariantReferenceDangling    CoverageVariant = "reference-dangling"
 )
 
 // CoverageRequirement is a machine-verifiable coverage obligation.
 type CoverageRequirement struct {
 	ID                string          `json:"id"`
+	ConstraintID      string          `json:"constraintId,omitempty"`
 	ProfileURL        string          `json:"profileUrl"`
 	ResourceType      string          `json:"resourceType"`
 	ElementPath       string          `json:"elementPath"`

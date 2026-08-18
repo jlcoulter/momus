@@ -41,7 +41,12 @@ Currently implemented:
   contractual rules derived from the registry, with stable identifiers
   (`cardinality`, `datatype`, `terminology`, `invariant`, `reference`,
   `fixed`, `pattern`, `search`, `interaction`)
-- MVP coverage derivation from resolved profile cardinality constraints
+- Constraint-driven coverage derivation across the cardinality, datatype,
+  terminology, invariant, and reference domains (plus required-slice
+  structure obligations), each requirement traceable to its source
+  constraint
+- AST generation for positive variants; negative-domain obligations remain
+  derived but uncovered until mutation generation is implemented
 - Generic dependency DAG planning for resource execution ordering
 - AST generation from coverage requirements with setup/capture scaffolding
 - Minimal assertion parser/evaluator (`status in [..]`)
@@ -153,6 +158,10 @@ Derive an MVP coverage plan from resolved package constraints:
 ```sh
 go run ./cmd/momus coverage derive package.tgz
 ```
+
+Derivation is constraint-driven and now spans multiple domains: cardinality,
+datatype, terminology, invariant, reference, and required-slice structure.
+Each obligation is traceable to its source constraint via `constraintId`.
 
 Derivation defaults are intentionally practical:
 

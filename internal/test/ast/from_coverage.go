@@ -35,6 +35,31 @@ func elementAllowsMultiple(def *model.ElementDefinition) bool {
 	return allowsMultiple(def.BaseMax)
 }
 
+// supportsVariant reports whether the generator can produce a faithful test
+// for a requirement variant.
+//
+// Only positive variants (and the existing cardinality cases) are currently
+// generatable. Negative variants such as invalid lexical values, wrong JSON
+// types, invalid terminology, violated invariants, and dangling references
+// require mutation generation (a later feature); leaving them ungenerated
+// keeps coverage honest, since they are then reported as uncovered rather than
+// falsely marked covered by a valid payload.
+func supportsVariant(variant coverage.CoverageVariant) bool {
+	switch variant {
+	case coverage.CoverageVariantValidMin,
+		coverage.CoverageVariantMissingRequired,
+		coverage.CoverageVariantMultipleValues,
+		coverage.CoverageVariantDatatypeValid,
+		coverage.CoverageVariantTerminologyValid,
+		coverage.CoverageVariantInvariantSatisfies,
+		coverage.CoverageVariantReferenceValid,
+		coverage.CoverageVariantStructureSlicePresent:
+		return true
+	default:
+		return false
+	}
+}
+
 // BuildOptions controls AST construction behavior.
 type BuildOptions struct {
 	BaseURL                        string
@@ -98,6 +123,9 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 			)
 
 			for _, req := range byResource[resourceType] {
+				if !supportsVariant(req.Variant) {
+					continue
+				}
 				requestID := requirementResourceID(req)
 				caseProfiles := orderedProfilesForResource(req.ResourceType, req.ProfileURL, options.PreferredProfileURLsByResource)
 				casePrimaryProfile := firstProfileURL(caseProfiles)
@@ -127,6 +155,34 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 	}
 
 	return &Plan{Version: "v1", Root: root}, nil
+}
+
+// RequirementCount returns the number of requirement-bound Assertions in a
+// generated plan, excluding setup scaffolding.
+func RequirementCount(plan *Plan) int {
+	if plan == nil || plan.Root == nil {
+		return 0
+	}
+	count := 0
+	var walk func(Node)
+	walk = func(node Node) {
+		switch n := node.(type) {
+		case *Sequence:
+			for _, step := range n.Steps {
+				walk(step)
+			}
+		case *Parallel:
+			for _, step := range n.Steps {
+				walk(step)
+			}
+		case *Assert:
+			if !strings.HasPrefix(n.RequirementID, "setup:") {
+				count++
+			}
+		}
+	}
+	walk(plan.Root)
+	return count
 }
 
 func joinURL(baseURL, resourceType string) string {

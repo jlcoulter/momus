@@ -273,7 +273,7 @@ func main() {
 				}
 			}
 
-			fmt.Printf("Generated AST with %d requirement cases from %d resolved packages\n", len(coveragePlan.Requirements), len(graph.Packages))
+			fmt.Printf("Generated AST with %d requirement cases from %d resolved packages\n", testast.RequirementCount(astPlan), len(graph.Packages))
 			if outputPath != "" {
 				fmt.Printf("AST plan written to %s\n", outputPath)
 			}

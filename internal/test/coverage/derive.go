@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jlcoulter/momus/internal/fhir/constraint"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -21,13 +22,18 @@ var defaultLowValueSegments = map[string]struct{}{
 }
 
 // DeriveMVPPlan derives the initial contractual coverage obligations from
-// cardinality constraints across every loaded StructureDefinition element.
+// the constraint model across every loaded StructureDefinition element.
 func DeriveMVPPlan(r *registry.Registry) (*CoveragePlan, error) {
 	return DerivePlan(r, DefaultDeriveOptions())
 }
 
-// DerivePlan derives contractual coverage obligations from loaded
-// StructureDefinition elements using the provided options.
+// DerivePlan derives contractual coverage obligations from the constraint
+// model using the provided options.
+//
+// The constraint model is the single source of truth: every element-derived
+// constraint (cardinality, datatype, terminology, invariant, reference) is
+// mapped to its coverage obligations. Required slices produce structure
+// obligations, which the constraint model does not yet model.
 func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, error) {
 	if r == nil {
 		return nil, errors.New("registry is required")
@@ -35,30 +41,29 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 
 	options = normalizeOptions(options)
 
+	constraints, err := constraint.Derive(r)
+	if err != nil {
+		return nil, err
+	}
+
 	profiles := r.StructureDefinitions()
 	if len(profiles) == 0 {
 		return nil, errors.New("no structure definitions available for coverage derivation")
 	}
-
 	sort.Slice(profiles, func(i, j int) bool {
 		return profiles[i].URL < profiles[j].URL
 	})
 
-	plan := &CoveragePlan{
-		Requirements: make([]CoverageRequirement, 0),
-		Summary: CoverageSummary{
-			ByDomain:       make(map[CoverageDomain]int),
-			ByResourceType: make(map[string]int),
-			ByVariant:      make(map[CoverageVariant]int),
-			PrunedByReason: make(map[PruneReason]int),
-		},
-	}
+	plan := newCoveragePlan()
 	seen := make(map[string]struct{})
 	foundDerivableElements := false
 
 	includeResources := toSet(options.IncludeResourceTypes)
 	includeProfiles := toSet(options.IncludeProfileURLs)
 
+	// First pass: apply element-level scoping/pruning options and remember
+	// which elements are derivable, together with their dependency targets.
+	derivable := make(map[string]derivableElement)
 	for _, profile := range profiles {
 		if profile == nil {
 			continue
@@ -84,23 +89,46 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 			if strings.Contains(element.Path, ".") {
 				foundDerivableElements = true
 			}
-			derivable, reason := isDerivableElement(element, options)
-			if !derivable {
+			ok, reason := isDerivableElement(element, options)
+			if !ok {
 				trackPruned(plan, reason)
 				continue
 			}
-			appendRequirement(plan, seen, newRequirement(r, profile, element, CoverageVariantValidMin))
-			if element.Min > 0 {
-				appendRequirement(plan, seen, newRequirement(r, profile, element, CoverageVariantMissingRequired))
+			key := elementKey(profile.URL, element.Path)
+			de := derivableElement{
+				element: element,
+				targets: collectDependencyTargets(r, element),
 			}
-			if allowsMultiple(element.Max) {
-				appendRequirement(plan, seen, newRequirement(r, profile, element, CoverageVariantMultipleValues))
+			derivable[key] = de
+
+			// Structure obligations (required slices) are derived directly from
+			// element declarations until the constraint model models slicing.
+			if element.SliceName != "" && element.Min > 0 {
+				synthetic := constraint.Constraint{
+					ID:           constraint.ID(profile.URL, element.Path, "structure"),
+					ProfileURL:   profile.URL,
+					ResourceType: profile.Type,
+					ElementPath:  element.Path,
+				}
+				addRequirement(plan, seen, synthetic, de, CoverageDomainStructure, CoverageVariantStructureSlicePresent)
 			}
 		}
 	}
 
 	if !foundDerivableElements {
 		return nil, errors.New("no derivable profile elements found in structure definitions")
+	}
+
+	// Second pass: map each element-derived constraint to its obligations.
+	for _, c := range constraints {
+		if !isElementConstraintKind(c.Kind) {
+			continue
+		}
+		de, ok := derivable[elementKey(c.ProfileURL, c.ElementPath)]
+		if !ok {
+			continue
+		}
+		appendObligations(plan, seen, c, de)
 	}
 
 	sort.Slice(plan.Requirements, func(i, j int) bool {
@@ -118,19 +146,94 @@ func DefaultDeriveOptions() DeriveOptions {
 	}
 }
 
-func newRequirement(r *registry.Registry, profile *model.StructureDefinition, element model.ElementDefinition, variant CoverageVariant) CoverageRequirement {
-	id := fmt.Sprintf("%s|%s|%s", profile.URL, element.Path, variant)
-	return CoverageRequirement{
-		ID:                id,
-		ProfileURL:        profile.URL,
-		ResourceType:      profile.Type,
-		ElementPath:       element.Path,
-		DependencyTargets: collectDependencyTargets(r, element),
-		Domain:            CoverageDomainCardinality,
-		Variant:           variant,
-		Min:               element.Min,
-		Max:               element.Max,
+func newCoveragePlan() *CoveragePlan {
+	return &CoveragePlan{
+		Requirements: make([]CoverageRequirement, 0),
+		Summary: CoverageSummary{
+			ByDomain:       make(map[CoverageDomain]int),
+			ByResourceType: make(map[string]int),
+			ByVariant:      make(map[CoverageVariant]int),
+			PrunedByReason: make(map[PruneReason]int),
+		},
 	}
+}
+
+func elementKey(profileURL, elementPath string) string {
+	return profileURL + "\x00" + elementPath
+}
+
+type derivableElement struct {
+	element model.ElementDefinition
+	targets []string
+}
+
+func isElementConstraintKind(k constraint.Kind) bool {
+	switch k {
+	case constraint.KindCardinality,
+		constraint.KindDatatype,
+		constraint.KindTerminology,
+		constraint.KindInvariant,
+		constraint.KindReference:
+		return true
+	default:
+		return false
+	}
+}
+
+func appendObligations(plan *CoveragePlan, seen map[string]struct{}, c constraint.Constraint, de derivableElement) {
+	switch c.Kind {
+	case constraint.KindCardinality:
+		addRequirement(plan, seen, c, de, CoverageDomainCardinality, CoverageVariantValidMin)
+		if de.element.Min > 0 {
+			addRequirement(plan, seen, c, de, CoverageDomainCardinality, CoverageVariantMissingRequired)
+		}
+		if allowsMultiple(de.element.Max) {
+			addRequirement(plan, seen, c, de, CoverageDomainCardinality, CoverageVariantMultipleValues)
+		}
+	case constraint.KindDatatype:
+		for _, variant := range []CoverageVariant{
+			CoverageVariantDatatypeValid,
+			CoverageVariantDatatypeInvalidLexical,
+			CoverageVariantDatatypeWrongJSONType,
+			CoverageVariantDatatypeNull,
+		} {
+			addRequirement(plan, seen, c, de, CoverageDomainDatatype, variant)
+		}
+	case constraint.KindTerminology:
+		for _, variant := range []CoverageVariant{
+			CoverageVariantTerminologyValid,
+			CoverageVariantTerminologyInvalid,
+			CoverageVariantTerminologyAbsent,
+		} {
+			addRequirement(plan, seen, c, de, CoverageDomainTerminology, variant)
+		}
+	case constraint.KindInvariant:
+		addRequirement(plan, seen, c, de, CoverageDomainInvariant, CoverageVariantInvariantSatisfies)
+		addRequirement(plan, seen, c, de, CoverageDomainInvariant, CoverageVariantInvariantViolates)
+	case constraint.KindReference:
+		for _, variant := range []CoverageVariant{
+			CoverageVariantReferenceValid,
+			CoverageVariantReferenceWrongTarget,
+			CoverageVariantReferenceDangling,
+		} {
+			addRequirement(plan, seen, c, de, CoverageDomainReference, variant)
+		}
+	}
+}
+
+func addRequirement(plan *CoveragePlan, seen map[string]struct{}, c constraint.Constraint, de derivableElement, domain CoverageDomain, variant CoverageVariant) {
+	appendRequirement(plan, seen, CoverageRequirement{
+		ID:                fmt.Sprintf("%s|%s|%s", c.ProfileURL, c.ElementPath, variant),
+		ConstraintID:      c.ID,
+		ProfileURL:        c.ProfileURL,
+		ResourceType:      c.ResourceType,
+		ElementPath:       c.ElementPath,
+		DependencyTargets: de.targets,
+		Domain:            domain,
+		Variant:           variant,
+		Min:               de.element.Min,
+		Max:               de.element.Max,
+	})
 }
 
 func collectDependencyTargets(r *registry.Registry, element model.ElementDefinition) []string {

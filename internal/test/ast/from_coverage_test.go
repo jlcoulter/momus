@@ -627,3 +627,18 @@ func TestNormalizeReferenceTypeUsesTargetResourceType(t *testing.T) {
 		t.Fatalf("got reference type %v, want Organization", value["type"])
 	}
 }
+
+func TestGenerateFromCoveragePlanSkipsUngeneratableVariants(t *testing.T) {
+	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
+		Requirements: []coverage.CoverageRequirement{
+			{ID: "d-valid", ProfileURL: "http://example.org/StructureDefinition/observation", ResourceType: "Observation", ElementPath: "Observation.value", Variant: coverage.CoverageVariantDatatypeValid},
+			{ID: "d-invalid", ProfileURL: "http://example.org/StructureDefinition/observation", ResourceType: "Observation", ElementPath: "Observation.value", Variant: coverage.CoverageVariantDatatypeInvalidLexical},
+		},
+	}, BuildOptions{BaseURL: "http://localhost:8080/fhir"})
+	if err != nil {
+		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
+	}
+	if got := RequirementCount(plan); got != 1 {
+		t.Fatalf("got %d generated cases, want 1 (negative variant must be skipped, not falsely generated)", got)
+	}
+}

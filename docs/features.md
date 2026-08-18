@@ -29,16 +29,28 @@ will re-implement its own ad-hoc rule extraction, and the architecture's
 
 ## 2. Coverage derivation across all domains
 
-**Status: partially started.** Only the cardinality domain exists today.
+**Status: implemented.** `DerivePlan` is now constraint-driven: it derives the
+constraint model via `constraint.Derive` and maps each element-derived
+constraint to obligations across the cardinality, datatype, terminology,
+invariant, and reference domains, plus required-slice structure obligations.
+Each requirement carries its source `ConstraintID`, giving end-to-end
+traceability (requirement -> constraint -> profile/path/variant).
 
-Once constraints exist, extend derivation to emit obligations per domain:
+Generated domains and variants:
 
-- Datatype: valid value, invalid lexical form, wrong JSON type, null.
-- Terminology: valid code, invalid code, absent, for each binding strength.
-- Structure: unknown elements, required slices present.
-- Constraint/invariant: satisfying and violating cases for error-severity
-  invariants.
-- Reference: valid target, wrong target type, dangling reference.
+- Datatype: valid, invalid lexical, wrong JSON type, null.
+- Terminology: valid, invalid, absent.
+- Structure: required slice present (derived directly from slice elements;
+  the constraint model does not yet model slicing). Unknown-element and
+  slice-missing cases await mutation generation (feature 4).
+- Invariant: satisfies, violates.
+- Reference: valid target, wrong target, dangling.
+
+To keep coverage honest, the AST generator only emits tests for the positive
+variants (and the existing cardinality cases). Negative variants are derived
+into the plan and reported as **uncovered** until feature 4 implements
+negative mutation generation — a valid payload must never be marked as
+satisfying a negative obligation.
 
 Why second: this turns the coverage plan from a cardinality demo into the
 actual contractual obligation set the architecture promises, and it exercises
