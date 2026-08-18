@@ -69,6 +69,9 @@ Currently implemented:
   `_text`, `_filter`, `_query`) and resource-specific search parameters are
   derived as `search`-domain obligations for every scoped resource type and
   exercised as GET search requests (valid / no-results / invalid-value)
+- Operation and state coverage: read / update / delete / history operations and
+  negative state transitions (GET / DELETE a nonexistent resource) are derived
+  per resource type and exercised as the corresponding HTTP requests
 - Registry-backed `DataRequirement` -> `Dataset` generator and a
   dependency-ordered server `Provisioner` (building blocks, tested in
   isolation; pipeline wiring lands with the planner, feature 8)

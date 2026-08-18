@@ -61,6 +61,7 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 	includeResources := toSet(options.IncludeResourceTypes)
 	includeProfiles := toSet(options.IncludeProfileURLs)
 	inScopeResourceTypes := make(map[string]struct{})
+	profileURLByType := make(map[string]string)
 
 	// First pass: apply element-level scoping/pruning options and remember
 	// which elements are derivable, together with their dependency targets.
@@ -87,6 +88,9 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 		}
 		if profile.Type != "" {
 			inScopeResourceTypes[profile.Type] = struct{}{}
+			if profileURLByType[profile.Type] == "" {
+				profileURLByType[profile.Type] = profile.URL
+			}
 		}
 
 		for _, element := range profile.Elements {
@@ -153,6 +157,12 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 		}
 	}
 
+	// Operation and state coverage obligations for every in-scope resource type.
+	for _, rt := range scopedTypes {
+		appendOperationObligations(plan, seen, rt, profileURLByType[rt])
+		appendStateObligations(plan, seen, rt, profileURLByType[rt])
+	}
+
 	sort.Slice(plan.Requirements, func(i, j int) bool {
 		return plan.Requirements[i].ID < plan.Requirements[j].ID
 	})
@@ -186,7 +196,7 @@ func deriveInteractionObligations(plan *CoveragePlan, seen map[string]struct{}) 
 	}
 	groups := make(map[groupKey][]CoverageRequirement)
 	for _, req := range plan.Requirements {
-		if req.Domain == CoverageDomainInteraction || req.Variant.IsReject() {
+		if isNonElementDomain(req.Domain) || req.Variant.IsReject() {
 			continue
 		}
 		key := groupKey{req.ResourceType, req.ProfileURL}
@@ -267,6 +277,18 @@ type derivableElement struct {
 	targets []string
 }
 
+// isNonElementDomain reports whether a coverage domain is derived independently
+// of resource-element constraints and does not participate in pairwise
+// interaction grouping.
+func isNonElementDomain(domain CoverageDomain) bool {
+	switch domain {
+	case CoverageDomainInteraction, CoverageDomainSearch, CoverageDomainOperation, CoverageDomainState:
+		return true
+	default:
+		return false
+	}
+}
+
 func isElementConstraintKind(k constraint.Kind) bool {
 	switch k {
 	case constraint.KindCardinality,
@@ -298,6 +320,42 @@ func appendSearchObligations(plan *CoveragePlan, seen map[string]struct{}, c con
 			Domain:       CoverageDomainSearch,
 			Variant:      variant,
 			SearchCode:   c.SearchCode,
+		})
+	}
+}
+
+// appendOperationObligations adds the CRUD-style operation obligations (read,
+// update, delete, history) for a resource type.
+func appendOperationObligations(plan *CoveragePlan, seen map[string]struct{}, resourceType, profileURL string) {
+	for _, variant := range []CoverageVariant{
+		CoverageVariantOperationRead,
+		CoverageVariantOperationUpdate,
+		CoverageVariantOperationDelete,
+		CoverageVariantOperationHistory,
+	} {
+		appendRequirement(plan, seen, CoverageRequirement{
+			ID:           fmt.Sprintf("operation|%s|%s", resourceType, variant),
+			ProfileURL:   profileURL,
+			ResourceType: resourceType,
+			Domain:       CoverageDomainOperation,
+			Variant:      variant,
+		})
+	}
+}
+
+// appendStateObligations adds the negative state-transition obligations for a
+// resource type (reading/deleting a nonexistent resource).
+func appendStateObligations(plan *CoveragePlan, seen map[string]struct{}, resourceType, profileURL string) {
+	for _, variant := range []CoverageVariant{
+		CoverageVariantStateReadNonexistent,
+		CoverageVariantStateDeleteNonexistent,
+	} {
+		appendRequirement(plan, seen, CoverageRequirement{
+			ID:           fmt.Sprintf("state|%s|%s", resourceType, variant),
+			ProfileURL:   profileURL,
+			ResourceType: resourceType,
+			Domain:       CoverageDomainState,
+			Variant:      variant,
 		})
 	}
 }

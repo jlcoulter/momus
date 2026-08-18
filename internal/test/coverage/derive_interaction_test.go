@@ -37,7 +37,7 @@ func interactionFixture() *registry.Registry {
 func countAcceptBaseRequirements(plan *CoveragePlan) int {
 	count := 0
 	for _, req := range plan.Requirements {
-		if req.Domain == CoverageDomainInteraction {
+		if isNonElementDomain(req.Domain) {
 			continue
 		}
 		if req.Variant.IsReject() {

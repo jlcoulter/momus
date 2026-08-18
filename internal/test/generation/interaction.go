@@ -13,14 +13,18 @@ import (
 // (selected by greedy set-cover) so pairwise interaction obligations are
 // exercised together, while each reject obligation keeps its own test.
 func buildResourceCases(reqs []coverage.CoverageRequirement, plan *coverage.CoveragePlan, options BuildOptions, deps []string) []ast.Node {
-	// Search obligations are separate GET search requests and do not participate
-	// in interaction candidate grouping.
+	// Search/operation/state obligations are separate requests (GET/DELETE/etc.)
+	// and do not participate in interaction candidate grouping.
 	searchReqs := make([]coverage.CoverageRequirement, 0)
+	opReqs := make([]coverage.CoverageRequirement, 0)
 	rest := make([]coverage.CoverageRequirement, 0)
 	for _, req := range reqs {
-		if req.Domain == coverage.CoverageDomainSearch {
+		switch req.Domain {
+		case coverage.CoverageDomainSearch:
 			searchReqs = append(searchReqs, req)
-		} else {
+		case coverage.CoverageDomainOperation, coverage.CoverageDomainState:
+			opReqs = append(opReqs, req)
+		default:
 			rest = append(rest, req)
 		}
 	}
@@ -28,6 +32,9 @@ func buildResourceCases(reqs []coverage.CoverageRequirement, plan *coverage.Cove
 	cases := make([]ast.Node, 0, len(reqs))
 	for _, req := range searchReqs {
 		cases = append(cases, buildSearchCase(req, options))
+	}
+	for _, req := range opReqs {
+		cases = append(cases, buildOperationCase(req, options))
 	}
 
 	if effectiveStrength(plan, options) < 2 {

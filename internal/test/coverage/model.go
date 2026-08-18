@@ -12,6 +12,8 @@ const (
 	CoverageDomainReference   CoverageDomain = "reference"
 	CoverageDomainInteraction CoverageDomain = "interaction"
 	CoverageDomainSearch      CoverageDomain = "search"
+	CoverageDomainOperation   CoverageDomain = "operation"
+	CoverageDomainState       CoverageDomain = "state"
 )
 
 // CoverageVariant identifies a specific test obligation type for a domain.
@@ -56,6 +58,16 @@ const (
 	CoverageVariantSearchValid        CoverageVariant = "search-valid"
 	CoverageVariantSearchNoResults    CoverageVariant = "search-no-results"
 	CoverageVariantSearchInvalidValue CoverageVariant = "search-invalid-value"
+
+	// Operation domain.
+	CoverageVariantOperationRead    CoverageVariant = "operation-read"
+	CoverageVariantOperationUpdate  CoverageVariant = "operation-update"
+	CoverageVariantOperationDelete  CoverageVariant = "operation-delete"
+	CoverageVariantOperationHistory CoverageVariant = "operation-history"
+
+	// State domain.
+	CoverageVariantStateReadNonexistent   CoverageVariant = "state-read-nonexistent"
+	CoverageVariantStateDeleteNonexistent CoverageVariant = "state-delete-nonexistent"
 )
 
 // IsReject reports whether a variant's generated test must be rejected by a
