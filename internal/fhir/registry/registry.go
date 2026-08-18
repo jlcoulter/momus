@@ -111,6 +111,17 @@ func (r *Registry) StructureDefinition(url string) (*model.StructureDefinition, 
 	return sd, ok
 }
 
+// StructureDefinitions returns every indexed StructureDefinition.
+func (r *Registry) StructureDefinitions() []*model.StructureDefinition {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*model.StructureDefinition, 0, len(r.structureDefinitions))
+	for _, sd := range r.structureDefinitions {
+		out = append(out, sd)
+	}
+	return out
+}
+
 // ValueSet returns the ValueSet for a canonical URL.
 func (r *Registry) ValueSet(url string) (*model.ValueSet, bool) {
 	r.mu.RLock()

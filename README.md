@@ -36,6 +36,7 @@ Currently implemented:
 - Normalisation of core FHIR resources into internal model types:
   `StructureDefinition`, `ValueSet`, `CodeSystem`, `CapabilityStatement`,
   and `SearchParameter`
+- MVP coverage derivation from resolved profile cardinality constraints
 
 ## Layout
 
@@ -137,6 +138,27 @@ go run ./cmd/momus package resolve package.tgz --conflict-policy strict
 
 `strict` is primarily useful for auditing package graph consistency. The default
 `root-wins` mode is the normal operational mode.
+
+Derive an MVP coverage plan from resolved package constraints:
+
+```sh
+go run ./cmd/momus coverage derive package.tgz
+```
+
+Example output:
+
+```text
+Derived 3 coverage requirements from 10 resolved packages
+- cardinality: 3
+```
+
+The command also prints the JSON coverage plan to stdout by default.
+
+Write the plan to a file:
+
+```sh
+go run ./cmd/momus coverage derive package.tgz --output ./coverage-plan.json
+```
 
 ## License
 

@@ -141,6 +141,42 @@ func TestRegistryBuilderBuildRoutesSupportedResourceTypes(t *testing.T) {
 	}
 }
 
+func TestRegistryBuilderBuildFromPackages(t *testing.T) {
+	builder := NewRegistryBuilder()
+	pkgs := []*Package{
+		{
+			Name:    "p1",
+			Version: "1.0.0",
+			Resources: []any{
+				&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient-a", Type: "Patient"},
+			},
+		},
+		{
+			Name:    "p2",
+			Version: "1.0.0",
+			Resources: []any{
+				&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient-b", Type: "Patient"},
+				&model.ValueSet{URL: "http://example.org/ValueSet/b"},
+			},
+		},
+	}
+
+	r, err := builder.BuildFromPackages(pkgs)
+	if err != nil {
+		t.Fatalf("BuildFromPackages returned error: %v", err)
+	}
+
+	if _, ok := r.StructureDefinition("http://example.org/StructureDefinition/patient-a"); !ok {
+		t.Fatal("expected first package StructureDefinition to be indexed")
+	}
+	if _, ok := r.StructureDefinition("http://example.org/StructureDefinition/patient-b"); !ok {
+		t.Fatal("expected second package StructureDefinition to be indexed")
+	}
+	if _, ok := r.ValueSet("http://example.org/ValueSet/b"); !ok {
+		t.Fatal("expected second package ValueSet to be indexed")
+	}
+}
+
 func buildTestPackageArchive(t *testing.T, files map[string]any) string {
 	t.Helper()
 	rawFiles := make(map[string][]byte, len(files))
