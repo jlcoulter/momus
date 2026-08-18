@@ -1,11 +1,10 @@
-// Command momus is the entry point for the Momus API and FHIR conformance
-// testing framework.
 package main
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -13,8 +12,11 @@ import (
 	"strings"
 	"syscall"
 
+	testbulk "github.com/jlcoulter/momus/internal/fhir/bulk"
 	testconstraint "github.com/jlcoulter/momus/internal/fhir/constraint"
+	"github.com/jlcoulter/momus/internal/fhir/model"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
+	fhirresource "github.com/jlcoulter/momus/internal/fhir/resource"
 	testast "github.com/jlcoulter/momus/internal/test/ast"
 	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
 	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
@@ -66,6 +68,7 @@ func main() {
 	var failOnUncovered bool
 	var interactionStrength int
 	var includeCases bool
+	var exhaustiveGen bool
 
 	loadCmd := &cobra.Command{
 		Use:   "load <path-to-package.tgz>",
@@ -263,7 +266,7 @@ func main() {
 				return err
 			}
 
-			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: interactionStrength})
+			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: interactionStrength, Exhaustive: exhaustiveGen})
 			if err != nil {
 				return err
 			}
@@ -305,6 +308,7 @@ func main() {
 	astCmd.Flags().StringVar(&baseURL, "base-url", "", "target FHIR base URL for request nodes")
 	astCmd.Flags().StringVar(&capabilityBaseURL, "capability-base-url", "", "optional alternate FHIR base URL to fetch CapabilityStatement metadata for scope/profile selection")
 	astCmd.Flags().IntVar(&interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
+	astCmd.Flags().BoolVar(&exhaustiveGen, "exhaustive", true, "populate optional elements to produce fuller, more realistic payloads")
 
 	runCmd := &cobra.Command{
 		Use:   "run <path-to-package.tgz>",
@@ -358,7 +362,7 @@ func main() {
 				return err
 			}
 
-			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: interactionStrength})
+			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: interactionStrength, Exhaustive: exhaustiveGen})
 			if err != nil {
 				return err
 			}
@@ -450,6 +454,109 @@ func main() {
 	runCmd.Flags().StringVar(&apiBasicPassword, "api-basic-password", "", "basic auth password used for API requests during coverage run")
 	runCmd.Flags().IntVar(&interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
 	runCmd.Flags().BoolVar(&includeCases, "include-cases", false, "include the full per-case result array in the JSON report (large runs produce very large output)")
+	runCmd.Flags().BoolVar(&exhaustiveGen, "exhaustive", true, "populate optional elements to produce fuller, more realistic payloads")
+
+	bulkCmd := &cobra.Command{
+		Use:   "bulk <path-to-package.tgz>",
+		Short: "Generate NDJSON bulk data from derived coverage requirements",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rootPath := args[0]
+			searchDir := depsDir
+			if searchDir == "" {
+				searchDir = filepath.Dir(rootPath)
+			}
+			cacheDir := downloadDir
+			if cacheDir == "" {
+				cacheDir = filepath.Join(searchDir, ".momus", "packages")
+			}
+
+			graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
+				DepsDir:        searchDir,
+				DownloadDir:    cacheDir,
+				ConflictPolicy: fhirpackage.ConflictPolicy(conflictPolicy),
+			})
+			if err != nil {
+				return err
+			}
+
+			builder := fhirpackage.NewRegistryBuilder()
+			reg, err := builder.BuildFromPackages(graph.Packages)
+			if err != nil {
+				return err
+			}
+
+			plan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
+				IncludeResourceTypes: includeResourceTypes,
+				IncludeProfileURLs:   includeProfileURLs,
+				ExcludePathPrefixes:  excludePathPrefixes,
+				MustSupportOnly:      mustSupportOnly,
+				IncludeOptional:      includeOptional,
+				IncludeLowValuePaths: includeLowValuePaths,
+				Strength:             interactionStrength,
+			})
+			if err != nil {
+				return err
+			}
+
+			requirements, err := testcoverage.PlanToDataRequirements(plan)
+			if err != nil {
+				return err
+			}
+
+			generator := fhirresource.NewGeneratorWithOptions(reg, fhirresource.Options{Exhaustive: exhaustiveGen})
+			datasets := make([]*model.Dataset, 0, len(requirements))
+			for _, req := range requirements {
+				ds, err := generator.Generate(cmd.Context(), req)
+				if err != nil {
+					return err
+				}
+				datasets = append(datasets, ds)
+			}
+
+			var out io.Writer = os.Stdout
+			var f *os.File
+			if outputPath != "" {
+				if dir := filepath.Dir(outputPath); dir != "" && dir != "." {
+					if err := os.MkdirAll(dir, 0o755); err != nil {
+						return fmt.Errorf("create bulk output dir %s: %w", dir, err)
+					}
+				}
+				f, err = os.Create(outputPath)
+				if err != nil {
+					return fmt.Errorf("create bulk file %s: %w", outputPath, err)
+				}
+				defer f.Close()
+				out = f
+			}
+
+			w := testbulk.NewWriter(out)
+			if err := w.WriteDatasets(datasets); err != nil {
+				return err
+			}
+			if err := w.Close(); err != nil {
+				return err
+			}
+
+			fmt.Printf("Generated NDJSON bulk data: %d resources from %d requirements\n", testbulk.Count(datasets), len(requirements))
+			if outputPath != "" {
+				fmt.Printf("Bulk data written to %s\n", outputPath)
+			}
+			return nil
+		},
+	}
+	bulkCmd.Flags().StringVar(&depsDir, "deps-dir", "", "directory to search for dependency package archives (.tgz/.tar.gz)")
+	bulkCmd.Flags().StringVar(&downloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
+	bulkCmd.Flags().StringVar(&conflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
+	bulkCmd.Flags().StringVar(&outputPath, "output", "", "write NDJSON bulk data to a file")
+	bulkCmd.Flags().BoolVar(&exhaustiveGen, "exhaustive", true, "populate optional elements to produce fuller, more complete resources")
+	bulkCmd.Flags().StringSliceVar(&includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable)")
+	bulkCmd.Flags().StringSliceVar(&includeProfileURLs, "include-profile-url", nil, "include only these profile canonical URLs (repeatable)")
+	bulkCmd.Flags().StringSliceVar(&excludePathPrefixes, "exclude-path-prefix", nil, "exclude element paths by prefix (repeatable)")
+	bulkCmd.Flags().BoolVar(&mustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
+	bulkCmd.Flags().BoolVar(&includeOptional, "include-optional", false, "include optional non-mustSupport elements")
+	bulkCmd.Flags().BoolVar(&includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
+	bulkCmd.Flags().IntVar(&interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
 
 	constraintsCmd := &cobra.Command{
 		Use:   "constraints <path-to-package.tgz>",
@@ -519,6 +626,7 @@ func main() {
 	coverageCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(packageCmd)
 	rootCmd.AddCommand(coverageCmd)
+	coverageCmd.AddCommand(bulkCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

@@ -3,6 +3,8 @@ package generation
 import (
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"math/rand"
 	"regexp"
 	"sort"
 	"strconv"
@@ -36,6 +38,19 @@ func elementAllowsMultiple(def *model.ElementDefinition) bool {
 	return allowsMultiple(def.BaseMax)
 }
 
+// optionalInclusionProbability is the chance that an optional (Min == 0)
+// element is included when generating exhaustive payloads, so presence varies
+// realistically across requests.
+const optionalInclusionProbability = 0.5
+
+// newRNG returns a deterministic random source seeded from seedString, so the
+// same input produces the same payload while different requests vary.
+func newRNG(seedString string) *rand.Rand {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(seedString))
+	return rand.New(rand.NewSource(int64(h.Sum32())))
+}
+
 // BuildOptions controls AST construction behavior.
 type BuildOptions struct {
 	BaseURL                        string
@@ -46,6 +61,11 @@ type BuildOptions struct {
 	// strength 1 (one test per requirement). Strength >= 2 groups compatible
 	// obligations into shared payloads selected by greedy set-cover.
 	Strength int
+	// Exhaustive populates optional (Min == 0) elements in addition to required
+	// ones, with randomised presence, so generated payloads are fuller and more
+	// realistic. When false, only required and contract-driven elements are
+	// populated.
+	Exhaustive bool
 }
 
 // GenerateFromCoveragePlan maps coverage requirements into a concrete AST.
@@ -93,7 +113,7 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 					Headers: map[string]string{
 						"Content-Type": "application/fhir+json",
 					},
-					Body: buildSetupBody(resourceType, setupResourceID(resourceType), setupProfiles, setupPrimaryProfile, deps, options.Registry),
+					Body: buildSetupBody(resourceType, setupResourceID(resourceType), setupProfiles, setupPrimaryProfile, deps, options.Registry, options.Exhaustive),
 				},
 				&ast.Assert{
 					Description:   "setup create seed resource",
@@ -159,21 +179,106 @@ func joinInstanceURL(baseURL, resourceType, id string) string {
 	return joinURL(baseURL, resourceType) + "/" + strings.TrimPrefix(id, "/")
 }
 
-func buildBodyTemplate(req coverage.CoverageRequirement, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry) map[string]any {
+func buildBodyTemplate(req coverage.CoverageRequirement, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
 	body := baseBodyTemplate(req.ResourceType, id, profileURLs, deps)
 	enrichBodyFromProfile(body, primaryProfileURL, reg)
+	if exhaustive {
+		enrichBodyExhaustive(body, primaryProfileURL, reg, newRNG(id))
+	}
 	normalizeGeneratedPayload(body)
 	normalizeResourceSpecificPayload(body)
 	applyNegativeMutation(body, req, reg)
 	return body
 }
 
-func buildSetupBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry) map[string]any {
+func buildSetupBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
 	body := baseBodyTemplate(resourceType, id, profileURLs, deps)
 	enrichBodyFromProfile(body, primaryProfileURL, reg)
+	if exhaustive {
+		enrichBodyExhaustive(body, primaryProfileURL, reg, newRNG(id))
+	}
 	normalizeGeneratedPayload(body)
 	normalizeResourceSpecificPayload(body)
 	return body
+}
+
+// enrichBodyExhaustive populates optional elements of the resolved profile
+// into body, with randomised presence, so generated payloads include every
+// parameter with a realistic value rather than only required elements.
+func enrichBodyExhaustive(body map[string]any, profileURL string, reg *registry.Registry, rng *rand.Rand) {
+	if reg == nil || strings.TrimSpace(profileURL) == "" {
+		return
+	}
+	resolved, err := reg.ResolveProfile(profileURL)
+	if err != nil || resolved == nil || resolved.Root == nil {
+		return
+	}
+	populateOptionalChildren(body, resolved.Root, reg, rng)
+	applySimpleConstraints(body, resolved.Root, reg)
+	normalizeRepeatableChildren(body, resolved.Root)
+}
+
+// populateOptionalChildren adds optional (Min == 0) children that are not
+// already present, randomised by rng, and recurses into existing complex
+// values so their optional children are populated too.
+func populateOptionalChildren(value map[string]any, node *model.ElementNode, reg *registry.Registry, rng *rand.Rand) {
+	if value == nil || node == nil {
+		return
+	}
+	childNames := make([]string, 0, len(node.Children))
+	for name := range node.Children {
+		childNames = append(childNames, name)
+	}
+	sort.Strings(childNames)
+	for _, name := range childNames {
+		child := node.Children[name]
+		if child == nil {
+			continue
+		}
+		if child.Definition == nil {
+			// Intermediate or choice node: recurse into any existing container.
+			if raw, ok := value[name]; ok {
+				recurseExhaustive(raw, child, reg, rng)
+			}
+			continue
+		}
+		propName := propertyNameForNode(child)
+		if propName == "" {
+			continue
+		}
+		optional := child.Definition.Min <= 0 && !hasRequiredSlices(child) && !hasContractSignal(child)
+		if !optional {
+			if raw, ok := value[propName]; ok {
+				recurseExhaustive(raw, child, reg, rng)
+			}
+			continue
+		}
+		if _, exists := value[propName]; exists {
+			recurseExhaustive(value[propName], child, reg, rng)
+			continue
+		}
+		if rng != nil && rng.Float64() > optionalInclusionProbability {
+			continue
+		}
+		if generated, ok := generateRequiredValue(child, reg); ok {
+			value[propName] = generated
+		}
+	}
+}
+
+// recurseExhaustive walks an existing value to populate optional children of
+// nested complex datatypes.
+func recurseExhaustive(raw any, node *model.ElementNode, reg *registry.Registry, rng *rand.Rand) {
+	switch typed := raw.(type) {
+	case map[string]any:
+		populateOptionalChildren(typed, node, reg, rng)
+	case []any:
+		for _, item := range typed {
+			if itemMap, ok := item.(map[string]any); ok {
+				populateOptionalChildren(itemMap, node, reg, rng)
+			}
+		}
+	}
 }
 
 func baseBodyTemplate(resourceType, id string, profileURLs, deps []string) map[string]any {
@@ -1698,7 +1803,7 @@ func buildSingleRequirementCase(req coverage.CoverageRequirement, options BuildO
 				"Content-Type":           "application/fhir+json",
 				"X-Momus-Requirement-ID": req.ID,
 			},
-			Body: buildBodyTemplate(req, requestID, caseProfiles, casePrimaryProfile, deps, options.Registry),
+			Body: buildBodyTemplate(req, requestID, caseProfiles, casePrimaryProfile, deps, options.Registry, options.Exhaustive),
 		},
 		buildRequirementAssert(req),
 	}}

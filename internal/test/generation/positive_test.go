@@ -1,6 +1,9 @@
 package generation
 
 import (
+	"sort"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -8,6 +11,106 @@ import (
 	"github.com/jlcoulter/momus/internal/test/ast"
 	"github.com/jlcoulter/momus/internal/test/coverage"
 )
+
+func TestGenerateFromCoveragePlanExhaustiveAddsAndVariesOptionals(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		{Path: "Patient.birthDate", Min: 0, Max: "1", Types: []model.ElementType{{Code: "date"}}},
+		{Path: "Patient.gender", Min: 0, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+	}})
+	basePlan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
+		{ID: "req-1", ProfileURL: "http://example.org/StructureDefinition/patient", ResourceType: "Patient", ElementPath: "Patient.name", Variant: coverage.CoverageVariantValidMin},
+	}}
+
+	// Default (non-exhaustive) payloads carry only the required name element.
+	defaultPlan, err := GenerateFromCoveragePlan(basePlan, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg})
+	if err != nil {
+		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
+	}
+	defaultBody := firstRequestBody(t, defaultPlan)
+	if defaultBody["birthDate"] != nil || defaultBody["gender"] != nil {
+		t.Fatalf("default payload unexpectedly exhaustive: %v", sortedBodyKeys(defaultBody))
+	}
+
+	// Exhaustive payloads add optional elements and vary their presence across
+	// requests seeded from distinct requirement IDs.
+	seen := make(map[string]bool)
+	varied := false
+	sawOptional := false
+	for i := 0; i < 12; i++ {
+		plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
+			{ID: "req-1", ProfileURL: "http://example.org/StructureDefinition/patient", ResourceType: "Patient", ElementPath: "Patient.name", Variant: coverage.CoverageVariantValidMin},
+		}}
+		// Ensure a distinct body seed per iteration by varying the requirement id.
+		plan.Requirements[0].ID = "req-" + strconv.Itoa(i)
+		p, err := GenerateFromCoveragePlan(plan, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg, Exhaustive: true})
+		if err != nil {
+			t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
+		}
+		body := firstRequestBody(t, p)
+		if body["name"] == nil {
+			t.Fatal("exhaustive payload missing required name element")
+		}
+		if body["birthDate"] != nil || body["gender"] != nil {
+			sawOptional = true
+		}
+		keySet := strings.Join(sortedBodyKeys(body), ",")
+		if !seen[keySet] && len(seen) > 0 {
+			varied = true
+		}
+		seen[keySet] = true
+	}
+	if !sawOptional {
+		t.Fatal("exhaustive payloads never included an optional element")
+	}
+	if !varied {
+		t.Fatal("expected exhaustive payload presence to vary across requests")
+	}
+}
+
+func firstRequestBody(t *testing.T, plan *ast.Plan) map[string]any {
+	t.Helper()
+	var body map[string]any
+	var walk func(ast.Node)
+	walk = func(node ast.Node) {
+		if body != nil {
+			return
+		}
+		switch n := node.(type) {
+		case *ast.Sequence:
+			for _, step := range n.Steps {
+				walk(step)
+			}
+		case *ast.Parallel:
+			for _, step := range n.Steps {
+				walk(step)
+			}
+		case *ast.Request:
+			// Skip the per-resource setup request; take the first requirement case.
+			if _, isRequirement := n.Headers["X-Momus-Requirement-ID"]; isRequirement {
+				if m, ok := n.Body.(map[string]any); ok {
+					body = m
+				}
+			}
+		}
+	}
+	walk(plan.Root)
+	if body == nil {
+		t.Fatal("no requirement case request body found in plan")
+	}
+	return body
+}
+
+func sortedBodyKeys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
 
 func TestGenerateFromCoveragePlanBuildsPerRequirementSequence(t *testing.T) {
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{

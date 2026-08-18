@@ -21,15 +21,30 @@ type Generator interface {
 	Generate(ctx context.Context, requirement model.DataRequirement) (*model.Dataset, error)
 }
 
+// Options configures the DatasetGenerator.
+type Options struct {
+	// Exhaustive populates optional elements in addition to required ones,
+	// producing fuller, more realistic resources suitable for bulk data.
+	// When false, only required (Min > 0) elements are populated.
+	Exhaustive bool
+}
+
 // DatasetGenerator synthesises concrete resources from a DataRequirement using
 // the registry's resolved profiles. It is safe to reuse across requirements.
 type DatasetGenerator struct {
-	reg *registry.Registry
+	reg        *registry.Registry
+	exhaustive bool
 }
 
 // NewGenerator returns a DatasetGenerator backed by reg.
 func NewGenerator(reg *registry.Registry) *DatasetGenerator {
-	return &DatasetGenerator{reg: reg}
+	return NewGeneratorWithOptions(reg, Options{})
+}
+
+// NewGeneratorWithOptions returns a DatasetGenerator backed by reg with the
+// given options applied.
+func NewGeneratorWithOptions(reg *registry.Registry, opts Options) *DatasetGenerator {
+	return &DatasetGenerator{reg: reg, exhaustive: opts.Exhaustive}
 }
 
 // Generate produces a Dataset satisfying req: one or more instances of the
@@ -60,7 +75,7 @@ func (g *DatasetGenerator) Generate(ctx context.Context, req model.DataRequireme
 		}
 		targetProfile := primaryProfile(rel.Target.Profile)
 		targetID := targetInstanceID(targetType, targetProfile)
-		body, err := synthesizeResource(g.reg, targetType, targetProfile, targetID, nil)
+		body, err := synthesizeResource(g.reg, targetType, targetProfile, targetID, nil, g.exhaustive, newRNG(targetID))
 		if err != nil {
 			return nil, fmt.Errorf("generate relationship target %s: %w", targetType, err)
 		}
@@ -80,7 +95,7 @@ func (g *DatasetGenerator) Generate(ctx context.Context, req model.DataRequireme
 	profile := primaryProfile(req.Resource.Profile)
 	for i := 0; i < count; i++ {
 		localID := instanceID(req, i)
-		body, err := synthesizeResource(g.reg, resourceType, profile, localID, refs)
+		body, err := synthesizeResource(g.reg, resourceType, profile, localID, refs, g.exhaustive, newRNG(localID))
 		if err != nil {
 			return nil, fmt.Errorf("generate %s instance %d: %w", resourceType, i, err)
 		}

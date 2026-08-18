@@ -2,6 +2,9 @@ package resource
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -171,4 +174,74 @@ func TestGenerateRequiresRegistryAndType(t *testing.T) {
 	if _, err := NewGenerator(reg).Generate(context.Background(), model.DataRequirement{}); err == nil {
 		t.Fatal("expected error for missing resource type")
 	}
+}
+
+func TestGenerateExhaustiveIncludesRequiredAndAddsOptionals(t *testing.T) {
+	reg := testRegistry(t)
+	req := model.DataRequirement{
+		Resource:    model.ResourceRequirement{Type: "Observation", Profile: []string{obsProfile}},
+		Cardinality: model.Exactly(1),
+	}
+
+	genDefault := NewGenerator(reg)
+	dsDefault, err := genDefault.Generate(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+	defaultKeys := sortedKeys(dsDefault.Resources["momus-Observation"].Resource)
+
+	// Exhaustive mode must include every required element (a superset of the
+	// default output) and, across varied instance seeds, exercise enough
+	// optional elements that the output varies.
+	gen := NewGeneratorWithOptions(reg, Options{Exhaustive: true})
+	seen := make(map[string]bool)
+	varied := false
+	for i := 0; i < 20; i++ {
+		r := req
+		r.ID = fmt.Sprintf("inst-%d", i)
+		ds, err := gen.Generate(context.Background(), r)
+		if err != nil {
+			t.Fatalf("Generate returned error: %v", err)
+		}
+		body := ds.Resources[instanceID(r, 0)].Resource
+		for _, k := range defaultKeys {
+			if _, ok := body[k]; !ok {
+				t.Fatalf("exhaustive body missing required key %q (have %v)", k, sortedKeys(body))
+			}
+		}
+		keySet := strings.Join(sortedKeys(body), ",")
+		if !seen[keySet] && len(seen) > 0 {
+			varied = true
+		}
+		seen[keySet] = true
+	}
+	if !varied {
+		t.Fatalf("expected exhaustive output to vary across instances (optional element presence is not randomised)")
+	}
+}
+
+func TestGenerateDefaultOmitsOptionalElements(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewGenerator(reg)
+
+	ds, err := gen.Generate(context.Background(), model.DataRequirement{
+		Resource:    model.ResourceRequirement{Type: "Observation", Profile: []string{obsProfile}},
+		Cardinality: model.Exactly(1),
+	})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+	obs := requireInstance(t, ds, "momus-Observation")
+	if obs.Resource["value"] != nil {
+		t.Fatalf("expected optional value element to be absent in default mode, got %v", obs.Resource["value"])
+	}
+}
+
+func sortedKeys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

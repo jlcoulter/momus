@@ -205,7 +205,7 @@ func buildCandidateCase(cand candidateTest, options BuildOptions, deps []string)
 			"Content-Type":           "application/fhir+json",
 			"X-Momus-Requirement-ID": seed.ID,
 		},
-		Body: buildBodyTemplate(seed, requestID, profiles, primaryProfile, deps, options.Registry),
+		Body: buildBodyTemplate(seed, requestID, profiles, primaryProfile, deps, options.Registry, options.Exhaustive),
 	}
 
 	seq := &ast.Sequence{Steps: []ast.Node{request}}
