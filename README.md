@@ -194,6 +194,21 @@ go run ./cmd/momus coverage ast package.tgz \
   --output ./test-ast.json
 ```
 
+Execute generated tests with the minimal runner and output a JSON result report:
+
+```sh
+go run ./cmd/momus coverage run package.tgz \
+  --base-url http://localhost:8080/fhir \
+  --output ./test-results.json
+```
+
+Example summary output:
+
+```text
+Executed 42 cases: 40 passed, 2 failed
+Test report written to ./test-results.json
+```
+
 ## License
 
 See [LICENSE](LICENSE).
