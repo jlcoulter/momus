@@ -77,6 +77,11 @@ Currently implemented:
   references wired into a distributed, coherent web (dependents spread over
   shared targets rather than all pointing at one instance)
 - Generic dependency DAG planning for resource execution ordering
+- True `Planner` and `TestPlan` (`coverage plan`): turns `DataRequirement`s into
+  a `Dataset` via the feature-6 `Generator`, lays out an executable AST that
+  provisions the dataset in dependency order (`Parallel` per level, levels in
+  `Sequence`, targets before dependents), and attaches the `Dataset` to the
+  `TestPlan` so one dataset can back multiple plans
 - AST generation from coverage requirements with setup/capture scaffolding
 - Minimal assertion parser/evaluator (`status in [..]`)
 - Minimal runner that executes AST requests/assertions and emits JSON test reports
@@ -310,6 +315,22 @@ healthcare services:
 go run ./cmd/momus coverage bulk package.tgz --output ./data.ndjson \
   --include-resource Organization --include-resource HealthcareService \
   --per-type Organization=10 --per-type HealthcareService=25
+```
+
+Generate a `TestPlan` from derived data requirements (feature 8): the planner
+generates a `Dataset` via the feature-6 `Generator`, lays out an executable AST
+that provisions the dataset in dependency order (`Parallel` per level, levels in
+`Sequence`, targets before dependents), and attaches the `Dataset` to the plan:
+
+```sh
+go run ./cmd/momus coverage plan package.tgz --base-url http://localhost:8080/fhir --output ./test-plan.json
+```
+
+Example output:
+
+```text
+Planned 23 resources from 17 data requirements across 2 dependency levels
+Test plan written to ./test-plan.json
 ```
 
 ### Coverage Pipeline (MVP)

@@ -17,6 +17,7 @@ import (
 	testconstraint "github.com/jlcoulter/momus/internal/fhir/constraint"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
+	fhirplanner "github.com/jlcoulter/momus/internal/fhir/planner"
 	fhirresource "github.com/jlcoulter/momus/internal/fhir/resource"
 	testast "github.com/jlcoulter/momus/internal/test/ast"
 	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
@@ -587,6 +588,96 @@ func main() {
 	bulkCmd.Flags().StringSliceVar(&bulkPerTypeCounts, "per-type", nil, "per-type resource counts as Type=Count (repeatable); overrides --count")
 	bulkCmd.Flags().StringSliceVar(&includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable); referenced target types are added automatically")
 
+	planCmd := &cobra.Command{
+		Use:   "plan <path-to-package.tgz>",
+		Short: "Generate a Dataset and executable TestPlan from data requirements",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rootPath := args[0]
+			searchDir := depsDir
+			if searchDir == "" {
+				searchDir = filepath.Dir(rootPath)
+			}
+			cacheDir := downloadDir
+			if cacheDir == "" {
+				cacheDir = filepath.Join(searchDir, ".momus", "packages")
+			}
+
+			graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
+				DepsDir:        searchDir,
+				DownloadDir:    cacheDir,
+				ConflictPolicy: fhirpackage.ConflictPolicy(conflictPolicy),
+			})
+			if err != nil {
+				return err
+			}
+
+			builder := fhirpackage.NewRegistryBuilder()
+			reg, err := builder.BuildFromPackagesScoped(graph.Packages, graph.Root)
+			if err != nil {
+				return err
+			}
+
+			coveragePlan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
+				IncludeResourceTypes: includeResourceTypes,
+				IncludeProfileURLs:   includeProfileURLs,
+				ExcludePathPrefixes:  excludePathPrefixes,
+				MustSupportOnly:      mustSupportOnly,
+				IncludeOptional:      includeOptional,
+				IncludeLowValuePaths: includeLowValuePaths,
+				Strength:             interactionStrength,
+			})
+			if err != nil {
+				return err
+			}
+
+			requirements, err := testcoverage.PlanToDataRequirements(coveragePlan)
+			if err != nil {
+				return err
+			}
+
+			generator := fhirresource.NewGeneratorWithOptions(reg, fhirresource.Options{Exhaustive: exhaustiveGen})
+			planner := fhirplanner.NewDefaultPlanner(generator)
+			testPlan, err := planner.Plan(cmd.Context(), fhirplanner.Input{BaseURL: baseURL, Requirements: requirements})
+			if err != nil {
+				return err
+			}
+
+			encoded, err := testast.EncodePlan(&testast.Plan{Version: "v1", Root: testPlan.Root})
+			if err != nil {
+				return err
+			}
+			out, err := json.MarshalIndent(encoded, "", "  ")
+			if err != nil {
+				return fmt.Errorf("marshal test plan: %w", err)
+			}
+
+			fmt.Printf("Planned %d resources from %d data requirements across %d dependency levels\n", len(testPlan.Dataset.Resources), len(requirements), dependencyLevelCount(testPlan.Root))
+			if outputPath == "" {
+				fmt.Println(string(out))
+			} else {
+				if err := writeOutputFile(outputPath, append(out, '\n')); err != nil {
+					return fmt.Errorf("write test plan to %s: %w", outputPath, err)
+				}
+				fmt.Printf("Test plan written to %s\n", outputPath)
+			}
+			return nil
+		},
+	}
+	planCmd.Flags().StringVar(&depsDir, "deps-dir", "", "directory to search for dependency package archives (.tgz/.tar.gz)")
+	planCmd.Flags().StringVar(&downloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
+	planCmd.Flags().StringVar(&conflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
+	planCmd.Flags().StringVar(&outputPath, "output", "", "write generated test plan JSON to a file")
+	planCmd.Flags().StringVar(&baseURL, "base-url", "", "target FHIR base URL for request nodes")
+	planCmd.Flags().StringSliceVar(&includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable)")
+	planCmd.Flags().StringSliceVar(&includeProfileURLs, "include-profile-url", nil, "include only these profile canonical URLs (repeatable)")
+	planCmd.Flags().StringSliceVar(&excludePathPrefixes, "exclude-path-prefix", nil, "exclude element paths by prefix (repeatable)")
+	planCmd.Flags().BoolVar(&mustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
+	planCmd.Flags().BoolVar(&includeOptional, "include-optional", false, "include optional non-mustSupport elements")
+	planCmd.Flags().BoolVar(&includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
+	planCmd.Flags().IntVar(&interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
+	planCmd.Flags().BoolVar(&exhaustiveGen, "exhaustive", true, "populate optional elements to produce fuller, more realistic resources")
+
 	constraintsCmd := &cobra.Command{
 		Use:   "constraints <path-to-package.tgz>",
 		Short: "Derive the constraint model from resolved package definitions",
@@ -659,6 +750,7 @@ func main() {
 	coverageCmd.AddCommand(constraintsCmd)
 	coverageCmd.AddCommand(astCmd)
 	coverageCmd.AddCommand(runCmd)
+	coverageCmd.AddCommand(planCmd)
 	rootCmd.AddCommand(packageCmd)
 	rootCmd.AddCommand(coverageCmd)
 	coverageCmd.AddCommand(bulkCmd)
@@ -907,6 +999,15 @@ func writeOutputFile(path string, data []byte) error {
 		}
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+// dependencyLevelCount returns the number of dependency levels in a plan root
+// built by the planner (a Sequence of Parallel levels).
+func dependencyLevelCount(root testast.Node) int {
+	if seq, ok := root.(*testast.Sequence); ok {
+		return len(seq.Steps)
+	}
+	return 0
 }
 
 // debugOutputDir is the default directory where per-stage JSON artifacts are

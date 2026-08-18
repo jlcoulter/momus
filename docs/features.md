@@ -167,27 +167,21 @@ home.
 
 ## 8. Planner and true `TestPlan`
 
-**Status: `internal/fhir/planner` is an interface-only stub; AST generation
-currently doubles as the planner.**
+**Status: implemented.** `internal/fhir/planner` now provides a concrete
+`DefaultPlanner` (via `planner.NewDefaultPlanner(generator)`) that turns data
+requirements into a true `TestPlan`.
 
-Implement `Planner` to turn data requirements and datasets into a `TestPlan`,
-choosing `Sequence` vs `Parallel` nodes based on dependency analysis rather
-than purely topological levels.
-
-This is where `DataRequirement` and `Dataset` become first-class in the
-pipeline (they are currently bypassed) and where the feature-6 building
-blocks get wired in. Concrete requirements:
-
-- The `Planner` emits `DataRequirement`s; the feature-6 `Generator`
-  (`resource.NewGenerator`) turns them into a concrete `Dataset`.
-- The feature-6 `Provisioner` (`provisioning.New`) provisions that `Dataset`
-  to the server ahead of execution.
-- `coverage run` executes the generated `TestPlan` against that provisioned
-  state instead of synthesising request bodies inline. One `Dataset` must be
-  able to serve multiple plans.
-
-Why eighth: it depends on the `Generator`/`Provisioner` building blocks (6)
-and is the integration point for execution-flow features.
+- The planner merges the `Dataset`s produced by the feature-6 `Generator`
+  (`resource.NewGenerator`) for each `DataRequirement`.
+- It lays out an executable AST that provisions the dataset in dependency
+  order: resources at each topological level run in `Parallel`, and levels run
+  in `Sequence` (targets before dependents), based on `Dataset.Relationships`
+  rather than purely topological levels.
+- The generated `Dataset` is attached to the `TestPlan`, so one `Dataset` can
+  back multiple plans, and can be provisioned ahead of execution via the
+  feature-6 `Provisioner` (`provisioning.New`).
+- Exposed via `coverage plan` (`planner.Plan`), which emits the executable
+  `TestPlan` AST from the derived data requirements.
 
 ## 9. Runner concurrency
 
