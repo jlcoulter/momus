@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -85,7 +86,7 @@ func TestRegistryResolveProfileBuildsElementTree(t *testing.T) {
 		t.Fatal("expected path lookup to succeed")
 	}
 
-	if _, err := r.ResolveProfile("http://example.org/missing"); err != ErrNotFound {
+	if _, err := r.ResolveProfile("http://example.org/missing"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("got error %v, want ErrNotFound", err)
 	}
 }

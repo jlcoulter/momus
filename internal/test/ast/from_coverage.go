@@ -348,9 +348,7 @@ func upperCamelTypeName(typeCode string) string {
 	if typeCode == "" {
 		return ""
 	}
-	if strings.HasPrefix(typeCode, "http://hl7.org/fhirpath/System.") {
-		typeCode = strings.TrimPrefix(typeCode, "http://hl7.org/fhirpath/System.")
-	}
+	typeCode = strings.TrimPrefix(typeCode, "http://hl7.org/fhirpath/System.")
 	if len(typeCode) == 1 {
 		return strings.ToUpper(typeCode)
 	}
@@ -1412,7 +1410,14 @@ func sampleStringValue(path string) string {
 	if name == "" {
 		name = "value"
 	}
-	return strings.Title(strings.ReplaceAll(name, "-", " "))
+	words := strings.Fields(strings.ReplaceAll(name, "-", " "))
+	for i, w := range words {
+		if w == "" {
+			continue
+		}
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 func sampleCodeValue(path string) string {
@@ -1462,13 +1467,6 @@ func pathLeaf(path string) string {
 		return path[idx+1:]
 	}
 	return path
-}
-
-func singleProfile(profileURL string) []string {
-	if strings.TrimSpace(profileURL) == "" {
-		return nil
-	}
-	return []string{profileURL}
 }
 
 func firstProfileURL(profileURLs []string) string {

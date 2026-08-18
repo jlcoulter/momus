@@ -69,7 +69,8 @@ func TestEvaluateCoverageEmptyPlan(t *testing.T) {
 	if report.CoveredRequirements != 0 || report.UncoveredRequirements != 0 {
 		t.Fatalf("unexpected covered/uncovered counts: %+v", report)
 	}
-	if report.CoveragePercent != 100 {
-		t.Fatalf("got coverage percent %.2f, want 100", report.CoveragePercent)
+	// An empty plan must not report 100% coverage.
+	if report.CoveragePercent != 0 {
+		t.Fatalf("got coverage percent %.2f, want 0", report.CoveragePercent)
 	}
 }

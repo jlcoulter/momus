@@ -10,7 +10,8 @@ func EvaluateCoverage(plan *CoveragePlan, executed []ExecutedRequirementResult) 
 		ByVariant:      make(map[CoverageVariant]DomainCoverageSummary),
 	}
 	if plan == nil || len(plan.Requirements) == 0 {
-		report.CoveragePercent = 100
+		// An empty or absent plan proves nothing: report zero coverage rather
+		// than claiming 100% of an undefined obligation set.
 		return report
 	}
 

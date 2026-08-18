@@ -4,6 +4,7 @@ package registry
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -195,7 +196,7 @@ func (r *Registry) ProfilesForResource(resourceType string) []*model.StructureDe
 func (r *Registry) ResolveProfile(url string) (*model.ResolvedProfile, error) {
 	sd, ok := r.StructureDefinition(url)
 	if !ok {
-		return nil, ErrNotFound
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, url)
 	}
 	return model.NewResolvedProfile(sd.URL, sd.Type, sd.Elements), nil
 }

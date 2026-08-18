@@ -303,7 +303,7 @@ func decodeManifest(data []byte, pkg *Package) error {
 			if dep.Name == "" {
 				continue
 			}
-			pkg.Dependencies = append(pkg.Dependencies, Dependency{Name: dep.Name, Version: dep.Version})
+			pkg.Dependencies = append(pkg.Dependencies, Dependency(dep))
 		}
 	}
 

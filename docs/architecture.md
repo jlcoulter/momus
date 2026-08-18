@@ -491,7 +491,9 @@ Uncovered:
 ```
 
 Momus must never report "100% coverage" without defining the coverage domain
-and proving that all required obligations in that domain were satisfied.
+and proving that all required obligations in that domain were satisfied. In
+particular, an empty or absent coverage plan is not 100% coverage; the
+evaluator reports zero coverage when there are no obligations to satisfy.
 
 ## Coverage reporting
 
@@ -595,12 +597,18 @@ covered.
 - `internal/fhir/registry` — immutable FHIR/API knowledge index.
 - `internal/fhir/terminology` — terminology expansion and lookup.
 - `internal/fhir/resource` — resource generator interface.
-- `internal/fhir/planner` — planner interface and `TestPlan`.
-- `internal/fhir/provisioning` — provisioner interface.
+- `internal/fhir/planner` — planner interface and `TestPlan` (interface-only
+        stub pending stage 6).
+- `internal/fhir/provisioning` — provisioner interface (interface-only stub
+        pending stage 6).
 - `internal/test/coverage` — coverage requirements, derivation, evaluation,
         and reporting.
 - `internal/test/generation` — positive, negative, boundary, and interaction
-        generation.
+        generation. (Planned. The MVP's profile-driven body synthesis
+        currently lives in `internal/test/ast/from_coverage.go`; it graduates
+        to this package when negative/boundary/interaction variant
+        generation lands, so that `ast` returns to holding only node
+        definitions and encoding.)
 - `internal/test/ast` — executable test AST.
 - `internal/test/runner` — test execution.
 - `internal/test/assertions` — assertion interface and evaluation.

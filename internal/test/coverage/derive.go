@@ -237,9 +237,7 @@ func allowsMultiple(max string) bool {
 }
 
 func normalizeOptions(options DeriveOptions) DeriveOptions {
-	if !options.IncludeOptional && !options.MustSupportOnly {
-		// default behavior already represented; no-op kept for clarity
-	}
+	// Reserved for future option normalization.
 	return options
 }
 
