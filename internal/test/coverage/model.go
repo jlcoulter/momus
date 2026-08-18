@@ -11,6 +11,7 @@ const (
 	CoverageDomainInvariant   CoverageDomain = "invariant"
 	CoverageDomainReference   CoverageDomain = "reference"
 	CoverageDomainInteraction CoverageDomain = "interaction"
+	CoverageDomainSearch      CoverageDomain = "search"
 )
 
 // CoverageVariant identifies a specific test obligation type for a domain.
@@ -50,6 +51,11 @@ const (
 
 	// Interaction domain.
 	CoverageVariantInteractionPair CoverageVariant = "interaction-pair"
+
+	// Search domain.
+	CoverageVariantSearchValid        CoverageVariant = "search-valid"
+	CoverageVariantSearchNoResults    CoverageVariant = "search-no-results"
+	CoverageVariantSearchInvalidValue CoverageVariant = "search-invalid-value"
 )
 
 // IsReject reports whether a variant's generated test must be rejected by a
@@ -67,7 +73,8 @@ func (v CoverageVariant) IsReject() bool {
 		CoverageVariantTerminologyAbsent,
 		CoverageVariantInvariantViolates,
 		CoverageVariantReferenceWrongTarget,
-		CoverageVariantReferenceDangling:
+		CoverageVariantReferenceDangling,
+		CoverageVariantSearchInvalidValue:
 		return true
 	default:
 		return false
@@ -91,6 +98,8 @@ type CoverageRequirement struct {
 	// interaction strength >= 2.
 	PairA string `json:"pairA,omitempty"`
 	PairB string `json:"pairB,omitempty"`
+	// SearchCode is the search parameter code for search-domain obligations.
+	SearchCode string `json:"searchCode,omitempty"`
 }
 
 // InteractionRequirement records a pairwise interaction obligation: the two

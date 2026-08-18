@@ -203,7 +203,13 @@ this change is contained to the runner.
 
 ## 10. Operation, state, and search coverage
 
-**Status: not started.** Only create-style PUT flows exist.
+**Status: search coverage partially implemented.** Every indexed
+`SearchParameter` (including the built-in FHIR `_parameters` such as `_id`,
+`_lastUpdated`, `_profile`, `_tag`, `_security`, `_source`, `_content`,
+`_text`, `_filter`, `_query`) now becomes a `search`-domain coverage obligation
+for every scoped resource type, generated as GET search requests (valid /
+no-results / invalid-value). Operations and state/transition coverage are not
+started; only create-style PUT flows exist.
 
 - Operations: read, update, patch, delete, history, and custom operations,
   scoped by CapabilityStatement interactions.
@@ -211,7 +217,8 @@ this change is contained to the runner.
   nonexistent, DELETE already deleted, etc.).
 - Search coverage: valid, no-results, multiple-results, invalid value,
   invalid and unsupported modifiers, and pairwise parameter combinations
-  derived from indexed `SearchParameter`s.
+  derived from indexed `SearchParameter`s. Derived: valid / no-results /
+  invalid-value. Remaining: multiple-results, modifiers, pairwise combinations.
 
 Why tenth: these domains extend coverage beyond resource validation into
 behavioural conformance. They need the planner (8) to express multi-step

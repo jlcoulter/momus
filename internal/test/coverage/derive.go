@@ -60,6 +60,7 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 
 	includeResources := toSet(options.IncludeResourceTypes)
 	includeProfiles := toSet(options.IncludeProfileURLs)
+	inScopeResourceTypes := make(map[string]struct{})
 
 	// First pass: apply element-level scoping/pruning options and remember
 	// which elements are derivable, together with their dependency targets.
@@ -83,6 +84,9 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 				trackPruned(plan, PruneReasonProfileFiltered)
 				continue
 			}
+		}
+		if profile.Type != "" {
+			inScopeResourceTypes[profile.Type] = struct{}{}
 		}
 
 		for _, element := range profile.Elements {
@@ -129,6 +133,24 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 			continue
 		}
 		appendObligations(plan, seen, c, de)
+	}
+
+	// Search constraints (including the universal `_parameters`) produce search
+	// coverage obligations for every in-scope resource type.
+	scopedTypes := sortedSetKeys(inScopeResourceTypes)
+	for _, c := range constraints {
+		if c.Kind != constraint.KindSearch {
+			continue
+		}
+		if isUniversalSearchBase(c.ResourceType) {
+			for _, rt := range scopedTypes {
+				appendSearchObligations(plan, seen, c, rt)
+			}
+			continue
+		}
+		if _, ok := inScopeResourceTypes[c.ResourceType]; ok {
+			appendSearchObligations(plan, seen, c, c.ResourceType)
+		}
 	}
 
 	sort.Slice(plan.Requirements, func(i, j int) bool {
@@ -255,6 +277,28 @@ func isElementConstraintKind(k constraint.Kind) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// appendSearchObligations adds the search coverage obligations for a search
+// constraint applied to a single resource type.
+func appendSearchObligations(plan *CoveragePlan, seen map[string]struct{}, c constraint.Constraint, resourceType string) {
+	if strings.TrimSpace(c.SearchCode) == "" {
+		return
+	}
+	for _, variant := range []CoverageVariant{
+		CoverageVariantSearchValid,
+		CoverageVariantSearchNoResults,
+		CoverageVariantSearchInvalidValue,
+	} {
+		appendRequirement(plan, seen, CoverageRequirement{
+			ID:           fmt.Sprintf("search|%s|%s|%s", resourceType, c.SearchCode, variant),
+			ConstraintID: c.ID,
+			ResourceType: resourceType,
+			Domain:       CoverageDomainSearch,
+			Variant:      variant,
+			SearchCode:   c.SearchCode,
+		})
 	}
 }
 
@@ -441,6 +485,27 @@ func isLowValuePath(path string) bool {
 	}
 	_, ok := defaultLowValueSegments[parts[1]]
 	return ok
+}
+
+// isUniversalSearchBase reports whether a search parameter base denotes the
+// universal parameters that apply to every resource type. In FHIR these are
+// defined against the abstract Resource base rather than "*".
+func isUniversalSearchBase(resourceType string) bool {
+	switch resourceType {
+	case "*", "Resource", "DomainResource":
+		return true
+	default:
+		return false
+	}
+}
+
+func sortedSetKeys(set map[string]struct{}) []string {
+	keys := make([]string, 0, len(set))
+	for k := range set {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func toSet(values []string) map[string]struct{} {

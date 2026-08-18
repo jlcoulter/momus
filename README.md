@@ -64,6 +64,11 @@ Currently implemented:
   domain and generation selects a near-minimal set by greedy set-cover,
   grouping compatible accepts into shared valid payloads (`--strength` on
   derive/ast/run)
+- Search parameter coverage: the built-in FHIR `_parameters` (`_id`,
+  `_lastUpdated`, `_profile`, `_tag`, `_security`, `_source`, `_content`,
+  `_text`, `_filter`, `_query`) and resource-specific search parameters are
+  derived as `search`-domain obligations for every scoped resource type and
+  exercised as GET search requests (valid / no-results / invalid-value)
 - Registry-backed `DataRequirement` -> `Dataset` generator and a
   dependency-ordered server `Provisioner` (building blocks, tested in
   isolation; pipeline wiring lands with the planner, feature 8)

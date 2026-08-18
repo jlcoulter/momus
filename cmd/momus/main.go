@@ -585,13 +585,7 @@ func main() {
 	bulkCmd.Flags().BoolVar(&exhaustiveGen, "exhaustive", true, "populate optional elements to produce fuller, more complete resources")
 	bulkCmd.Flags().IntVar(&bulkCount, "count", 25, "number of resources to generate per resource type")
 	bulkCmd.Flags().StringSliceVar(&bulkPerTypeCounts, "per-type", nil, "per-type resource counts as Type=Count (repeatable); overrides --count")
-	bulkCmd.Flags().StringSliceVar(&includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable)")
-	bulkCmd.Flags().StringSliceVar(&includeProfileURLs, "include-profile-url", nil, "include only these profile canonical URLs (repeatable)")
-	bulkCmd.Flags().StringSliceVar(&excludePathPrefixes, "exclude-path-prefix", nil, "exclude element paths by prefix (repeatable)")
-	bulkCmd.Flags().BoolVar(&mustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
-	bulkCmd.Flags().BoolVar(&includeOptional, "include-optional", false, "include optional non-mustSupport elements")
-	bulkCmd.Flags().BoolVar(&includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
-	bulkCmd.Flags().IntVar(&interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
+	bulkCmd.Flags().StringSliceVar(&includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable); referenced target types are added automatically")
 
 	constraintsCmd := &cobra.Command{
 		Use:   "constraints <path-to-package.tgz>",
