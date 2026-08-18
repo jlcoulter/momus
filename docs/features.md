@@ -201,23 +201,23 @@ this change is contained to the runner.
 
 ## 10. Operation, state, and search coverage
 
-**Status: operations, state transitions, and CRUD sequences implemented; search
-partially implemented.** Every scoped resource type derives CRUD-style operation
-obligations (read / update / patch / delete / history), negative state
-transitions (GET / DELETE a nonexistent resource), and a full CRUD sequence
-(create -> read -> update -> read -> delete -> read-404), generated as the
-corresponding HTTP requests with status assertions. Search coverage derives the
-built-in FHIR `_parameters` and resource-specific search parameters as GET
-requests (valid / no-results / invalid-value).
+**Status: implemented.** Every scoped resource type derives CRUD-style operation
+obligations (read / update / patch / delete / history), custom operations
+declared in `CapabilityStatement` `rest.resource.operation` entries (e.g.
+`$everything`), negative state transitions (GET / DELETE a nonexistent
+resource), and a full CRUD sequence (create -> read -> update -> read -> delete
+-> read-404). Search coverage derives the built-in FHIR `_parameters` and
+resource-specific search parameters, plus invalid-value, multiple-results
+(`body.total`), and invalid-modifier variants; pairwise search-parameter
+combinations are derived opt-in at `--strength 2`.
 
-- Operations: read, update, patch, delete, and history are derived per resource
-  type. Custom operations are not yet derived.
+- Operations: read, update, patch, delete, history, and custom (`$`) operations
+  are derived from the resolved resource types and their CapabilityStatements.
 - State/transition coverage: reading and deleting nonexistent resources (404),
   and a full create -> read -> update -> read -> delete -> read(404) sequence.
-- Search coverage: valid, no-results, invalid value, and multiple-results
-  (`body.total >= 2` via the feature-12 assertion engine) are derived for every
-  indexed `SearchParameter`. Remaining: modifiers and pairwise parameter
-  combinations.
+- Search coverage: valid, no-results, invalid value, multiple-results
+  (`body.total >= 2`), and invalid modifier for every indexed `SearchParameter`;
+  pairwise parameter combinations at interaction strength 2.
 
 Why tenth: these domains extend coverage beyond resource validation into
 behavioural conformance. They need the planner (8) to express multi-step

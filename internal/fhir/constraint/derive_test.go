@@ -80,6 +80,9 @@ func testRegistry() *registry.Registry {
 					{Code: "create"},
 					{Code: "read"},
 				},
+				Operation: []model.CapabilityStatementOperation{
+					{Name: "$everything", Definition: "http://example.org/OperationDefinition/Observation-everything"},
+				},
 			}},
 		}},
 	})
@@ -185,6 +188,11 @@ func TestDeriveCapabilityConstraints(t *testing.T) {
 	}
 	requireConstraint(t, derived, KindInteraction, ID("http://example.org/CapabilityStatement/server", string(KindInteraction), "Observation", "create"))
 	requireConstraint(t, derived, KindInteraction, ID("http://example.org/CapabilityStatement/server", string(KindInteraction), "Observation", "read"))
+
+	op := requireConstraint(t, derived, KindOperation, ID("http://example.org/CapabilityStatement/server", string(KindOperation), "Observation", "everything"))
+	if op.OperationName != "everything" {
+		t.Fatalf("operation name = %q, want everything", op.OperationName)
+	}
 }
 
 func TestDeriveIsDeterministicAndSorted(t *testing.T) {

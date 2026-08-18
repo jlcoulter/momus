@@ -183,6 +183,10 @@ type capabilityStatementJSON struct {
 			Interaction      []struct {
 				Code string `json:"code"`
 			} `json:"interaction"`
+			Operation []struct {
+				Name       string `json:"name"`
+				Definition string `json:"definition"`
+			} `json:"operation"`
 		} `json:"resource"`
 	} `json:"rest"`
 }
@@ -378,11 +382,16 @@ func decodeResource(data []byte) (any, error) {
 				for _, interaction := range resource.Interaction {
 					interactions = append(interactions, model.CapabilityStatementInteraction{Code: interaction.Code})
 				}
+				operations := make([]model.CapabilityStatementOperation, 0, len(resource.Operation))
+				for _, operation := range resource.Operation {
+					operations = append(operations, model.CapabilityStatementOperation{Name: operation.Name, Definition: operation.Definition})
+				}
 				resources = append(resources, model.CapabilityStatementRestResource{
 					Type:             resource.Type,
 					Profile:          resource.Profile,
 					SupportedProfile: resource.SupportedProfile,
 					Interaction:      interactions,
+					Operation:        operations,
 				})
 			}
 			rest = append(rest, model.CapabilityStatementRest{

@@ -7,6 +7,52 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
 
+func TestDerivePlanAddsSearchModifierAndCombination(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/org-profile",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.name", Min: 1, Max: "1"},
+		},
+	})
+	r.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Resource-id", Name: "_id", Code: "_id", Base: []string{"Resource"}, Type: "token"})
+	r.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Organization-active", Name: "active", Code: "active", Base: []string{"Organization"}, Type: "token"})
+
+	plan, err := DerivePlan(r, DeriveOptions{})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+	var hasModifier bool
+	for _, req := range plan.Requirements {
+		if req.Variant == CoverageVariantSearchInvalidModifier {
+			hasModifier = true
+		}
+	}
+	if !hasModifier {
+		t.Fatal("expected search-invalid-modifier obligation")
+	}
+
+	// Pairwise combinations are opt-in at strength 2.
+	plan2, err := DerivePlan(r, DeriveOptions{Strength: 2})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+	var hasCombination bool
+	for _, req := range plan2.Requirements {
+		if req.Variant == CoverageVariantSearchCombination {
+			hasCombination = true
+			if req.SearchCode == "" || req.SearchCodeB == "" {
+				t.Fatalf("combination requirement missing codes: %+v", req)
+			}
+		}
+	}
+	if !hasCombination {
+		t.Fatal("expected search-combination obligation at strength 2")
+	}
+}
+
 func TestDerivePlanAddsSearchObligations(t *testing.T) {
 	r := registry.New()
 	r.AddStructureDefinition(&model.StructureDefinition{

@@ -142,6 +142,7 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 	// Search constraints (including the universal `_parameters`) produce search
 	// coverage obligations for every in-scope resource type.
 	scopedTypes := sortedSetKeys(inScopeResourceTypes)
+	searchCodesByType := make(map[string][]string)
 	for _, c := range constraints {
 		if c.Kind != constraint.KindSearch {
 			continue
@@ -149,11 +150,21 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 		if isUniversalSearchBase(c.ResourceType) {
 			for _, rt := range scopedTypes {
 				appendSearchObligations(plan, seen, c, rt)
+				searchCodesByType[rt] = appendUniqueString(searchCodesByType[rt], c.SearchCode)
 			}
 			continue
 		}
 		if _, ok := inScopeResourceTypes[c.ResourceType]; ok {
 			appendSearchObligations(plan, seen, c, c.ResourceType)
+			searchCodesByType[c.ResourceType] = appendUniqueString(searchCodesByType[c.ResourceType], c.SearchCode)
+		}
+	}
+
+	// Pairwise search-parameter combinations are opt-in at interaction strength 2
+	// (like interaction coverage) to avoid combinatorial explosion by default.
+	if options.Strength >= 2 {
+		for _, rt := range scopedTypes {
+			appendSearchCombinationObligations(plan, seen, rt, profileURLByType[rt], searchCodesByType[rt])
 		}
 	}
 
@@ -161,6 +172,23 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 	for _, rt := range scopedTypes {
 		appendOperationObligations(plan, seen, rt, profileURLByType[rt])
 		appendStateObligations(plan, seen, rt, profileURLByType[rt])
+	}
+
+	// Custom operations declared by in-scope resource types' CapabilityStatements.
+	for _, c := range constraints {
+		if c.Kind != constraint.KindOperation {
+			continue
+		}
+		if _, ok := inScopeResourceTypes[c.ResourceType]; ok {
+			appendRequirement(plan, seen, CoverageRequirement{
+				ID:            fmt.Sprintf("operation|%s|%s", c.ResourceType, c.OperationName),
+				ProfileURL:    profileURLByType[c.ResourceType],
+				ResourceType:  c.ResourceType,
+				Domain:        CoverageDomainOperation,
+				Variant:       CoverageVariantOperationCustom,
+				OperationName: c.OperationName,
+			})
+		}
 	}
 
 	sort.Slice(plan.Requirements, func(i, j int) bool {
@@ -313,6 +341,7 @@ func appendSearchObligations(plan *CoveragePlan, seen map[string]struct{}, c con
 		CoverageVariantSearchNoResults,
 		CoverageVariantSearchInvalidValue,
 		CoverageVariantSearchMultipleResults,
+		CoverageVariantSearchInvalidModifier,
 	} {
 		appendRequirement(plan, seen, CoverageRequirement{
 			ID:           fmt.Sprintf("search|%s|%s|%s", resourceType, c.SearchCode, variant),
@@ -361,6 +390,40 @@ func appendStateObligations(plan *CoveragePlan, seen map[string]struct{}, resour
 			Variant:      variant,
 		})
 	}
+}
+
+// appendSearchCombinationObligations adds a pairwise combination obligation for
+// every pair of distinct search parameters of a resource type.
+func appendSearchCombinationObligations(plan *CoveragePlan, seen map[string]struct{}, resourceType, profileURL string, codes []string) {
+	codes = uniqueSortedStrings(codes)
+	for i := 0; i < len(codes); i++ {
+		for j := i + 1; j < len(codes); j++ {
+			appendRequirement(plan, seen, CoverageRequirement{
+				ID:           fmt.Sprintf("search|%s|%s++%s|%s", resourceType, codes[i], codes[j], CoverageVariantSearchCombination),
+				ProfileURL:   profileURL,
+				ResourceType: resourceType,
+				Domain:       CoverageDomainSearch,
+				Variant:      CoverageVariantSearchCombination,
+				SearchCode:   codes[i],
+				SearchCodeB:  codes[j],
+			})
+		}
+	}
+}
+
+func uniqueSortedStrings(values []string) []string {
+	set := make(map[string]struct{}, len(values))
+	for _, v := range values {
+		if v != "" {
+			set[v] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(set))
+	for v := range set {
+		out = append(out, v)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func appendObligations(plan *CoveragePlan, seen map[string]struct{}, c constraint.Constraint, de derivableElement) {

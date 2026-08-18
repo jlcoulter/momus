@@ -10,8 +10,7 @@ import (
 // buildSearchCase builds a GET search request that exercises a search
 // parameter against a resource type, with the appropriate accept/reject assert.
 func buildSearchCase(req coverage.CoverageRequirement, options BuildOptions) ast.Node {
-	query := req.SearchCode + "=" + url.QueryEscape(searchQueryValue(req))
-	requestURL := joinURL(options.BaseURL, req.ResourceType) + "?" + query
+	requestURL := joinURL(options.BaseURL, req.ResourceType) + "?" + searchQuery(req)
 	return &ast.Sequence{Steps: []ast.Node{
 		&ast.Request{
 			Method:  "GET",
@@ -20,6 +19,20 @@ func buildSearchCase(req coverage.CoverageRequirement, options BuildOptions) ast
 		},
 		searchAssert(req),
 	}}
+}
+
+// searchQuery builds the query string for a search obligation, handling pairwise
+// combinations (two parameters) and invalid modifiers.
+func searchQuery(req coverage.CoverageRequirement) string {
+	if req.Variant == coverage.CoverageVariantSearchCombination && req.SearchCodeB != "" {
+		return req.SearchCode + "=" + url.QueryEscape(searchQueryValue(req)) +
+			"&" + req.SearchCodeB + "=" + url.QueryEscape(searchQueryValue(req))
+	}
+	code := req.SearchCode
+	if req.Variant == coverage.CoverageVariantSearchInvalidModifier {
+		code += ":zzz"
+	}
+	return code + "=" + url.QueryEscape(searchQueryValue(req))
 }
 
 // searchAssert builds the assertion for a search obligation. Multiple-results

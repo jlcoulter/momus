@@ -32,6 +32,8 @@ const (
 	KindSearch Kind = "search"
 	// KindInteraction is a REST interaction a server must support.
 	KindInteraction Kind = "interaction"
+	// KindOperation is a custom operation ($name) a server must support.
+	KindOperation Kind = "operation"
 )
 
 // Constraint is a single normalised contractual rule.
@@ -76,6 +78,9 @@ type Constraint struct {
 
 	// Interaction (KindInteraction).
 	Interaction string `json:"interaction,omitempty"`
+
+	// OperationName (KindOperation).
+	OperationName string `json:"operationName,omitempty"`
 }
 
 // ID builds a stable, deterministic constraint identifier from its parts.

@@ -23,6 +23,16 @@ type CapabilityStatementRestResource struct {
 	Profile          string
 	SupportedProfile []string
 	Interaction      []CapabilityStatementInteraction
+	// Operation lists custom operations ($name) the server supports for this
+	// resource type.
+	Operation []CapabilityStatementOperation
+}
+
+// CapabilityStatementOperation represents a custom operation ($name) supported
+// for a resource type, referencing its OperationDefinition.
+type CapabilityStatementOperation struct {
+	Name       string
+	Definition string
 }
 
 // CapabilityStatementInteraction represents a supported REST interaction code.

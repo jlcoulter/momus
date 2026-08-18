@@ -273,6 +273,19 @@ func deriveCapabilityConstraints(cs *model.CapabilityStatement) []Constraint {
 					Interaction:  inter.Code,
 				})
 			}
+			for _, op := range res.Operation {
+				name := strings.TrimSpace(op.Name)
+				if name == "" {
+					continue
+				}
+				name = strings.TrimPrefix(name, "$")
+				out = append(out, Constraint{
+					ID:            ID(cs.URL, string(KindOperation), res.Type, name),
+					Kind:          KindOperation,
+					ResourceType:  res.Type,
+					OperationName: name,
+				})
+			}
 		}
 	}
 	return out

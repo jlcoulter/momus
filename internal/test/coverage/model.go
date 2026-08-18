@@ -59,6 +59,8 @@ const (
 	CoverageVariantSearchNoResults       CoverageVariant = "search-no-results"
 	CoverageVariantSearchInvalidValue    CoverageVariant = "search-invalid-value"
 	CoverageVariantSearchMultipleResults CoverageVariant = "search-multiple-results"
+	CoverageVariantSearchInvalidModifier CoverageVariant = "search-invalid-modifier"
+	CoverageVariantSearchCombination     CoverageVariant = "search-combination"
 
 	// Operation domain.
 	CoverageVariantOperationRead    CoverageVariant = "operation-read"
@@ -66,6 +68,7 @@ const (
 	CoverageVariantOperationPatch   CoverageVariant = "operation-patch"
 	CoverageVariantOperationDelete  CoverageVariant = "operation-delete"
 	CoverageVariantOperationHistory CoverageVariant = "operation-history"
+	CoverageVariantOperationCustom  CoverageVariant = "operation-custom"
 
 	// State domain.
 	CoverageVariantStateCRUDSequence      CoverageVariant = "state-crud-sequence"
@@ -89,7 +92,8 @@ func (v CoverageVariant) IsReject() bool {
 		CoverageVariantInvariantViolates,
 		CoverageVariantReferenceWrongTarget,
 		CoverageVariantReferenceDangling,
-		CoverageVariantSearchInvalidValue:
+		CoverageVariantSearchInvalidValue,
+		CoverageVariantSearchInvalidModifier:
 		return true
 	default:
 		return false
@@ -115,6 +119,12 @@ type CoverageRequirement struct {
 	PairB string `json:"pairB,omitempty"`
 	// SearchCode is the search parameter code for search-domain obligations.
 	SearchCode string `json:"searchCode,omitempty"`
+	// SearchCodeB is the second search parameter code for pairwise search
+	// combination obligations.
+	SearchCodeB string `json:"searchCodeB,omitempty"`
+	// OperationName is the custom operation name ($name) for operation-custom
+	// obligations.
+	OperationName string `json:"operationName,omitempty"`
 }
 
 // InteractionRequirement records a pairwise interaction obligation: the two

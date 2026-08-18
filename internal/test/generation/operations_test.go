@@ -97,3 +97,38 @@ func TestBuildCRUDCaseEmitsSixStepSequence(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildCustomOperationCase(t *testing.T) {
+	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
+		Requirements: []coverage.CoverageRequirement{
+			{ID: "op-custom", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationCustom, OperationName: "everything"},
+		},
+	}, BuildOptions{BaseURL: "http://localhost:8080/fhir"})
+	if err != nil {
+		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
+	}
+
+	got := map[string]string{}
+	var walk func(ast.Node)
+	walk = func(node ast.Node) {
+		switch n := node.(type) {
+		case *ast.Sequence:
+			for _, step := range n.Steps {
+				walk(step)
+			}
+		case *ast.Parallel:
+			for _, step := range n.Steps {
+				walk(step)
+			}
+		case *ast.Request:
+			if rid := n.Headers["X-Momus-Requirement-ID"]; rid != "" {
+				got[rid] = n.Method + " " + n.URL
+			}
+		}
+	}
+	walk(plan.Root)
+
+	if got["op-custom"] != "GET http://localhost:8080/fhir/Organization/$everything" {
+		t.Fatalf("custom operation case = %q", got["op-custom"])
+	}
+}

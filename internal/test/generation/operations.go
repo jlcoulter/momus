@@ -1,6 +1,8 @@
 package generation
 
 import (
+	"strings"
+
 	"github.com/jlcoulter/momus/internal/test/ast"
 	"github.com/jlcoulter/momus/internal/test/coverage"
 )
@@ -88,6 +90,9 @@ func operationSpec(req coverage.CoverageRequirement, options BuildOptions) (meth
 		return "DELETE", "/" + target, "status in [200,204]", "accept"
 	case coverage.CoverageVariantOperationHistory:
 		return "GET", "/" + target + "/_history", "status in [200]", "accept"
+	case coverage.CoverageVariantOperationCustom:
+		name := strings.TrimPrefix(req.OperationName, "$")
+		return "GET", "/$" + name, "status in [200]", "accept"
 	case coverage.CoverageVariantStateReadNonexistent:
 		return "GET", "/" + missing, "status in [404]", "reject"
 	case coverage.CoverageVariantStateDeleteNonexistent:

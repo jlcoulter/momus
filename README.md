@@ -69,11 +69,13 @@ Currently implemented:
   `_text`, `_filter`, `_query`) and resource-specific search parameters are
   derived as `search`-domain obligations for every scoped resource type and
   exercised as GET search requests (valid / no-results / invalid-value /
-  multiple-results via `body.total`)
-- Operation, state, and CRUD coverage: read / update / patch / delete / history
-  operations, negative state transitions (GET / DELETE a nonexistent resource),
-  and a full create-read-update-read-delete-read(404) sequence are derived per
-  resource type and exercised as the corresponding HTTP requests
+  multiple-results via `body.total` / invalid modifier; pairwise combinations
+  at `--strength 2`)
+- Operation, state, and CRUD coverage: read / update / patch / delete / history,
+  custom (`$`) operations from CapabilityStatements, negative state transitions
+  (GET / DELETE a nonexistent resource), and a full
+  create-read-update-read-delete-read(404) sequence are derived per resource
+  type and exercised as the corresponding HTTP requests
 - Registry-backed `DataRequirement` -> `Dataset` generator and a
   dependency-ordered server `Provisioner` (building blocks, tested in
   isolation; pipeline wiring lands with the planner, feature 8)
