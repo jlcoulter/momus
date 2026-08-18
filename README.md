@@ -45,8 +45,14 @@ Currently implemented:
   terminology, invariant, and reference domains (plus required-slice
   structure obligations), each requirement traceable to its source
   constraint
-- AST generation for positive variants; negative-domain obligations remain
-  derived but uncovered until mutation generation is implemented
+- AST generation for positive, negative, and boundary cases: negative
+  variants mutate a valid payload against exactly one constraint and assert
+  rejection; boundary helpers emit edge values for string length, numeric,
+  and cardinality ranges
+- End-to-end requirement traceability: each generated assertion and each
+  executed test result carries the source constraint (id, profile, path,
+  domain, variant, expected outcome), and coverage reports list both the
+  covered and uncovered requirements
 - Generic dependency DAG planning for resource execution ordering
 - AST generation from coverage requirements with setup/capture scaffolding
 - Minimal assertion parser/evaluator (`status in [..]`)
@@ -58,7 +64,7 @@ Currently implemented:
 cmd/momus/          CLI entry point (minimal; --help / --version)
 internal/fhir/      FHIR model, constraint model, package loading, registry,
                     terminology, resource generation, planner, provisioning
-internal/test/      test AST, assertions, runner
+internal/test/      test AST, assertions, generation (positive/negative/boundary), runner
 internal/openapi/   OpenAPI testing support (future)
 docs/               architecture documentation
 pkg/                reserved public API (intentionally empty)

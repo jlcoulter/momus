@@ -612,12 +612,11 @@ covered.
         pending stage 6).
 - `internal/test/coverage` — coverage requirements, derivation, evaluation,
         and reporting.
-- `internal/test/generation` — positive, negative, boundary, and interaction
-        generation. (Planned. The MVP's profile-driven body synthesis
-        currently lives in `internal/test/ast/from_coverage.go`; it graduates
-        to this package when negative/boundary/interaction variant
-        generation lands, so that `ast` returns to holding only node
-        definitions and encoding.)
+- `internal/test/generation` — positive, negative, and boundary generation.
+        Profile-driven body synthesis lives here; negative variants mutate an
+        otherwise-valid payload against exactly one constraint and assert
+        rejection. `internal/test/ast` holds only node definitions and
+        encoding.
 - `internal/test/ast` — executable test AST.
 - `internal/test/runner` — test execution.
 - `internal/test/assertions` — assertion interface and evaluation.
