@@ -5,9 +5,12 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"syscall"
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/test/ast"
 	"github.com/jlcoulter/momus/internal/test/coverage"
 	"github.com/jlcoulter/momus/internal/test/runner"
@@ -167,3 +170,61 @@ type timeoutError struct{}
 func (timeoutError) Error() string   { return "i/o timeout" }
 func (timeoutError) Timeout() bool   { return true }
 func (timeoutError) Temporary() bool { return true }
+
+func TestWriteDebugOutput(t *testing.T) {
+	dir := t.TempDir()
+	orig := debugOutputDir
+	debugOutputDir = dir
+	t.Cleanup(func() { debugOutputDir = orig })
+
+	// Disabled: no file written.
+	if err := writeDebugOutput(false, "coverage-plan.json", []byte("{}")); err != nil {
+		t.Fatalf("writeDebugOutput(false) returned error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "coverage-plan.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected no file when debug disabled")
+	}
+
+	// Enabled: file written with content.
+	if err := writeDebugOutput(true, "coverage-plan.json", []byte("{}\n")); err != nil {
+		t.Fatalf("writeDebugOutput(true) returned error: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "coverage-plan.json"))
+	if err != nil {
+		t.Fatalf("read debug output: %v", err)
+	}
+	if string(data) != "{}\n" {
+		t.Fatalf("debug output = %q, want %q", data, "{}\n")
+	}
+}
+
+func TestWriteDebugBulk(t *testing.T) {
+	dir := t.TempDir()
+	orig := debugOutputDir
+	debugOutputDir = dir
+	t.Cleanup(func() { debugOutputDir = orig })
+
+	instances := []*model.ResourceInstance{
+		{ResourceType: "Patient", LocalID: "p1", Resource: map[string]any{"resourceType": "Patient", "id": "p1"}},
+	}
+
+	// Disabled: no file written.
+	if err := writeDebugBulk(false, instances); err != nil {
+		t.Fatalf("writeDebugBulk(false) returned error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "bulk.ndjson")); !os.IsNotExist(err) {
+		t.Fatalf("expected no bulk file when debug disabled")
+	}
+
+	// Enabled: NDJSON written.
+	if err := writeDebugBulk(true, instances); err != nil {
+		t.Fatalf("writeDebugBulk(true) returned error: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "bulk.ndjson"))
+	if err != nil {
+		t.Fatalf("read bulk debug output: %v", err)
+	}
+	if string(data) != "{\"id\":\"p1\",\"resourceType\":\"Patient\"}\n" {
+		t.Fatalf("bulk debug output = %q", data)
+	}
+}

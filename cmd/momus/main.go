@@ -125,6 +125,9 @@ func main() {
 			if err != nil {
 				return err
 			}
+			if err := writeDebugGraph(debug, graph); err != nil {
+				return err
+			}
 
 			totalResources := 0
 			for _, p := range graph.Packages {
@@ -165,6 +168,9 @@ func main() {
 			if err != nil {
 				return err
 			}
+			if err := writeDebugGraph(debug, graph); err != nil {
+				return err
+			}
 
 			builder := fhirpackage.NewRegistryBuilder()
 			reg, err := builder.BuildFromPackagesScoped(graph.Packages, graph.Root)
@@ -188,6 +194,9 @@ func main() {
 			out, err := json.MarshalIndent(plan, "", "  ")
 			if err != nil {
 				return fmt.Errorf("marshal coverage plan: %w", err)
+			}
+			if err := writeDebugOutput(debug, "coverage-plan.json", append(out, '\n')); err != nil {
+				return err
 			}
 
 			if outputPath == "" {
@@ -253,6 +262,9 @@ func main() {
 			if err != nil {
 				return err
 			}
+			if err := writeDebugGraph(debug, graph); err != nil {
+				return err
+			}
 
 			builder := fhirpackage.NewRegistryBuilder()
 			reg, err := builder.BuildFromPackagesScoped(graph.Packages, graph.Root)
@@ -290,6 +302,9 @@ func main() {
 			out, err := json.MarshalIndent(encoded, "", "  ")
 			if err != nil {
 				return fmt.Errorf("marshal AST plan: %w", err)
+			}
+			if err := writeDebugOutput(debug, "ast-plan.json", append(out, '\n')); err != nil {
+				return err
 			}
 
 			if outputPath == "" {
@@ -349,6 +364,9 @@ func main() {
 			if err != nil {
 				return err
 			}
+			if err := writeDebugGraph(debug, graph); err != nil {
+				return err
+			}
 
 			builder := fhirpackage.NewRegistryBuilder()
 			reg, err := builder.BuildFromPackagesScoped(graph.Packages, graph.Root)
@@ -402,6 +420,9 @@ func main() {
 			out, err := marshalCoverageRunOutput(report, coverageEvaluation, includeCases)
 			if err != nil {
 				return fmt.Errorf("marshal test report: %w", err)
+			}
+			if err := writeDebugOutput(debug, "test-report.json", append(out, '\n')); err != nil {
+				return err
 			}
 
 			if outputPath == "" {
@@ -491,6 +512,9 @@ func main() {
 			if err != nil {
 				return err
 			}
+			if err := writeDebugGraph(debug, graph); err != nil {
+				return err
+			}
 
 			builder := fhirpackage.NewRegistryBuilder()
 			reg, err := builder.BuildFromPackagesScoped(graph.Packages, graph.Root)
@@ -537,6 +561,9 @@ func main() {
 
 			w := testbulk.NewWriter(out)
 			instances := testbulk.Link([]*model.Dataset{corpus})
+			if err := writeDebugBulk(debug, instances); err != nil {
+				return err
+			}
 			if err := w.WriteInstances(instances); err != nil {
 				return err
 			}
@@ -589,6 +616,9 @@ func main() {
 			if err != nil {
 				return err
 			}
+			if err := writeDebugGraph(debug, graph); err != nil {
+				return err
+			}
 
 			builder := fhirpackage.NewRegistryBuilder()
 			reg, err := builder.BuildFromPackages(graph.Packages)
@@ -604,6 +634,9 @@ func main() {
 			out, err := json.MarshalIndent(constraints, "", "  ")
 			if err != nil {
 				return fmt.Errorf("marshal constraints: %w", err)
+			}
+			if err := writeDebugOutput(debug, "constraints.json", append(out, '\n')); err != nil {
+				return err
 			}
 
 			if outputPath == "" {
@@ -880,6 +913,64 @@ func writeOutputFile(path string, data []byte) error {
 		}
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+// debugOutputDir is the default directory where per-stage JSON artifacts are
+// written when --debug is enabled.
+var debugOutputDir = ".momus/output"
+
+// writeDebugOutput writes stage data to the debug output directory when debug
+// mode is enabled. It is a no-op otherwise. stage is the file name within the
+// debug output directory, e.g. "coverage-plan.json".
+func writeDebugOutput(debug bool, stage string, data []byte) error {
+	if !debug {
+		return nil
+	}
+	path := filepath.Join(debugOutputDir, stage)
+	if err := writeOutputFile(path, data); err != nil {
+		return fmt.Errorf("write debug output %s: %w", path, err)
+	}
+	fmt.Fprintf(os.Stderr, "debug: wrote %s\n", path)
+	return nil
+}
+
+// writeDebugBulk writes NDJSON bulk instances to the debug output directory
+// when debug mode is enabled. It is a no-op otherwise.
+func writeDebugBulk(debug bool, instances []*model.ResourceInstance) error {
+	if !debug {
+		return nil
+	}
+	path := filepath.Join(debugOutputDir, "bulk.ndjson")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create debug bulk dir: %w", err)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("create debug bulk file %s: %w", path, err)
+	}
+	defer f.Close()
+	w := testbulk.NewWriter(f)
+	if err := w.WriteInstances(instances); err != nil {
+		return fmt.Errorf("write debug bulk output %s: %w", path, err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("flush debug bulk output %s: %w", path, err)
+	}
+	fmt.Fprintf(os.Stderr, "debug: wrote %s\n", path)
+	return nil
+}
+
+// writeDebugGraph writes the resolved dependency graph to the debug output
+// directory when debug mode is enabled. It is a no-op otherwise.
+func writeDebugGraph(debug bool, graph *fhirpackage.ResolvedGraph) error {
+	if !debug {
+		return nil
+	}
+	out, err := json.MarshalIndent(graph, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal resolved graph: %w", err)
+	}
+	return writeDebugOutput(debug, "resolved-graph.json", append(out, '\n'))
 }
 
 // parsePerTypeCounts parses repeatable Type=Count overrides into a map. Values
