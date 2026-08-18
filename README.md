@@ -53,6 +53,11 @@ Currently implemented:
   executed test result carries the source constraint (id, profile, path,
   domain, variant, expected outcome), and coverage reports list both the
   covered and uncovered requirements
+- Failure triage in run reports: failed cases are rolled up by
+  accept-rejected / reject-accepted / server-error outcome and obligation
+  variant, with example requirement IDs and a plain-language hint, so a large
+  run can be navigated to tell broken generated tests apart from server
+  defects
 - Interaction (pairwise) coverage: the plan carries an interaction `Strength`
   (1 = individual, 2 = pairwise); at strength 2 pairwise obligations between
   accept requirements on the same profile are derived as an `interaction`

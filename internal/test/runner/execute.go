@@ -85,6 +85,9 @@ type Report struct {
 	Failed      int                 `json:"failed"`
 	Cases       []CaseResult        `json:"cases"`
 	Diagnostics *DiagnosticsSummary `json:"diagnostics,omitempty"`
+	// Triage, when present, rolls failed cases into broken-test vs server-defect
+	// buckets to help triage large runs.
+	Triage *TriageSummary `json:"triage,omitempty"`
 }
 
 // Execute runs the AST and returns a structured report.
@@ -117,6 +120,7 @@ func Execute(ctx context.Context, plan ast.Node, options ExecuteOptions) (*Repor
 	}
 	exec.report.Total = len(exec.report.Cases)
 	exec.report.Diagnostics = exec.buildDiagnosticsSummary()
+	exec.report.Triage = buildTriageSummary(exec.report.Cases)
 	return exec.report, nil
 }
 

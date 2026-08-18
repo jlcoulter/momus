@@ -65,6 +65,7 @@ func main() {
 	var scopeToCapability bool
 	var failOnUncovered bool
 	var interactionStrength int
+	var includeCases bool
 
 	loadCmd := &cobra.Command{
 		Use:   "load <path-to-package.tgz>",
@@ -382,7 +383,7 @@ func main() {
 			}
 			coverageEvaluation := testcoverage.EvaluateCoverage(coveragePlan, executed)
 
-			out, err := marshalCoverageRunOutput(report, coverageEvaluation)
+			out, err := marshalCoverageRunOutput(report, coverageEvaluation, includeCases)
 			if err != nil {
 				return fmt.Errorf("marshal test report: %w", err)
 			}
@@ -448,6 +449,7 @@ func main() {
 	runCmd.Flags().StringVar(&apiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during coverage run")
 	runCmd.Flags().StringVar(&apiBasicPassword, "api-basic-password", "", "basic auth password used for API requests during coverage run")
 	runCmd.Flags().IntVar(&interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
+	runCmd.Flags().BoolVar(&includeCases, "include-cases", false, "include the full per-case result array in the JSON report (large runs produce very large output)")
 
 	constraintsCmd := &cobra.Command{
 		Use:   "constraints <path-to-package.tgz>",
@@ -619,17 +621,73 @@ func intersectCaseInsensitive(requested, available []string) []string {
 	return intersected
 }
 
-func marshalCoverageRunOutput(report *testrunner.Report, evaluation testcoverage.EvaluationReport) ([]byte, error) {
-	rawReport, err := json.Marshal(report)
-	if err != nil {
-		return nil, err
+func marshalCoverageRunOutput(report *testrunner.Report, evaluation testcoverage.EvaluationReport, includeCases bool) ([]byte, error) {
+	requirementCases, setupCases := countRequirementAndSetupCases(report.Cases)
+
+	// Readable summary first so the report can be scanned without wading through
+	// the (potentially very large) per-case data.
+	payload := map[string]any{
+		"summary": map[string]any{
+			"totalCases":            report.Total,
+			"passedCases":           report.Passed,
+			"failedCases":           report.Failed,
+			"requirementCases":      requirementCases,
+			"setupCases":            setupCases,
+			"totalRequirements":     evaluation.TotalRequirements,
+			"coveredRequirements":   evaluation.CoveredRequirements,
+			"uncoveredRequirements": evaluation.UncoveredRequirements,
+			"coveragePercent":       evaluation.CoveragePercent,
+		},
+		"coverage":    evaluation,
+		"triage":      report.Triage,
+		"diagnostics": report.Diagnostics,
 	}
-	var payload map[string]any
-	if err := json.Unmarshal(rawReport, &payload); err != nil {
-		return nil, err
+
+	// Failures, compact, so every failed test is addressable by requirement id
+	// without dumping all passing cases (which coverage.covered already records).
+	failures := make([]map[string]any, 0)
+	for _, c := range report.Cases {
+		if c.Passed {
+			continue
+		}
+		failures = append(failures, compactFailure(c))
 	}
-	payload["coverage"] = evaluation
+	payload["failures"] = failures
+
+	if includeCases {
+		payload["cases"] = report.Cases
+	}
 	return json.MarshalIndent(payload, "", "  ")
+}
+
+// compactFailure renders a failed case with the fields needed to look it up and
+// decide whether it is a broken test or a server issue, omitting debug bloat.
+func compactFailure(c testrunner.CaseResult) map[string]any {
+	m := map[string]any{
+		"requirementId": c.RequirementID,
+		"description":   c.Description,
+		"expression":    c.Expression,
+		"statusCode":    c.StatusCode,
+	}
+	if c.Error != "" {
+		m["error"] = c.Error
+	}
+	if c.FailureFingerprint != "" {
+		m["failureFingerprint"] = c.FailureFingerprint
+	}
+	if c.Trace != nil {
+		m["expected"] = c.Trace.Expected
+		m["domain"] = c.Trace.Domain
+		m["variant"] = c.Trace.Variant
+		m["resourceType"] = c.Trace.ResourceType
+		m["elementPath"] = c.Trace.ElementPath
+	}
+	if c.Debug != nil {
+		m["requestUrl"] = c.Debug.RequestURL
+		m["requestBody"] = c.Debug.RequestBody
+		m["responseBody"] = c.Debug.ResponseBody
+	}
+	return m
 }
 
 func countRequirementAndSetupCases(cases []testrunner.CaseResult) (requirement, setup int) {
