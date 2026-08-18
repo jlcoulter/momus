@@ -70,10 +70,31 @@ func TestGenerateFromCoveragePlanBuildsPerRequirementSequence(t *testing.T) {
 	if setupBody["id"] != "momus-setup-patient" {
 		t.Fatalf("got setup id %v, want momus-setup-patient", setupBody["id"])
 	}
+	setupMeta, ok := setupBody["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected setup meta block, got %T", setupBody["meta"])
+	}
+	setupProfiles, ok := setupMeta["profile"].([]any)
+	if !ok || len(setupProfiles) != 1 || setupProfiles[0] != "http://example.org/StructureDefinition/patient" {
+		t.Fatalf("got setup meta.profile %v, want patient profile", setupMeta["profile"])
+	}
 
 	case0, ok := resourceSeq.Steps[3].(*Sequence)
 	if !ok {
 		t.Fatalf("expected first case to be *Sequence, got %T", resourceSeq.Steps[3])
+	}
+	caseReq, ok := case0.Steps[0].(*Request)
+	if !ok {
+		t.Fatalf("expected case request to be *Request, got %T", case0.Steps[0])
+	}
+	caseBody := caseReq.Body.(map[string]any)
+	if _, ok := caseBody["_momus"]; ok {
+		t.Fatal("did not expect _momus field in generated request body")
+	}
+	caseMeta := caseBody["meta"].(map[string]any)
+	caseProfiles := caseMeta["profile"].([]any)
+	if len(caseProfiles) != 1 || caseProfiles[0] != "http://example.org/StructureDefinition/patient" {
+		t.Fatalf("got case meta.profile %v, want patient profile", caseMeta["profile"])
 	}
 	assert1, ok := case0.Steps[1].(*Assert)
 	if !ok {
@@ -93,8 +114,8 @@ func TestGenerateFromCoveragePlanBuildsPerRequirementSequence(t *testing.T) {
 func TestGenerateFromCoveragePlanUsesDependencyTemplate(t *testing.T) {
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
 		Requirements: []coverage.CoverageRequirement{
-			{ID: "p-1", ResourceType: "Patient", ElementPath: "Patient.name", Variant: coverage.CoverageVariantValidMin},
-			{ID: "o-1", ResourceType: "Observation", ElementPath: "Observation.subject", DependencyTargets: []string{"Patient"}, Variant: coverage.CoverageVariantValidMin},
+			{ID: "p-1", ProfileURL: "http://example.org/StructureDefinition/patient", ResourceType: "Patient", ElementPath: "Patient.name", Variant: coverage.CoverageVariantValidMin},
+			{ID: "o-1", ProfileURL: "http://example.org/StructureDefinition/observation", ResourceType: "Observation", ElementPath: "Observation.subject", DependencyTargets: []string{"Patient"}, Variant: coverage.CoverageVariantValidMin},
 		},
 	}, BuildOptions{BaseURL: "http://localhost:8080/fhir"})
 	if err != nil {
@@ -112,6 +133,11 @@ func TestGenerateFromCoveragePlanUsesDependencyTemplate(t *testing.T) {
 		t.Fatalf("got method %q, want PUT", setupReq.Method)
 	}
 	body := setupReq.Body.(map[string]any)
+	meta := body["meta"].(map[string]any)
+	profiles := meta["profile"].([]any)
+	if len(profiles) != 1 || profiles[0] != "http://example.org/StructureDefinition/observation" {
+		t.Fatalf("got setup meta.profile %v, want observation profile", meta["profile"])
+	}
 	subject := body["subject"].(map[string]any)
 	if subject["reference"] != "Patient/{{Patient.id}}" {
 		t.Fatalf("got subject reference %v, want Patient/{{Patient.id}}", subject["reference"])

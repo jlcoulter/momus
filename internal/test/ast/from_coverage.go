@@ -46,6 +46,7 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 		for _, resourceType := range level {
 			resourceSeq := &Sequence{Steps: make([]Node, 0)}
 			deps := depPlan.Dependencies[resourceType]
+			resourceProfiles := uniqueProfileURLs(byResource[resourceType])
 
 			resourceSeq.Steps = append(resourceSeq.Steps,
 				&Request{
@@ -54,7 +55,7 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 					Headers: map[string]string{
 						"Content-Type": "application/fhir+json",
 					},
-					Body: buildSetupBody(resourceType, setupResourceID(resourceType), deps),
+					Body: buildSetupBody(resourceType, setupResourceID(resourceType), resourceProfiles, deps),
 				},
 				&Assert{
 					Description:   "setup create seed resource",
@@ -106,15 +107,7 @@ func joinInstanceURL(baseURL, resourceType, id string) string {
 }
 
 func buildBodyTemplate(req coverage.CoverageRequirement, id string, deps []string) map[string]any {
-	body := baseBodyTemplate(req.ResourceType, id, deps)
-	body["_momus"] = map[string]any{
-		"requirementId": req.ID,
-		"profileUrl":    req.ProfileURL,
-		"elementPath":   req.ElementPath,
-		"variant":       string(req.Variant),
-		"min":           req.Min,
-		"max":           req.Max,
-	}
+	body := baseBodyTemplate(req.ResourceType, id, []string{req.ProfileURL}, deps)
 	if req.Variant == coverage.CoverageVariantMissingRequired {
 		delete(body, "subject")
 		delete(body, "patient")
@@ -122,14 +115,17 @@ func buildBodyTemplate(req coverage.CoverageRequirement, id string, deps []strin
 	return body
 }
 
-func buildSetupBody(resourceType, id string, deps []string) map[string]any {
-	return baseBodyTemplate(resourceType, id, deps)
+func buildSetupBody(resourceType, id string, profileURLs, deps []string) map[string]any {
+	return baseBodyTemplate(resourceType, id, profileURLs, deps)
 }
 
-func baseBodyTemplate(resourceType, id string, deps []string) map[string]any {
+func baseBodyTemplate(resourceType, id string, profileURLs, deps []string) map[string]any {
 	body := map[string]any{
 		"resourceType": resourceType,
 		"id":           id,
+	}
+	if meta := buildMeta(profileURLs); meta != nil {
+		body["meta"] = meta
 	}
 
 	switch resourceType {
@@ -145,6 +141,43 @@ func baseBodyTemplate(resourceType, id string, deps []string) map[string]any {
 
 	attachDependencyReferences(body, resourceType, deps)
 	return body
+}
+
+func buildMeta(profileURLs []string) map[string]any {
+	profiles := make([]any, 0, len(profileURLs))
+	seen := make(map[string]struct{}, len(profileURLs))
+	for _, profileURL := range profileURLs {
+		profileURL = strings.TrimSpace(profileURL)
+		if profileURL == "" {
+			continue
+		}
+		if _, ok := seen[profileURL]; ok {
+			continue
+		}
+		seen[profileURL] = struct{}{}
+		profiles = append(profiles, profileURL)
+	}
+	if len(profiles) == 0 {
+		return nil
+	}
+	return map[string]any{"profile": profiles}
+}
+
+func uniqueProfileURLs(reqs []coverage.CoverageRequirement) []string {
+	profiles := make([]string, 0, len(reqs))
+	seen := make(map[string]struct{}, len(reqs))
+	for _, req := range reqs {
+		profileURL := strings.TrimSpace(req.ProfileURL)
+		if profileURL == "" {
+			continue
+		}
+		if _, ok := seen[profileURL]; ok {
+			continue
+		}
+		seen[profileURL] = struct{}{}
+		profiles = append(profiles, profileURL)
+	}
+	return profiles
 }
 
 func setupResourceID(resourceType string) string {
