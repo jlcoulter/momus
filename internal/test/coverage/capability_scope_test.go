@@ -103,6 +103,37 @@ func TestSupportedProfileURLsFromCapabilityStatement(t *testing.T) {
 	}
 }
 
+func TestSupportedProfileURLsByResourceFromCapabilityStatement(t *testing.T) {
+	cs := &model.CapabilityStatement{
+		Rest: []model.CapabilityStatementRest{{
+			Mode: "server",
+			Resource: []model.CapabilityStatementRestResource{
+				{
+					Type:             "PractitionerRole",
+					SupportedProfile: []string{"http://example.org/StructureDefinition/practitionerrole-a", "http://example.org/StructureDefinition/practitionerrole-b"},
+					Interaction:      []model.CapabilityStatementInteraction{{Code: "create"}},
+				},
+				{
+					Type:             "Observation",
+					SupportedProfile: []string{"http://example.org/StructureDefinition/observation-a"},
+					Interaction:      []model.CapabilityStatementInteraction{{Code: "read"}},
+				},
+			},
+		}},
+	}
+
+	got := SupportedProfileURLsByResourceFromCapabilityStatement(cs, true)
+	want := map[string][]string{
+		"PractitionerRole": {
+			"http://example.org/StructureDefinition/practitionerrole-a",
+			"http://example.org/StructureDefinition/practitionerrole-b",
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
 func TestFetchCapabilityStatementUsesMetadataEndpoint(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/metadata" {

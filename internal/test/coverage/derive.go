@@ -85,12 +85,12 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 				trackPruned(plan, reason)
 				continue
 			}
-			appendRequirement(plan, seen, newRequirement(profile, element, CoverageVariantValidMin))
+			appendRequirement(plan, seen, newRequirement(r, profile, element, CoverageVariantValidMin))
 			if element.Min > 0 {
-				appendRequirement(plan, seen, newRequirement(profile, element, CoverageVariantMissingRequired))
+				appendRequirement(plan, seen, newRequirement(r, profile, element, CoverageVariantMissingRequired))
 			}
 			if allowsMultiple(element.Max) {
-				appendRequirement(plan, seen, newRequirement(profile, element, CoverageVariantMultipleValues))
+				appendRequirement(plan, seen, newRequirement(r, profile, element, CoverageVariantMultipleValues))
 			}
 		}
 	}
@@ -114,14 +114,14 @@ func DefaultDeriveOptions() DeriveOptions {
 	}
 }
 
-func newRequirement(profile *model.StructureDefinition, element model.ElementDefinition, variant CoverageVariant) CoverageRequirement {
+func newRequirement(r *registry.Registry, profile *model.StructureDefinition, element model.ElementDefinition, variant CoverageVariant) CoverageRequirement {
 	id := fmt.Sprintf("%s|%s|%s", profile.URL, element.Path, variant)
 	return CoverageRequirement{
 		ID:                id,
 		ProfileURL:        profile.URL,
 		ResourceType:      profile.Type,
 		ElementPath:       element.Path,
-		DependencyTargets: collectDependencyTargets(element),
+		DependencyTargets: collectDependencyTargets(r, element),
 		Domain:            CoverageDomainCardinality,
 		Variant:           variant,
 		Min:               element.Min,
@@ -129,16 +129,16 @@ func newRequirement(profile *model.StructureDefinition, element model.ElementDef
 	}
 }
 
-func collectDependencyTargets(element model.ElementDefinition) []string {
+func collectDependencyTargets(r *registry.Registry, element model.ElementDefinition) []string {
 	targets := make([]string, 0)
 	for _, canonical := range element.TargetProfile {
-		if resourceType := canonicalToResourceType(canonical); resourceType != "" {
+		if resourceType := canonicalToResourceType(r, canonical); resourceType != "" {
 			targets = appendUniqueString(targets, resourceType)
 		}
 	}
 	for _, et := range element.Types {
 		for _, canonical := range et.TargetProfile {
-			if resourceType := canonicalToResourceType(canonical); resourceType != "" {
+			if resourceType := canonicalToResourceType(r, canonical); resourceType != "" {
 				targets = appendUniqueString(targets, resourceType)
 			}
 		}
@@ -146,7 +146,7 @@ func collectDependencyTargets(element model.ElementDefinition) []string {
 	return targets
 }
 
-func canonicalToResourceType(canonical string) string {
+func canonicalToResourceType(r *registry.Registry, canonical string) string {
 	v := strings.TrimSpace(canonical)
 	if v == "" {
 		return ""
@@ -156,6 +156,11 @@ func canonicalToResourceType(canonical string) string {
 	}
 	if i := strings.Index(v, "#"); i >= 0 {
 		v = v[:i]
+	}
+	if r != nil {
+		if sd, ok := r.StructureDefinition(v); ok && sd != nil && strings.TrimSpace(sd.Type) != "" {
+			return sd.Type
+		}
 	}
 	v = strings.TrimRight(v, "/")
 	if v == "" {

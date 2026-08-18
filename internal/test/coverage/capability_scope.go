@@ -121,6 +121,55 @@ func SupportedProfileURLsFromCapabilityStatement(cs *model.CapabilityStatement, 
 	return out
 }
 
+// SupportedProfileURLsByResourceFromCapabilityStatement returns supportedProfile
+// canonicals grouped by resource type for server mode entries.
+func SupportedProfileURLsByResourceFromCapabilityStatement(cs *model.CapabilityStatement, requireCreateInteraction bool) map[string][]string {
+	if cs == nil {
+		return nil
+	}
+
+	grouped := make(map[string]map[string]struct{})
+	for _, rest := range cs.Rest {
+		if rest.Mode != "" && !strings.EqualFold(rest.Mode, "server") {
+			continue
+		}
+		for _, resource := range rest.Resource {
+			resourceType := strings.TrimSpace(resource.Type)
+			if resourceType == "" {
+				continue
+			}
+			if requireCreateInteraction && !hasInteraction(resource.Interaction, "create") {
+				continue
+			}
+			for _, profileURL := range resource.SupportedProfile {
+				profileURL = strings.TrimSpace(profileURL)
+				if profileURL == "" {
+					continue
+				}
+				if _, ok := grouped[resourceType]; !ok {
+					grouped[resourceType] = make(map[string]struct{})
+				}
+				grouped[resourceType][profileURL] = struct{}{}
+			}
+		}
+	}
+
+	if len(grouped) == 0 {
+		return nil
+	}
+
+	out := make(map[string][]string, len(grouped))
+	for resourceType, profiles := range grouped {
+		values := make([]string, 0, len(profiles))
+		for profileURL := range profiles {
+			values = append(values, profileURL)
+		}
+		sort.Strings(values)
+		out[resourceType] = values
+	}
+	return out
+}
+
 // FetchCapabilityStatement loads the live server CapabilityStatement from /metadata.
 func FetchCapabilityStatement(ctx context.Context, baseURL string, options CapabilityFetchOptions) (*model.CapabilityStatement, error) {
 	trimmedBaseURL := strings.TrimRight(strings.TrimSpace(baseURL), "/")

@@ -1,6 +1,10 @@
 package coverage
 
-import "sort"
+import (
+	"sort"
+	"strings"
+	"unicode"
+)
 
 // DependencyPlan describes a topological execution order for resource types.
 type DependencyPlan struct {
@@ -18,6 +22,11 @@ func PlanDependencies(requirements []CoverageRequirement) (*DependencyPlan, erro
 		}
 		resourceSet[req.ResourceType] = struct{}{}
 	}
+	resourceTypes := make([]string, 0, len(resourceSet))
+	for rt := range resourceSet {
+		resourceTypes = append(resourceTypes, rt)
+	}
+	sort.Strings(resourceTypes)
 	if len(resourceSet) == 0 {
 		return &DependencyPlan{Levels: nil, Dependencies: map[string][]string{}}, nil
 	}
@@ -28,13 +37,14 @@ func PlanDependencies(requirements []CoverageRequirement) (*DependencyPlan, erro
 			continue
 		}
 		for _, dep := range req.DependencyTargets {
-			if dep == req.ResourceType {
+			normalizedDep := normalizeDependencyTarget(dep, resourceSet, resourceTypes)
+			if normalizedDep == "" || normalizedDep == req.ResourceType {
 				continue
 			}
-			if _, ok := resourceSet[dep]; !ok {
+			if _, ok := resourceSet[normalizedDep]; !ok {
 				continue
 			}
-			dependencies[req.ResourceType] = appendUnique(dependencies[req.ResourceType], dep)
+			dependencies[req.ResourceType] = appendUnique(dependencies[req.ResourceType], normalizedDep)
 		}
 	}
 	for resourceType := range resourceSet {
@@ -78,19 +88,11 @@ func topologicalLevels(resourceSet map[string]struct{}, dependencies map[string]
 	processed := 0
 	for processed < len(resourceSet) {
 		if len(ready) == 0 {
-			cycleLevel := make([]string, 0)
-			for rt, d := range inDegree {
-				if d > 0 {
-					cycleLevel = append(cycleLevel, rt)
-				}
-			}
-			sort.Strings(cycleLevel)
-			if len(cycleLevel) == 0 {
+			breaker := pickCycleBreaker(inDegree, reverse)
+			if breaker == "" {
 				break
 			}
-			levels = append(levels, cycleLevel)
-			processed += len(cycleLevel)
-			break
+			ready = []string{breaker}
 		}
 
 		level := append([]string(nil), ready...)
@@ -117,6 +119,24 @@ func topologicalLevels(resourceSet map[string]struct{}, dependencies map[string]
 	return levels, nil
 }
 
+func pickCycleBreaker(inDegree map[string]int, reverse map[string][]string) string {
+	best := ""
+	bestOutDegree := -1
+	bestInDegree := 0
+	for rt, degree := range inDegree {
+		if degree <= 0 {
+			continue
+		}
+		outDegree := len(reverse[rt])
+		if best == "" || outDegree > bestOutDegree || (outDegree == bestOutDegree && degree < bestInDegree) || (outDegree == bestOutDegree && degree == bestInDegree && rt < best) {
+			best = rt
+			bestOutDegree = outDegree
+			bestInDegree = degree
+		}
+	}
+	return best
+}
+
 func appendUnique(values []string, candidate string) []string {
 	for _, v := range values {
 		if v == candidate {
@@ -124,4 +144,30 @@ func appendUnique(values []string, candidate string) []string {
 		}
 	}
 	return append(values, candidate)
+}
+
+func normalizeDependencyTarget(dep string, resourceSet map[string]struct{}, resourceTypes []string) string {
+	dep = strings.TrimSpace(dep)
+	if dep == "" {
+		return ""
+	}
+	if _, ok := resourceSet[dep]; ok {
+		return dep
+	}
+	for _, resourceType := range resourceTypes {
+		if strings.EqualFold(resourceType, dep) {
+			return resourceType
+		}
+	}
+	tokens := strings.FieldsFunc(strings.ToLower(dep), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	for _, token := range tokens {
+		for _, resourceType := range resourceTypes {
+			if token == strings.ToLower(resourceType) {
+				return resourceType
+			}
+		}
+	}
+	return ""
 }

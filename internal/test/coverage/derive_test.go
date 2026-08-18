@@ -193,6 +193,43 @@ func TestDerivePlanIncludesDependencyTargetsFromElementMetadata(t *testing.T) {
 	}
 }
 
+func TestDerivePlanPrunesOptionalReferenceDependencies(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/location-profile",
+		Type: "Location",
+		Elements: []model.ElementDefinition{
+			{Path: "Location", Min: 0, Max: "*"},
+			{Path: "Location.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Location.managingOrganization", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Organization|4.0.1"}}}},
+		},
+	})
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:      "http://hl7.org/fhir/StructureDefinition/Organization",
+		Type:     "Organization",
+		Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: "*"}},
+	})
+
+	plan, err := DerivePlan(r, DeriveOptions{IncludeOptional: false})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+
+	var found bool
+	for _, req := range plan.Requirements {
+		if req.ResourceType != "Location" || req.ElementPath != "Location.name" || req.Variant != CoverageVariantValidMin {
+			continue
+		}
+		found = true
+		if len(req.DependencyTargets) != 0 {
+			t.Fatalf("unexpected dependency targets for %s: %+v", req.ID, req.DependencyTargets)
+		}
+	}
+	if !found {
+		t.Fatal("expected Location.name requirement")
+	}
+}
+
 func TestDeriveMVPPlanFailsWithoutStructureDefinitions(t *testing.T) {
 	r := registry.New()
 	if _, err := DeriveMVPPlan(r); err == nil {

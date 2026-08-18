@@ -67,7 +67,7 @@ func TestPlanDependenciesWithoutReferencePathsReturnsSingleLevel(t *testing.T) {
 	}
 }
 
-func TestPlanDependenciesCycleReturnsDeterministicFallbackLevel(t *testing.T) {
+func TestPlanDependenciesCycleBreaksDeterministically(t *testing.T) {
 	reqs := []CoverageRequirement{
 		{ID: "a1", ResourceType: "A", ElementPath: "A.ref", DependencyTargets: []string{"B"}},
 		{ID: "b1", ResourceType: "B", ElementPath: "B.ref", DependencyTargets: []string{"A"}},
@@ -77,13 +77,61 @@ func TestPlanDependenciesCycleReturnsDeterministicFallbackLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanDependencies returned error: %v", err)
 	}
-	if len(plan.Levels) != 1 {
-		t.Fatalf("got %d levels, want 1", len(plan.Levels))
+	if len(plan.Levels) != 2 {
+		t.Fatalf("got %d levels, want 2", len(plan.Levels))
 	}
-	if len(plan.Levels[0]) != 2 {
-		t.Fatalf("got level entries %+v, want two entries", plan.Levels[0])
+	if len(plan.Levels[0]) != 1 || len(plan.Levels[1]) != 1 {
+		t.Fatalf("expected single-entry cycle levels, got %+v", plan.Levels)
 	}
-	if plan.Levels[0][0] != "A" || plan.Levels[0][1] != "B" {
-		t.Fatalf("expected deterministic alphabetical cycle fallback [A B], got %+v", plan.Levels[0])
+	if plan.Levels[0][0] != "A" || plan.Levels[1][0] != "B" {
+		t.Fatalf("expected deterministic cycle break order [A] then [B], got %+v", plan.Levels)
+	}
+}
+
+func TestPlanDependenciesCycleBreakerPreservesDownstreamOrder(t *testing.T) {
+	reqs := []CoverageRequirement{
+		{ID: "a1", ResourceType: "A", ElementPath: "A.ref", DependencyTargets: []string{"B"}},
+		{ID: "b1", ResourceType: "B", ElementPath: "B.ref", DependencyTargets: []string{"A"}},
+		{ID: "c1", ResourceType: "C", ElementPath: "C.ref", DependencyTargets: []string{"A"}},
+	}
+
+	plan, err := PlanDependencies(reqs)
+	if err != nil {
+		t.Fatalf("PlanDependencies returned error: %v", err)
+	}
+	if len(plan.Levels) < 2 {
+		t.Fatalf("expected at least 2 levels, got %+v", plan.Levels)
+	}
+	if plan.Levels[0][0] != "A" {
+		t.Fatalf("expected cycle breaker A first, got %+v", plan.Levels[0])
+	}
+	seenC := false
+	for _, level := range plan.Levels[1:] {
+		for _, rt := range level {
+			if rt == "C" {
+				seenC = true
+			}
+		}
+	}
+	if !seenC {
+		t.Fatalf("expected downstream resource C to be scheduled after A, got %+v", plan.Levels)
+	}
+}
+
+func TestPlanDependenciesNormalizesProfileLikeDependencyTargets(t *testing.T) {
+	reqs := []CoverageRequirement{
+		{ID: "org-1", ResourceType: "Organization", ElementPath: "Organization.name"},
+		{ID: "prov-1", ResourceType: "Provenance", ElementPath: "Provenance.target", DependencyTargets: []string{"hcpd-organization"}},
+	}
+
+	plan, err := PlanDependencies(reqs)
+	if err != nil {
+		t.Fatalf("PlanDependencies returned error: %v", err)
+	}
+	if len(plan.Dependencies["Provenance"]) != 1 || plan.Dependencies["Provenance"][0] != "Organization" {
+		t.Fatalf("got provenance dependencies %+v, want [Organization]", plan.Dependencies["Provenance"])
+	}
+	if len(plan.Levels) != 2 || plan.Levels[0][0] != "Organization" || plan.Levels[1][0] != "Provenance" {
+		t.Fatalf("got levels %+v, want [[Organization] [Provenance]]", plan.Levels)
 	}
 }
