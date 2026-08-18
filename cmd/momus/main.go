@@ -17,6 +17,7 @@ import (
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	testast "github.com/jlcoulter/momus/internal/test/ast"
 	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
+	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 	testrunner "github.com/jlcoulter/momus/internal/test/runner"
 	"github.com/spf13/cobra"
 )
@@ -254,7 +255,7 @@ func main() {
 				return err
 			}
 
-			astPlan, err := testast.GenerateFromCoveragePlan(coveragePlan, testast.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource})
+			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource})
 			if err != nil {
 				return err
 			}
@@ -276,7 +277,7 @@ func main() {
 				}
 			}
 
-			fmt.Printf("Generated AST with %d requirement cases from %d resolved packages\n", testast.RequirementCount(astPlan), len(graph.Packages))
+			fmt.Printf("Generated AST with %d requirement cases from %d resolved packages\n", testgeneration.RequirementCount(astPlan), len(graph.Packages))
 			if outputPath != "" {
 				fmt.Printf("AST plan written to %s\n", outputPath)
 			}
@@ -347,7 +348,7 @@ func main() {
 				return err
 			}
 
-			astPlan, err := testast.GenerateFromCoveragePlan(coveragePlan, testast.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource})
+			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource})
 			if err != nil {
 				return err
 			}
@@ -385,7 +386,9 @@ func main() {
 				}
 			}
 
-			fmt.Printf("Executed %d cases: %d passed, %d failed\n", report.Total, report.Passed, report.Failed)
+			requirementCases, setupCases := countRequirementAndSetupCases(report.Cases)
+			fmt.Printf("Executed %d cases: %d passed, %d failed (%d requirement cases + %d setup cases)\n",
+				report.Total, report.Passed, report.Failed, requirementCases, setupCases)
 			if report.Diagnostics != nil && len(report.Diagnostics.TopSignatures) > 0 {
 				fmt.Printf("Top failure signatures (%d OperationOutcome failures):\n", report.Diagnostics.OperationOutcomeFailures)
 				for i, sig := range report.Diagnostics.TopSignatures {
@@ -396,6 +399,9 @@ func main() {
 				}
 			}
 			fmt.Printf("Contractual coverage: %.1f%% (%d/%d)\n", coverageEvaluation.CoveragePercent, coverageEvaluation.CoveredRequirements, coverageEvaluation.TotalRequirements)
+			if requirementCases != coverageEvaluation.TotalRequirements {
+				fmt.Printf("WARNING: generated %d requirement cases but the plan defines %d obligations; check for duplicate or missing requirements\n", requirementCases, coverageEvaluation.TotalRequirements)
+			}
 			if coverageEvaluation.UncoveredRequirements > 0 {
 				fmt.Printf("Uncovered contractual obligations: %d\n", coverageEvaluation.UncoveredRequirements)
 				printCoverageGapSummary(coverageEvaluation)
@@ -614,6 +620,17 @@ func marshalCoverageRunOutput(report *testrunner.Report, evaluation testcoverage
 	}
 	payload["coverage"] = evaluation
 	return json.MarshalIndent(payload, "", "  ")
+}
+
+func countRequirementAndSetupCases(cases []testrunner.CaseResult) (requirement, setup int) {
+	for _, c := range cases {
+		if strings.HasPrefix(c.RequirementID, "setup:") {
+			setup++
+		} else {
+			requirement++
+		}
+	}
+	return requirement, setup
 }
 
 func printCoverageGapSummary(evaluation testcoverage.EvaluationReport) {

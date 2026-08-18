@@ -1,6 +1,7 @@
 package coverage
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"unicode"
@@ -76,54 +77,59 @@ func topologicalLevels(resourceSet map[string]struct{}, dependencies map[string]
 		sort.Strings(reverse[dep])
 	}
 
-	ready := make([]string, 0)
-	for rt, d := range inDegree {
-		if d == 0 {
-			ready = append(ready, rt)
-		}
+	remaining := make(map[string]struct{}, len(resourceSet))
+	for rt := range resourceSet {
+		remaining[rt] = struct{}{}
 	}
-	sort.Strings(ready)
 
 	levels := make([][]string, 0)
-	processed := 0
-	for processed < len(resourceSet) {
-		if len(ready) == 0 {
-			breaker := pickCycleBreaker(inDegree, reverse)
-			if breaker == "" {
-				break
+	for len(remaining) > 0 {
+		ready := make([]string, 0)
+		for rt := range remaining {
+			if inDegree[rt] == 0 {
+				ready = append(ready, rt)
 			}
+		}
+		if len(ready) == 0 {
+			// Cycle: break it by removing the node that releases the most
+			// dependents. Each node is still emitted exactly once.
+			breaker := pickCycleBreaker(inDegree, reverse, remaining)
+			if breaker == "" {
+				return nil, fmt.Errorf("dependency graph has an unbreakable cycle")
+			}
+			inDegree[breaker] = 0
 			ready = []string{breaker}
 		}
+		sort.Strings(ready)
 
-		level := append([]string(nil), ready...)
-		levels = append(levels, level)
-		processed += len(level)
-
-		nextSet := make(map[string]struct{})
-		for _, rt := range level {
+		level := make([]string, 0, len(ready))
+		for _, rt := range ready {
+			if _, ok := remaining[rt]; !ok {
+				continue
+			}
+			delete(remaining, rt)
+			level = append(level, rt)
 			for _, child := range reverse[rt] {
-				inDegree[child]--
-				if inDegree[child] == 0 {
-					nextSet[child] = struct{}{}
+				if _, ok := remaining[child]; !ok {
+					continue
 				}
+				inDegree[child]--
 			}
 		}
-
-		next := make([]string, 0, len(nextSet))
-		for rt := range nextSet {
-			next = append(next, rt)
+		if len(level) == 0 {
+			return nil, fmt.Errorf("dependency graph has an unbreakable cycle")
 		}
-		sort.Strings(next)
-		ready = next
+		levels = append(levels, level)
 	}
 	return levels, nil
 }
 
-func pickCycleBreaker(inDegree map[string]int, reverse map[string][]string) string {
+func pickCycleBreaker(inDegree map[string]int, reverse map[string][]string, remaining map[string]struct{}) string {
 	best := ""
 	bestOutDegree := -1
 	bestInDegree := 0
-	for rt, degree := range inDegree {
+	for rt := range remaining {
+		degree := inDegree[rt]
 		if degree <= 0 {
 			continue
 		}

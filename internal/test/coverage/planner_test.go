@@ -1,6 +1,44 @@
 package coverage
 
-import "testing"
+import (
+	"testing"
+)
+
+func TestTopologicalLevelsEmitsEachNodeExactlyOnce(t *testing.T) {
+	// Graph: A<-C<-B<-A with D feeding into B (A depends on C, C on B, B on
+	// A and D). This forms a cycle that the topological sort must break
+	// without emitting any node more than once.
+	set := map[string]struct{}{
+		"A": {}, "B": {}, "C": {}, "D": {},
+	}
+	deps := map[string][]string{
+		"A": {"C"},
+		"B": {"A", "D"},
+		"C": {"B"},
+	}
+
+	levels, err := topologicalLevels(set, deps)
+	if err != nil {
+		t.Fatalf("topologicalLevels returned error: %v", err)
+	}
+
+	seen := make(map[string]int)
+	total := 0
+	for _, level := range levels {
+		for _, rt := range level {
+			seen[rt]++
+			total++
+		}
+	}
+	if total != len(set) {
+		t.Fatalf("levels emitted %d nodes, want %d (levels=%+v)", total, len(set), levels)
+	}
+	for rt, count := range seen {
+		if count != 1 {
+			t.Fatalf("resource type %s emitted %d times, want 1 (levels=%+v)", rt, count, levels)
+		}
+	}
+}
 
 func TestPlanDependenciesReturnsTopologicalLevels(t *testing.T) {
 	reqs := []CoverageRequirement{
