@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	testast "github.com/jlcoulter/momus/internal/test/ast"
@@ -54,6 +55,7 @@ func main() {
 	var includeOptional bool
 	var includeLowValuePaths bool
 	var baseURL string
+	var scopeToCapability bool
 
 	loadCmd := &cobra.Command{
 		Use:   "load <path-to-package.tgz>",
@@ -228,9 +230,14 @@ func main() {
 				return err
 			}
 
+			coverageResourceTypes, coverageProfileURLs, err := resourceScopeForRun(cmd, includeResourceTypes, includeProfileURLs, baseURL, scopeToCapability, apiBearerToken, apiBasicUsername, apiBasicPassword)
+			if err != nil {
+				return err
+			}
+
 			coveragePlan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
-				IncludeResourceTypes: includeResourceTypes,
-				IncludeProfileURLs:   includeProfileURLs,
+				IncludeResourceTypes: coverageResourceTypes,
+				IncludeProfileURLs:   coverageProfileURLs,
 				ExcludePathPrefixes:  excludePathPrefixes,
 				MustSupportOnly:      mustSupportOnly,
 				IncludeOptional:      includeOptional,
@@ -315,9 +322,14 @@ func main() {
 				return err
 			}
 
+			capabilityResourceTypes, capabilityProfileURLs, err := resourceScopeForRun(cmd, includeResourceTypes, includeProfileURLs, baseURL, scopeToCapability, apiBearerToken, apiBasicUsername, apiBasicPassword)
+			if err != nil {
+				return err
+			}
+
 			coveragePlan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
-				IncludeResourceTypes: includeResourceTypes,
-				IncludeProfileURLs:   includeProfileURLs,
+				IncludeResourceTypes: capabilityResourceTypes,
+				IncludeProfileURLs:   capabilityProfileURLs,
 				ExcludePathPrefixes:  excludePathPrefixes,
 				MustSupportOnly:      mustSupportOnly,
 				IncludeOptional:      includeOptional,
@@ -373,6 +385,7 @@ func main() {
 	runCmd.Flags().BoolVar(&mustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
 	runCmd.Flags().BoolVar(&includeOptional, "include-optional", false, "include optional non-mustSupport elements")
 	runCmd.Flags().BoolVar(&includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
+	runCmd.Flags().BoolVar(&scopeToCapability, "scope-to-capability", true, "limit derivation to CapabilityStatement server resources that support create")
 	runCmd.Flags().StringVar(&baseURL, "base-url", "", "target FHIR base URL for request execution")
 	runCmd.Flags().StringVar(&apiBearerToken, "api-bearer-token", "", "bearer token used for API requests during coverage run")
 	runCmd.Flags().StringVar(&apiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during coverage run")
@@ -389,4 +402,52 @@ func main() {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+func resourceScopeForRun(cmd *cobra.Command, includeResourceTypes, includeProfileURLs []string, baseURL string, scopeToCapability bool, bearerToken, basicUsername, basicPassword string) ([]string, []string, error) {
+	if !scopeToCapability {
+		return includeResourceTypes, includeProfileURLs, nil
+	}
+	capabilityStatement, err := testcoverage.FetchCapabilityStatement(cmd.Context(), baseURL, testcoverage.CapabilityFetchOptions{
+		BearerToken:   bearerToken,
+		BasicUsername: basicUsername,
+		BasicPassword: basicPassword,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	capabilityTypes := testcoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, true)
+	capabilityProfiles := testcoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, true)
+	if len(capabilityProfiles) > 0 {
+		return intersectCaseInsensitive(includeResourceTypes, capabilityTypes), intersectCaseInsensitive(includeProfileURLs, capabilityProfiles), nil
+	}
+	if len(capabilityTypes) == 0 {
+		return includeResourceTypes, includeProfileURLs, nil
+	}
+	return intersectCaseInsensitive(includeResourceTypes, capabilityTypes), includeProfileURLs, nil
+}
+
+func intersectCaseInsensitive(requested, available []string) []string {
+	if len(available) == 0 {
+		return requested
+	}
+	if len(requested) == 0 {
+		return available
+	}
+	requestedSet := make(map[string]string, len(requested))
+	for _, value := range requested {
+		key := strings.ToLower(strings.TrimSpace(value))
+		if key == "" {
+			continue
+		}
+		requestedSet[key] = value
+	}
+	intersected := make([]string, 0)
+	for _, value := range available {
+		key := strings.ToLower(strings.TrimSpace(value))
+		if original, ok := requestedSet[key]; ok {
+			intersected = append(intersected, original)
+		}
+	}
+	return intersected
 }

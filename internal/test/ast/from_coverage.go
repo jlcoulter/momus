@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/jlcoulter/momus/internal/test/coverage"
 )
@@ -47,12 +49,12 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 
 			resourceSeq.Steps = append(resourceSeq.Steps,
 				&Request{
-					Method: "POST",
-					URL:    joinURL(options.BaseURL, resourceType),
+					Method: "PUT",
+					URL:    joinInstanceURL(options.BaseURL, resourceType, setupResourceID(resourceType)),
 					Headers: map[string]string{
 						"Content-Type": "application/fhir+json",
 					},
-					Body: buildSetupBody(resourceType, deps),
+					Body: buildSetupBody(resourceType, setupResourceID(resourceType), deps),
 				},
 				&Assert{
 					Description:   "setup create seed resource",
@@ -63,15 +65,16 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 			)
 
 			for _, req := range byResource[resourceType] {
+				requestID := requirementResourceID(req)
 				caseSeq := &Sequence{Steps: []Node{
 					&Request{
-						Method: "POST",
-						URL:    joinURL(options.BaseURL, req.ResourceType),
+						Method: "PUT",
+						URL:    joinInstanceURL(options.BaseURL, req.ResourceType, requestID),
 						Headers: map[string]string{
 							"Content-Type":           "application/fhir+json",
 							"X-Momus-Requirement-ID": req.ID,
 						},
-						Body: buildBodyTemplate(req, deps),
+						Body: buildBodyTemplate(req, requestID, deps),
 					},
 					buildRequirementAssert(req),
 				}}
@@ -98,8 +101,12 @@ func joinURL(baseURL, resourceType string) string {
 	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimPrefix(resourceType, "/")
 }
 
-func buildBodyTemplate(req coverage.CoverageRequirement, deps []string) map[string]any {
-	body := baseBodyTemplate(req.ResourceType, deps)
+func joinInstanceURL(baseURL, resourceType, id string) string {
+	return joinURL(baseURL, resourceType) + "/" + strings.TrimPrefix(id, "/")
+}
+
+func buildBodyTemplate(req coverage.CoverageRequirement, id string, deps []string) map[string]any {
+	body := baseBodyTemplate(req.ResourceType, id, deps)
 	body["_momus"] = map[string]any{
 		"requirementId": req.ID,
 		"profileUrl":    req.ProfileURL,
@@ -115,13 +122,14 @@ func buildBodyTemplate(req coverage.CoverageRequirement, deps []string) map[stri
 	return body
 }
 
-func buildSetupBody(resourceType string, deps []string) map[string]any {
-	return baseBodyTemplate(resourceType, deps)
+func buildSetupBody(resourceType, id string, deps []string) map[string]any {
+	return baseBodyTemplate(resourceType, id, deps)
 }
 
-func baseBodyTemplate(resourceType string, deps []string) map[string]any {
+func baseBodyTemplate(resourceType, id string, deps []string) map[string]any {
 	body := map[string]any{
 		"resourceType": resourceType,
+		"id":           id,
 	}
 
 	switch resourceType {
@@ -137,6 +145,66 @@ func baseBodyTemplate(resourceType string, deps []string) map[string]any {
 
 	attachDependencyReferences(body, resourceType, deps)
 	return body
+}
+
+func setupResourceID(resourceType string) string {
+	return sanitizeFHIRID("momus-setup-" + resourceType)
+}
+
+func requirementResourceID(req coverage.CoverageRequirement) string {
+	resourceType := strings.TrimSpace(req.ResourceType)
+	if resourceType == "" {
+		resourceType = "resource"
+	}
+	variant := strings.TrimSpace(string(req.Variant))
+	if variant == "" {
+		variant = "case"
+	}
+	return sanitizeFHIRID("momus-" + resourceType + "-" + variant + "-" + strconv.Itoa(stableChecksum(req.ID)))
+}
+
+func sanitizeFHIRID(value string) string {
+	if value == "" {
+		return "momus-id"
+	}
+	var b strings.Builder
+	prevHyphen := false
+	for _, r := range value {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(unicode.ToLower(r))
+			prevHyphen = false
+		case r == '-' || r == '.':
+			if !prevHyphen {
+				b.WriteRune(r)
+				prevHyphen = true
+			}
+		default:
+			if !prevHyphen {
+				b.WriteRune('-')
+				prevHyphen = true
+			}
+		}
+	}
+	out := strings.Trim(b.String(), "-.")
+	if out == "" {
+		return "momus-id"
+	}
+	if len(out) > 64 {
+		return out[:64]
+	}
+	return out
+}
+
+func stableChecksum(value string) int {
+	sum := 0
+	for _, r := range value {
+		sum = (sum*31 + int(r)) % 1000000
+	}
+	if sum < 0 {
+		return -sum
+	}
+	return sum
 }
 
 func attachDependencyReferences(body map[string]any, resourceType string, deps []string) {

@@ -12,7 +12,7 @@ import (
 
 func TestExecuteProducesReport(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/Patient" && r.Method == http.MethodPost {
+		if r.URL.Path == "/Patient/test-1" && r.Method == http.MethodPut {
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"id":"1"}`))
 			return
@@ -22,7 +22,7 @@ func TestExecuteProducesReport(t *testing.T) {
 	defer server.Close()
 
 	plan := &ast.Sequence{Steps: []ast.Node{
-		&ast.Request{Method: http.MethodPost, URL: "/Patient", Headers: map[string]string{"Content-Type": "application/fhir+json"}, Body: map[string]any{"resourceType": "Patient"}},
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/test-1", Headers: map[string]string{"Content-Type": "application/fhir+json"}, Body: map[string]any{"resourceType": "Patient", "id": "test-1"}},
 		&ast.Assert{Description: "create patient", RequirementID: "req-1", Expression: "status in [200,201]"},
 	}}
 
@@ -48,7 +48,7 @@ func TestExecuteCapturesAssertionFailure(t *testing.T) {
 	defer server.Close()
 
 	plan := &ast.Sequence{Steps: []ast.Node{
-		&ast.Request{Method: http.MethodPost, URL: "/Patient", Body: map[string]any{"resourceType": "Patient"}},
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/test-2", Body: map[string]any{"resourceType": "Patient", "id": "test-2"}},
 		&ast.Assert{Description: "create patient", RequirementID: "req-2", Expression: "status in [200,201]"},
 	}}
 
@@ -68,10 +68,10 @@ func TestExecuteResolvesCapturedTemplateVariables(t *testing.T) {
 	var observationSubjectRef string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/Patient":
+		case "/Patient/p-123":
 			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"id":"p-123"}`))
-		case "/Observation":
+			// Simulate a server that accepts PUT but does not echo a resource body.
+		case "/Observation/o-456":
 			var payload map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&payload)
 			if subject, ok := payload["subject"].(map[string]any); ok {
@@ -88,10 +88,10 @@ func TestExecuteResolvesCapturedTemplateVariables(t *testing.T) {
 	defer server.Close()
 
 	plan := &ast.Sequence{Steps: []ast.Node{
-		&ast.Request{Method: http.MethodPost, URL: "/Patient", Body: map[string]any{"resourceType": "Patient"}},
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/p-123", Body: map[string]any{"resourceType": "Patient", "id": "p-123"}},
 		&ast.Assert{Description: "seed patient", RequirementID: "setup:Patient", Expression: "status in [200,201]"},
 		&ast.Capture{Name: "Patient.id", Path: "id"},
-		&ast.Request{Method: http.MethodPost, URL: "/Observation", Body: map[string]any{"resourceType": "Observation", "subject": map[string]any{"reference": "Patient/{{Patient.id}}"}}},
+		&ast.Request{Method: http.MethodPut, URL: "/Observation/o-456", Body: map[string]any{"resourceType": "Observation", "id": "o-456", "subject": map[string]any{"reference": "Patient/{{Patient.id}}"}}},
 		&ast.Assert{Description: "create observation", RequirementID: "req-obs", Expression: "status in [200,201]"},
 	}}
 
@@ -117,7 +117,7 @@ func TestExecuteAppliesBearerToken(t *testing.T) {
 	defer server.Close()
 
 	plan := &ast.Sequence{Steps: []ast.Node{
-		&ast.Request{Method: http.MethodPost, URL: "/Patient", Body: map[string]any{"resourceType": "Patient"}},
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/auth-1", Body: map[string]any{"resourceType": "Patient", "id": "auth-1"}},
 		&ast.Assert{Description: "create patient", RequirementID: "req-auth", Expression: "status in [200,201]"},
 	}}
 
@@ -141,7 +141,7 @@ func TestExecuteIncludesDebugDetailsWhenEnabled(t *testing.T) {
 	defer server.Close()
 
 	plan := &ast.Sequence{Steps: []ast.Node{
-		&ast.Request{Method: http.MethodPost, URL: "/Patient", Body: map[string]any{"resourceType": "Patient"}},
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/debug-1", Body: map[string]any{"resourceType": "Patient", "id": "debug-1"}},
 		&ast.Assert{Description: "create patient", RequirementID: "req-debug", Expression: "status in [200,201]"},
 	}}
 
@@ -155,8 +155,8 @@ func TestExecuteIncludesDebugDetailsWhenEnabled(t *testing.T) {
 	if report.Cases[0].Debug == nil {
 		t.Fatalf("expected debug details in case result")
 	}
-	if report.Cases[0].Debug.RequestMethod != http.MethodPost {
-		t.Fatalf("got request method %q, want %q", report.Cases[0].Debug.RequestMethod, http.MethodPost)
+	if report.Cases[0].Debug.RequestMethod != http.MethodPut {
+		t.Fatalf("got request method %q, want %q", report.Cases[0].Debug.RequestMethod, http.MethodPut)
 	}
 	if report.Cases[0].Debug.StatusCode != http.StatusForbidden {
 		t.Fatalf("got debug status %d, want %d", report.Cases[0].Debug.StatusCode, http.StatusForbidden)
@@ -174,7 +174,7 @@ func TestExecuteOmitsDebugDetailsByDefault(t *testing.T) {
 	defer server.Close()
 
 	plan := &ast.Sequence{Steps: []ast.Node{
-		&ast.Request{Method: http.MethodPost, URL: "/Patient", Body: map[string]any{"resourceType": "Patient"}},
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/debug-2", Body: map[string]any{"resourceType": "Patient", "id": "debug-2"}},
 		&ast.Assert{Description: "create patient", RequirementID: "req-debug-default", Expression: "status in [200,201]"},
 	}}
 

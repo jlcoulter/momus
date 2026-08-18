@@ -136,6 +136,17 @@ type capabilityStatementJSON struct {
 	Name        string `json:"name"`
 	Status      string `json:"status"`
 	FhirVersion string `json:"fhirVersion"`
+	Rest        []struct {
+		Mode     string `json:"mode"`
+		Resource []struct {
+			Type             string   `json:"type"`
+			Profile          string   `json:"profile"`
+			SupportedProfile []string `json:"supportedProfile"`
+			Interaction      []struct {
+				Code string `json:"code"`
+			} `json:"interaction"`
+		} `json:"resource"`
+	} `json:"rest"`
 }
 
 type searchParameterJSON struct {
@@ -306,12 +317,33 @@ func decodeResource(data []byte) (any, error) {
 		if err := json.Unmarshal(data, &cs); err != nil {
 			return nil, err
 		}
+		rest := make([]model.CapabilityStatementRest, 0, len(cs.Rest))
+		for _, restBlock := range cs.Rest {
+			resources := make([]model.CapabilityStatementRestResource, 0, len(restBlock.Resource))
+			for _, resource := range restBlock.Resource {
+				interactions := make([]model.CapabilityStatementInteraction, 0, len(resource.Interaction))
+				for _, interaction := range resource.Interaction {
+					interactions = append(interactions, model.CapabilityStatementInteraction{Code: interaction.Code})
+				}
+				resources = append(resources, model.CapabilityStatementRestResource{
+					Type:             resource.Type,
+					Profile:          resource.Profile,
+					SupportedProfile: resource.SupportedProfile,
+					Interaction:      interactions,
+				})
+			}
+			rest = append(rest, model.CapabilityStatementRest{
+				Mode:     restBlock.Mode,
+				Resource: resources,
+			})
+		}
 		return &model.CapabilityStatement{
 			URL:         cs.URL,
 			Version:     cs.Version,
 			Name:        cs.Name,
 			Status:      cs.Status,
 			FhirVersion: cs.FhirVersion,
+			Rest:        rest,
 		}, nil
 	case "SearchParameter":
 		var sp searchParameterJSON

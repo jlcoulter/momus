@@ -57,11 +57,18 @@ func TestGenerateFromCoveragePlanBuildsPerRequirementSequence(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected first resource step to be *Request, got %T", resourceSeq.Steps[0])
 	}
-	if setupReq.URL != "http://localhost:8080/fhir/Patient" {
-		t.Fatalf("got URL %q, want %q", setupReq.URL, "http://localhost:8080/fhir/Patient")
+	if setupReq.Method != "PUT" {
+		t.Fatalf("got method %q, want PUT", setupReq.Method)
+	}
+	if setupReq.URL != "http://localhost:8080/fhir/Patient/momus-setup-patient" {
+		t.Fatalf("got URL %q, want %q", setupReq.URL, "http://localhost:8080/fhir/Patient/momus-setup-patient")
 	}
 	if _, ok := setupReq.Headers["X-Momus-Requirement-ID"]; ok {
 		t.Fatalf("did not expect setup request to carry requirement header")
+	}
+	setupBody := setupReq.Body.(map[string]any)
+	if setupBody["id"] != "momus-setup-patient" {
+		t.Fatalf("got setup id %v, want momus-setup-patient", setupBody["id"])
 	}
 
 	case0, ok := resourceSeq.Steps[3].(*Sequence)
@@ -101,6 +108,9 @@ func TestGenerateFromCoveragePlanUsesDependencyTemplate(t *testing.T) {
 
 	obsResourceSeq := root.Steps[1].(*Sequence)
 	setupReq := obsResourceSeq.Steps[0].(*Request)
+	if setupReq.Method != "PUT" {
+		t.Fatalf("got method %q, want PUT", setupReq.Method)
+	}
 	body := setupReq.Body.(map[string]any)
 	subject := body["subject"].(map[string]any)
 	if subject["reference"] != "Patient/{{Patient.id}}" {

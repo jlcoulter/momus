@@ -193,7 +193,11 @@ func (e *executor) executeRequest(reqNode *ast.Request) (assertions.Result, erro
 	if reqNode.Body != nil {
 		if bodyMap, ok := reqNode.Body.(map[string]any); ok {
 			if resourceType, ok := bodyMap["resourceType"].(string); ok && resourceType != "" {
-				if id := extractResourceID(body); id != "" {
+				id := extractResourceID(body)
+				if id == "" {
+					id, _ = bodyMap["id"].(string)
+				}
+				if id != "" {
 					variables[resourceType+".id"] = id
 					e.variables[resourceType+".id"] = id
 				}

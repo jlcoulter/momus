@@ -8,5 +8,24 @@ type CapabilityStatement struct {
 	Name        string
 	Status      string
 	FhirVersion string
-	// REST interactions are intentionally omitted for now.
+	Rest        []CapabilityStatementRest
+}
+
+// CapabilityStatementRest describes a REST endpoint block in a CapabilityStatement.
+type CapabilityStatementRest struct {
+	Mode     string
+	Resource []CapabilityStatementRestResource
+}
+
+// CapabilityStatementRestResource describes supported interactions for a resource type.
+type CapabilityStatementRestResource struct {
+	Type             string
+	Profile          string
+	SupportedProfile []string
+	Interaction      []CapabilityStatementInteraction
+}
+
+// CapabilityStatementInteraction represents a supported REST interaction code.
+type CapabilityStatementInteraction struct {
+	Code string
 }

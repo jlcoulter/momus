@@ -146,6 +146,17 @@ func (r *Registry) CapabilityStatement(url string) (*model.CapabilityStatement, 
 	return cs, ok
 }
 
+// CapabilityStatements returns every indexed CapabilityStatement.
+func (r *Registry) CapabilityStatements() []*model.CapabilityStatement {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*model.CapabilityStatement, 0, len(r.capabilityStatements))
+	for _, cs := range r.capabilityStatements {
+		out = append(out, cs)
+	}
+	return out
+}
+
 // SearchParameter returns the SearchParameter for a resource type and code.
 func (r *Registry) SearchParameter(resourceType, code string) (*model.SearchParameter, bool) {
 	r.mu.RLock()
