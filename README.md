@@ -11,7 +11,6 @@ is implemented yet.
 
 The following capabilities are planned but **not yet implemented**:
 
-- Full FHIR package dependency resolution (recursive dependency loading)
 - A normalised FHIR Registry of profiles, value sets, code systems, and
   search parameters
 - Profile resolution and inheritance, element trees, cardinality, slicing,
@@ -29,6 +28,10 @@ decisions.
 Currently implemented:
 
 - Local FHIR package `.tgz` loading via CLI
+- Recursive package dependency resolution via CLI
+- Local-first dependency resolution with remote package download fallback
+- Download cache for resolved dependency archives
+- Floating dependency version resolution such as `current` -> concrete package version
 - Package manifest parsing (`name`, `version`, `dependencies`)
 - Normalisation of core FHIR resources into internal model types:
   `StructureDefinition`, `ValueSet`, `CodeSystem`, `CapabilityStatement`,
@@ -83,6 +86,57 @@ Example output:
 ```text
 Loaded package au.gov.digitalhealth.fhir.hcpd@26.0.0 with 7 dependencies and 55 resources
 ```
+
+Resolve a package and its transitive dependencies:
+
+```sh
+go run ./cmd/momus package resolve package.tgz
+```
+
+Example output:
+
+```text
+Resolved 10 packages from . using download dir .momus/packages with 9067 total resources
+- hl7.fhir.r4.core@4.0.1 (deps=0, resources=4441)
+- hl7.terminology.r4@7.3.0 (deps=2, resources=3470)
+- hl7.fhir.uv.extensions.r4@5.3.0 (deps=2, resources=884)
+- hl7.fhir.au.base@6.0.0 (deps=3, resources=151)
+- hl7.fhir.uv.smart-app-launch@2.0.0 (deps=1, resources=0)
+- hl7.fhir.uv.ipa@1.1.0 (deps=4, resources=14)
+- hl7.fhir.au.core@2.0.0 (deps=6, resources=30)
+- hl7.fhir.au.pd@2.0.1 (deps=1, resources=14)
+- hl7.fhir.uv.bulkdata@3.0.0 (deps=3, resources=8)
+- au.gov.digitalhealth.fhir.hcpd@26.0.0 (deps=7, resources=55)
+```
+
+Resolver behaviour:
+
+- Searches the local dependency directory first
+- Downloads missing package archives from FHIR package registries
+- Stores downloaded archives in `.momus/packages` by default
+- Resolves floating dependency versions such as `current` using registry metadata
+- Uses `root-wins` as the default conflict policy for version conflicts
+
+Override dependency search and download directories:
+
+```sh
+go run ./cmd/momus package resolve package.tgz --deps-dir . --download-dir ./.momus/packages
+```
+
+Enable debug logging:
+
+```sh
+go run ./cmd/momus --debug package resolve package.tgz
+```
+
+Advanced resolver option:
+
+```sh
+go run ./cmd/momus package resolve package.tgz --conflict-policy strict
+```
+
+`strict` is primarily useful for auditing package graph consistency. The default
+`root-wins` mode is the normal operational mode.
 
 ## License
 

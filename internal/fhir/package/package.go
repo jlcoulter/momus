@@ -90,19 +90,15 @@ type packageManifest struct {
 	DepsArray    []manifestDependency `json:"dependsOn"`
 }
 
-// manifestDependency is a single dependency in a package manifest.
 type manifestDependency struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 }
 
-// resourceEnvelope is a minimal representation of a FHIR resource, used to
-// determine the resource type before decoding into a more specific struct.
 type resourceEnvelope struct {
 	ResourceType string `json:"resourceType"`
 }
 
-// structureDefinitionJSON is a minimal representation of a FHIR StructureDefinition resource.
 type structureDefinitionJSON struct {
 	URL            string `json:"url"`
 	Version        string `json:"version"`
@@ -120,7 +116,6 @@ type structureDefinitionJSON struct {
 	} `json:"differential"`
 }
 
-// valueSetJSON is a minimal representation of a FHIR ValueSet resource.
 type valueSetJSON struct {
 	URL     string `json:"url"`
 	Version string `json:"version"`
@@ -128,7 +123,6 @@ type valueSetJSON struct {
 	Status  string `json:"status"`
 }
 
-// codeSystemJSON is a minimal representation of a FHIR CodeSystem resource.
 type codeSystemJSON struct {
 	URL     string `json:"url"`
 	Version string `json:"version"`
@@ -136,7 +130,6 @@ type codeSystemJSON struct {
 	Status  string `json:"status"`
 }
 
-// capabilityStatementJSON is a minimal representation of a FHIR CapabilityStatement resource.
 type capabilityStatementJSON struct {
 	URL         string `json:"url"`
 	Version     string `json:"version"`
@@ -145,7 +138,6 @@ type capabilityStatementJSON struct {
 	FhirVersion string `json:"fhirVersion"`
 }
 
-// searchParameterJSON is a minimal representation of a FHIR SearchParameter resource.
 type searchParameterJSON struct {
 	URL        string   `json:"url"`
 	Name       string   `json:"name"`
@@ -242,7 +234,6 @@ func ReadPackage(packagePath string) (*Package, error) {
 	return pkg, nil
 }
 
-// decodeManifest decodes a package manifest from JSON into a Package struct.
 func decodeManifest(data []byte, pkg *Package) error {
 	var m packageManifest
 	if err := json.Unmarshal(data, &m); err != nil {
