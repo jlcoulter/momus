@@ -93,6 +93,9 @@ Currently implemented:
 - Assertion expression engine: `status in [..]` plus `body.<path>`, `header.<name>`,
   and `variable.<name>` comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`) so
   assertions can inspect response bodies, headers, and captured variables
+- OpenAPI contract support: `internal/openapi` loads OpenAPI 3.x documents into
+  operation contracts, parameters, and request/response schemas, and derives
+  API constraints through the shared constraint model (`momus api constraints`)
 - Minimal runner that executes AST requests/assertions and emits JSON test reports;
   `Parallel` branches run concurrently with per-branch variable scoping and
   deterministic result aggregation
@@ -104,7 +107,7 @@ cmd/momus/          CLI entry point (minimal; --help / --version)
 internal/fhir/      FHIR model, constraint model, package loading, registry,
                     terminology, resource generation, planner, provisioning
 internal/test/      test AST, assertions, generation (positive/negative/boundary), runner
-internal/openapi/   OpenAPI testing support (future)
+internal/openapi/   OpenAPI document loading and API constraint derivation
 docs/               architecture documentation
 pkg/                reserved public API (intentionally empty)
 ```
@@ -258,6 +261,28 @@ Write the constraints to a file:
 
 ```sh
 go run ./cmd/momus coverage constraints package.tgz --output ./constraints.json
+```
+
+Derive the constraint model from an OpenAPI contract (feature 13):
+
+```sh
+go run ./cmd/momus api constraints ./openapi.json --output ./api-constraints.json
+```
+
+This loads an OpenAPI 3.x document and normalises its operation contracts,
+parameters, and request/response schemas into `api-operation` and
+`api-parameter` constraints in the shared constraint model.
+
+Generate and execute a test against a live API from an OpenAPI document:
+
+```sh
+go run ./cmd/momus api run ./openapi.json --base-url http://localhost:8080
+```
+
+Or just generate the test AST without executing it:
+
+```sh
+go run ./cmd/momus api ast ./openapi.json --base-url http://localhost:8080 --output ./api-ast.json
 ```
 
 Generate a test AST from derived coverage requirements:

@@ -57,6 +57,6 @@ func newRootCmd(cfg *config) *cobra.Command {
 		newBulkCmd(cfg),
 	)
 
-	rootCmd.AddCommand(packageCmd, coverageCmd)
+	rootCmd.AddCommand(packageCmd, coverageCmd, newApiCmd(cfg))
 	return rootCmd
 }

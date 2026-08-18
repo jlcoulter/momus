@@ -34,6 +34,10 @@ const (
 	KindInteraction Kind = "interaction"
 	// KindOperation is a custom operation ($name) a server must support.
 	KindOperation Kind = "operation"
+	// KindAPIOperation is an HTTP operation an API must support.
+	KindAPIOperation Kind = "api-operation"
+	// KindAPIParameter is an API operation parameter (with presence rules).
+	KindAPIParameter Kind = "api-parameter"
 )
 
 // Constraint is a single normalised contractual rule.
@@ -81,6 +85,13 @@ type Constraint struct {
 
 	// OperationName (KindOperation).
 	OperationName string `json:"operationName,omitempty"`
+
+	// API (KindAPIOperation / KindAPIParameter).
+	APIMethod string `json:"apiMethod,omitempty"`
+	APIPath   string `json:"apiPath,omitempty"`
+	// ParameterName/ParameterIn describe an API parameter (KindAPIParameter).
+	ParameterName string `json:"parameterName,omitempty"`
+	ParameterIn   string `json:"parameterIn,omitempty"`
 }
 
 // ID builds a stable, deterministic constraint identifier from its parts.

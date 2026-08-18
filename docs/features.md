@@ -252,12 +252,21 @@ assert the shape of an `OperationOutcome` rather than only a status code.
 
 ## 13. OpenAPI contract support
 
-**Status: `internal/openapi` is a placeholder.**
+**Status: implemented.** `internal/openapi` loads OpenAPI 3.x documents (JSON)
+into the same architectural roles as the FHIR pipeline: operation contracts
+(path + method), parameter definitions (path/query/header/cookie with required
+presence), and request/response schemas (with component `$ref` resolution).
+`openapi.DeriveConstraints` feeds these through the shared constraint model
+(`KindAPIOperation` / `KindAPIParameter`), and `openapi.GeneratePlan` produces
+an executable test AST (one request+assert case per operation, with path
+parameters substituted and sample request bodies) that the runner can execute
+against a live API — proving the architecture's "FHIR/API" duality rather
+than leaving it aspirational.
 
-Load OpenAPI documents into the same architectural roles: operation
-contracts, parameter definitions, request/response schemas, and supported
-interactions feeding the constraint model. This proves the architecture's
-"FHIR/API" duality rather than leaving it aspirational.
+Exposed via `momus api constraints <openapi.json>` (derive the constraint
+model), `momus api ast <openapi.json> --base-url <url>` (generate the test
+AST), and `momus api run <openapi.json> --base-url <url>` (generate and
+execute).
 
 Why thirteenth: valuable, but it should follow the FHIR pipeline reaching
 feature-complete form so the API side reuses proven layers instead of
