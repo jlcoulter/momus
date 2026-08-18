@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/test/ast"
@@ -107,6 +108,70 @@ func TestExecuteResolvesCapturedTemplateVariables(t *testing.T) {
 	}
 }
 
+func TestExecuteFailsFastForUnresolvedSetupReference(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"o-1"}`))
+	}))
+	defer server.Close()
+
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodPut, URL: "/Observation/momus-setup-observation", Body: map[string]any{"resourceType": "Observation", "id": "momus-setup-observation", "subject": map[string]any{"reference": "Patient/momus-setup-patient"}}},
+		&ast.Assert{Description: "create observation", RequirementID: "setup:Observation", Expression: "status in [200,201]"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{BaseURL: server.URL, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("unexpected report summary: %+v", report)
+	}
+	if report.Cases[0].Error == "" || report.Cases[0].Passed {
+		t.Fatalf("expected unresolved setup reference failure, got %+v", report.Cases[0])
+	}
+	if requestCount != 0 {
+		t.Fatalf("expected preflight guard to block HTTP request, got %d requests", requestCount)
+	}
+}
+
+func TestExecuteAllowsResolvedSetupReferenceAfterSetupCreation(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusCreated)
+		switch r.URL.Path {
+		case "/Patient/momus-setup-patient":
+			_, _ = w.Write([]byte(`{"id":"momus-setup-patient"}`))
+		case "/Observation/o-1":
+			_, _ = w.Write([]byte(`{"id":"o-1"}`))
+		default:
+			_, _ = w.Write([]byte(`{"id":"unknown"}`))
+		}
+	}))
+	defer server.Close()
+
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/momus-setup-patient", Body: map[string]any{"resourceType": "Patient", "id": "momus-setup-patient"}},
+		&ast.Assert{Description: "seed patient", RequirementID: "setup:Patient", Expression: "status in [200,201]"},
+		&ast.Request{Method: http.MethodPut, URL: "/Observation/o-1", Body: map[string]any{"resourceType": "Observation", "id": "o-1", "subject": map[string]any{"reference": "Patient/momus-setup-patient"}}},
+		&ast.Assert{Description: "create observation", RequirementID: "req-resolved-setup-ref", Expression: "status in [200,201]"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{BaseURL: server.URL, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Total != 2 || report.Passed != 2 || report.Failed != 0 {
+		t.Fatalf("unexpected report summary: %+v", report)
+	}
+	if requestCount != 2 {
+		t.Fatalf("got %d HTTP requests, want 2", requestCount)
+	}
+}
+
 func TestExecuteAppliesBearerToken(t *testing.T) {
 	var authHeader string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -187,5 +252,176 @@ func TestExecuteOmitsDebugDetailsByDefault(t *testing.T) {
 	}
 	if report.Cases[0].Debug != nil {
 		t.Fatalf("expected debug details to be omitted when IncludeDebug is false")
+	}
+}
+
+func TestExecuteTreatsWarningOnly412AsPositivePass(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPreconditionFailed)
+		_, _ = w.Write([]byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"warning","code":"processing","diagnostics":"validation warning"}]}`))
+	}))
+	defer server.Close()
+
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/warn-1", Body: map[string]any{"resourceType": "Patient", "id": "warn-1"}},
+		&ast.Assert{Description: "create patient", RequirementID: "req-warning-pass", Expression: "status in [200,201]"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{BaseURL: server.URL, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Total != 1 || report.Passed != 1 || report.Failed != 0 {
+		t.Fatalf("unexpected report summary: %+v", report)
+	}
+}
+
+func TestExecuteDoesNotTreatError412AsPositivePass(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPreconditionFailed)
+		_, _ = w.Write([]byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"processing","diagnostics":"validation error"}]}`))
+	}))
+	defer server.Close()
+
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/error-1", Body: map[string]any{"resourceType": "Patient", "id": "error-1"}},
+		&ast.Assert{Description: "create patient", RequirementID: "req-warning-fail", Expression: "status in [200,201]"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{BaseURL: server.URL, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("unexpected report summary: %+v", report)
+	}
+}
+
+func TestExecuteAggregatesOperationOutcomeFailureDiagnostics(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPreconditionFailed)
+		_, _ = w.Write([]byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"processing","expression":["Organization.extension[0].value"],"diagnostics":"Unable to find match for profile"}]}`))
+	}))
+	defer server.Close()
+
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodPut, URL: "/Organization/org-1", Body: map[string]any{"resourceType": "Organization", "id": "org-1"}},
+		&ast.Assert{Description: "create organization", RequirementID: "req-org-1", Expression: "status in [200,201]"},
+		&ast.Request{Method: http.MethodPut, URL: "/Organization/org-2", Body: map[string]any{"resourceType": "Organization", "id": "org-2"}},
+		&ast.Assert{Description: "create organization", RequirementID: "req-org-2", Expression: "status in [200,201]"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{BaseURL: server.URL, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Total != 2 || report.Passed != 0 || report.Failed != 2 {
+		t.Fatalf("unexpected report summary: %+v", report)
+	}
+	if report.Diagnostics == nil {
+		t.Fatalf("expected diagnostics summary in report")
+	}
+	if report.Diagnostics.OperationOutcomeFailures != 2 {
+		t.Fatalf("got %d operation outcome failures, want 2", report.Diagnostics.OperationOutcomeFailures)
+	}
+	if len(report.Diagnostics.TopSignatures) != 1 {
+		t.Fatalf("got %d top signatures, want 1", len(report.Diagnostics.TopSignatures))
+	}
+	sig := report.Diagnostics.TopSignatures[0]
+	if sig.Count != 2 {
+		t.Fatalf("got signature count %d, want 2", sig.Count)
+	}
+	if sig.ExampleRequirementID != "req-org-1" {
+		t.Fatalf("got example requirement %q, want req-org-1", sig.ExampleRequirementID)
+	}
+	if report.Cases[0].FailureFingerprint == "" {
+		t.Fatalf("expected case failure fingerprint to be set")
+	}
+	if report.Cases[1].FailureFingerprint != report.Cases[0].FailureFingerprint {
+		t.Fatalf("expected matching fingerprints, got %q and %q", report.Cases[0].FailureFingerprint, report.Cases[1].FailureFingerprint)
+	}
+}
+
+func TestExecuteDoesNotCreateFailureSignatureForWarningIssue(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"warning","code":"processing","diagnostics":"warning only"}]}`))
+	}))
+	defer server.Close()
+
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/warn-fingerprint", Body: map[string]any{"resourceType": "Patient", "id": "warn-fingerprint"}},
+		&ast.Assert{Description: "create patient", RequirementID: "req-warning-sig", Expression: "status in [200,201]"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{BaseURL: server.URL, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("unexpected report summary: %+v", report)
+	}
+	if report.Cases[0].FailureFingerprint != "" {
+		t.Fatalf("expected empty failure fingerprint for warning issue, got %q", report.Cases[0].FailureFingerprint)
+	}
+	if report.Diagnostics != nil {
+		t.Fatalf("expected no diagnostics summary when all issues are warnings, got %+v", report.Diagnostics)
+	}
+}
+
+func TestExecutePrefersErrorIssueOverLeadingWarningForSignature(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPreconditionFailed)
+		_, _ = w.Write([]byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"warning","code":"processing","diagnostics":"first warning"},{"severity":"error","code":"processing","diagnostics":"real error","expression":["Patient.name"]}]}`))
+	}))
+	defer server.Close()
+
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/mixed-issue", Body: map[string]any{"resourceType": "Patient", "id": "mixed-issue"}},
+		&ast.Assert{Description: "create patient", RequirementID: "req-mixed-sig", Expression: "status in [200,201]"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{BaseURL: server.URL, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Diagnostics == nil || len(report.Diagnostics.TopSignatures) != 1 {
+		t.Fatalf("expected exactly one diagnostics signature, got %+v", report.Diagnostics)
+	}
+	sig := report.Diagnostics.TopSignatures[0]
+	if sig.Severity != "error" {
+		t.Fatalf("got severity %q, want error", sig.Severity)
+	}
+	if !strings.Contains(sig.Signature, "diag=real error") {
+		t.Fatalf("expected signature to include error diagnostics, got %q", sig.Signature)
+	}
+}
+
+func TestExecuteMarksLikelyAuthFailureWhenAllFailuresMatchAuthSignature(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"processing","diagnostics":"UPDATE operations are disabled. Please provide valid basic authentication."}]}`))
+	}))
+	defer server.Close()
+
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodPut, URL: "/Organization/org-auth-1", Body: map[string]any{"resourceType": "Organization", "id": "org-auth-1"}},
+		&ast.Assert{Description: "create organization", RequirementID: "req-auth-1", Expression: "status in [200,201]"},
+		&ast.Request{Method: http.MethodPut, URL: "/Organization/org-auth-2", Body: map[string]any{"resourceType": "Organization", "id": "org-auth-2"}},
+		&ast.Assert{Description: "create organization", RequirementID: "req-auth-2", Expression: "status in [200,201]"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{BaseURL: server.URL, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Diagnostics == nil {
+		t.Fatalf("expected diagnostics summary in report")
+	}
+	if !report.Diagnostics.LikelyAuthFailure {
+		t.Fatalf("expected likely auth failure detection, got diagnostics: %+v", report.Diagnostics)
+	}
+	if report.Diagnostics.Hint == "" {
+		t.Fatalf("expected auth hint to be populated")
 	}
 }
