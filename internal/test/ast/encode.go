@@ -47,14 +47,30 @@ func EncodeNode(node Node) (map[string]any, error) {
 			"path": n.Path,
 		}, nil
 	case *Assert:
-		return map[string]any{
+		encoded := map[string]any{
 			"type":          "assert",
 			"description":   n.Description,
 			"requirementId": n.RequirementID,
 			"expression":    n.Expression,
-		}, nil
+		}
+		if n.Trace != nil {
+			encoded["requirement"] = encodeTrace(n.Trace)
+		}
+		return encoded, nil
 	default:
 		return nil, fmt.Errorf("unsupported AST node type %T", node)
+	}
+}
+
+func encodeTrace(t *Trace) map[string]any {
+	return map[string]any{
+		"constraintId": t.ConstraintID,
+		"profileUrl":   t.ProfileURL,
+		"resourceType": t.ResourceType,
+		"elementPath":  t.ElementPath,
+		"domain":       t.Domain,
+		"variant":      t.Variant,
+		"expected":     t.Expected,
 	}
 }
 

@@ -37,10 +37,28 @@ type Capture struct {
 }
 
 // Assert is a test assertion against a result.
+//
+// Trace, when non-nil, carries the coverage requirement this assertion is
+// bound to. It lives in the ast package (rather than referencing the coverage
+// model) to keep ast free of dependencies on the coverage package.
 type Assert struct {
 	Description   string
 	RequirementID string
 	Expression    string
+	Trace         *Trace
+}
+
+// Trace is the coverage requirement a generated assertion is bound to. It
+// provides end-to-end traceability from an executed test back to its source
+// constraint.
+type Trace struct {
+	ConstraintID string
+	ProfileURL   string
+	ResourceType string
+	ElementPath  string
+	Domain       string
+	Variant      string
+	Expected     string // "accept" or "reject"
 }
 
 func (*Sequence) node() {}

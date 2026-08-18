@@ -17,6 +17,9 @@ func TestEvaluateCoverageAllCovered(t *testing.T) {
 	if report.CoveredRequirements != 2 || report.UncoveredRequirements != 0 {
 		t.Fatalf("unexpected covered/uncovered counts: %+v", report)
 	}
+	if len(report.Covered) != 2 || len(report.Uncovered) != 0 {
+		t.Fatalf("got %d covered / %d uncovered requirements, want 2/0", len(report.Covered), len(report.Uncovered))
+	}
 	if report.CoveragePercent != 100 {
 		t.Fatalf("got coverage percent %.2f, want 100", report.CoveragePercent)
 	}

@@ -23,5 +23,6 @@ type EvaluationReport struct {
 	ByDomain              map[CoverageDomain]DomainCoverageSummary  `json:"byDomain,omitempty"`
 	ByResourceType        map[string]DomainCoverageSummary          `json:"byResourceType,omitempty"`
 	ByVariant             map[CoverageVariant]DomainCoverageSummary `json:"byVariant,omitempty"`
+	Covered               []CoverageRequirement                     `json:"covered,omitempty"`
 	Uncovered             []CoverageRequirement                     `json:"uncovered,omitempty"`
 }

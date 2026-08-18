@@ -57,6 +57,7 @@ func EvaluateCoverage(plan *CoveragePlan, executed []ExecutedRequirementResult) 
 			domain.Covered++
 			resource.Covered++
 			variant.Covered++
+			report.Covered = append(report.Covered, req)
 		} else {
 			report.UncoveredRequirements++
 			domain.Uncovered++

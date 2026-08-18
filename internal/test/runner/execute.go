@@ -45,6 +45,9 @@ type CaseResult struct {
 	Passed        bool   `json:"passed"`
 	StatusCode    int    `json:"statusCode,omitempty"`
 	Error         string `json:"error,omitempty"`
+	// Trace is the coverage requirement this case is bound to, providing
+	// end-to-end traceability from the executed test to its source constraint.
+	Trace *ast.Trace `json:"requirement,omitempty"`
 	// FailureFingerprint points to the aggregated failure signature for this case.
 	FailureFingerprint string     `json:"failureFingerprint,omitempty"`
 	Debug              *CaseDebug `json:"debug,omitempty"`
@@ -259,6 +262,7 @@ func (e *executor) evaluateAssert(assertNode *ast.Assert) {
 		RequirementID: assertNode.RequirementID,
 		Description:   assertNode.Description,
 		Expression:    assertNode.Expression,
+		Trace:         assertNode.Trace,
 	}
 
 	if e.lastErr != nil {

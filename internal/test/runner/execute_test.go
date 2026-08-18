@@ -24,7 +24,7 @@ func TestExecuteProducesReport(t *testing.T) {
 
 	plan := &ast.Sequence{Steps: []ast.Node{
 		&ast.Request{Method: http.MethodPut, URL: "/Patient/test-1", Headers: map[string]string{"Content-Type": "application/fhir+json"}, Body: map[string]any{"resourceType": "Patient", "id": "test-1"}},
-		&ast.Assert{Description: "create patient", RequirementID: "req-1", Expression: "status in [200,201]"},
+		&ast.Assert{Description: "create patient", RequirementID: "req-1", Expression: "status in [200,201]", Trace: &ast.Trace{ConstraintID: "profile|Patient.name|cardinality", Domain: "cardinality", Variant: "valid-min", Expected: "accept"}},
 	}}
 
 	report, err := Execute(context.Background(), plan, ExecuteOptions{BaseURL: server.URL, HTTPClient: server.Client()})
@@ -39,6 +39,9 @@ func TestExecuteProducesReport(t *testing.T) {
 	}
 	if !report.Cases[0].Passed {
 		t.Fatalf("expected case to pass: %+v", report.Cases[0])
+	}
+	if report.Cases[0].Trace == nil || report.Cases[0].Trace.ConstraintID != "profile|Patient.name|cardinality" {
+		t.Fatalf("expected trace to carry constraint id, got %+v", report.Cases[0].Trace)
 	}
 }
 
