@@ -402,3 +402,48 @@ func TestDerivePlanRequiredSliceStructureObligation(t *testing.T) {
 		}
 	}
 }
+
+// TestDerivePlanScopedToRootPackage verifies that when a registry is scoped to
+// a root package, derivation produces obligations only for the root package's
+// StructureDefinitions, while dependency (parent) definitions remain indexed
+// for resolution but are not test subjects.
+func TestDerivePlanScopedToRootPackage(t *testing.T) {
+	r := registry.New()
+	// Root package profile.
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/root-patient",
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		},
+	})
+	// Parent/core package profile that must NOT be a test subject.
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://hl7.org/fhir/StructureDefinition/Observation",
+		Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+		},
+	})
+
+	r.SetScope([]string{"http://example.org/StructureDefinition/root-patient"})
+
+	plan, err := DerivePlan(r, DeriveOptions{})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+
+	if len(plan.Requirements) == 0 {
+		t.Fatal("expected requirements for the scoped root profile")
+	}
+	for _, req := range plan.Requirements {
+		if req.ProfileURL != "http://example.org/StructureDefinition/root-patient" {
+			t.Fatalf("requirement %s scoped to out-of-scope profile %q", req.ID, req.ProfileURL)
+		}
+		if req.ResourceType == "Observation" {
+			t.Fatalf("requirement %s derived from parent package profile", req.ID)
+		}
+	}
+}

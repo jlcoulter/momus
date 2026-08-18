@@ -30,6 +30,14 @@ type Registry struct {
 	searchParametersForResource map[string][]*model.SearchParameter
 
 	profilesByResource map[string][]*model.StructureDefinition
+
+	// scopedStructureDefinitions is the set of canonical URLs whose
+	// StructureDefinitions belong to the selected package scope. Only these
+	// are subjects of test generation; the full index remains available for
+	// dependency resolution (referenced profiles, base definitions, value
+	// sets, and so on). When empty, every indexed StructureDefinition is
+	// considered in scope.
+	scopedStructureDefinitions map[string]struct{}
 }
 
 // New returns an empty Registry.
@@ -116,6 +124,55 @@ func (r *Registry) StructureDefinition(url string) (*model.StructureDefinition, 
 func (r *Registry) StructureDefinitions() []*model.StructureDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	out := make([]*model.StructureDefinition, 0, len(r.structureDefinitions))
+	for _, sd := range r.structureDefinitions {
+		out = append(out, sd)
+	}
+	return out
+}
+
+// SetScope restricts the set of StructureDefinitions that are subjects of
+// test generation to those whose canonical URL is in scope. Structure
+// Definitions outside the scope remain indexed and resolvable so they can
+// satisfy dependencies (referenced profiles, base definitions, value sets),
+// but they are not returned by ScopedStructureDefinitions. Passing an empty
+// scope clears the restriction and treats every indexed StructureDefinition
+// as in scope.
+func (r *Registry) SetScope(scope []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(scope) == 0 {
+		r.scopedStructureDefinitions = nil
+		return
+	}
+	set := make(map[string]struct{}, len(scope))
+	for _, url := range scope {
+		if url != "" {
+			set[url] = struct{}{}
+		}
+	}
+	r.scopedStructureDefinitions = set
+}
+
+// ScopedStructureDefinitions returns the StructureDefinitions that are
+// subjects of test generation: those in the selected package scope, or every
+// indexed StructureDefinition when no scope has been set.
+func (r *Registry) ScopedStructureDefinitions() []*model.StructureDefinition {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if len(r.scopedStructureDefinitions) == 0 {
+		return r.structureDefinitionsSnapshot()
+	}
+	out := make([]*model.StructureDefinition, 0, len(r.scopedStructureDefinitions))
+	for url := range r.scopedStructureDefinitions {
+		if sd, ok := r.structureDefinitions[url]; ok {
+			out = append(out, sd)
+		}
+	}
+	return out
+}
+
+func (r *Registry) structureDefinitionsSnapshot() []*model.StructureDefinition {
 	out := make([]*model.StructureDefinition, 0, len(r.structureDefinitions))
 	for _, sd := range r.structureDefinitions {
 		out = append(out, sd)

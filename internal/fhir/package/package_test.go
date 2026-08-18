@@ -266,6 +266,78 @@ func TestRegistryBuilderBuildFromPackages(t *testing.T) {
 	}
 }
 
+func TestRegistryBuilderBuildFromPackagesScoped(t *testing.T) {
+	builder := NewRegistryBuilder()
+	root := &Package{
+		Name:    "root",
+		Version: "1.0.0",
+		Resources: []any{
+			&model.StructureDefinition{URL: "http://example.org/StructureDefinition/root-patient", Type: "Patient"},
+		},
+	}
+	deps := []*Package{
+		{
+			Name:    "core",
+			Version: "1.0.0",
+			Resources: []any{
+				&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Patient", Type: "Patient"},
+				&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Observation", Type: "Observation"},
+			},
+		},
+	}
+	pkgs := append([]*Package{root}, deps...)
+
+	r, err := builder.BuildFromPackagesScoped(pkgs, root)
+	if err != nil {
+		t.Fatalf("BuildFromPackagesScoped returned error: %v", err)
+	}
+
+	// Only the root package's StructureDefinitions are test subjects.
+	scoped := r.ScopedStructureDefinitions()
+	if len(scoped) != 1 {
+		t.Fatalf("scoped subjects = %d, want 1", len(scoped))
+	}
+	if scoped[0].URL != "http://example.org/StructureDefinition/root-patient" {
+		t.Fatalf("unexpected scoped subject %q", scoped[0].URL)
+	}
+
+	// Dependency definitions remain indexed and resolvable.
+	if _, ok := r.StructureDefinition("http://hl7.org/fhir/StructureDefinition/Patient"); !ok {
+		t.Fatal("dependency StructureDefinition should remain indexed for resolution")
+	}
+	if _, ok := r.StructureDefinition("http://hl7.org/fhir/StructureDefinition/Observation"); !ok {
+		t.Fatal("dependency StructureDefinition should remain indexed for resolution")
+	}
+}
+
+func TestRegistryBuilderBuildFromPackagesScopedNilRootUnscoped(t *testing.T) {
+	builder := NewRegistryBuilder()
+	pkgs := []*Package{
+		{
+			Name:    "root",
+			Version: "1.0.0",
+			Resources: []any{
+				&model.StructureDefinition{URL: "http://example.org/StructureDefinition/root-patient", Type: "Patient"},
+			},
+		},
+		{
+			Name:    "core",
+			Version: "1.0.0",
+			Resources: []any{
+				&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Patient", Type: "Patient"},
+			},
+		},
+	}
+
+	r, err := builder.BuildFromPackagesScoped(pkgs, nil)
+	if err != nil {
+		t.Fatalf("BuildFromPackagesScoped returned error: %v", err)
+	}
+	if got := len(r.ScopedStructureDefinitions()); got != 2 {
+		t.Fatalf("nil root scoped subjects = %d, want 2 (unscoped)", got)
+	}
+}
+
 func buildTestPackageArchive(t *testing.T, files map[string]any) string {
 	t.Helper()
 	rawFiles := make(map[string][]byte, len(files))

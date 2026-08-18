@@ -46,7 +46,7 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 		return nil, err
 	}
 
-	profiles := r.StructureDefinitions()
+	profiles := r.ScopedStructureDefinitions()
 	if len(profiles) == 0 {
 		return nil, errors.New("no structure definitions available for coverage derivation")
 	}

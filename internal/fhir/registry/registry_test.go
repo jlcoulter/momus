@@ -90,3 +90,46 @@ func TestRegistryResolveProfileBuildsElementTree(t *testing.T) {
 		t.Fatalf("got error %v, want ErrNotFound", err)
 	}
 }
+
+func TestRegistryScopeRestrictsScopedStructureDefinitions(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/root-a", Type: "Patient"})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/root-b", Type: "Observation"})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Patient", Type: "Patient"})
+
+	// Without a scope, every indexed definition is a subject.
+	if got := len(r.ScopedStructureDefinitions()); got != 3 {
+		t.Fatalf("unscoped ScopedStructureDefinitions returned %d, want 3", got)
+	}
+
+	r.SetScope([]string{"http://example.org/StructureDefinition/root-a", "http://example.org/StructureDefinition/root-b"})
+	scoped := r.ScopedStructureDefinitions()
+	if len(scoped) != 2 {
+		t.Fatalf("scoped ScopedStructureDefinitions returned %d, want 2", len(scoped))
+	}
+	for _, sd := range scoped {
+		if sd.URL == "http://hl7.org/fhir/StructureDefinition/Patient" {
+			t.Fatalf("out-of-scope definition %q returned as a subject", sd.URL)
+		}
+	}
+
+	// Out-of-scope definitions remain resolvable for dependency resolution.
+	if _, ok := r.StructureDefinition("http://hl7.org/fhir/StructureDefinition/Patient"); !ok {
+		t.Fatal("out-of-scope definition should remain indexed for dependency resolution")
+	}
+
+	// Clearing the scope restores all definitions as subjects.
+	r.SetScope(nil)
+	if got := len(r.ScopedStructureDefinitions()); got != 3 {
+		t.Fatalf("cleared scope returned %d, want 3", got)
+	}
+}
+
+func TestRegistryScopeIgnoresUnknownURLs(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/root", Type: "Patient"})
+	r.SetScope([]string{"http://example.org/StructureDefinition/root", "http://example.org/StructureDefinition/missing"})
+	if got := len(r.ScopedStructureDefinitions()); got != 1 {
+		t.Fatalf("scoped ScopedStructureDefinitions returned %d, want 1", got)
+	}
+}

@@ -20,6 +20,10 @@ import (
 // Packages are ordered so dependencies always appear before dependents.
 type ResolvedGraph struct {
 	Packages []*Package
+	// Root is the package the graph was resolved from. It is the subject of
+	// test generation; the other packages in Packages are its dependencies,
+	// used only to resolve referenced definitions.
+	Root *Package
 }
 
 // ConflictPolicy controls how package version conflicts are handled.
@@ -241,7 +245,7 @@ func ResolveLocalPackageGraphWithOptions(rootArchivePath string, options Resolve
 		return nil, err
 	}
 
-	result := &ResolvedGraph{Packages: make([]*Package, 0, len(order))}
+	result := &ResolvedGraph{Packages: make([]*Package, 0, len(order)), Root: rootPackage}
 	for _, key := range order {
 		result.Packages = append(result.Packages, loaded[key])
 	}

@@ -167,7 +167,7 @@ func main() {
 			}
 
 			builder := fhirpackage.NewRegistryBuilder()
-			reg, err := builder.BuildFromPackages(graph.Packages)
+			reg, err := builder.BuildFromPackagesScoped(graph.Packages, graph.Root)
 			if err != nil {
 				return err
 			}
@@ -255,7 +255,7 @@ func main() {
 			}
 
 			builder := fhirpackage.NewRegistryBuilder()
-			reg, err := builder.BuildFromPackages(graph.Packages)
+			reg, err := builder.BuildFromPackagesScoped(graph.Packages, graph.Root)
 			if err != nil {
 				return err
 			}
@@ -351,7 +351,7 @@ func main() {
 			}
 
 			builder := fhirpackage.NewRegistryBuilder()
-			reg, err := builder.BuildFromPackages(graph.Packages)
+			reg, err := builder.BuildFromPackagesScoped(graph.Packages, graph.Root)
 			if err != nil {
 				return err
 			}
@@ -493,7 +493,7 @@ func main() {
 			}
 
 			builder := fhirpackage.NewRegistryBuilder()
-			reg, err := builder.BuildFromPackages(graph.Packages)
+			reg, err := builder.BuildFromPackagesScoped(graph.Packages, graph.Root)
 			if err != nil {
 				return err
 			}
@@ -501,7 +501,7 @@ func main() {
 			resourceTypes := includeResourceTypes
 			if len(resourceTypes) == 0 {
 				seen := make(map[string]bool)
-				for _, sd := range reg.StructureDefinitions() {
+				for _, sd := range reg.ScopedStructureDefinitions() {
 					if sd.Type == "" || sd.Kind != "resource" || abstractResourceTypes[sd.Type] {
 						continue
 					}

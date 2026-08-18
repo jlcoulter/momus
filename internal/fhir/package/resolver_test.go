@@ -26,6 +26,13 @@ func TestResolveLocalPackageGraphLinear(t *testing.T) {
 	got := packageIDs(graph)
 	want := []string{"c.pkg@1.0.0", "b.pkg@1.0.0", "a.pkg@1.0.0"}
 	assertStringSliceEqual(t, got, want)
+
+	if graph.Root == nil {
+		t.Fatal("expected graph.Root to be set")
+	}
+	if graph.Root.Name != "a.pkg" || graph.Root.Version != "1.0.0" {
+		t.Fatalf("unexpected root package %s@%s, want a.pkg@1.0.0", graph.Root.Name, graph.Root.Version)
+	}
 }
 
 func TestResolveLocalPackageGraphDiamondDeDupes(t *testing.T) {
