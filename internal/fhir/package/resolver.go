@@ -56,6 +56,25 @@ var packageRegistryBaseURLs = []string{
 
 var httpClient = &http.Client{Timeout: 60 * time.Second}
 
+type registryHTTPAuth struct {
+	BasicUsername string
+	BasicPassword string
+	BearerToken   string
+}
+
+var registryAuth registryHTTPAuth
+
+// SetRegistryBasicAuth configures HTTP basic auth for remote registry requests.
+func SetRegistryBasicAuth(username, password string) {
+	registryAuth.BasicUsername = username
+	registryAuth.BasicPassword = password
+}
+
+// SetRegistryBearerToken configures bearer auth for remote registry requests.
+func SetRegistryBearerToken(token string) {
+	registryAuth.BearerToken = token
+}
+
 // ResolveLocalPackageGraph resolves the root package and all transitive
 // dependencies using archives discovered in depsDir and remote registry
 // downloads when needed.
@@ -488,7 +507,13 @@ func resolveRemoteDependency(dep Dependency) (Dependency, string, error) {
 }
 
 func fetchRegistryPackageMetadata(metadataURL string) (*registryPackageMetadata, error) {
-	resp, err := httpClient.Get(metadataURL)
+	req, err := http.NewRequest(http.MethodGet, metadataURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	applyRegistryAuth(req)
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -535,7 +560,13 @@ func resolveVersionFromMetadata(dep Dependency, meta *registryPackageMetadata) (
 }
 
 func downloadFile(downloadURL, destination string) error {
-	resp, err := httpClient.Get(downloadURL)
+	req, err := http.NewRequest(http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return err
+	}
+	applyRegistryAuth(req)
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -568,6 +599,19 @@ func downloadFile(downloadURL, destination string) error {
 		return err
 	}
 	return nil
+}
+
+func applyRegistryAuth(req *http.Request) {
+	if req == nil {
+		return
+	}
+	if registryAuth.BearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+registryAuth.BearerToken)
+		return
+	}
+	if registryAuth.BasicUsername != "" || registryAuth.BasicPassword != "" {
+		req.SetBasicAuth(registryAuth.BasicUsername, registryAuth.BasicPassword)
+	}
 }
 
 func sortedDependencies(deps []Dependency) []Dependency {

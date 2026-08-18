@@ -18,14 +18,15 @@ const (
 
 // CoverageRequirement is a machine-verifiable coverage obligation.
 type CoverageRequirement struct {
-	ID           string          `json:"id"`
-	ProfileURL   string          `json:"profileUrl"`
-	ResourceType string          `json:"resourceType"`
-	ElementPath  string          `json:"elementPath"`
-	Domain       CoverageDomain  `json:"domain"`
-	Variant      CoverageVariant `json:"variant"`
-	Min          int             `json:"min"`
-	Max          string          `json:"max"`
+	ID                string          `json:"id"`
+	ProfileURL        string          `json:"profileUrl"`
+	ResourceType      string          `json:"resourceType"`
+	ElementPath       string          `json:"elementPath"`
+	DependencyTargets []string        `json:"dependencyTargets,omitempty"`
+	Domain            CoverageDomain  `json:"domain"`
+	Variant           CoverageVariant `json:"variant"`
+	Min               int             `json:"min"`
+	Max               string          `json:"max"`
 }
 
 // DeriveOptions controls which profile elements become coverage obligations.

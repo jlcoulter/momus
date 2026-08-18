@@ -301,6 +301,86 @@ func TestResolveLocalPackageGraphResolvesCurrentVersionRemotely(t *testing.T) {
 	}
 }
 
+func TestResolveLocalPackageGraphUsesRegistryBasicAuth(t *testing.T) {
+	dir := t.TempDir()
+	downloadDir := filepath.Join(dir, ".momus", "packages")
+	rootPath := writePackageArchive(t, dir, "a.pkg", "1.0.0", map[string]string{"b.pkg": "1.0.0"})
+	remoteArchive := buildTestPackageArchiveAtPath(t, filepath.Join(t.TempDir(), "b.pkg-1.0.0.tgz"), map[string]any{
+		"package/package.json": map[string]any{
+			"name":         "b.pkg",
+			"version":      "1.0.0",
+			"dependencies": map[string]string{},
+		},
+		"package/ValueSet-b.pkg.json": map[string]any{
+			"resourceType": "ValueSet",
+			"url":          "http://example.org/ValueSet/b.pkg",
+			"version":      "1.0.0",
+			"name":         "b.pkgValueSet",
+			"status":       "active",
+		},
+	})
+	remoteBytes, err := os.ReadFile(remoteArchive)
+	if err != nil {
+		t.Fatalf("failed to read remote archive fixture: %v", err)
+	}
+
+	var metadataAuthOK bool
+	var tarballAuthOK bool
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		authOK := ok && u == "alice" && p == "secret"
+		switch r.URL.Path {
+		case "/b.pkg":
+			metadataAuthOK = authOK
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(mustMarshalJSON(t, map[string]any{
+				"dist-tags": map[string]any{"latest": "1.0.0"},
+				"versions": map[string]any{
+					"1.0.0": map[string]any{
+						"version": "1.0.0",
+						"dist": map[string]any{
+							"tarball": serverURL + "/tarballs/b.pkg-1.0.0.tgz",
+						},
+					},
+				},
+			}))
+		case "/tarballs/b.pkg-1.0.0.tgz":
+			tarballAuthOK = authOK
+			w.Header().Set("Content-Type", "application/gzip")
+			_, _ = w.Write(remoteBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	serverURL = server.URL
+	defer server.Close()
+
+	oldBaseURLs := packageRegistryBaseURLs
+	oldClient := httpClient
+	packageRegistryBaseURLs = []string{server.URL}
+	httpClient = server.Client()
+	SetRegistryBasicAuth("alice", "secret")
+	defer func() {
+		packageRegistryBaseURLs = oldBaseURLs
+		httpClient = oldClient
+		SetRegistryBasicAuth("", "")
+		SetRegistryBearerToken("")
+	}()
+
+	graph, err := ResolveLocalPackageGraphWithDownloadDir(rootPath, dir, downloadDir)
+	if err != nil {
+		t.Fatalf("ResolveLocalPackageGraph returned error: %v", err)
+	}
+
+	got := packageIDs(graph)
+	want := []string{"b.pkg@1.0.0", "a.pkg@1.0.0"}
+	assertStringSliceEqual(t, got, want)
+	if !metadataAuthOK || !tarballAuthOK {
+		t.Fatalf("expected basic auth on metadata and tarball requests, got metadata=%v tarball=%v", metadataAuthOK, tarballAuthOK)
+	}
+}
+
 func writePackageArchive(t *testing.T, dir, name, version string, deps map[string]string) string {
 	t.Helper()
 	archivePath := filepath.Join(dir, name+"-"+version+".tgz")

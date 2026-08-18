@@ -3,6 +3,7 @@ package coverage
 import (
 	"errors"
 	"fmt"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -116,15 +117,64 @@ func DefaultDeriveOptions() DeriveOptions {
 func newRequirement(profile *model.StructureDefinition, element model.ElementDefinition, variant CoverageVariant) CoverageRequirement {
 	id := fmt.Sprintf("%s|%s|%s", profile.URL, element.Path, variant)
 	return CoverageRequirement{
-		ID:           id,
-		ProfileURL:   profile.URL,
-		ResourceType: profile.Type,
-		ElementPath:  element.Path,
-		Domain:       CoverageDomainCardinality,
-		Variant:      variant,
-		Min:          element.Min,
-		Max:          element.Max,
+		ID:                id,
+		ProfileURL:        profile.URL,
+		ResourceType:      profile.Type,
+		ElementPath:       element.Path,
+		DependencyTargets: collectDependencyTargets(element),
+		Domain:            CoverageDomainCardinality,
+		Variant:           variant,
+		Min:               element.Min,
+		Max:               element.Max,
 	}
+}
+
+func collectDependencyTargets(element model.ElementDefinition) []string {
+	targets := make([]string, 0)
+	for _, canonical := range element.TargetProfile {
+		if resourceType := canonicalToResourceType(canonical); resourceType != "" {
+			targets = appendUniqueString(targets, resourceType)
+		}
+	}
+	for _, et := range element.Types {
+		for _, canonical := range et.TargetProfile {
+			if resourceType := canonicalToResourceType(canonical); resourceType != "" {
+				targets = appendUniqueString(targets, resourceType)
+			}
+		}
+	}
+	return targets
+}
+
+func canonicalToResourceType(canonical string) string {
+	v := strings.TrimSpace(canonical)
+	if v == "" {
+		return ""
+	}
+	if i := strings.Index(v, "|"); i >= 0 {
+		v = v[:i]
+	}
+	if i := strings.Index(v, "#"); i >= 0 {
+		v = v[:i]
+	}
+	v = strings.TrimRight(v, "/")
+	if v == "" {
+		return ""
+	}
+	name := path.Base(v)
+	if name == "StructureDefinition" {
+		return ""
+	}
+	return name
+}
+
+func appendUniqueString(values []string, candidate string) []string {
+	for _, v := range values {
+		if v == candidate {
+			return values
+		}
+	}
+	return append(values, candidate)
 }
 
 func appendRequirement(plan *CoveragePlan, seen map[string]struct{}, req CoverageRequirement) {

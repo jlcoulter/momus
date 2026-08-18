@@ -20,6 +20,9 @@ const version = "0.0.0"
 
 func main() {
 	var debug bool
+	var apiBearerToken string
+	var apiBasicUsername string
+	var apiBasicPassword string
 
 	rootCmd := &cobra.Command{
 		Use:   "momus",
@@ -329,7 +332,13 @@ func main() {
 				return err
 			}
 
-			report, err := testrunner.Execute(cmd.Context(), astPlan.Root, testrunner.ExecuteOptions{BaseURL: baseURL})
+			report, err := testrunner.Execute(cmd.Context(), astPlan.Root, testrunner.ExecuteOptions{
+				BaseURL:       baseURL,
+				BearerToken:   apiBearerToken,
+				BasicUsername: apiBasicUsername,
+				BasicPassword: apiBasicPassword,
+				IncludeDebug:  debug,
+			})
 			if err != nil {
 				return err
 			}
@@ -365,6 +374,9 @@ func main() {
 	runCmd.Flags().BoolVar(&includeOptional, "include-optional", false, "include optional non-mustSupport elements")
 	runCmd.Flags().BoolVar(&includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
 	runCmd.Flags().StringVar(&baseURL, "base-url", "", "target FHIR base URL for request execution")
+	runCmd.Flags().StringVar(&apiBearerToken, "api-bearer-token", "", "bearer token used for API requests during coverage run")
+	runCmd.Flags().StringVar(&apiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during coverage run")
+	runCmd.Flags().StringVar(&apiBasicPassword, "api-basic-password", "", "basic auth password used for API requests during coverage run")
 
 	packageCmd.AddCommand(loadCmd)
 	packageCmd.AddCommand(resolveCmd)

@@ -41,41 +41,70 @@ func TestGenerateFromCoveragePlanBuildsPerRequirementSequence(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected root to be *Sequence, got %T", plan.Root)
 	}
-	if len(root.Steps) != 2 {
-		t.Fatalf("got %d root steps, want 2", len(root.Steps))
+	if len(root.Steps) != 1 {
+		t.Fatalf("got %d root steps, want 1", len(root.Steps))
 	}
 
-	case0, ok := root.Steps[0].(*Sequence)
+	resourceSeq, ok := root.Steps[0].(*Sequence)
 	if !ok {
-		t.Fatalf("expected case step to be *Sequence, got %T", root.Steps[0])
+		t.Fatalf("expected resource step to be *Sequence, got %T", root.Steps[0])
 	}
-	if len(case0.Steps) != 2 {
-		t.Fatalf("got %d case steps, want 2", len(case0.Steps))
+	if len(resourceSeq.Steps) != 5 {
+		t.Fatalf("got %d resource steps, want 5", len(resourceSeq.Steps))
 	}
 
-	req, ok := case0.Steps[0].(*Request)
+	setupReq, ok := resourceSeq.Steps[0].(*Request)
 	if !ok {
-		t.Fatalf("expected first case step to be *Request, got %T", case0.Steps[0])
+		t.Fatalf("expected first resource step to be *Request, got %T", resourceSeq.Steps[0])
 	}
-	if req.URL != "http://localhost:8080/fhir/Patient" {
-		t.Fatalf("got URL %q, want %q", req.URL, "http://localhost:8080/fhir/Patient")
+	if setupReq.URL != "http://localhost:8080/fhir/Patient" {
+		t.Fatalf("got URL %q, want %q", setupReq.URL, "http://localhost:8080/fhir/Patient")
 	}
-	if req.Headers["X-Momus-Requirement-ID"] != "req-1" {
-		t.Fatalf("missing requirement id header, got headers=%v", req.Headers)
+	if _, ok := setupReq.Headers["X-Momus-Requirement-ID"]; ok {
+		t.Fatalf("did not expect setup request to carry requirement header")
 	}
 
+	case0, ok := resourceSeq.Steps[3].(*Sequence)
+	if !ok {
+		t.Fatalf("expected first case to be *Sequence, got %T", resourceSeq.Steps[3])
+	}
 	assert1, ok := case0.Steps[1].(*Assert)
 	if !ok {
-		t.Fatalf("expected second case step to be *Assert, got %T", case0.Steps[1])
+		t.Fatalf("expected case assertion to be *Assert, got %T", case0.Steps[1])
 	}
 	if assert1.Expression != "status in [200,201]" {
 		t.Fatalf("got expression %q, want %q", assert1.Expression, "status in [200,201]")
 	}
 
-	case1 := root.Steps[1].(*Sequence)
+	case1 := resourceSeq.Steps[4].(*Sequence)
 	assert2 := case1.Steps[1].(*Assert)
 	if assert2.Expression != "status in [400,422]" {
 		t.Fatalf("got expression %q, want %q", assert2.Expression, "status in [400,422]")
+	}
+}
+
+func TestGenerateFromCoveragePlanUsesDependencyTemplate(t *testing.T) {
+	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
+		Requirements: []coverage.CoverageRequirement{
+			{ID: "p-1", ResourceType: "Patient", ElementPath: "Patient.name", Variant: coverage.CoverageVariantValidMin},
+			{ID: "o-1", ResourceType: "Observation", ElementPath: "Observation.subject", DependencyTargets: []string{"Patient"}, Variant: coverage.CoverageVariantValidMin},
+		},
+	}, BuildOptions{BaseURL: "http://localhost:8080/fhir"})
+	if err != nil {
+		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
+	}
+
+	root := plan.Root.(*Sequence)
+	if len(root.Steps) != 2 {
+		t.Fatalf("got %d levels, want 2", len(root.Steps))
+	}
+
+	obsResourceSeq := root.Steps[1].(*Sequence)
+	setupReq := obsResourceSeq.Steps[0].(*Request)
+	body := setupReq.Body.(map[string]any)
+	subject := body["subject"].(map[string]any)
+	if subject["reference"] != "Patient/{{Patient.id}}" {
+		t.Fatalf("got subject reference %v, want Patient/{{Patient.id}}", subject["reference"])
 	}
 }
 

@@ -155,6 +155,44 @@ func TestDerivePlanScopeAndPruningOptions(t *testing.T) {
 	}
 }
 
+func TestDerivePlanIncludesDependencyTargetsFromElementMetadata(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/observation-profile",
+		Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{
+				Path: "Observation.subject",
+				Min:  1,
+				Max:  "1",
+				Types: []model.ElementType{
+					{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Patient|4.0.1"}},
+				},
+			},
+		},
+	})
+
+	plan, err := DerivePlan(r, DeriveOptions{IncludeOptional: true})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+
+	var found bool
+	for _, req := range plan.Requirements {
+		if req.ElementPath != "Observation.subject" {
+			continue
+		}
+		found = true
+		if len(req.DependencyTargets) != 1 || req.DependencyTargets[0] != "Patient" {
+			t.Fatalf("unexpected dependency targets for %s: %+v", req.ID, req.DependencyTargets)
+		}
+	}
+	if !found {
+		t.Fatal("expected requirement for Observation.subject")
+	}
+}
+
 func TestDeriveMVPPlanFailsWithoutStructureDefinitions(t *testing.T) {
 	r := registry.New()
 	if _, err := DeriveMVPPlan(r); err == nil {

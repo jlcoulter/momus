@@ -2,26 +2,26 @@
 
 Momus is a testing framework/tool for API and FHIR conformance testing.
 
-This repository is a fresh, production-oriented implementation of Momus. The
-current state is an **architecture scaffold**: the package layout, domain
-models, and interfaces are established, but none of the core functionality
-is implemented yet.
+This repository is a fresh, production-oriented implementation of Momus.
+The current state is an **early MVP**: key end-to-end vertical slices are
+implemented for package loading, dependency resolution, coverage derivation,
+AST generation, and minimal test execution/reporting.
 
 ## Status
 
-The following capabilities are planned but **not yet implemented**:
+The following capabilities are planned but **not yet fully implemented**:
 
-- A normalised FHIR Registry of profiles, value sets, code systems, and
-  search parameters
+- Full profile-resolution pipeline (inheritance, slicing, differential/snapshot merge)
 - Profile resolution and inheritance, element trees, cardinality, slicing,
   and extensions
-- Terminology expansion
-- DataRequirement planning, dataset generation, and resource generation
-- Dataset provisioning to a FHIR server
+- Terminology expansion and validation against required bindings
+- Rich DataRequirement planning, dataset generation, and resource generation
+- Robust dataset provisioning lifecycle (seed, isolation, teardown)
 - OpenAPI-based API testing
-- Test planning, execution (sequential and parallel), and assertions
+- Advanced test planning, execution (true parallelism), and assertion engines
 
-What exists today is the architecture that these will grow into. See
+What exists today implements the first executable slices of this architecture.
+See
 [`docs/architecture.md`](docs/architecture.md) for the layering and design
 decisions.
 
@@ -37,6 +37,10 @@ Currently implemented:
   `StructureDefinition`, `ValueSet`, `CodeSystem`, `CapabilityStatement`,
   and `SearchParameter`
 - MVP coverage derivation from resolved profile cardinality constraints
+- Generic dependency DAG planning for resource execution ordering
+- AST generation from coverage requirements with setup/capture scaffolding
+- Minimal assertion parser/evaluator (`status in [..]`)
+- Minimal runner that executes AST requests/assertions and emits JSON test reports
 
 ## Layout
 
@@ -208,6 +212,24 @@ Example summary output:
 Executed 42 cases: 40 passed, 2 failed
 Test report written to ./test-results.json
 ```
+
+### Coverage Pipeline (MVP)
+
+The current executable MVP pipeline is:
+
+1. Resolve package graph (`package resolve`)
+2. Derive scoped coverage requirements (`coverage derive`)
+3. Build resource dependency DAG (internal planner)
+4. Generate dependency-aware AST (`coverage ast`)
+5. Execute AST and emit result report (`coverage run`)
+
+Dependency-chain behavior in the current AST/runner implementation:
+
+- Resources are ordered by DAG levels (topological order)
+- Setup nodes create seed resources before requirement cases
+- Capture nodes extract resource IDs from setup responses
+- Later request payloads can reference captured IDs via templates such as
+  `Patient/{{Patient.id}}`
 
 ## License
 
