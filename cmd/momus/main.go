@@ -56,6 +56,7 @@ func main() {
 	var includeLowValuePaths bool
 	var baseURL string
 	var scopeToCapability bool
+	var failOnUncovered bool
 
 	loadCmd := &cobra.Command{
 		Use:   "load <path-to-package.tgz>",
@@ -355,7 +356,16 @@ func main() {
 				return err
 			}
 
-			out, err := json.MarshalIndent(report, "", "  ")
+			executed := make([]testcoverage.ExecutedRequirementResult, 0, len(report.Cases))
+			for _, c := range report.Cases {
+				executed = append(executed, testcoverage.ExecutedRequirementResult{
+					RequirementID: c.RequirementID,
+					Passed:        c.Passed,
+				})
+			}
+			coverageEvaluation := testcoverage.EvaluateCoverage(coveragePlan, executed)
+
+			out, err := marshalCoverageRunOutput(report, coverageEvaluation)
 			if err != nil {
 				return fmt.Errorf("marshal test report: %w", err)
 			}
@@ -378,8 +388,21 @@ func main() {
 					fmt.Printf("Hint: %s\n", report.Diagnostics.Hint)
 				}
 			}
+			fmt.Printf("Contractual coverage: %.1f%% (%d/%d)\n", coverageEvaluation.CoveragePercent, coverageEvaluation.CoveredRequirements, coverageEvaluation.TotalRequirements)
+			if coverageEvaluation.UncoveredRequirements > 0 {
+				fmt.Printf("Uncovered contractual obligations: %d\n", coverageEvaluation.UncoveredRequirements)
+				for idx, req := range coverageEvaluation.Uncovered {
+					if idx >= 10 {
+						break
+					}
+					fmt.Printf("  - %s\n", req.ID)
+				}
+			}
 			if outputPath != "" {
 				fmt.Printf("Test report written to %s\n", outputPath)
+			}
+			if failOnUncovered && coverageEvaluation.UncoveredRequirements > 0 {
+				return fmt.Errorf("coverage incomplete: %d uncovered obligations", coverageEvaluation.UncoveredRequirements)
 			}
 			return nil
 		},
@@ -395,6 +418,7 @@ func main() {
 	runCmd.Flags().BoolVar(&includeOptional, "include-optional", false, "include optional non-mustSupport elements")
 	runCmd.Flags().BoolVar(&includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
 	runCmd.Flags().BoolVar(&scopeToCapability, "scope-to-capability", true, "limit derivation to CapabilityStatement server resources that support create")
+	runCmd.Flags().BoolVar(&failOnUncovered, "fail-on-uncovered", false, "return non-zero exit code when contractual coverage has uncovered obligations")
 	runCmd.Flags().StringVar(&baseURL, "base-url", "", "target FHIR base URL for request execution")
 	runCmd.Flags().StringVar(&apiBearerToken, "api-bearer-token", "", "bearer token used for API requests during coverage run")
 	runCmd.Flags().StringVar(&apiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during coverage run")
@@ -460,4 +484,17 @@ func intersectCaseInsensitive(requested, available []string) []string {
 		}
 	}
 	return intersected
+}
+
+func marshalCoverageRunOutput(report *testrunner.Report, evaluation testcoverage.EvaluationReport) ([]byte, error) {
+	rawReport, err := json.Marshal(report)
+	if err != nil {
+		return nil, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rawReport, &payload); err != nil {
+		return nil, err
+	}
+	payload["coverage"] = evaluation
+	return json.MarshalIndent(payload, "", "  ")
 }
