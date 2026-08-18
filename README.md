@@ -53,6 +53,12 @@ Currently implemented:
   executed test result carries the source constraint (id, profile, path,
   domain, variant, expected outcome), and coverage reports list both the
   covered and uncovered requirements
+- Interaction (pairwise) coverage: the plan carries an interaction `Strength`
+  (1 = individual, 2 = pairwise); at strength 2 pairwise obligations between
+  accept requirements on the same profile are derived as an `interaction`
+  domain and generation selects a near-minimal set by greedy set-cover,
+  grouping compatible accepts into shared valid payloads (`--strength` on
+  derive/ast/run)
 - Registry-backed `DataRequirement` -> `Dataset` generator and a
   dependency-ordered server `Provisioner` (building blocks, tested in
   isolation; pipeline wiring lands with the planner, feature 8)

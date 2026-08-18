@@ -41,6 +41,11 @@ type BuildOptions struct {
 	BaseURL                        string
 	Registry                       *registry.Registry
 	PreferredProfileURLsByResource map[string][]string
+	// Strength is the interaction strength used when generating. When unset (or
+	// < 2) it falls back to the coverage plan's own Strength, and finally to
+	// strength 1 (one test per requirement). Strength >= 2 groups compatible
+	// obligations into shared payloads selected by greedy set-cover.
+	Strength int
 }
 
 // GenerateFromCoveragePlan maps coverage requirements into a concrete AST.
@@ -98,22 +103,7 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 				&ast.Capture{Name: resourceType + ".id", Path: "id"},
 			)
 
-			for _, req := range byResource[resourceType] {
-				requestID := requirementResourceID(req)
-				caseProfiles := orderedProfilesForResource(req.ResourceType, req.ProfileURL, options.PreferredProfileURLsByResource)
-				casePrimaryProfile := firstProfileURL(caseProfiles)
-				caseSeq := &ast.Sequence{Steps: []ast.Node{
-					&ast.Request{
-						Method: "PUT",
-						URL:    joinInstanceURL(options.BaseURL, req.ResourceType, requestID),
-						Headers: map[string]string{
-							"Content-Type":           "application/fhir+json",
-							"X-Momus-Requirement-ID": req.ID,
-						},
-						Body: buildBodyTemplate(req, requestID, caseProfiles, casePrimaryProfile, deps, options.Registry),
-					},
-					buildRequirementAssert(req),
-				}}
+			for _, caseSeq := range buildResourceCases(byResource[resourceType], plan, options, deps) {
 				resourceSeq.Steps = append(resourceSeq.Steps, caseSeq)
 			}
 
@@ -1692,6 +1682,26 @@ func attachDependencyReferences(body map[string]any, resourceType string, deps [
 			body["result"] = []map[string]any{{"reference": dep + "/" + setupResourceID(dep)}}
 		}
 	}
+}
+
+// buildSingleRequirementCase builds the strength-1 test for a single coverage
+// requirement: one request carrying that requirement's body plus its assert.
+func buildSingleRequirementCase(req coverage.CoverageRequirement, options BuildOptions, deps []string) ast.Node {
+	requestID := requirementResourceID(req)
+	caseProfiles := orderedProfilesForResource(req.ResourceType, req.ProfileURL, options.PreferredProfileURLsByResource)
+	casePrimaryProfile := firstProfileURL(caseProfiles)
+	return &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{
+			Method: "PUT",
+			URL:    joinInstanceURL(options.BaseURL, req.ResourceType, requestID),
+			Headers: map[string]string{
+				"Content-Type":           "application/fhir+json",
+				"X-Momus-Requirement-ID": req.ID,
+			},
+			Body: buildBodyTemplate(req, requestID, caseProfiles, casePrimaryProfile, deps, options.Registry),
+		},
+		buildRequirementAssert(req),
+	}}
 }
 
 func buildRequirementAssert(req coverage.CoverageRequirement) *ast.Assert {

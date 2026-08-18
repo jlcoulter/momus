@@ -10,6 +10,7 @@ const (
 	CoverageDomainStructure   CoverageDomain = "structure"
 	CoverageDomainInvariant   CoverageDomain = "invariant"
 	CoverageDomainReference   CoverageDomain = "reference"
+	CoverageDomainInteraction CoverageDomain = "interaction"
 )
 
 // CoverageVariant identifies a specific test obligation type for a domain.
@@ -46,7 +47,32 @@ const (
 	CoverageVariantReferenceValid       CoverageVariant = "reference-valid"
 	CoverageVariantReferenceWrongTarget CoverageVariant = "reference-wrong-target"
 	CoverageVariantReferenceDangling    CoverageVariant = "reference-dangling"
+
+	// Interaction domain.
+	CoverageVariantInteractionPair CoverageVariant = "interaction-pair"
 )
+
+// IsReject reports whether a variant's generated test must be rejected by a
+// conformant server (i.e. it asserts a constraint violation). Variants that
+// are not rejects are accept variants: they assert that a valid payload is
+// accepted. This is the single source of truth for the negative variant set,
+// shared by derivation (interaction eligibility) and generation (assertions).
+func (v CoverageVariant) IsReject() bool {
+	switch v {
+	case CoverageVariantMissingRequired,
+		CoverageVariantDatatypeInvalidLexical,
+		CoverageVariantDatatypeWrongJSONType,
+		CoverageVariantDatatypeNull,
+		CoverageVariantTerminologyInvalid,
+		CoverageVariantTerminologyAbsent,
+		CoverageVariantInvariantViolates,
+		CoverageVariantReferenceWrongTarget,
+		CoverageVariantReferenceDangling:
+		return true
+	default:
+		return false
+	}
+}
 
 // CoverageRequirement is a machine-verifiable coverage obligation.
 type CoverageRequirement struct {
@@ -60,6 +86,21 @@ type CoverageRequirement struct {
 	Variant           CoverageVariant `json:"variant"`
 	Min               int             `json:"min"`
 	Max               string          `json:"max"`
+	// PairA and PairB reference the two source requirements of an interaction
+	// obligation. They are set only for coverage-domain requirements derived at
+	// interaction strength >= 2.
+	PairA string `json:"pairA,omitempty"`
+	PairB string `json:"pairB,omitempty"`
+}
+
+// InteractionRequirement records a pairwise interaction obligation: the two
+// base requirements that must be satisfiable together in a single payload.
+type InteractionRequirement struct {
+	ID           string `json:"id"`
+	ProfileURL   string `json:"profileUrl"`
+	ResourceType string `json:"resourceType"`
+	RequirementA string `json:"requirementA"`
+	RequirementB string `json:"requirementB"`
 }
 
 // DeriveOptions controls which profile elements become coverage obligations.
@@ -70,6 +111,9 @@ type DeriveOptions struct {
 	MustSupportOnly      bool
 	IncludeOptional      bool
 	IncludeLowValuePaths bool
+	// Strength is the interaction strength of the plan (1 = individual
+	// requirement coverage, 2 = pairwise interaction coverage).
+	Strength int
 }
 
 // PruneReason describes why an element was excluded from derivation.
@@ -92,10 +136,17 @@ type CoverageSummary struct {
 	ByResourceType    map[string]int          `json:"byResourceType"`
 	ByVariant         map[CoverageVariant]int `json:"byVariant"`
 	PrunedByReason    map[PruneReason]int     `json:"prunedByReason"`
+	Interactions      int                     `json:"interactions,omitempty"`
 }
 
 // CoveragePlan is the list of obligations derived from selected contracts.
+//
+// Strength is the interaction strength of the plan: 1 (default) covers each
+// obligation individually; 2 additionally derives pairwise interaction
+// obligations and groups compatible obligations into shared payloads.
 type CoveragePlan struct {
-	Requirements []CoverageRequirement `json:"requirements"`
-	Summary      CoverageSummary       `json:"summary"`
+	Requirements []CoverageRequirement    `json:"requirements"`
+	Interactions []InteractionRequirement `json:"interactions,omitempty"`
+	Strength     int                      `json:"strength"`
+	Summary      CoverageSummary          `json:"summary"`
 }

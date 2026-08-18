@@ -12,20 +12,7 @@ import (
 // isNegativeVariant reports whether a requirement variant's generated test must
 // be rejected by a conformant server (i.e. it asserts a constraint violation).
 func isNegativeVariant(variant coverage.CoverageVariant) bool {
-	switch variant {
-	case coverage.CoverageVariantMissingRequired,
-		coverage.CoverageVariantDatatypeInvalidLexical,
-		coverage.CoverageVariantDatatypeWrongJSONType,
-		coverage.CoverageVariantDatatypeNull,
-		coverage.CoverageVariantTerminologyInvalid,
-		coverage.CoverageVariantTerminologyAbsent,
-		coverage.CoverageVariantInvariantViolates,
-		coverage.CoverageVariantReferenceWrongTarget,
-		coverage.CoverageVariantReferenceDangling:
-		return true
-	default:
-		return false
-	}
+	return variant.IsReject()
 }
 
 // applyNegativeMutation mutates an otherwise-valid payload so that it violates

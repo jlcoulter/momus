@@ -64,6 +64,7 @@ func main() {
 	var capabilityBaseURL string
 	var scopeToCapability bool
 	var failOnUncovered bool
+	var interactionStrength int
 
 	loadCmd := &cobra.Command{
 		Use:   "load <path-to-package.tgz>",
@@ -162,6 +163,7 @@ func main() {
 				MustSupportOnly:      mustSupportOnly,
 				IncludeOptional:      includeOptional,
 				IncludeLowValuePaths: includeLowValuePaths,
+				Strength:             interactionStrength,
 			})
 			if err != nil {
 				return err
@@ -185,6 +187,9 @@ func main() {
 				fmt.Printf("- %s: %d\n", domain, count)
 			}
 			fmt.Printf("Resource types: %d, variants: %d\n", len(plan.Summary.ByResourceType), len(plan.Summary.ByVariant))
+			if plan.Summary.Interactions > 0 {
+				fmt.Printf("Interactions (strength %d): %d\n", plan.Strength, plan.Summary.Interactions)
+			}
 			if len(plan.Summary.PrunedByReason) > 0 {
 				fmt.Println("Pruned elements:")
 				for reason, count := range plan.Summary.PrunedByReason {
@@ -207,6 +212,7 @@ func main() {
 	deriveCmd.Flags().BoolVar(&mustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
 	deriveCmd.Flags().BoolVar(&includeOptional, "include-optional", false, "include optional non-mustSupport elements")
 	deriveCmd.Flags().BoolVar(&includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
+	deriveCmd.Flags().IntVar(&interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
 
 	astCmd := &cobra.Command{
 		Use:   "ast <path-to-package.tgz>",
@@ -250,12 +256,13 @@ func main() {
 				MustSupportOnly:      mustSupportOnly,
 				IncludeOptional:      includeOptional,
 				IncludeLowValuePaths: includeLowValuePaths,
+				Strength:             interactionStrength,
 			})
 			if err != nil {
 				return err
 			}
 
-			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource})
+			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: interactionStrength})
 			if err != nil {
 				return err
 			}
@@ -296,6 +303,7 @@ func main() {
 	astCmd.Flags().BoolVar(&includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
 	astCmd.Flags().StringVar(&baseURL, "base-url", "", "target FHIR base URL for request nodes")
 	astCmd.Flags().StringVar(&capabilityBaseURL, "capability-base-url", "", "optional alternate FHIR base URL to fetch CapabilityStatement metadata for scope/profile selection")
+	astCmd.Flags().IntVar(&interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
 
 	runCmd := &cobra.Command{
 		Use:   "run <path-to-package.tgz>",
@@ -343,12 +351,13 @@ func main() {
 				MustSupportOnly:      mustSupportOnly,
 				IncludeOptional:      includeOptional,
 				IncludeLowValuePaths: includeLowValuePaths,
+				Strength:             interactionStrength,
 			})
 			if err != nil {
 				return err
 			}
 
-			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource})
+			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: interactionStrength})
 			if err != nil {
 				return err
 			}
@@ -438,6 +447,7 @@ func main() {
 	runCmd.Flags().StringVar(&apiBearerToken, "api-bearer-token", "", "bearer token used for API requests during coverage run")
 	runCmd.Flags().StringVar(&apiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during coverage run")
 	runCmd.Flags().StringVar(&apiBasicPassword, "api-basic-password", "", "basic auth password used for API requests during coverage run")
+	runCmd.Flags().IntVar(&interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
 
 	constraintsCmd := &cobra.Command{
 		Use:   "constraints <path-to-package.tgz>",

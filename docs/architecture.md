@@ -384,6 +384,12 @@ The coverage plan therefore includes an interaction strength, and tests
 record the interaction requirements they satisfy. Interaction coverage is a
 measurable domain, not an accidental outcome.
 
+Implemented: the plan carries `Strength` (default 1; 2 = pairwise). At
+strength 2, pairwise obligations between accept requirements sharing a
+resource type and profile are derived as `interaction`-domain requirements, and
+generation uses greedy set-cover to group those accepts into shared valid
+payloads. The anti-Cartesian default is preserved.
+
 ## Search coverage
 
 Search behaviour also produces explicit coverage obligations.

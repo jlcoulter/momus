@@ -134,21 +134,99 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 	sort.Slice(plan.Requirements, func(i, j int) bool {
 		return plan.Requirements[i].ID < plan.Requirements[j].ID
 	})
+
+	// Interaction strength 2 adds pairwise interaction obligations: pairs of
+	// accept obligations on the same profile that must be satisfiable together
+	// in a single payload. These are appended as first-class requirements in
+	// the interaction domain so the evaluator can measure them.
+	if options.Strength >= 2 {
+		plan.Strength = options.Strength
+		deriveInteractionObligations(plan, seen)
+		sort.Slice(plan.Requirements, func(i, j int) bool {
+			return plan.Requirements[i].ID < plan.Requirements[j].ID
+		})
+	}
+
 	plan.Summary.TotalRequirements = len(plan.Requirements)
 
 	return plan, nil
+}
+
+// deriveInteractionObligations appends pairwise interaction obligations between
+// accept (non-reject) base requirements that share a resource type and profile.
+// Interaction obligations are derived only over accept obligations: a negative
+// mutation exercises exactly one constraint, so it cannot coexist with another
+// obligation in the same payload.
+func deriveInteractionObligations(plan *CoveragePlan, seen map[string]struct{}) {
+	type groupKey struct {
+		resourceType string
+		profileURL   string
+	}
+	groups := make(map[groupKey][]CoverageRequirement)
+	for _, req := range plan.Requirements {
+		if req.Domain == CoverageDomainInteraction || req.Variant.IsReject() {
+			continue
+		}
+		key := groupKey{req.ResourceType, req.ProfileURL}
+		groups[key] = append(groups[key], req)
+	}
+
+	keys := make([]groupKey, 0, len(groups))
+	for key := range groups {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].resourceType != keys[j].resourceType {
+			return keys[i].resourceType < keys[j].resourceType
+		}
+		return keys[i].profileURL < keys[j].profileURL
+	})
+
+	for _, key := range keys {
+		reqs := groups[key]
+		sort.Slice(reqs, func(i, j int) bool {
+			return reqs[i].ID < reqs[j].ID
+		})
+		for i := 0; i < len(reqs); i++ {
+			for j := i + 1; j < len(reqs); j++ {
+				a, b := reqs[i], reqs[j]
+				id := "interaction|" + a.ID + "++" + b.ID
+				interaction := CoverageRequirement{
+					ID:           id,
+					ProfileURL:   a.ProfileURL,
+					ResourceType: a.ResourceType,
+					ElementPath:  a.ElementPath + " ++ " + b.ElementPath,
+					Domain:       CoverageDomainInteraction,
+					Variant:      CoverageVariantInteractionPair,
+					PairA:        a.ID,
+					PairB:        b.ID,
+				}
+				appendRequirement(plan, seen, interaction)
+				plan.Interactions = append(plan.Interactions, InteractionRequirement{
+					ID:           id,
+					ProfileURL:   a.ProfileURL,
+					ResourceType: a.ResourceType,
+					RequirementA: a.ID,
+					RequirementB: b.ID,
+				})
+				plan.Summary.Interactions++
+			}
+		}
+	}
 }
 
 // DefaultDeriveOptions returns the practical default derivation policy.
 func DefaultDeriveOptions() DeriveOptions {
 	return DeriveOptions{
 		IncludeOptional: false,
+		Strength:        1,
 	}
 }
 
 func newCoveragePlan() *CoveragePlan {
 	return &CoveragePlan{
 		Requirements: make([]CoverageRequirement, 0),
+		Strength:     1,
 		Summary: CoverageSummary{
 			ByDomain:       make(map[CoverageDomain]int),
 			ByResourceType: make(map[string]int),
