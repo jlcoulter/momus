@@ -330,6 +330,7 @@ func appendOperationObligations(plan *CoveragePlan, seen map[string]struct{}, re
 	for _, variant := range []CoverageVariant{
 		CoverageVariantOperationRead,
 		CoverageVariantOperationUpdate,
+		CoverageVariantOperationPatch,
 		CoverageVariantOperationDelete,
 		CoverageVariantOperationHistory,
 	} {
@@ -347,6 +348,7 @@ func appendOperationObligations(plan *CoveragePlan, seen map[string]struct{}, re
 // resource type (reading/deleting a nonexistent resource).
 func appendStateObligations(plan *CoveragePlan, seen map[string]struct{}, resourceType, profileURL string) {
 	for _, variant := range []CoverageVariant{
+		CoverageVariantStateCRUDSequence,
 		CoverageVariantStateReadNonexistent,
 		CoverageVariantStateDeleteNonexistent,
 	} {

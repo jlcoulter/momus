@@ -31,8 +31,8 @@ func TestDeriveMVPPlanPatientNameOneToMany(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeriveMVPPlan returned error: %v", err)
 	}
-	if len(plan.Requirements) != 17 {
-		t.Fatalf("got %d requirements, want 17", len(plan.Requirements))
+	if len(plan.Requirements) != 21 {
+		t.Fatalf("got %d requirements, want 21", len(plan.Requirements))
 	}
 
 	if !hasVariant(plan, CoverageVariantValidMin) {
@@ -61,8 +61,8 @@ func TestDeriveMVPPlanPatientNameOptionalSingle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeriveMVPPlan returned error: %v", err)
 	}
-	if len(plan.Requirements) != 6 {
-		t.Fatalf("got %d requirements, want 6", len(plan.Requirements))
+	if len(plan.Requirements) != 8 {
+		t.Fatalf("got %d requirements, want 8", len(plan.Requirements))
 	}
 	if plan.Summary.PrunedByReason[PruneReasonOptionalFiltered] == 0 {
 		t.Fatal("expected optional-filtered prune reason")
@@ -84,8 +84,8 @@ func TestDeriveMVPPlanDerivesWithoutPatientProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeriveMVPPlan returned error: %v", err)
 	}
-	if len(plan.Requirements) != 8 {
-		t.Fatalf("got %d requirements, want 8", len(plan.Requirements))
+	if len(plan.Requirements) != 10 {
+		t.Fatalf("got %d requirements, want 10", len(plan.Requirements))
 	}
 }
 
@@ -104,8 +104,8 @@ func TestDerivePlanIncludeOptional(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
-	if len(plan.Requirements) != 7 {
-		t.Fatalf("got %d requirements, want 7", len(plan.Requirements))
+	if len(plan.Requirements) != 9 {
+		t.Fatalf("got %d requirements, want 9", len(plan.Requirements))
 	}
 	if !hasVariant(plan, CoverageVariantValidMin) {
 		t.Fatal("expected valid-min requirement")
@@ -142,11 +142,11 @@ func TestDerivePlanScopeAndPruningOptions(t *testing.T) {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 
-	if len(plan.Requirements) != 8 {
-		t.Fatalf("got %d requirements, want 8", len(plan.Requirements))
+	if len(plan.Requirements) != 10 {
+		t.Fatalf("got %d requirements, want 10", len(plan.Requirements))
 	}
-	if plan.Summary.ByResourceType["Patient"] != 8 {
-		t.Fatalf("got patient summary count %d, want 8", plan.Summary.ByResourceType["Patient"])
+	if plan.Summary.ByResourceType["Patient"] != 10 {
+		t.Fatalf("got patient summary count %d, want 10", plan.Summary.ByResourceType["Patient"])
 	}
 	if plan.Summary.PrunedByReason[PruneReasonResourceFiltered] == 0 {
 		t.Fatal("expected resource-filtered prune reason")
@@ -182,8 +182,8 @@ func TestDerivePlanSkipsNonResourceStructureDefinitions(t *testing.T) {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 
-	if len(plan.Requirements) != 8 {
-		t.Fatalf("got %d requirements, want 8", len(plan.Requirements))
+	if len(plan.Requirements) != 10 {
+		t.Fatalf("got %d requirements, want 10", len(plan.Requirements))
 	}
 	for _, req := range plan.Requirements {
 		if req.ResourceType != "Patient" {

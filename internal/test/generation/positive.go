@@ -147,6 +147,7 @@ func RequirementCount(plan *ast.Plan) int {
 		return 0
 	}
 	count := 0
+	seen := make(map[string]struct{})
 	var walk func(ast.Node)
 	walk = func(node ast.Node) {
 		switch n := node.(type) {
@@ -159,9 +160,16 @@ func RequirementCount(plan *ast.Plan) int {
 				walk(step)
 			}
 		case *ast.Assert:
-			if !strings.HasPrefix(n.RequirementID, "setup:") {
-				count++
+			if strings.HasPrefix(n.RequirementID, "setup:") {
+				return
 			}
+			// Count each obligation once even when its execution expands to
+			// multiple asserts (e.g. a CRUD sequence).
+			if _, ok := seen[n.RequirementID]; ok {
+				return
+			}
+			seen[n.RequirementID] = struct{}{}
+			count++
 		}
 	}
 	walk(plan.Root)

@@ -201,22 +201,22 @@ this change is contained to the runner.
 
 ## 10. Operation, state, and search coverage
 
-**Status: operations and state transitions implemented; search partially
-implemented.** Every scoped resource type now derives CRUD-style operation
-obligations (read / update / delete / history) and negative state-transition
-obligations (GET / DELETE a nonexistent resource), generated as the
+**Status: operations, state transitions, and CRUD sequences implemented; search
+partially implemented.** Every scoped resource type derives CRUD-style operation
+obligations (read / update / patch / delete / history), negative state
+transitions (GET / DELETE a nonexistent resource), and a full CRUD sequence
+(create -> read -> update -> read -> delete -> read-404), generated as the
 corresponding HTTP requests with status assertions. Search coverage derives the
 built-in FHIR `_parameters` and resource-specific search parameters as GET
 requests (valid / no-results / invalid-value).
 
-- Operations: read, update, delete, and history are derived per resource type.
-  Patch and custom operations are not yet derived.
-- State/transition coverage: reading and deleting nonexistent resources (404).
-  Full CRUD sequences (create -> read -> update -> delete) are not yet a single
-  derived obligation.
+- Operations: read, update, patch, delete, and history are derived per resource
+  type. Custom operations are not yet derived.
+- State/transition coverage: reading and deleting nonexistent resources (404),
+  and a full create -> read -> update -> read -> delete -> read(404) sequence.
 - Search coverage: valid, no-results, invalid value derived for every indexed
   `SearchParameter`. Remaining: multiple-results assertion (needs `Bundle.total`
-  evaluation), modifiers, and pairwise parameter combinations.
+  evaluation, feature 12), modifiers, and pairwise parameter combinations.
 
 Why tenth: these domains extend coverage beyond resource validation into
 behavioural conformance. They need the planner (8) to express multi-step

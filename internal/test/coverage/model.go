@@ -62,10 +62,12 @@ const (
 	// Operation domain.
 	CoverageVariantOperationRead    CoverageVariant = "operation-read"
 	CoverageVariantOperationUpdate  CoverageVariant = "operation-update"
+	CoverageVariantOperationPatch   CoverageVariant = "operation-patch"
 	CoverageVariantOperationDelete  CoverageVariant = "operation-delete"
 	CoverageVariantOperationHistory CoverageVariant = "operation-history"
 
 	// State domain.
+	CoverageVariantStateCRUDSequence      CoverageVariant = "state-crud-sequence"
 	CoverageVariantStateReadNonexistent   CoverageVariant = "state-read-nonexistent"
 	CoverageVariantStateDeleteNonexistent CoverageVariant = "state-delete-nonexistent"
 )

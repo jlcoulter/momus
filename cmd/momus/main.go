@@ -945,12 +945,24 @@ func compactFailure(c testrunner.CaseResult) map[string]any {
 }
 
 func countRequirementAndSetupCases(cases []testrunner.CaseResult) (requirement, setup int) {
+	seenReq := make(map[string]struct{})
+	seenSetup := make(map[string]struct{})
 	for _, c := range cases {
 		if strings.HasPrefix(c.RequirementID, "setup:") {
+			if _, ok := seenSetup[c.RequirementID]; ok {
+				continue
+			}
+			seenSetup[c.RequirementID] = struct{}{}
 			setup++
-		} else {
-			requirement++
+			continue
 		}
+		// Count each obligation once even when its execution expands to multiple
+		// cases (e.g. a CRUD sequence).
+		if _, ok := seenReq[c.RequirementID]; ok {
+			continue
+		}
+		seenReq[c.RequirementID] = struct{}{}
+		requirement++
 	}
 	return requirement, setup
 }

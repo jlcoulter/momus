@@ -32,11 +32,11 @@ func TestDerivePlanAddsOperationAndStateObligations(t *testing.T) {
 			states++
 		}
 	}
-	if ops != 4 {
-		t.Fatalf("got %d operation obligations, want 4 (read/update/delete/history)", ops)
+	if ops != 5 {
+		t.Fatalf("got %d operation obligations, want 5 (read/update/patch/delete/history)", ops)
 	}
-	if states != 2 {
-		t.Fatalf("got %d state obligations, want 2 (read/delete nonexistent)", states)
+	if states != 3 {
+		t.Fatalf("got %d state obligations, want 3 (crud-sequence/read/delete nonexistent)", states)
 	}
 
 	for _, req := range plan.Requirements {

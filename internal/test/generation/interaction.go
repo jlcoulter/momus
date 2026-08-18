@@ -34,6 +34,10 @@ func buildResourceCases(reqs []coverage.CoverageRequirement, plan *coverage.Cove
 		cases = append(cases, buildSearchCase(req, options))
 	}
 	for _, req := range opReqs {
+		if req.Variant == coverage.CoverageVariantStateCRUDSequence {
+			cases = append(cases, buildCRUDCase(req, options))
+			continue
+		}
 		cases = append(cases, buildOperationCase(req, options))
 	}
 
