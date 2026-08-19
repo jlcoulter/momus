@@ -52,6 +52,7 @@ func newRootCmd(cfg *config) *cobra.Command {
 		newDeriveCmd(cfg),
 		newConstraintsCmd(cfg),
 		newAstCmd(cfg),
+		newProvisionCmd(cfg),
 		newRunCmd(cfg),
 		newPlanCmd(cfg),
 		newBulkCmd(cfg),

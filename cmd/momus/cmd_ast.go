@@ -1,12 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
-	testast "github.com/jlcoulter/momus/internal/test/ast"
 	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
 	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 	"github.com/spf13/cobra"
@@ -16,7 +14,7 @@ import (
 func newAstCmd(cfg *config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ast <path-to-package.tgz>",
-		Short: "Generate a test AST from derived coverage requirements",
+		Short: "Generate a test plan (seed dataset + test AST) from derived coverage requirements",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rootPath := args[0]
@@ -69,16 +67,19 @@ func newAstCmd(cfg *config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			encoded, err := testast.EncodePlan(astPlan)
+			// Build the seed dataset with the same generation logic so the plan
+			// carries the exact resources the test cases reference. The dataset is
+			// provisioned separately by "coverage provision"; carrying it in the
+			// plan lets provisioning and execution work from the plan alone.
+			setupDataset, err := testgeneration.BuildSetupDataset(coveragePlan, testgeneration.BuildOptions{BaseURL: cfg.baseURL, WriteBaseURL: cfg.writeBaseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: cfg.interactionStrength, Exhaustive: cfg.exhaustive})
 			if err != nil {
 				return err
 			}
-
-			out, err := json.MarshalIndent(encoded, "", "  ")
+			out, err := encodeTestPlan(astPlan, setupDataset)
 			if err != nil {
-				return fmt.Errorf("marshal AST plan: %w", err)
+				return fmt.Errorf("encode test plan: %w", err)
 			}
-			if err := writeDebugOutput(cfg.debug, "ast-plan.json", append(out, '\n')); err != nil {
+			if err := writeDebugOutput(cfg.debug, "test-plan.json", append(out, '\n')); err != nil {
 				return err
 			}
 
@@ -86,13 +87,13 @@ func newAstCmd(cfg *config) *cobra.Command {
 				fmt.Println(string(out))
 			} else {
 				if err := writeOutputFile(cfg.outputPath, append(out, '\n')); err != nil {
-					return fmt.Errorf("write AST plan to %s: %w", cfg.outputPath, err)
+					return fmt.Errorf("write test plan to %s: %w", cfg.outputPath, err)
 				}
 			}
 
-			fmt.Printf("Generated AST with %d requirement cases from %d resolved packages\n", testgeneration.RequirementCount(astPlan), len(graph.Packages))
+			fmt.Printf("Generated test plan with %d requirement cases and %d seed resources from %d resolved packages\n", testgeneration.RequirementCount(astPlan), len(setupDataset.Resources), len(graph.Packages))
 			if cfg.outputPath != "" {
-				fmt.Printf("AST plan written to %s\n", cfg.outputPath)
+				fmt.Printf("Test plan written to %s\n", cfg.outputPath)
 			}
 			return nil
 		},

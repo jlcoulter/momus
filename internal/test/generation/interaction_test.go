@@ -54,11 +54,11 @@ func TestGenerateFromCoveragePlanStrengthTwoGroupsAccepts(t *testing.T) {
 
 	root := plan.Root.(*ast.Sequence)
 	resourceSeq := root.Steps[0].(*ast.Sequence)
-	if len(resourceSeq.Steps) != 5 {
-		t.Fatalf("resourceSeq has %d steps, want 5 (setup req/assert/capture + group case + reject case)", len(resourceSeq.Steps))
+	if len(resourceSeq.Steps) != 2 {
+		t.Fatalf("resourceSeq has %d steps, want 2 (group case + reject case)", len(resourceSeq.Steps))
 	}
 
-	group := resourceSeq.Steps[3].(*ast.Sequence)
+	group := resourceSeq.Steps[0].(*ast.Sequence)
 	groupReq, ok := group.Steps[0].(*ast.Request)
 	if !ok {
 		t.Fatalf("group first step is %T, want *ast.Request", group.Steps[0])
@@ -104,7 +104,7 @@ func TestGenerateFromCoveragePlanStrengthTwoGroupsAccepts(t *testing.T) {
 		t.Fatalf("group case has %d accept and %d reject asserts, want 6 accept / 0 reject", acceptCount, rejectCount)
 	}
 
-	reject := resourceSeq.Steps[4].(*ast.Sequence)
+	reject := resourceSeq.Steps[1].(*ast.Sequence)
 	if len(reject.Steps) != 2 {
 		t.Fatalf("reject case has %d steps, want 2 (request + assert)", len(reject.Steps))
 	}
@@ -136,9 +136,9 @@ func TestGenerateFromCoveragePlanStrengthTwoHasFewerRequestsThanRequirements(t *
 			}
 		}
 	}
-	// 3 accepts share one request + 1 reject = 2 case requests (plus setup).
-	if requestCount != 3 {
-		t.Fatalf("request count = %d, want 3 (setup + shared accept + reject)", requestCount)
+	// 3 accepts share one request + 1 reject = 2 case requests (provisioning is separate).
+	if requestCount != 2 {
+		t.Fatalf("request count = %d, want 2 (shared accept + reject)", requestCount)
 	}
 }
 
@@ -149,11 +149,11 @@ func TestGenerateFromCoveragePlanStrengthOneKeepsPerRequirementTests(t *testing.
 	}
 	root := plan.Root.(*ast.Sequence)
 	resourceSeq := root.Steps[0].(*ast.Sequence)
-	// Setup (3) + one case per requirement (7) = 10 steps.
-	if len(resourceSeq.Steps) != 10 {
-		t.Fatalf("resourceSeq has %d steps at strength 1, want 10", len(resourceSeq.Steps))
+	// One case per requirement (7) = 7 steps (provisioning is a separate stage).
+	if len(resourceSeq.Steps) != 7 {
+		t.Fatalf("resourceSeq has %d steps at strength 1, want 7", len(resourceSeq.Steps))
 	}
-	for i := 3; i < len(resourceSeq.Steps); i++ {
+	for i := 0; i < len(resourceSeq.Steps); i++ {
 		seq := resourceSeq.Steps[i].(*ast.Sequence)
 		if len(seq.Steps) != 2 {
 			t.Fatalf("strength-1 case %d has %d steps, want 2", i, len(seq.Steps))

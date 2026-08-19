@@ -70,11 +70,6 @@ type BuildOptions struct {
 	// realistic. When false, only required and contract-driven elements are
 	// populated.
 	Exhaustive bool
-	// SkipSetup, when true, omits the per-resource setup create requests from the
-	// generated AST. Use this when the seed dataset is provisioned ahead of
-	// execution (e.g. coverage run), so the AST contains only test cases and the
-	// run has a clean provisioning phase followed by a testing phase.
-	SkipSetup bool
 }
 
 // GenerateFromCoveragePlan maps coverage requirements into a concrete AST.
@@ -105,29 +100,19 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 	for _, level := range depPlan.Levels {
 		resourceNodes := make([]ast.Node, 0, len(level))
 		for _, resourceType := range level {
+			// Skip types present only as seed dependencies (reachable via references
+			// but with no coverage obligations of their own): they are provisioned by
+			// the seed dataset but have no test cases to emit.
+			if len(byResource[resourceType]) == 0 {
+				continue
+			}
 			resourceSeq := &ast.Sequence{Steps: make([]ast.Node, 0)}
 			deps := depPlan.Dependencies[resourceType]
 
-			if !options.SkipSetup {
-				setupInst := buildSetupResource(resourceType, options, deps, byResource)
-				resourceSeq.Steps = append(resourceSeq.Steps,
-					&ast.Request{
-						Method: "PUT",
-						URL:    joinInstanceURL(baseURLForMethod(options, "PUT"), resourceType, setupInst.LocalID),
-						Headers: map[string]string{
-							"Content-Type": "application/fhir+json",
-						},
-						Body: setupInst.Resource,
-					},
-					&ast.Assert{
-						Description:   "setup create seed resource",
-						RequirementID: "setup:" + resourceType,
-						Expression:    "status in [200,201]",
-					},
-					&ast.Capture{Name: resourceType + ".id", Path: "id"},
-				)
-			}
-
+			// Provisioning is a separate stage (BuildSetupDataset + provisioner): the
+			// generated AST contains only test cases, which run against data already
+			// provisioned on the server. Test cases that need seed data reference it by
+			// its deterministic setup id (e.g. operations target "momus-setup-<Type>").
 			for _, caseSeq := range buildResourceCases(byResource[resourceType], plan, options, deps) {
 				resourceSeq.Steps = append(resourceSeq.Steps, caseSeq)
 			}
@@ -135,6 +120,9 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 			resourceNodes = append(resourceNodes, resourceSeq)
 		}
 
+		if len(resourceNodes) == 0 {
+			continue
+		}
 		if len(resourceNodes) == 1 {
 			root.Steps = append(root.Steps, resourceNodes[0])
 			continue
@@ -209,6 +197,13 @@ func BuildSetupDataset(plan *coverage.CoveragePlan, options BuildOptions) (*mode
 				})
 			}
 		}
+	}
+
+	// Search-accept obligations need data that matches the query to be
+	// meaningful (and to satisfy multiple-results). Add those matching seeds so
+	// the provisioned dataset carries the critical data each search test needs.
+	for _, req := range plan.Requirements {
+		appendSearchSeedResources(ds, req, options, byResource)
 	}
 	return ds, nil
 }

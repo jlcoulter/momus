@@ -70,7 +70,11 @@ func TestGenerateFromCoveragePlanExhaustiveAddsAndVariesOptionals(t *testing.T) 
 	}
 }
 
-func TestGenerateFromCoveragePlanSkipSetupOmitsSetupSteps(t *testing.T) {
+// TestGenerateFromCoveragePlanOmitsProvisioning verifies that the generated AST
+// contains only test cases: provisioning is a separate stage (BuildSetupDataset +
+// provisioner), so no per-resource setup create requests or setup-bound
+// assertions appear in the AST.
+func TestGenerateFromCoveragePlanOmitsProvisioning(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
 		{Path: "Patient", Min: 0, Max: "*"},
@@ -80,25 +84,15 @@ func TestGenerateFromCoveragePlanSkipSetupOmitsSetupSteps(t *testing.T) {
 		{ID: "req-1", ProfileURL: "http://example.org/StructureDefinition/patient", ResourceType: "Patient", ElementPath: "Patient.name", Variant: coverage.CoverageVariantValidMin},
 	}}
 
-	// Default generation keeps the per-resource setup create steps.
-	withSetup, err := GenerateFromCoveragePlan(plan, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg})
+	astPlan, err := GenerateFromCoveragePlan(plan, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
 	}
-	if !hasSetupStep(withSetup.Root) {
-		t.Fatal("expected setup steps in default generation")
+	if hasSetupStep(astPlan.Root) {
+		t.Fatal("expected no provisioning steps in generated AST; provisioning is a separate stage")
 	}
-
-	// SkipSetup omits them, leaving only requirement test cases.
-	skipped, err := GenerateFromCoveragePlan(plan, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg, SkipSetup: true})
-	if err != nil {
-		t.Fatalf("GenerateFromCoveragePlan(SkipSetup) returned error: %v", err)
-	}
-	if hasSetupStep(skipped.Root) {
-		t.Fatal("expected no setup steps when SkipSetup is set")
-	}
-	if RequirementCount(skipped) != 1 {
-		t.Fatalf("RequirementCount = %d, want 1", RequirementCount(skipped))
+	if RequirementCount(astPlan) != 1 {
+		t.Fatalf("RequirementCount = %d, want 1", RequirementCount(astPlan))
 	}
 }
 
@@ -191,23 +185,7 @@ func TestGenerateFromCoveragePlanBuildsPerRequirementSequence(t *testing.T) {
 	}
 	root := plan.Root.(*ast.Sequence)
 	resourceSeq := root.Steps[0].(*ast.Sequence)
-	setupReq := resourceSeq.Steps[0].(*ast.Request)
-	if setupReq.Method != "PUT" {
-		t.Fatalf("got method %q, want PUT", setupReq.Method)
-	}
-	if setupReq.URL != "http://localhost:8080/fhir/Patient/momus-setup-patient" {
-		t.Fatalf("got URL %q, want setup patient URL", setupReq.URL)
-	}
-	setupBody := setupReq.Body.(map[string]any)
-	if setupBody["id"] != "momus-setup-patient" {
-		t.Fatalf("got setup id %v, want momus-setup-patient", setupBody["id"])
-	}
-	setupMeta := setupBody["meta"].(map[string]any)
-	setupProfiles := setupMeta["profile"].([]any)
-	if len(setupProfiles) != 1 || setupProfiles[0] != "http://example.org/StructureDefinition/patient" {
-		t.Fatalf("got setup meta.profile %v, want patient profile", setupMeta["profile"])
-	}
-	case0 := resourceSeq.Steps[3].(*ast.Sequence)
+	case0 := resourceSeq.Steps[0].(*ast.Sequence)
 	caseReq := case0.Steps[0].(*ast.Request)
 	caseBody := caseReq.Body.(map[string]any)
 	if _, ok := caseBody["_momus"]; ok {
@@ -222,7 +200,7 @@ func TestGenerateFromCoveragePlanBuildsPerRequirementSequence(t *testing.T) {
 	if assert1.Expression != "status in [200,201]" {
 		t.Fatalf("got expression %q, want status in [200,201]", assert1.Expression)
 	}
-	case1 := resourceSeq.Steps[4].(*ast.Sequence)
+	case1 := resourceSeq.Steps[1].(*ast.Sequence)
 	assert2 := case1.Steps[1].(*ast.Assert)
 	if assert2.Expression != "status in [400,412,422]" {
 		t.Fatalf("got expression %q, want status in [400,412,422]", assert2.Expression)
@@ -241,12 +219,13 @@ func TestGenerateFromCoveragePlanUsesDependencyTemplate(t *testing.T) {
 	}
 	root := plan.Root.(*ast.Sequence)
 	obsResourceSeq := root.Steps[1].(*ast.Sequence)
-	setupReq := obsResourceSeq.Steps[0].(*ast.Request)
-	body := setupReq.Body.(map[string]any)
+	caseSeq := obsResourceSeq.Steps[0].(*ast.Sequence)
+	req := caseSeq.Steps[0].(*ast.Request)
+	body := req.Body.(map[string]any)
 	meta := body["meta"].(map[string]any)
 	profiles := meta["profile"].([]any)
 	if len(profiles) != 1 || profiles[0] != "http://example.org/StructureDefinition/observation" {
-		t.Fatalf("got setup meta.profile %v, want observation profile", meta["profile"])
+		t.Fatalf("got case meta.profile %v, want observation profile", meta["profile"])
 	}
 	subject := body["subject"].(map[string]any)
 	if subject["reference"] != "Patient/momus-setup-patient" {
@@ -522,7 +501,7 @@ func TestGenerateFromCoveragePlanPopulatesRequiredIdentifierSlicesFromProfile(t 
 	}
 	root := plan.Root.(*ast.Sequence)
 	resourceSeq := root.Steps[0].(*ast.Sequence)
-	caseSeq := resourceSeq.Steps[3].(*ast.Sequence)
+	caseSeq := resourceSeq.Steps[0].(*ast.Sequence)
 	req := caseSeq.Steps[0].(*ast.Request)
 	body := req.Body.(map[string]any)
 	identifiers := body["identifier"].([]any)
@@ -548,7 +527,7 @@ func TestGenerateFromCoveragePlanMergesPatternAndBindingForCodeableConcept(t *te
 	}
 	root := plan.Root.(*ast.Sequence)
 	resourceSeq := root.Steps[0].(*ast.Sequence)
-	caseSeq := resourceSeq.Steps[3].(*ast.Sequence)
+	caseSeq := resourceSeq.Steps[0].(*ast.Sequence)
 	req := caseSeq.Steps[0].(*ast.Request)
 	body := req.Body.(map[string]any)
 	identifiers := body["identifier"].([]any)
@@ -577,7 +556,7 @@ func TestGenerateFromCoveragePlanFillsMissingPatternCodingFieldsFromBinding(t *t
 	}
 	root := plan.Root.(*ast.Sequence)
 	resourceSeq := root.Steps[0].(*ast.Sequence)
-	caseSeq := resourceSeq.Steps[3].(*ast.Sequence)
+	caseSeq := resourceSeq.Steps[0].(*ast.Sequence)
 	req := caseSeq.Steps[0].(*ast.Request)
 	body := req.Body.(map[string]any)
 	codeConcept := body["code"].(map[string]any)
@@ -600,7 +579,7 @@ func TestGenerateFromCoveragePlanIncludesOptionalContainerWithRequiredSlices(t *
 	}
 	root := plan.Root.(*ast.Sequence)
 	resourceSeq := root.Steps[0].(*ast.Sequence)
-	caseSeq := resourceSeq.Steps[3].(*ast.Sequence)
+	caseSeq := resourceSeq.Steps[0].(*ast.Sequence)
 	req := caseSeq.Steps[0].(*ast.Request)
 	body := req.Body.(map[string]any)
 	extensions := body["extension"].([]any)
@@ -619,7 +598,7 @@ func TestGenerateFromCoveragePlanPopulatesSliceChildPatternFields(t *testing.T) 
 	}
 	root := plan.Root.(*ast.Sequence)
 	resourceSeq := root.Steps[0].(*ast.Sequence)
-	caseSeq := resourceSeq.Steps[3].(*ast.Sequence)
+	caseSeq := resourceSeq.Steps[0].(*ast.Sequence)
 	req := caseSeq.Steps[0].(*ast.Request)
 	body := req.Body.(map[string]any)
 	address := body["address"].(map[string]any)
@@ -642,7 +621,7 @@ func TestGenerateFromCoveragePlanUsesTypedChoicePropertyNames(t *testing.T) {
 	}
 	root := plan.Root.(*ast.Sequence)
 	resourceSeq := root.Steps[0].(*ast.Sequence)
-	caseSeq := resourceSeq.Steps[3].(*ast.Sequence)
+	caseSeq := resourceSeq.Steps[0].(*ast.Sequence)
 	req := caseSeq.Steps[0].(*ast.Request)
 	body := req.Body.(map[string]any)
 	ext := body["extension"].([]any)[0].(map[string]any)
@@ -683,7 +662,7 @@ func TestGenerateFromCoveragePlanUsesSingleObjectForSingularSlicedChoice(t *test
 
 	root := plan.Root.(*ast.Sequence)
 	resourceSeq := root.Steps[0].(*ast.Sequence)
-	caseSeq := resourceSeq.Steps[3].(*ast.Sequence)
+	caseSeq := resourceSeq.Steps[0].(*ast.Sequence)
 	req := caseSeq.Steps[0].(*ast.Request)
 	body := req.Body.(map[string]any)
 	ext := body["extension"].([]any)[0].(map[string]any)
@@ -721,7 +700,7 @@ func TestGenerateFromCoveragePlanWrapsRepeatableComplexFieldsAsArrays(t *testing
 
 	root := plan.Root.(*ast.Sequence)
 	resourceSeq := root.Steps[0].(*ast.Sequence)
-	caseSeq := resourceSeq.Steps[3].(*ast.Sequence)
+	caseSeq := resourceSeq.Steps[0].(*ast.Sequence)
 	req := caseSeq.Steps[0].(*ast.Request)
 	body := req.Body.(map[string]any)
 	addresses, ok := body["address"].([]any)
@@ -764,7 +743,7 @@ func TestGenerateFromCoveragePlanPrefersCapabilityProfileInMeta(t *testing.T) {
 	}
 	root := plan.Root.(*ast.Sequence)
 	resourceSeq := root.Steps[0].(*ast.Sequence)
-	caseSeq := resourceSeq.Steps[3].(*ast.Sequence)
+	caseSeq := resourceSeq.Steps[0].(*ast.Sequence)
 	req := caseSeq.Steps[0].(*ast.Request)
 	body := req.Body.(map[string]any)
 	meta := body["meta"].(map[string]any)

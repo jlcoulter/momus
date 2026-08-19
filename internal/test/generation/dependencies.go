@@ -11,9 +11,13 @@ import (
 
 // buildDependencyPlan computes the resource dependency order for execution,
 // expanding the coverage-derived dependencies with every resource type that a
-// profile's Reference elements target. This ensures all referenced setup
-// resources are created before their dependents, even when the referencing
-// element is optional and therefore not itself a derived coverage obligation.
+// profile's Reference elements target. The expansion is transitive: a type is
+// added only if it is reachable from a coverage obligation via reference edges,
+// and each added type's own references are followed too. This ensures all
+// referenced setup resources are created before their dependents, even when the
+// referencing element is optional and therefore not itself a derived coverage
+// obligation, and even when a referenced type is not itself a coverage
+// obligation (e.g. Patient referenced by Observation).
 func buildDependencyPlan(plan *coverage.CoveragePlan, options BuildOptions) (*coverage.DependencyPlan, error) {
 	depPlan, err := coverage.PlanDependencies(plan.Requirements)
 	if err != nil {
@@ -26,25 +30,45 @@ func buildDependencyPlan(plan *coverage.CoveragePlan, options BuildOptions) (*co
 			resourceSet[req.ResourceType] = struct{}{}
 		}
 	}
-	resourceTypes := make([]string, 0, len(resourceSet))
-	for rt := range resourceSet {
-		resourceTypes = append(resourceTypes, rt)
-	}
-	sort.Strings(resourceTypes)
 
 	dependencies := depPlan.Dependencies
 	if dependencies == nil {
 		dependencies = make(map[string][]string)
 	}
-	for resourceType := range resourceSet {
-		profileURL := primaryProfileURL(plan.Requirements, resourceType, options.Registry)
+
+	// Transitive closure over profile reference targets. Worklist-driven so each
+	// newly discovered type's own references are followed, guaranteeing every
+	// transitively-referenced type is seeded and ordered before its dependents.
+	queue := make([]string, 0, len(resourceSet))
+	for rt := range resourceSet {
+		queue = append(queue, rt)
+	}
+	visited := make(map[string]struct{})
+	for len(queue) > 0 {
+		rt := queue[0]
+		queue = queue[1:]
+		if _, seen := visited[rt]; seen {
+			continue
+		}
+		visited[rt] = struct{}{}
+		profileURL := primaryProfileURL(plan.Requirements, rt, options.Registry)
 		for _, target := range profileReferenceTargets(options.Registry, profileURL) {
-			if target == resourceType {
+			if target == rt {
 				continue
 			}
-			dependencies[resourceType] = appendUniqueString(dependencies[resourceType], target)
+			dependencies[rt] = appendUniqueString(dependencies[rt], target)
+			if _, ok := resourceSet[target]; !ok {
+				resourceSet[target] = struct{}{}
+				queue = append(queue, target)
+			}
 		}
 	}
+
+	resourceTypes := make([]string, 0, len(resourceSet))
+	for rt := range resourceSet {
+		resourceTypes = append(resourceTypes, rt)
+	}
+	sort.Strings(resourceTypes)
 	return coverage.PlanLevels(resourceTypes, dependencies)
 }
 

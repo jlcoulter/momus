@@ -332,11 +332,49 @@ func newDebugTracer(debug bool) *tracing.Tracer {
 	return tracing.New(os.Stderr)
 }
 
+// testPlanFile is the on-disk test plan artifact: the seed dataset (stage J)
+// plus the executable test AST (stage L). It is produced by "coverage ast" and
+// consumed by "coverage provision" (uploads the dataset) and "coverage run"
+// (executes the AST). Carrying the dataset in the plan lets provisioning and
+// execution work from the plan alone, without the source package.
+type testPlanFile struct {
+	Version string         `json:"version"`
+	Dataset *model.Dataset `json:"dataset,omitempty"`
+	Root    map[string]any `json:"root"`
+}
+
+// encodeTestPlan builds the on-disk test plan artifact from a generated AST and
+// its seed dataset.
+func encodeTestPlan(astPlan *testast.Plan, ds *model.Dataset) ([]byte, error) {
+	root, err := testast.EncodeNode(astPlan.Root)
+	if err != nil {
+		return nil, fmt.Errorf("encode test AST: %w", err)
+	}
+	payload := testPlanFile{Version: astPlan.Version, Dataset: ds, Root: root}
+	return json.MarshalIndent(payload, "", "  ")
+}
+
+// decodeTestPlan reads a test plan artifact and returns its AST and seed dataset.
+func decodeTestPlan(raw []byte) (*testast.Plan, *model.Dataset, error) {
+	var payload testPlanFile
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, nil, fmt.Errorf("parse test plan: %w", err)
+	}
+	root, err := testast.DecodeNode(payload.Root)
+	if err != nil {
+		return nil, nil, fmt.Errorf("decode test plan root: %w", err)
+	}
+	return &testast.Plan{Version: payload.Version, Root: root}, payload.Dataset, nil
+}
+
 // datasetResourceKeys returns the "Type/id" keys of every resource in a dataset,
 // used to mark seed resources as already-created so the runner's setup-reference
 // validation passes for test cases that reference them.
 func datasetResourceKeys(ds *model.Dataset) map[string]struct{} {
-	keys := make(map[string]struct{}, len(ds.Resources))
+	keys := make(map[string]struct{})
+	if ds == nil {
+		return keys
+	}
 	for _, inst := range ds.Resources {
 		if inst == nil || inst.ResourceType == "" || inst.LocalID == "" {
 			continue

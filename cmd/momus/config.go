@@ -32,7 +32,7 @@ type config struct {
 	capabilityBaseURL  string
 	scopeToCapability  bool
 	failOnUncovered    bool
-	provisionOnly      bool
+	coveragePlanPath   string
 	apiBearerToken     string
 	apiBasicUsername   string
 	apiBasicPassword   string

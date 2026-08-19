@@ -94,7 +94,9 @@ Currently implemented:
   provisions the dataset in dependency order (`Parallel` per level, levels in
   `Sequence`, targets before dependents), and attaches the `Dataset` to the
   `TestPlan` so one dataset can back multiple plans
-- AST generation from coverage requirements with setup/capture scaffolding
+- Test plan generation from coverage requirements (`coverage ast`): emits the
+  seed dataset plus a test-only AST; provisioning (`coverage provision`) and
+  execution (`coverage run`) both consume the test plan, not the package
 - Assertion expression engine: `status in [..]` plus `body.<path>`, `header.<name>`,
   and `variable.<name>` comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`) so
   assertions can inspect response bodies, headers, and captured variables
@@ -290,10 +292,14 @@ Or just generate the test AST without executing it:
 go run ./cmd/momus api ast ./openapi.json --base-url http://localhost:8080 --output ./api-ast.json
 ```
 
-Generate a test AST from derived coverage requirements:
+Generate a test plan from derived coverage requirements. The test plan carries
+the seed dataset (stage J) plus the test AST (stage L): the AST contains only
+test cases (searches, operations, CRUD sequences, positive/negative payloads),
+while seed `momus-setup-*` resources are provisioned separately by `coverage
+provision`. Test PUTs that are themselves the test stay in the AST:
 
 ```sh
-go run ./cmd/momus coverage ast package.tgz --output ./test-ast.json
+go run ./cmd/momus coverage ast package.tgz --output ./test-plan.json
 ```
 
 Optionally include a base URL for request nodes:
@@ -302,13 +308,33 @@ Optionally include a base URL for request nodes:
 go run ./cmd/momus coverage ast package.tgz \
   --base-url http://localhost:8080/fhir \
   --include-resource Observation \
-  --output ./test-ast.json
+  --output ./test-plan.json
 ```
 
-Execute generated tests with the minimal runner and output a JSON result report:
+Provision the seed dataset up front (stage J). `coverage provision` consumes
+the test plan (not the package) and uploads the seed resources it carries to
+the target server before any tests run, so searches and other reads execute
+against data that already exists:
 
 ```sh
-go run ./cmd/momus coverage run package.tgz \
+go run ./cmd/momus coverage provision ./test-plan.json --base-url http://localhost:8080/fhir
+```
+
+Example output:
+
+```text
+Provisioning phase: uploading 42 seed resources to http://localhost:8080/fhir
+Provisioning complete: 42 resources uploaded
+```
+
+Execute a generated test plan and output a JSON result report. `coverage run`
+consumes the test plan (not a package): its single role is execution (M),
+coverage evaluation (N), and reporting (O). Pass `--coverage-plan` to evaluate
+contractual coverage against the plan produced by `coverage derive`:
+
+```sh
+go run ./cmd/momus coverage run ./test-plan.json \
+  --coverage-plan ./coverage-plan.json \
   --base-url http://localhost:8080/fhir \
   --output ./test-results.json \
   --html ./coverage.html
@@ -329,36 +355,43 @@ pass/fail badge and expands to its assertion, request URL, request body, and
 response body.
 
 If resource creation (write) requests must target a different endpoint than
-read/search requests, pass `--write-base-url` (defaults to `--base-url`):
+read/search requests, pass `--write-base-url` (defaults to `--base-url`). This
+is set at AST generation (`coverage ast`) and provisioning (`coverage provision`)
+time; `coverage run` inherits the baked-in URLs:
 
 ```sh
-go run ./cmd/momus coverage run package.tgz \
+go run ./cmd/momus coverage ast package.tgz \
   --base-url http://read.example/fhir \
   --write-base-url http://write.example/fhir \
-  --output ./test-results.json
+  --output ./test-plan.json
+go run ./cmd/momus coverage provision ./test-plan.json \
+  --base-url http://read.example/fhir \
+  --write-base-url http://write.example/fhir
+go run ./cmd/momus coverage run ./test-plan.json \
+  --coverage-plan ./coverage-plan.json --output ./test-results.json
 ```
 
 Write requests (PUT/PATCH/POST/DELETE) go to `--write-base-url`; GET
 read/search requests go to `--base-url`. The same flag is available on
-`coverage ast`, `coverage plan`, `api ast`, and `api run`.
+`coverage ast`, `coverage provision`, `coverage plan`, `api ast`, and `api run`.
 
 If the write endpoint requires different credentials than the read endpoint,
-pass `--write-basic-username` and `--write-basic-password`. These apply to
-write requests targeting `--write-base-url` (including dataset seeding) and
-default to `--api-basic-username` / `--api-basic-password` when unset:
+pass `--write-basic-username` and `--write-basic-password` to `coverage provision`
+(and `coverage run`). These apply to write requests targeting `--write-base-url`
+(including dataset seeding) and default to `--api-basic-username` /
+`--api-basic-password` when unset:
 
 ```sh
-go run ./cmd/momus coverage run package.tgz \
+go run ./cmd/momus coverage provision ./test-plan.json \
   --base-url http://read.example/fhir \
   --write-base-url http://write.example/fhir \
   --api-basic-username read-user --api-basic-password read-pass \
-  --write-basic-username write-user --write-basic-password write-pass \
-  --output ./test-results.json
+  --write-basic-username write-user --write-basic-password write-pass
 ```
 
 When the server rejects a seeded resource (for example, HAPI validation
-failure), the run prints each rejected resource with the server's reason
-parsed from the OperationOutcome response:
+failure), `coverage provision` prints each rejected resource with the server's
+reason parsed from the OperationOutcome response:
 
 ```
 WARNING: dataset seeding incomplete — 41 of 42 resources uploaded. Data seeding is essential to achieve full coverage success. Fix the failing resources and re-run.
@@ -424,13 +457,14 @@ Test plan written to ./test-plan.json
 
 ### Coverage Pipeline (MVP)
 
-The current executable MVP pipeline is:
+The current executable MVP pipeline is, with each command owning one stage:
 
 1. Resolve package graph (`package resolve`)
 2. Derive scoped coverage requirements (`coverage derive`)
 3. Build resource dependency DAG (internal planner)
-4. Generate dependency-aware AST (`coverage ast`)
-5. Execute AST and emit result report (`coverage run`)
+4. Generate a test plan: seed dataset + test AST (`coverage ast`)
+5. Provision the seed dataset from the test plan (`coverage provision`)
+6. Execute the test plan, evaluate coverage, and emit a report (`coverage run`)
 
 The constraint model (`coverage constraints`) is the normalised intermediate
 representation between the registry and coverage: contractual rules are
@@ -440,8 +474,18 @@ traceability.
 Dependency-chain behavior in the current AST/runner implementation:
 
 - Resources are ordered by DAG levels (topological order)
-- Setup nodes create seed resources before requirement cases
-- Capture nodes extract resource IDs from setup responses
+- The seed dataset is a transitive closure: every type a test references (even
+  one that is not itself a coverage obligation) is seeded and provisioned before
+  its dependents, so references resolve
+- Search-accept obligations carry the data they need to return results: a
+  matching resource (two for multiple-results) is added to the seed dataset
+  whenever the search parameter can be matched with a valid value
+- Seed resources are provisioned up front by `coverage provision` from the
+  dataset carried in the test plan, before any test case executes
+- Test cases reference seed resources by their deterministic setup id
+  (`momus-setup-<Type>`); `coverage run` marks the plan's seed resources as
+  already provisioned
+- Capture nodes extract resource IDs from responses
 - Later request payloads can reference captured IDs via templates such as
   `Patient/{{Patient.id}}`
 

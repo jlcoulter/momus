@@ -109,6 +109,50 @@ those rules, the generator creates tests intended to satisfy those
 obligations, and the evaluator determines whether the obligations were in
 fact covered.
 
+### How the CLI commands fit the pipeline
+
+Each CLI command owns one stage and hands its artifact to the next. Stages that
+synthesise resources (registry, constraints, generation) take the package;
+the provisioning and execution stages consume artifacts only, so they never
+re-derive or re-generate from the package.
+
+| Command | Stages | Input | Output / role |
+| --- | --- | --- | --- |
+| `package resolve <pkg>` | A→C | FHIR package | resolved dependency graph + FHIR registry |
+| `coverage constraints <pkg>` | D | package | `constraints.json` — the normalised constraint model |
+| `coverage derive <pkg>` | E→F | package | `coverage-plan.json` — the coverage plan of obligations |
+| `coverage ast <pkg>` | G→L | package | `test-plan.json` — carries the seed dataset (J) and the test AST (L) |
+| `coverage provision <test-plan.json>` | J | test plan | uploads the seed dataset up front, in dependency order |
+| `coverage run <test-plan.json> [--coverage-plan …]` | M→O | test plan (+ coverage plan) | executes the AST, evaluates coverage, emits the report |
+| `coverage plan <pkg>` | I→K | package | a `TestPlan` (Dataset + provision AST) via the formal `Planner` |
+| `coverage bulk <pkg>` | J | package | NDJSON bulk dataset (`$export` format) |
+
+The main coverage run is a four-command sequence, each command owning one
+stage and passing its artifact to the next:
+
+1. `coverage derive <pkg> --output coverage-plan.json` — the obligations (E→F).
+2. `coverage ast <pkg> --output test-plan.json` — generation (G→L). Because a
+   test only passes when the data it depends on exists, generation also derives
+   the data each test needs (the `DataRequirement`s, stage I), produces the seed
+   dataset (stage J) that satisfies them, and embeds both the seed dataset and
+   the test AST in the plan. The test AST itself is test cases only.
+3. `coverage provision <test-plan.json> --base-url …` — stage J is executed
+   first: the seed dataset is uploaded before any test runs, so searches and
+   reads run against data that already exists.
+4. `coverage run <test-plan.json> --coverage-plan coverage-plan.json` — the test
+   AST is executed (M) against the provisioned server, the obligations are
+   evaluated against the coverage plan (N), and the coverage report is emitted
+   (O). `coverage run` never provisions or generates.
+
+Keeping provisioning (J) separate from execution (M) is the reason the plan
+carries a concrete dataset rather than re-deriving from the package: the data is
+staged once, ahead of execution, and `coverage run` is a pure testing phase.
+
+Two parallel development paths exist alongside the run pipeline: `coverage plan`
+uses the formal `Planner` to go from `DataRequirement` → `Dataset` → provision
+`TestPlan` (one dataset can back many plans), and `coverage bulk` generates bulk
+NDJSON data for `$export` without tests or provisioning.
+
 ## FHIR/API Registry
 
 The registry is a single, immutable index of FHIR and API knowledge, keyed
@@ -613,8 +657,8 @@ covered.
 - `internal/fhir/terminology` — terminology expansion and lookup.
 - `internal/fhir/resource` — resource `Generator` (registry-backed
         `DatasetGenerator` turns `DataRequirement`s into concrete `Dataset`s).
-- `internal/fhir/planner` — planner interface and `TestPlan` (interface-only
-        stub pending stage 8).
+- `internal/fhir/planner` — planner interface and `TestPlan`; `DefaultPlanner`
+        turns `DataRequirement`s into a provision `TestPlan` (Dataset + AST).
 - `internal/fhir/provisioning` — `Provisioner` (`ServerProvisioner` PUTs a
         `Dataset` to the server, dependency-ordered).
 - `internal/test/coverage` — coverage requirements, derivation, evaluation,
@@ -622,8 +666,10 @@ covered.
 - `internal/test/generation` — positive, negative, and boundary generation.
         Profile-driven body synthesis lives here; negative variants mutate an
         otherwise-valid payload against exactly one constraint and assert
-        rejection. `internal/test/ast` holds only node definitions and
-        encoding.
+        rejection. It also builds the seed `Dataset` (`BuildSetupDataset`) from
+        the data each coverage obligation needs, including search-matching seeds
+        and transitively-referenced types. `internal/test/ast` holds only node
+        definitions and encoding.
 - `internal/test/ast` — executable test AST.
 - `internal/test/runner` — test execution.
 - `internal/test/assertions` — assertion interface and evaluation.

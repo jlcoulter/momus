@@ -1,154 +1,48 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"os"
 
-	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
-	provisioning "github.com/jlcoulter/momus/internal/fhir/provisioning"
 	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
 	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 	testrunner "github.com/jlcoulter/momus/internal/test/runner"
 	"github.com/spf13/cobra"
 )
 
-// newRunCmd returns the "coverage run" command.
+// newRunCmd returns the "coverage run" command. Its single role is the
+// execution stage (M) plus coverage evaluation (N) and reporting (O): it
+// consumes a generated test plan (the seed dataset + test AST produced by
+// "coverage ast") and executes the AST against a target server whose seed data
+// has already been provisioned (via "coverage provision"). It does not take a
+// package and does not provision or generate anything.
 func newRunCmd(cfg *config) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "run <path-to-package.tgz>",
-		Short: "Execute generated AST and output test results",
+		Use:   "run <path-to-test-plan.json>",
+		Short: "Execute a generated test plan and output test results",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cfg.baseURL == "" {
-				return fmt.Errorf("base URL is required; provide --base-url")
-			}
-			// Resolve the write base URL up front: the provisioner below needs a
-			// concrete URL (it does not default internally), while the library
-			// calls (planner, generation, runner) also default empty to baseURL as
-			// a safety net.
-			writeBase := cfg.writeBaseURL
-			if writeBase == "" {
-				writeBase = cfg.baseURL
-			}
-			// Resolve write-specific basic auth credentials, falling back to the
-			// general API credentials when the write-specific ones are not set.
-			writeBasicUser := cfg.writeBasicUsername
-			if writeBasicUser == "" {
-				writeBasicUser = cfg.apiBasicUsername
-			}
-			writeBasicPass := cfg.writeBasicPassword
-			if writeBasicPass == "" {
-				writeBasicPass = cfg.apiBasicPassword
-			}
-
-			rootPath := args[0]
-			searchDir := cfg.depsDir
-			if searchDir == "" {
-				searchDir = filepath.Dir(rootPath)
-			}
-			cacheDir := cfg.downloadDir
-			if cacheDir == "" {
-				cacheDir = filepath.Join(searchDir, ".momus", "packages")
-			}
-
-			graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
-				DepsDir:        searchDir,
-				DownloadDir:    cacheDir,
-				ConflictPolicy: fhirpackage.ConflictPolicy(cfg.conflictPolicy),
-			})
+			planPath := args[0]
+			raw, err := os.ReadFile(planPath)
 			if err != nil {
-				return err
+				return fmt.Errorf("read test plan %s: %w", planPath, err)
 			}
-			if err := writeDebugGraph(cfg.debug, graph); err != nil {
-				return err
-			}
-
-			builder := fhirpackage.NewRegistryBuilder()
-			reg, err := builder.BuildFromPackagesScoped(graph.Packages, graph.Root)
+			astPlan, setupDataset, err := decodeTestPlan(raw)
 			if err != nil {
 				return err
 			}
 
-			capabilityResourceTypes, capabilityProfileURLs, preferredProfilesByResource, err := resourceScopeForRun(cmd, cfg, newDebugTracer(cfg.debug))
-			if err != nil {
-				return err
-			}
-
-			coveragePlan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
-				IncludeResourceTypes: capabilityResourceTypes,
-				IncludeProfileURLs:   capabilityProfileURLs,
-				ExcludePathPrefixes:  cfg.excludePathPrefixes,
-				MustSupportOnly:      cfg.mustSupportOnly,
-				IncludeOptional:      cfg.includeOptional,
-				IncludeLowValuePaths: cfg.includeLowValuePaths,
-				Strength:             cfg.interactionStrength,
-			})
-			if err != nil {
-				return err
-			}
-
-			// Build the seed dataset using the same generation logic as the AST so
-			// the provisioned data conforms to the same profiles and is exactly what
-			// the generated tests reference, then provision it ahead of execution so
-			// tests run against real provisioned state.
-			setupDataset, err := testgeneration.BuildSetupDataset(coveragePlan, testgeneration.BuildOptions{
-				BaseURL:                        cfg.baseURL,
-				WriteBaseURL:                   writeBase,
-				Registry:                       reg,
-				PreferredProfileURLsByResource: preferredProfilesByResource,
-				Strength:                       cfg.interactionStrength,
-				Exhaustive:                     cfg.exhaustive,
-			})
-			if err != nil {
-				return err
-			}
-			provisioner := provisioning.New(writeBase, &provisioning.Options{
-				BearerToken:   cfg.apiBearerToken,
-				BasicUsername: writeBasicUser,
-				BasicPassword: writeBasicPass,
-				Tracer:        newDebugTracer(cfg.debug),
-			})
-			// Data seeding is essential to achieve full coverage success, so the
-			// user must be told when the dataset was not fully uploaded.
-			fmt.Printf("Provisioning phase: uploading %d seed resources to %s\n", len(setupDataset.Resources), writeBase)
-			seed := provisioner.ProvisionAll(cmd.Context(), setupDataset)
-			if !seed.Complete() {
-				fmt.Printf("WARNING: dataset seeding incomplete — %d of %d resources uploaded. Data seeding is essential to achieve full coverage success. Fix the failing resources and re-run.\n", seed.Provisioned, seed.Provisioned+seed.Failed)
-				for _, failure := range seed.Failures {
-					fmt.Printf("  - %s\n", failure.Describe())
-				}
-				if !cfg.debug {
-					fmt.Printf("Run with --debug to write the rejected payloads and full server responses to %s for inspection.\n", debugOutputDir)
-				}
-				if err := writeDebugProvisionFailures(cfg.debug, seed.Failures); err != nil {
-					return err
-				}
-			} else {
-				fmt.Printf("Provisioning complete: %d resources uploaded ahead of execution\n", seed.Provisioned)
-			}
-
-			// --provision-only stops after the provisioning phase: the seed dataset
-			// is on the server and no tests are executed.
-			if cfg.provisionOnly {
-				if !seed.Complete() {
-					return fmt.Errorf("provisioning incomplete: %d of %d resources uploaded", seed.Provisioned, seed.Provisioned+seed.Failed)
-				}
-				fmt.Printf("Provisioning only: %d resources uploaded; skipping test execution\n", seed.Provisioned)
-				return nil
-			}
-
-			// The seed dataset is already on the server, so generate the AST with
-			// setup omitted: execution is a pure testing phase with no interleaved
-			// provisioning.
-			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: cfg.baseURL, WriteBaseURL: writeBase, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: cfg.interactionStrength, Exhaustive: cfg.exhaustive, SkipSetup: true})
-			if err != nil {
-				return err
-			}
+			// Seed resources are provisioned ahead of execution (a separate stage).
+			// The test plan carries the seed dataset; mark those resources as
+			// already-created so the runner's setup-reference validation passes
+			// without re-provisioning them during execution.
+			preCreated := datasetResourceKeys(setupDataset)
 
 			fmt.Printf("Testing phase: executing %d test cases\n", testgeneration.RequirementCount(astPlan))
 			report, err := testrunner.Execute(cmd.Context(), astPlan.Root, testrunner.ExecuteOptions{
 				BaseURL:            cfg.baseURL,
-				WriteBaseURL:       writeBase,
+				WriteBaseURL:       cfg.writeBaseURL,
 				BearerToken:        cfg.apiBearerToken,
 				BasicUsername:      cfg.apiBasicUsername,
 				BasicPassword:      cfg.apiBasicPassword,
@@ -158,22 +52,34 @@ func newRunCmd(cfg *config) *cobra.Command {
 				// requested, so failed cases can drill down into them.
 				IncludeDebug: cfg.debug || cfg.htmlReport != "",
 				Tracer:       newDebugTracer(cfg.debug),
-				// The seed resources were provisioned above, so mark them as
-				// already-created so setup-reference validation passes.
-				PreCreated: datasetResourceKeys(setupDataset),
+				PreCreated:   preCreated,
 			})
 			if err != nil {
 				return err
 			}
 
-			executed := make([]testcoverage.ExecutedRequirementResult, 0, len(report.Cases))
-			for _, c := range report.Cases {
-				executed = append(executed, testcoverage.ExecutedRequirementResult{
-					RequirementID: c.RequirementID,
-					Passed:        c.Passed,
-				})
+			// Coverage evaluation needs the coverage plan that defined the
+			// obligations. When --coverage-plan is supplied, evaluate against it;
+			// otherwise report execution results only.
+			var coverageEvaluation testcoverage.EvaluationReport
+			if cfg.coveragePlanPath != "" {
+				planRaw, err := os.ReadFile(cfg.coveragePlanPath)
+				if err != nil {
+					return fmt.Errorf("read coverage plan %s: %w", cfg.coveragePlanPath, err)
+				}
+				var coveragePlan testcoverage.CoveragePlan
+				if err := json.Unmarshal(planRaw, &coveragePlan); err != nil {
+					return fmt.Errorf("parse coverage plan %s: %w", cfg.coveragePlanPath, err)
+				}
+				executed := make([]testcoverage.ExecutedRequirementResult, 0, len(report.Cases))
+				for _, c := range report.Cases {
+					executed = append(executed, testcoverage.ExecutedRequirementResult{
+						RequirementID: c.RequirementID,
+						Passed:        c.Passed,
+					})
+				}
+				coverageEvaluation = testcoverage.EvaluateCoverage(&coveragePlan, executed)
 			}
-			coverageEvaluation := testcoverage.EvaluateCoverage(coveragePlan, executed)
 
 			if cfg.htmlReport != "" {
 				html, err := testcoverage.RenderHTML(coverageEvaluation, htmlItems(report.Cases))
@@ -205,19 +111,23 @@ func newRunCmd(cfg *config) *cobra.Command {
 			requirementCases, setupCases := countRequirementAndSetupCases(report.Cases)
 			fmt.Printf("Executed %d cases: %d passed, %d failed (%d requirement cases + %d setup cases)\n",
 				report.Total, report.Passed, report.Failed, requirementCases, setupCases)
-			fmt.Printf("Contractual coverage: %.1f%% (%d/%d)\n", coverageEvaluation.CoveragePercent, coverageEvaluation.CoveredRequirements, coverageEvaluation.TotalRequirements)
-			if requirementCases != coverageEvaluation.TotalRequirements {
-				fmt.Printf("WARNING: generated %d requirement cases but the plan defines %d obligations; check for duplicate or missing requirements\n", requirementCases, coverageEvaluation.TotalRequirements)
-			}
-			if coverageEvaluation.UncoveredRequirements > 0 {
-				fmt.Printf("Uncovered contractual obligations: %d\n", coverageEvaluation.UncoveredRequirements)
-				printCoverageGapSummary(coverageEvaluation)
-				for idx, req := range coverageEvaluation.Uncovered {
-					if idx >= 10 {
-						break
-					}
-					fmt.Printf("  - %s\n", req.ID)
+			if coverageEvaluation.TotalRequirements > 0 {
+				fmt.Printf("Contractual coverage: %.1f%% (%d/%d)\n", coverageEvaluation.CoveragePercent, coverageEvaluation.CoveredRequirements, coverageEvaluation.TotalRequirements)
+				if requirementCases != coverageEvaluation.TotalRequirements {
+					fmt.Printf("WARNING: generated %d requirement cases but the plan defines %d obligations; check for duplicate or missing requirements\n", requirementCases, coverageEvaluation.TotalRequirements)
 				}
+				if coverageEvaluation.UncoveredRequirements > 0 {
+					fmt.Printf("Uncovered contractual obligations: %d\n", coverageEvaluation.UncoveredRequirements)
+					printCoverageGapSummary(coverageEvaluation)
+					for idx, req := range coverageEvaluation.Uncovered {
+						if idx >= 10 {
+							break
+						}
+						fmt.Printf("  - %s\n", req.ID)
+					}
+				}
+			} else if cfg.coveragePlanPath == "" {
+				fmt.Printf("Coverage evaluation skipped: pass --coverage-plan to evaluate contractual coverage\n")
 			}
 			if cfg.outputPath != "" {
 				fmt.Printf("Test report written to %s\n", cfg.outputPath)
@@ -228,30 +138,17 @@ func newRunCmd(cfg *config) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&cfg.depsDir, "deps-dir", "", "directory to search for dependency package archives (.tgz/.tar.gz)")
-	cmd.Flags().StringVar(&cfg.downloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
-	cmd.Flags().StringVar(&cfg.conflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
+	cmd.Flags().StringVar(&cfg.coveragePlanPath, "coverage-plan", "", "path to a coverage plan JSON (from 'coverage derive') used to evaluate contractual coverage")
 	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write test result report JSON to a file")
 	cmd.Flags().StringVar(&cfg.htmlReport, "html", "", "write an HTML coverage report with drill-down to a file")
-	cmd.Flags().StringSliceVar(&cfg.includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable)")
-	cmd.Flags().StringSliceVar(&cfg.includeProfileURLs, "include-profile-url", nil, "include only these profile canonical URLs (repeatable)")
-	cmd.Flags().StringSliceVar(&cfg.excludePathPrefixes, "exclude-path-prefix", nil, "exclude element paths by prefix (repeatable)")
-	cmd.Flags().BoolVar(&cfg.mustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
-	cmd.Flags().BoolVar(&cfg.includeOptional, "include-optional", false, "include optional non-mustSupport elements")
-	cmd.Flags().BoolVar(&cfg.includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
-	cmd.Flags().BoolVar(&cfg.scopeToCapability, "scope-to-capability", true, "limit derivation to CapabilityStatement server resources that support create")
 	cmd.Flags().BoolVar(&cfg.failOnUncovered, "fail-on-uncovered", false, "return non-zero exit code when contractual coverage has uncovered obligations")
-	cmd.Flags().BoolVar(&cfg.provisionOnly, "provision-only", false, "provision the seed dataset and stop without executing tests")
-	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target FHIR base URL for request execution")
-	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate FHIR base URL for resource creation (write) requests; defaults to --base-url")
-	cmd.Flags().StringVar(&cfg.capabilityBaseURL, "capability-base-url", "", "optional alternate FHIR base URL to fetch CapabilityStatement metadata for scope/profile selection")
-	cmd.Flags().StringVar(&cfg.apiBearerToken, "api-bearer-token", "", "bearer token used for API requests during coverage run")
-	cmd.Flags().StringVar(&cfg.apiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during coverage run")
-	cmd.Flags().StringVar(&cfg.apiBasicPassword, "api-basic-password", "", "basic auth password used for API requests during coverage run")
+	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target FHIR base URL for relative request URLs (the AST usually carries absolute URLs)")
+	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate FHIR base URL for write (PUT/PATCH/POST/DELETE) request URLs; defaults to --base-url")
+	cmd.Flags().StringVar(&cfg.apiBearerToken, "api-bearer-token", "", "bearer token used for API requests during execution")
+	cmd.Flags().StringVar(&cfg.apiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during execution")
+	cmd.Flags().StringVar(&cfg.apiBasicPassword, "api-basic-password", "", "basic auth password used for API requests during execution")
 	cmd.Flags().StringVar(&cfg.writeBasicUsername, "write-basic-username", "", "basic auth username used for write requests to --write-base-url; defaults to --api-basic-username")
 	cmd.Flags().StringVar(&cfg.writeBasicPassword, "write-basic-password", "", "basic auth password used for write requests to --write-base-url; defaults to --api-basic-password")
-	cmd.Flags().IntVar(&cfg.interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
 	cmd.Flags().BoolVar(&cfg.includeCases, "include-cases", false, "include the full per-case result array in the JSON report (large runs produce very large output)")
-	cmd.Flags().BoolVar(&cfg.exhaustive, "exhaustive", true, "populate optional elements to produce fuller, more realistic payloads")
 	return cmd
 }
