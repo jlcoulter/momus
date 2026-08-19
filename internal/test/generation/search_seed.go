@@ -141,7 +141,7 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 	if elementPath == "" {
 		return false
 	}
-	typeCode := searchLeafType(resourceType, elementPath, reg)
+	typeCode, repeatable := searchLeafType(resourceType, elementPath, reg)
 	switch typeCode {
 	case "string", "markdown", "uri", "url", "id", "oid", "uuid", "base64Binary":
 		setPathLeaf(body, elementPath, value)
@@ -150,8 +150,9 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 		// A token search matches the code: for a primitive code it is the scalar,
 		// for a Coding it is the object's `code` member, and for a CodeableConcept
 		// it is the first coding's `code`. Set the appropriate member without
-		// ever adding an illegal property (e.g. `coding` on a Coding).
-		setSearchCodeValue(body, elementPath, value)
+		// ever adding an illegal property (e.g. `coding` on a Coding) and without
+		// collapsing a repeatable element's array to an object.
+		setSearchCodeValue(body, elementPath, value, typeCode, repeatable)
 		return true
 	case "HumanName":
 		// A string search on HumanName matches the text/family tokens; ensure the
@@ -212,8 +213,9 @@ func isBaseResourceTypeToken(token, resourceType string) bool {
 }
 
 // searchLeafType resolves the FHIR type code of the element a search expression
-// points at, by looking it up in the resource's resolved profile.
-func searchLeafType(resourceType, elementPath string, reg *registry.Registry) string {
+// points at (and whether it is repeatable), by looking it up in the resource's
+// resolved profile.
+func searchLeafType(resourceType, elementPath string, reg *registry.Registry) (typeCode string, repeatable bool) {
 	profiles := reg.ProfilesForResource(resourceType)
 	for _, profile := range profiles {
 		resolved, err := reg.ResolveProfile(profile.URL)
@@ -222,10 +224,10 @@ func searchLeafType(resourceType, elementPath string, reg *registry.Registry) st
 		}
 		node, ok := resolved.Elements[resourceType+"."+elementPath]
 		if ok && node != nil && node.Definition != nil && len(node.Definition.Types) > 0 {
-			return node.Definition.Types[0].Code
+			return node.Definition.Types[0].Code, node.Definition.Max == "*"
 		}
 	}
-	return ""
+	return "", false
 }
 
 // setPathLeaf sets a primitive string value at a dotted element path within the
@@ -283,15 +285,29 @@ func setAddressLeaf(body map[string]any, path string, value string) {
 // setSearchCodeValue places a code value that a token search can match on the
 // target element, handling a primitive code (scalar), a Coding (its `code`
 // member), and a CodeableConcept (its first coding's `code`). It never adds an
-// illegal property such as `coding` on a Coding.
-func setSearchCodeValue(body map[string]any, path string, value string) {
+// illegal property such as `coding` on a Coding, and it keeps repeatable
+// elements as arrays.
+func setSearchCodeValue(body map[string]any, path string, value string, typeCode string, repeatable bool) {
 	field := path
 	if idx := strings.LastIndex(path, "."); idx >= 0 {
 		field = path[idx+1:]
 	}
 	raw, ok := body[field]
 	if !ok {
-		body[field] = map[string]any{"code": value}
+		switch typeCode {
+		case "CodeableConcept":
+			single := map[string]any{"coding": []any{map[string]any{"code": value}}}
+			if repeatable {
+				body[field] = []any{single}
+			} else {
+				body[field] = single
+			}
+		case "Coding":
+			body[field] = map[string]any{"code": value}
+		default:
+			// A primitive code: set the scalar.
+			body[field] = value
+		}
 		return
 	}
 	switch v := raw.(type) {
@@ -310,6 +326,32 @@ func setSearchCodeValue(body map[string]any, path string, value string) {
 			return
 		}
 		v["code"] = value
+	case []any:
+		// A repeatable CodeableConcept/Coding: set the first element's code. Never
+		// replace the array with an object (servers reject a scalar/object where
+		// an array is required).
+		if len(v) == 0 {
+			body[field] = []any{map[string]any{"code": value}}
+			return
+		}
+		first, ok := v[0].(map[string]any)
+		if !ok {
+			v[0] = map[string]any{"code": value}
+			return
+		}
+		if _, hasCode := first["code"]; hasCode {
+			first["code"] = value
+			return
+		}
+		if coding, ok := first["coding"].([]any); ok && len(coding) > 0 {
+			if c, ok := coding[0].(map[string]any); ok {
+				c["code"] = value
+				return
+			}
+			coding[0] = map[string]any{"code": value}
+			return
+		}
+		first["code"] = value
 	case string:
 		// A primitive code: set the scalar.
 		body[field] = value

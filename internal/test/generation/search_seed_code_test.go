@@ -47,3 +47,51 @@ func TestSearchSeedKeepsCodingPrimitive(t *testing.T) {
 		}
 	}
 }
+
+// TestSearchSeedKeepsRepeatableCodeableConcept verifies that a token search on a
+// repeatable CodeableConcept element (e.g. Endpoint.payloadType) sets the code on
+// the first element without turning the required JSON array into an object.
+func TestSearchSeedKeepsRepeatableCodeableConcept(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/endpoint", Type: "Endpoint", Elements: []model.ElementDefinition{
+		{Path: "Endpoint", Min: 0, Max: "*"},
+		{Path: "Endpoint.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Endpoint.connectionType", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Coding"}}},
+		{Path: "Endpoint.payloadType", Min: 1, Max: "*", Types: []model.ElementType{{Code: "CodeableConcept"}}},
+	}})
+	reg.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Endpoint-payload-type", Name: "payload-type", Code: "payload-type", Base: []string{"Endpoint"}, Type: "token", Expression: "Endpoint.payloadType"})
+
+	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
+		{ID: "search|Endpoint|payload-type|search-multiple-results", ResourceType: "Endpoint", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchMultipleResults, SearchCode: "payload-type"},
+	}}
+	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
+
+	ds, err := BuildSetupDataset(plan, opts)
+	if err != nil {
+		t.Fatalf("BuildSetupDataset returned error: %v", err)
+	}
+	for _, inst := range ds.Resources {
+		pt, ok := inst.Resource["payloadType"]
+		if !ok {
+			continue
+		}
+		arr, ok := pt.([]any)
+		if !ok {
+			t.Fatalf("payloadType = %T %v, want a JSON array", pt, pt)
+		}
+		if len(arr) == 0 {
+			t.Fatal("payloadType is empty")
+		}
+		first, ok := arr[0].(map[string]any)
+		if !ok {
+			t.Fatalf("payloadType[0] = %T, want an object", arr[0])
+		}
+		coding, ok := first["coding"].([]any)
+		if !ok || len(coding) == 0 {
+			t.Fatalf("payloadType[0] has no coding: %v", first)
+		}
+		if c, ok := coding[0].(map[string]any); ok && c["code"] != "momus-search" {
+			t.Fatalf("payloadType[0].coding[0].code = %v, want momus-search", c["code"])
+		}
+	}
+}
