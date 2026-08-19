@@ -102,22 +102,16 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 		for _, resourceType := range level {
 			resourceSeq := &ast.Sequence{Steps: make([]ast.Node, 0)}
 			deps := depPlan.Dependencies[resourceType]
-			resourceProfiles := uniqueProfileURLs(byResource[resourceType])
-			setupProfileURL := ""
-			if len(resourceProfiles) > 0 {
-				setupProfileURL = resourceProfiles[0]
-			}
-			setupProfiles := orderedProfilesForResource(resourceType, setupProfileURL, options.PreferredProfileURLsByResource)
-			setupPrimaryProfile := firstProfileURL(setupProfiles)
+			setupInst := buildSetupResource(resourceType, options, deps, byResource)
 
 			resourceSeq.Steps = append(resourceSeq.Steps,
 				&ast.Request{
 					Method: "PUT",
-					URL:    joinInstanceURL(baseURLForMethod(options, "PUT"), resourceType, setupResourceID(resourceType)),
+					URL:    joinInstanceURL(baseURLForMethod(options, "PUT"), resourceType, setupInst.LocalID),
 					Headers: map[string]string{
 						"Content-Type": "application/fhir+json",
 					},
-					Body: buildSetupBody(resourceType, setupResourceID(resourceType), setupProfiles, setupPrimaryProfile, deps, options.Registry, options.Exhaustive),
+					Body: setupInst.Resource,
 				},
 				&ast.Assert{
 					Description:   "setup create seed resource",
@@ -142,6 +136,74 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 	}
 
 	return &ast.Plan{Version: "v1", Root: root}, nil
+}
+
+// buildSetupResource builds the seed resource instance for a resource type,
+// using the same body-generation logic as the AST setup requests so provisioned
+// data matches exactly what the generated tests reference.
+func buildSetupResource(resourceType string, options BuildOptions, deps []string, byResource map[string][]coverage.CoverageRequirement) *model.ResourceInstance {
+	resourceProfiles := uniqueProfileURLs(byResource[resourceType])
+	setupProfileURL := ""
+	if len(resourceProfiles) > 0 {
+		setupProfileURL = resourceProfiles[0]
+	}
+	setupProfiles := orderedProfilesForResource(resourceType, setupProfileURL, options.PreferredProfileURLsByResource)
+	setupPrimaryProfile := firstProfileURL(setupProfiles)
+	id := setupResourceID(resourceType)
+	body := buildSetupBody(resourceType, id, setupProfiles, setupPrimaryProfile, deps, options.Registry, options.Exhaustive)
+	return &model.ResourceInstance{
+		LocalID:      id,
+		ResourceType: resourceType,
+		Profile:      setupPrimaryProfile,
+		Resource:     body,
+	}
+}
+
+// BuildSetupDataset builds the Dataset of seed resources that the generated
+// AST provisions ahead of execution. It uses the exact same body-generation
+// logic as GenerateFromCoveragePlan's setup requests, so the provisioned data
+// conforms to the same profiles and is what the generated tests reference.
+// Relationships are recorded so provisioning orders targets before dependents.
+func BuildSetupDataset(plan *coverage.CoveragePlan, options BuildOptions) (*model.Dataset, error) {
+	if plan == nil {
+		return nil, errors.New("coverage plan is required")
+	}
+	depPlan, err := buildDependencyPlan(plan, options)
+	if err != nil {
+		return nil, err
+	}
+	byResource := make(map[string][]coverage.CoverageRequirement)
+	for _, req := range plan.Requirements {
+		if req.ResourceType == "" {
+			return nil, fmt.Errorf("coverage requirement %s missing resource type", req.ID)
+		}
+		byResource[req.ResourceType] = append(byResource[req.ResourceType], req)
+	}
+	for resourceType := range byResource {
+		sort.Slice(byResource[resourceType], func(i, j int) bool {
+			return byResource[resourceType][i].ID < byResource[resourceType][j].ID
+		})
+	}
+
+	ds := &model.Dataset{
+		Resources:     make(map[string]*model.ResourceInstance),
+		Relationships: make([]model.Reference, 0),
+	}
+	for _, level := range depPlan.Levels {
+		for _, resourceType := range level {
+			deps := depPlan.Dependencies[resourceType]
+			inst := buildSetupResource(resourceType, options, deps, byResource)
+			ds.Resources[inst.LocalID] = inst
+			for _, dep := range deps {
+				ds.Relationships = append(ds.Relationships, model.Reference{
+					SourceID: inst.LocalID,
+					Path:     resourceType + "." + dep,
+					TargetID: setupResourceID(dep),
+				})
+			}
+		}
+	}
+	return ds, nil
 }
 
 // RequirementCount returns the number of requirement-bound Assertions in a

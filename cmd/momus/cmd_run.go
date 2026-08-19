@@ -5,9 +5,7 @@ import (
 	"path/filepath"
 
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
-	fhirplanner "github.com/jlcoulter/momus/internal/fhir/planner"
 	provisioning "github.com/jlcoulter/momus/internal/fhir/provisioning"
-	fhirresource "github.com/jlcoulter/momus/internal/fhir/resource"
 	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
 	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 	testrunner "github.com/jlcoulter/momus/internal/test/runner"
@@ -79,16 +77,18 @@ func newRunCmd(cfg *config) *cobra.Command {
 				return err
 			}
 
-			// Generate the backing data through the planner and provision it ahead
-			// of execution, so tests run against real provisioned state rather
-			// than purely inline-synthesised bodies.
-			requirements, err := testcoverage.PlanToDataRequirements(coveragePlan)
-			if err != nil {
-				return err
-			}
-			generator := fhirresource.NewGeneratorWithOptions(reg, fhirresource.Options{Exhaustive: cfg.exhaustive})
-			planner := fhirplanner.NewDefaultPlanner(generator)
-			testPlan, err := planner.Plan(cmd.Context(), fhirplanner.Input{BaseURL: cfg.baseURL, WriteBaseURL: writeBase, Requirements: requirements})
+			// Build the seed dataset using the same generation logic as the AST so
+			// the provisioned data conforms to the same profiles and is exactly what
+			// the generated tests reference, then provision it ahead of execution so
+			// tests run against real provisioned state.
+			setupDataset, err := testgeneration.BuildSetupDataset(coveragePlan, testgeneration.BuildOptions{
+				BaseURL:                        cfg.baseURL,
+				WriteBaseURL:                   writeBase,
+				Registry:                       reg,
+				PreferredProfileURLsByResource: preferredProfilesByResource,
+				Strength:                       cfg.interactionStrength,
+				Exhaustive:                     cfg.exhaustive,
+			})
 			if err != nil {
 				return err
 			}
@@ -99,7 +99,7 @@ func newRunCmd(cfg *config) *cobra.Command {
 			})
 			// Data seeding is essential to achieve full coverage success, so the
 			// user must be told when the dataset was not fully uploaded.
-			seed := provisioner.ProvisionAll(cmd.Context(), testPlan.Dataset)
+			seed := provisioner.ProvisionAll(cmd.Context(), setupDataset)
 			if !seed.Complete() {
 				fmt.Printf("WARNING: dataset seeding incomplete — %d of %d resources uploaded. Data seeding is essential to achieve full coverage success. Fix the failing resources and re-run.\n", seed.Provisioned, seed.Provisioned+seed.Failed)
 				for _, failure := range seed.Failures {
