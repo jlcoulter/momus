@@ -126,6 +126,7 @@ func newApiRunCmd(cfg *config) *cobra.Command {
 			report, err := testrunner.Execute(cmd.Context(), plan.Root, testrunner.ExecuteOptions{
 				BaseURL:      cfg.baseURL,
 				WriteBaseURL: cfg.writeBaseURL,
+				Tracer:       newDebugTracer(cfg.debug),
 			})
 			if err != nil {
 				return err

@@ -15,6 +15,7 @@ import (
 
 	"github.com/jlcoulter/momus/internal/test/assertions"
 	"github.com/jlcoulter/momus/internal/test/ast"
+	"github.com/jlcoulter/momus/internal/tracing"
 )
 
 // ExecuteOptions configures AST execution.
@@ -35,6 +36,9 @@ type ExecuteOptions struct {
 	WriteBasicUsername string
 	WriteBasicPassword string
 	IncludeDebug       bool
+	// Tracer, when set, logs every HTTP request and response as it is made
+	// (used for --debug request/response tracing).
+	Tracer *tracing.Tracer
 }
 
 const maxDebugBodyBytes = 4096
@@ -123,6 +127,7 @@ func Execute(ctx context.Context, plan ast.Node, options ExecuteOptions) (*Repor
 		writeBasicUsername: options.WriteBasicUsername,
 		writeBasicPassword: options.WriteBasicPassword,
 		includeDebug:       options.IncludeDebug,
+		tracer:             options.Tracer,
 		report:             &Report{Cases: make([]CaseResult, 0)},
 		variables:          make(map[string]any),
 		created:            make(map[string]struct{}),
@@ -149,6 +154,7 @@ type executor struct {
 	writeBasicUsername string
 	writeBasicPassword string
 	includeDebug       bool
+	tracer             *tracing.Tracer
 	report             *Report
 	lastResult         assertions.Result
 	hasResult          bool
@@ -249,6 +255,7 @@ func (e *executor) child() *executor {
 		writeBasicUsername: e.writeBasicUsername,
 		writeBasicPassword: e.writeBasicPassword,
 		includeDebug:       e.includeDebug,
+		tracer:             e.tracer,
 		report:             &Report{Cases: make([]CaseResult, 0)},
 		variables:          variables,
 		created:            created,
@@ -333,6 +340,10 @@ func (e *executor) executeRequest(reqNode *ast.Request) (assertions.Result, erro
 	}
 	e.applyRequestAuth(req, reqNode.Method)
 
+	if e.tracer != nil {
+		e.tracer.LogRequest(req, requestBodyBytes)
+	}
+
 	resp, err := e.client.Do(req)
 	if err != nil {
 		return assertions.Result{}, err
@@ -342,6 +353,10 @@ func (e *executor) executeRequest(reqNode *ast.Request) (assertions.Result, erro
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return assertions.Result{}, err
+	}
+
+	if e.tracer != nil {
+		e.tracer.LogResponse(req, resp.StatusCode, resp.Header, body)
 	}
 
 	if e.lastDebug != nil {

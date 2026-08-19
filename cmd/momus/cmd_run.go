@@ -69,7 +69,7 @@ func newRunCmd(cfg *config) *cobra.Command {
 				return err
 			}
 
-			capabilityResourceTypes, capabilityProfileURLs, preferredProfilesByResource, err := resourceScopeForRun(cmd, cfg)
+			capabilityResourceTypes, capabilityProfileURLs, preferredProfilesByResource, err := resourceScopeForRun(cmd, cfg, newDebugTracer(cfg.debug))
 			if err != nil {
 				return err
 			}
@@ -106,6 +106,7 @@ func newRunCmd(cfg *config) *cobra.Command {
 				BearerToken:   cfg.apiBearerToken,
 				BasicUsername: writeBasicUser,
 				BasicPassword: writeBasicPass,
+				Tracer:        newDebugTracer(cfg.debug),
 			})
 			// Data seeding is essential to achieve full coverage success, so the
 			// user must be told when the dataset was not fully uploaded.
@@ -141,6 +142,7 @@ func newRunCmd(cfg *config) *cobra.Command {
 				// Capture request/response detail whenever an HTML report is
 				// requested, so failed cases can drill down into them.
 				IncludeDebug: cfg.debug || cfg.htmlReport != "",
+				Tracer:       newDebugTracer(cfg.debug),
 			})
 			if err != nil {
 				return err
