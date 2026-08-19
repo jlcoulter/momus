@@ -64,11 +64,16 @@ func TestBuildSetupDatasetAddsIDSearchSeed(t *testing.T) {
 		t.Fatalf("BuildSetupDataset returned error: %v", err)
 	}
 
-	// A resource with id "momus-search" must exist so `_id=momus-search` matches.
+	// A resource with id "momus-search" must exist so `_id=momus-search` matches,
+	// and its LocalID (used for the PUT URL) must equal the id so the server
+	// accepts the update (HAPI-0420 requires body and URL ids to agree).
 	found := false
 	for _, inst := range ds.Resources {
 		if inst.Resource["id"] == "momus-search" {
 			found = true
+			if inst.LocalID != "momus-search" {
+				t.Fatalf("LocalID = %q, want momus-search so it matches the body id", inst.LocalID)
+			}
 		}
 	}
 	if !found {

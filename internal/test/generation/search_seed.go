@@ -50,6 +50,7 @@ func buildSearchSeedInstances(req coverage.CoverageRequirement, count int, optio
 	// needs all codes to be matchable; if any is not, adding a partial match
 	// could skew the result, so bail out for the whole obligation.
 	params := make([]*model.SearchParameter, 0, len(codes))
+	idSearch := false
 	for _, code := range codes {
 		// _id is a built-in search parameter indexed under the base "Resource"
 		// type, so it is resolved directly rather than via the registry lookup.
@@ -57,6 +58,7 @@ func buildSearchSeedInstances(req coverage.CoverageRequirement, count int, optio
 			if count > 1 {
 				return nil
 			}
+			idSearch = true
 			params = append(params, &model.SearchParameter{Code: "_id"})
 			continue
 		}
@@ -78,7 +80,12 @@ func buildSearchSeedInstances(req coverage.CoverageRequirement, count int, optio
 
 	out := make([]*model.ResourceInstance, 0, count)
 	for i := 0; i < count; i++ {
-		localID := searchSeedID(req, i)
+		// For an _id search the resource id itself must equal the search value
+		// (so the URL and body ids agree and _id=<value> matches).
+		localID := value
+		if !idSearch {
+			localID = searchSeedID(req, i)
+		}
 		body := buildSetupBody(req.ResourceType, localID, setupProfiles, setupPrimaryProfile, nil, options.Registry, options.Exhaustive)
 		matched := true
 		for _, sp := range params {
