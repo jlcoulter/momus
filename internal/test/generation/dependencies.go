@@ -130,18 +130,29 @@ func collectReferenceTargets(node *model.ElementNode, reg *registry.Registry, se
 func allTargetResourceTypes(def *model.ElementDefinition, reg *registry.Registry) []string {
 	var out []string
 	for _, canonical := range def.TargetProfile {
-		if rt := resolveTargetResourceType(canonical, reg); rt != "" {
+		if rt := resolveTargetResourceType(canonical, reg); rt != "" && !isAbstractResourceType(rt) {
 			out = appendUniqueString(out, rt)
 		}
 	}
 	for _, et := range def.Types {
 		for _, canonical := range et.TargetProfile {
-			if rt := resolveTargetResourceType(canonical, reg); rt != "" {
+			if rt := resolveTargetResourceType(canonical, reg); rt != "" && !isAbstractResourceType(rt) {
 				out = appendUniqueString(out, rt)
 			}
 		}
 	}
 	return out
+}
+
+// isAbstractResourceType reports whether a resource type is an abstract FHIR
+// base type (Resource, DomainResource, ...) that must not be instantiated as a
+// provisioned resource or reference target.
+func isAbstractResourceType(resourceType string) bool {
+	switch strings.TrimSpace(resourceType) {
+	case "Resource", "DomainResource", "CanonicalResource", "MetadataResource":
+		return true
+	}
+	return false
 }
 
 func appendUniqueString(values []string, candidate string) []string {

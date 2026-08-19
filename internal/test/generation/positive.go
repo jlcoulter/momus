@@ -186,6 +186,11 @@ func BuildSetupDataset(plan *coverage.CoveragePlan, options BuildOptions) (*mode
 	}
 	for _, level := range depPlan.Levels {
 		for _, resourceType := range level {
+			// Abstract base types (Resource, DomainResource, ...) cannot be
+			// instantiated and must never be provisioned.
+			if isAbstractResourceType(resourceType) {
+				continue
+			}
 			deps := depPlan.Dependencies[resourceType]
 			inst := buildSetupResource(resourceType, options, deps, byResource)
 			ds.Resources[inst.LocalID] = inst

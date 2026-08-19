@@ -273,18 +273,31 @@ func descendContainer(cur map[string]any, key string) map[string]any {
 	}
 }
 
+// containerForPath descends into the intermediate containers of a dotted path
+// (handling repeatable arrays via descendContainer) and returns the parent map
+// plus the leaf key, so nested search values land on the right element.
+func containerForPath(body map[string]any, path string) (map[string]any, string) {
+	segs := strings.Split(path, ".")
+	if len(segs) == 0 {
+		return body, ""
+	}
+	leaf := segs[len(segs)-1]
+	cur := body
+	for i := 0; i < len(segs)-1; i++ {
+		cur = descendContainer(cur, segs[i])
+	}
+	return cur, leaf
+}
+
 // setNameLeaf places the search value on a HumanName (which FHIR string search
 // indexes via family/text) so the search can match it.
 func setNameLeaf(body map[string]any, path string, value string) {
-	field := path
-	if idx := strings.LastIndex(path, "."); idx >= 0 {
-		field = path[idx+1:]
-	}
+	cur, field := containerForPath(body, path)
 	// Ensure the field is an array of name objects.
-	arr, ok := body[field].([]any)
+	arr, ok := cur[field].([]any)
 	if !ok || len(arr) == 0 {
 		arr = []any{map[string]any{"family": value, "text": value}}
-		body[field] = arr
+		cur[field] = arr
 		return
 	}
 	first, ok := arr[0].(map[string]any)
@@ -312,56 +325,52 @@ func setAddressLeaf(body map[string]any, path string, value string) {
 // illegal property such as `coding` on a Coding, and it keeps repeatable
 // elements as arrays.
 func setSearchCodeValue(body map[string]any, path string, value string, typeCode string, repeatable bool) {
-	field := path
-	if idx := strings.LastIndex(path, "."); idx >= 0 {
-		field = path[idx+1:]
-	}
+	cur, field := containerForPath(body, path)
 	if typeCode == "code" {
 		// A primitive code holds scalar strings. A repeatable code is an array of
 		// strings; set its first element to the string value, never an object
 		// (servers reject an object where a simple value is required).
-		raw, ok := body[field]
+		raw, ok := cur[field]
 		if !ok {
 			if repeatable {
-				body[field] = []any{value}
+				cur[field] = []any{value}
 			} else {
-				body[field] = value
+				cur[field] = value
 			}
 			return
 		}
 		if arr, ok := raw.([]any); ok {
 			if len(arr) == 0 {
-				body[field] = []any{value}
+				cur[field] = []any{value}
 				return
 			}
 			arr[0] = value
 			return
 		}
-		body[field] = value
+		cur[field] = value
 		return
 	}
-	raw, ok := body[field]
+	raw, ok := cur[field]
 	if !ok {
 		switch typeCode {
 		case "CodeableConcept":
 			single := map[string]any{"coding": []any{map[string]any{"code": value}}}
 			if repeatable {
-				body[field] = []any{single}
+				cur[field] = []any{single}
 			} else {
-				body[field] = single
+				cur[field] = single
 			}
 		case "Coding":
-			body[field] = map[string]any{"code": value}
+			cur[field] = map[string]any{"code": value}
 		default:
 			// A primitive code: set the scalar.
-			body[field] = value
+			cur[field] = value
 		}
 		return
 	}
 	switch v := raw.(type) {
 	case map[string]any:
 		if _, hasCode := v["code"]; hasCode {
-			// A Coding: set its code member.
 			v["code"] = value
 			return
 		}
@@ -375,11 +384,8 @@ func setSearchCodeValue(body map[string]any, path string, value string, typeCode
 		}
 		v["code"] = value
 	case []any:
-		// A repeatable CodeableConcept/Coding: set the first element's code. Never
-		// replace the array with an object (servers reject a scalar/object where
-		// an array is required).
 		if len(v) == 0 {
-			body[field] = []any{map[string]any{"code": value}}
+			cur[field] = []any{map[string]any{"code": value}}
 			return
 		}
 		first, ok := v[0].(map[string]any)
@@ -401,28 +407,24 @@ func setSearchCodeValue(body map[string]any, path string, value string, typeCode
 		}
 		first["code"] = value
 	case string:
-		// A primitive code: set the scalar.
-		body[field] = value
+		cur[field] = value
 	default:
-		body[field] = map[string]any{"code": value}
+		cur[field] = map[string]any{"code": value}
 	}
 }
 
 // setFieldLeaf sets a string sub-field on the first element of a (possibly
 // array) field, creating it if needed.
 func setFieldLeaf(body map[string]any, path, leaf, value string) {
-	field := path
-	if idx := strings.LastIndex(path, "."); idx >= 0 {
-		field = path[idx+1:]
-	}
-	raw, ok := body[field]
+	cur, field := containerForPath(body, path)
+	raw, ok := cur[field]
 	if !ok {
-		body[field] = []any{map[string]any{leaf: value}}
+		cur[field] = []any{map[string]any{leaf: value}}
 		return
 	}
 	if arr, ok := raw.([]any); ok {
 		if len(arr) == 0 {
-			body[field] = []any{map[string]any{leaf: value}}
+			cur[field] = []any{map[string]any{leaf: value}}
 			return
 		}
 		first, ok := arr[0].(map[string]any)

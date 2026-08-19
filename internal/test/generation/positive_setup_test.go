@@ -134,6 +134,34 @@ func keysOf(m map[string]*model.ResourceInstance) []string {
 	return out
 }
 
+// TestBuildSetupDatasetExcludesAbstractReferenceTypes verifies that abstract
+// base types (Resource, DomainResource) are never seeded as reference targets,
+// even when a Reference element carries an abstract target profile.
+func TestBuildSetupDatasetExcludesAbstractReferenceTypes(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Resource", Type: "Resource", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: "*"}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/observation", Type: "Observation", Elements: []model.ElementDefinition{
+		{Path: "Observation", Min: 0, Max: "*"},
+		{Path: "Observation.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Observation.subject", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Resource"}}}},
+	}})
+	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
+		{ID: "o-1", ProfileURL: "http://example.org/StructureDefinition/observation", ResourceType: "Observation", ElementPath: "Observation.subject", Variant: coverage.CoverageVariantValidMin},
+	}}
+	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
+
+	ds, err := BuildSetupDataset(plan, opts)
+	if err != nil {
+		t.Fatalf("BuildSetupDataset returned error: %v", err)
+	}
+	if _, ok := ds.Resources[setupResourceID("Resource")]; ok {
+		t.Fatal("abstract type Resource must not be seeded as a reference target")
+	}
+}
+
+// TestBuildSetupDatasetRecordsDependencyRelationships verifies that the seed
+// dataset records relationships so provisioning orders targets before
+// dependents.
 func TestBuildSetupDatasetRecordsDependencyRelationships(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
