@@ -28,6 +28,7 @@ type config struct {
 
 	// Target FHIR server / API
 	baseURL           string
+	writeBaseURL      string
 	capabilityBaseURL string
 	scopeToCapability bool
 	failOnUncovered   bool

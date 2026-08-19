@@ -19,7 +19,11 @@ import (
 
 // ExecuteOptions configures AST execution.
 type ExecuteOptions struct {
-	BaseURL       string
+	BaseURL string
+	// WriteBaseURL, when set, is used for write requests (PUT/PATCH/POST/DELETE)
+	// instead of BaseURL, so resource creation can target a different endpoint
+	// than read/search requests. When empty, write requests use BaseURL.
+	WriteBaseURL  string
 	HTTPClient    *http.Client
 	BearerToken   string
 	BasicUsername string
@@ -106,6 +110,7 @@ func Execute(ctx context.Context, plan ast.Node, options ExecuteOptions) (*Repor
 		ctx:           ctx,
 		client:        client,
 		baseURL:       strings.TrimRight(options.BaseURL, "/"),
+		writeBaseURL:  strings.TrimRight(options.WriteBaseURL, "/"),
 		bearerToken:   options.BearerToken,
 		basicUsername: options.BasicUsername,
 		basicPassword: options.BasicPassword,
@@ -129,6 +134,7 @@ type executor struct {
 	ctx           context.Context
 	client        *http.Client
 	baseURL       string
+	writeBaseURL  string
 	bearerToken   string
 	basicUsername string
 	basicPassword string
@@ -226,6 +232,7 @@ func (e *executor) child() *executor {
 		ctx:           e.ctx,
 		client:        e.client,
 		baseURL:       e.baseURL,
+		writeBaseURL:  e.writeBaseURL,
 		bearerToken:   e.bearerToken,
 		basicUsername: e.basicUsername,
 		basicPassword: e.basicPassword,
@@ -274,10 +281,11 @@ func (e *executor) merge(child *executor) {
 func (e *executor) executeRequest(reqNode *ast.Request) (assertions.Result, error) {
 	url := reqNode.URL
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		if e.baseURL == "" {
+		base := e.baseURLForMethod(reqNode.Method)
+		if base == "" {
 			return assertions.Result{}, fmt.Errorf("request URL %q is relative and no base URL is configured", reqNode.URL)
 		}
-		url = e.baseURL + "/" + strings.TrimPrefix(reqNode.URL, "/")
+		url = base + "/" + strings.TrimPrefix(reqNode.URL, "/")
 	}
 
 	var bodyReader io.Reader
@@ -347,6 +355,21 @@ func (e *executor) executeRequest(reqNode *ast.Request) (assertions.Result, erro
 	}
 
 	return assertions.Result{StatusCode: resp.StatusCode, Body: body, Headers: resp.Header, Variables: variables}, nil
+}
+
+// baseURLForMethod returns the base URL to use for a request of the given
+// method: write methods (PUT/PATCH/POST/DELETE) use the write base URL when
+// configured, while read/search (GET) requests use the read base URL.
+func (e *executor) baseURLForMethod(method string) string {
+	switch method {
+	case http.MethodGet:
+		return e.baseURL
+	default:
+		if e.writeBaseURL != "" {
+			return e.writeBaseURL
+		}
+		return e.baseURL
+	}
 }
 
 func isSetupRequest(url string) bool {

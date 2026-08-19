@@ -6,12 +6,36 @@ import (
 	"github.com/jlcoulter/momus/internal/test/ast"
 )
 
+func TestGeneratePlanRoutesWriteOperationsToWriteBaseURL(t *testing.T) {
+	doc, err := ParseJSON([]byte(testDoc))
+	if err != nil {
+		t.Fatalf("ParseJSON returned error: %v", err)
+	}
+	plan, err := GeneratePlan(doc, "http://read.example", "http://write.example")
+	if err != nil {
+		t.Fatalf("GeneratePlan returned error: %v", err)
+	}
+	root, ok := plan.Root.(*ast.Sequence)
+	if !ok || len(root.Steps) != 2 {
+		t.Fatalf("expected root Sequence with 2 steps, got %T", plan.Root)
+	}
+
+	get := root.Steps[0].(*ast.Sequence).Steps[0].(*ast.Request)
+	if get.URL != "http://read.example/patients/sample" {
+		t.Fatalf("GET request = %q, want read base URL", get.URL)
+	}
+	post := root.Steps[1].(*ast.Sequence).Steps[0].(*ast.Request)
+	if post.URL != "http://write.example/patients/sample" {
+		t.Fatalf("POST request = %q, want write base URL", post.URL)
+	}
+}
+
 func TestGeneratePlanBuildsOperationCases(t *testing.T) {
 	doc, err := ParseJSON([]byte(testDoc))
 	if err != nil {
 		t.Fatalf("ParseJSON returned error: %v", err)
 	}
-	plan, err := GeneratePlan(doc, "http://localhost:8080")
+	plan, err := GeneratePlan(doc, "http://localhost:8080", "")
 	if err != nil {
 		t.Fatalf("GeneratePlan returned error: %v", err)
 	}

@@ -24,6 +24,10 @@ func newRunCmd(cfg *config) *cobra.Command {
 			if cfg.baseURL == "" {
 				return fmt.Errorf("base URL is required; provide --base-url")
 			}
+			writeBase := cfg.writeBaseURL
+			if writeBase == "" {
+				writeBase = cfg.baseURL
+			}
 
 			rootPath := args[0]
 			searchDir := cfg.depsDir
@@ -80,11 +84,11 @@ func newRunCmd(cfg *config) *cobra.Command {
 			}
 			generator := fhirresource.NewGeneratorWithOptions(reg, fhirresource.Options{Exhaustive: cfg.exhaustive})
 			planner := fhirplanner.NewDefaultPlanner(generator)
-			testPlan, err := planner.Plan(cmd.Context(), fhirplanner.Input{BaseURL: cfg.baseURL, Requirements: requirements})
+			testPlan, err := planner.Plan(cmd.Context(), fhirplanner.Input{BaseURL: cfg.baseURL, WriteBaseURL: writeBase, Requirements: requirements})
 			if err != nil {
 				return err
 			}
-			provisioner := provisioning.New(cfg.baseURL, &provisioning.Options{
+			provisioner := provisioning.New(writeBase, &provisioning.Options{
 				BearerToken:   cfg.apiBearerToken,
 				BasicUsername: cfg.apiBasicUsername,
 				BasicPassword: cfg.apiBasicPassword,
@@ -98,13 +102,14 @@ func newRunCmd(cfg *config) *cobra.Command {
 				fmt.Printf("Dataset seeded: %d resources uploaded ahead of execution\n", seed.Provisioned)
 			}
 
-			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: cfg.baseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: cfg.interactionStrength, Exhaustive: cfg.exhaustive})
+			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: cfg.baseURL, WriteBaseURL: writeBase, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: cfg.interactionStrength, Exhaustive: cfg.exhaustive})
 			if err != nil {
 				return err
 			}
 
 			report, err := testrunner.Execute(cmd.Context(), astPlan.Root, testrunner.ExecuteOptions{
 				BaseURL:       cfg.baseURL,
+				WriteBaseURL:  writeBase,
 				BearerToken:   cfg.apiBearerToken,
 				BasicUsername: cfg.apiBasicUsername,
 				BasicPassword: cfg.apiBasicPassword,
@@ -192,6 +197,7 @@ func newRunCmd(cfg *config) *cobra.Command {
 	cmd.Flags().BoolVar(&cfg.scopeToCapability, "scope-to-capability", true, "limit derivation to CapabilityStatement server resources that support create")
 	cmd.Flags().BoolVar(&cfg.failOnUncovered, "fail-on-uncovered", false, "return non-zero exit code when contractual coverage has uncovered obligations")
 	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target FHIR base URL for request execution")
+	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate FHIR base URL for resource creation (write) requests; defaults to --base-url")
 	cmd.Flags().StringVar(&cfg.capabilityBaseURL, "capability-base-url", "", "optional alternate FHIR base URL to fetch CapabilityStatement metadata for scope/profile selection")
 	cmd.Flags().StringVar(&cfg.apiBearerToken, "api-bearer-token", "", "bearer token used for API requests during coverage run")
 	cmd.Flags().StringVar(&cfg.apiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during coverage run")

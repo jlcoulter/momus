@@ -65,7 +65,7 @@ func newPlanCmd(cfg *config) *cobra.Command {
 
 			generator := fhirresource.NewGeneratorWithOptions(reg, fhirresource.Options{Exhaustive: cfg.exhaustive})
 			planner := fhirplanner.NewDefaultPlanner(generator)
-			testPlan, err := planner.Plan(cmd.Context(), fhirplanner.Input{BaseURL: cfg.baseURL, Requirements: requirements})
+			testPlan, err := planner.Plan(cmd.Context(), fhirplanner.Input{BaseURL: cfg.baseURL, WriteBaseURL: cfg.writeBaseURL, Requirements: requirements})
 			if err != nil {
 				return err
 			}
@@ -96,6 +96,7 @@ func newPlanCmd(cfg *config) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.conflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
 	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write generated test plan JSON to a file")
 	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target FHIR base URL for request nodes")
+	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate FHIR base URL for resource creation (write) request nodes; defaults to --base-url")
 	cmd.Flags().StringSliceVar(&cfg.includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable)")
 	cmd.Flags().StringSliceVar(&cfg.includeProfileURLs, "include-profile-url", nil, "include only these profile canonical URLs (repeatable)")
 	cmd.Flags().StringSliceVar(&cfg.excludePathPrefixes, "exclude-path-prefix", nil, "exclude element paths by prefix (repeatable)")

@@ -19,24 +19,28 @@ const successStatusExpression = "status in [200,201,202,203,204]"
 // GeneratePlan builds an executable test plan (AST) from an OpenAPI document:
 // one request+assert case per HTTP operation, targeting baseURL. Operations run
 // in document order (Sequence) so create-then-read flows execute predictably.
-func GeneratePlan(doc *Document, baseURL string) (*ast.Plan, error) {
+// writeBaseURL, when non-empty, is used for write operations (POST/PUT/PATCH)
+// instead of baseURL, so resource creation can target a different endpoint than
+// read/search (GET) requests.
+func GeneratePlan(doc *Document, baseURL, writeBaseURL string) (*ast.Plan, error) {
 	if doc == nil {
 		return nil, fmt.Errorf("openapi document is required")
 	}
 	base := strings.TrimRight(baseURL, "/")
+	writeBase := strings.TrimRight(writeBaseURL, "/")
 	steps := make([]ast.Node, 0, len(doc.Paths))
 	for _, op := range doc.Paths {
 		if op == nil {
 			continue
 		}
-		steps = append(steps, operationCase(op, base))
+		steps = append(steps, operationCase(op, base, writeBase))
 	}
 	return &ast.Plan{Version: "v1", Root: &ast.Sequence{Steps: steps}}, nil
 }
 
 // operationCase builds a single request+assert case for an operation.
-func operationCase(op *Operation, base string) ast.Node {
-	url := operationURL(op, base)
+func operationCase(op *Operation, base, writeBase string) ast.Node {
+	url := operationURL(op, base, writeBase)
 	body := operationRequestBody(op)
 	return &ast.Sequence{Steps: []ast.Node{
 		&ast.Request{
@@ -55,8 +59,12 @@ func operationCase(op *Operation, base string) ast.Node {
 
 // operationURL builds the absolute request URL, substituting path parameters
 // with sample values (declared ones by type, any remaining placeholders with a
-// generic sample).
-func operationURL(op *Operation, base string) string {
+// generic sample). Write operations use writeBase when configured.
+func operationURL(op *Operation, base, writeBase string) string {
+	target := base
+	if isWriteMethod(op.Method) && writeBase != "" {
+		target = writeBase
+	}
 	path := op.Path
 	for _, param := range op.Parameters {
 		if param.In == "path" {
@@ -64,7 +72,17 @@ func operationURL(op *Operation, base string) string {
 		}
 	}
 	path = pathParamPattern.ReplaceAllString(path, sampleScalar(""))
-	return base + path
+	return target + path
+}
+
+// isWriteMethod reports whether the HTTP method creates or modifies a resource.
+func isWriteMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch:
+		return true
+	default:
+		return false
+	}
 }
 
 // operationRequestBody returns a sample JSON body for write operations that

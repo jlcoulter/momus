@@ -7,6 +7,49 @@ import (
 	"github.com/jlcoulter/momus/internal/test/coverage"
 )
 
+func TestGenerateRoutesWriteAndReadRequestsToSeparateBaseURLs(t *testing.T) {
+	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
+		Requirements: []coverage.CoverageRequirement{
+			{ID: "op-read", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationRead},
+			{ID: "op-update", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationUpdate},
+			{ID: "search-1", ResourceType: "Organization", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchValid, SearchCode: "_id"},
+		},
+	}, BuildOptions{BaseURL: "http://read.example/fhir", WriteBaseURL: "http://write.example/fhir"})
+	if err != nil {
+		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
+	}
+
+	got := map[string]string{}
+	var walk func(ast.Node)
+	walk = func(node ast.Node) {
+		switch n := node.(type) {
+		case *ast.Sequence:
+			for _, step := range n.Steps {
+				walk(step)
+			}
+		case *ast.Parallel:
+			for _, step := range n.Steps {
+				walk(step)
+			}
+		case *ast.Request:
+			if rid := n.Headers["X-Momus-Requirement-ID"]; rid != "" {
+				got[rid] = n.Method + " " + n.URL
+			}
+		}
+	}
+	walk(plan.Root)
+
+	if got["op-read"] != "GET http://read.example/fhir/Organization/momus-setup-organization" {
+		t.Fatalf("read request = %q, want read base URL", got["op-read"])
+	}
+	if got["op-update"] != "PUT http://write.example/fhir/Organization/momus-setup-organization" {
+		t.Fatalf("write request = %q, want write base URL", got["op-update"])
+	}
+	if got["search-1"] != "GET http://read.example/fhir/Organization?_id=momus-search" {
+		t.Fatalf("search request = %q, want read base URL", got["search-1"])
+	}
+}
+
 func TestGenerateOperationCasesEmitCorrectRequests(t *testing.T) {
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
 		Requirements: []coverage.CoverageRequirement{

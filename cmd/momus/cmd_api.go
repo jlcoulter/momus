@@ -71,7 +71,7 @@ func newApiAstCmd(cfg *config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			plan, err := openapi.GeneratePlan(doc, cfg.baseURL)
+			plan, err := openapi.GeneratePlan(doc, cfg.baseURL, cfg.writeBaseURL)
 			if err != nil {
 				return err
 			}
@@ -101,6 +101,7 @@ func newApiAstCmd(cfg *config) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write generated API AST JSON to a file")
 	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target API base URL for request nodes")
+	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate API base URL for write (POST/PUT/PATCH) request nodes; defaults to --base-url")
 	return cmd
 }
 
@@ -118,12 +119,13 @@ func newApiRunCmd(cfg *config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			plan, err := openapi.GeneratePlan(doc, cfg.baseURL)
+			plan, err := openapi.GeneratePlan(doc, cfg.baseURL, cfg.writeBaseURL)
 			if err != nil {
 				return err
 			}
 			report, err := testrunner.Execute(cmd.Context(), plan.Root, testrunner.ExecuteOptions{
-				BaseURL: cfg.baseURL,
+				BaseURL:      cfg.baseURL,
+				WriteBaseURL: cfg.writeBaseURL,
 			})
 			if err != nil {
 				return err
@@ -150,6 +152,7 @@ func newApiRunCmd(cfg *config) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write API test report JSON to a file")
 	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target API base URL for request execution")
+	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate API base URL for write (POST/PUT/PATCH) request execution; defaults to --base-url")
 	return cmd
 }
 

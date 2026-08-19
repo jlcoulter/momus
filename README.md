@@ -328,6 +328,20 @@ per-domain / per-resource / per-variant lists where every executed item shows a
 pass/fail badge and expands to its assertion, request URL, request body, and
 response body.
 
+If resource creation (write) requests must target a different endpoint than
+read/search requests, pass `--write-base-url` (defaults to `--base-url`):
+
+```sh
+go run ./cmd/momus coverage run package.tgz \
+  --base-url http://read.example/fhir \
+  --write-base-url http://write.example/fhir \
+  --output ./test-results.json
+```
+
+Write requests (PUT/PATCH/POST/DELETE) go to `--write-base-url`; GET
+read/search requests go to `--base-url`. The same flag is available on
+`coverage ast`, `coverage plan`, `api ast`, and `api run`.
+
 Generate realistic bulk data as NDJSON (newline-delimited JSON, the FHIR Bulk
 Data `$export` format):
 

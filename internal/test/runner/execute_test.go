@@ -11,6 +11,48 @@ import (
 	"github.com/jlcoulter/momus/internal/test/ast"
 )
 
+func TestExecuteRoutesWriteAndReadRequestsToSeparateBaseURLs(t *testing.T) {
+	var writePath, readPath string
+	writeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writePath = r.URL.Path
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"1"}`))
+	}))
+	defer writeServer.Close()
+	readServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		readPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","total":1}`))
+	}))
+	defer readServer.Close()
+
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/test-1", Headers: map[string]string{"Content-Type": "application/fhir+json"}, Body: map[string]any{"resourceType": "Patient", "id": "test-1"}},
+		&ast.Assert{Description: "create", RequirementID: "req-1", Expression: "status in [200,201]"},
+		&ast.Request{Method: http.MethodGet, URL: "/Patient?name=momus-search"},
+		&ast.Assert{Description: "search", RequirementID: "req-2", Expression: "status in [200]"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{
+		BaseURL:      readServer.URL,
+		WriteBaseURL: writeServer.URL,
+		HTTPClient:   readServer.Client(),
+	})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Total != 2 || report.Passed != 2 || report.Failed != 0 {
+		t.Fatalf("unexpected report summary: %+v", report)
+	}
+	if writePath != "/Patient/test-1" {
+		t.Fatalf("write request hit %q, want /Patient/test-1 on write server", writePath)
+	}
+	if readPath != "/Patient" {
+		t.Fatalf("read request hit %q, want /Patient on read server", readPath)
+	}
+}
+
 func TestExecuteEvaluatesBodyAssertion(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

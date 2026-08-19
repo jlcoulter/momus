@@ -226,7 +226,7 @@ func buildCandidateCase(cand candidateTest, options BuildOptions, deps []string)
 
 	request := &ast.Request{
 		Method: "PUT",
-		URL:    joinInstanceURL(options.BaseURL, seed.ResourceType, requestID),
+		URL:    joinInstanceURL(baseURLForMethod(options, "PUT"), seed.ResourceType, requestID),
 		Headers: map[string]string{
 			"Content-Type":           "application/fhir+json",
 			"X-Momus-Requirement-ID": seed.ID,

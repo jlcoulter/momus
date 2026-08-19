@@ -21,7 +21,7 @@ func buildOperationCase(req coverage.CoverageRequirement, options BuildOptions) 
 		body = []any{map[string]any{"op": "add", "path": "/", "value": map[string]any{"status": "active"}}}
 		contentType = "application/json-patch+json"
 	}
-	url := joinURL(options.BaseURL, req.ResourceType) + path
+	url := joinURL(baseURLForMethod(options, method), req.ResourceType) + path
 	return &ast.Sequence{Steps: []ast.Node{
 		&ast.Request{
 			Method:  method,
@@ -38,21 +38,23 @@ func buildOperationCase(req coverage.CoverageRequirement, options BuildOptions) 
 func buildCRUDCase(req coverage.CoverageRequirement, options BuildOptions) ast.Node {
 	resourceType := req.ResourceType
 	id := crudResourceID(resourceType)
-	url := joinURL(options.BaseURL, resourceType) + "/" + id
 	body := operationUpdateBody(req, options)
 	headers := map[string]string{"Content-Type": "application/fhir+json", "X-Momus-Requirement-ID": req.ID}
+	crudURL := func(method string) string {
+		return joinURL(baseURLForMethod(options, method), resourceType) + "/" + id
+	}
 	return &ast.Sequence{Steps: []ast.Node{
-		&ast.Request{Method: "PUT", URL: url, Headers: headers, Body: body},
+		&ast.Request{Method: "PUT", URL: crudURL("PUT"), Headers: headers, Body: body},
 		operationAssert(req, "status in [200,201]", "accept"),
-		&ast.Request{Method: "GET", URL: url, Headers: headers},
+		&ast.Request{Method: "GET", URL: crudURL("GET"), Headers: headers},
 		operationAssert(req, "status in [200]", "accept"),
-		&ast.Request{Method: "PUT", URL: url, Headers: headers, Body: body},
+		&ast.Request{Method: "PUT", URL: crudURL("PUT"), Headers: headers, Body: body},
 		operationAssert(req, "status in [200]", "accept"),
-		&ast.Request{Method: "GET", URL: url, Headers: headers},
+		&ast.Request{Method: "GET", URL: crudURL("GET"), Headers: headers},
 		operationAssert(req, "status in [200]", "accept"),
-		&ast.Request{Method: "DELETE", URL: url, Headers: headers},
+		&ast.Request{Method: "DELETE", URL: crudURL("DELETE"), Headers: headers},
 		operationAssert(req, "status in [200,204]", "accept"),
-		&ast.Request{Method: "GET", URL: url, Headers: headers},
+		&ast.Request{Method: "GET", URL: crudURL("GET"), Headers: headers},
 		operationAssert(req, "status in [404]", "reject"),
 	}}
 }

@@ -19,6 +19,10 @@ type Input struct {
 	Requirements []model.DataRequirement
 	// BaseURL is the target FHIR server the plan will execute against.
 	BaseURL string
+	// WriteBaseURL, when set, is used for the provisioning (PUT) requests instead
+	// of BaseURL, so resource creation can target a different endpoint than
+	// read/search requests. When empty, provisioning uses BaseURL.
+	WriteBaseURL string
 }
 
 // Planner builds a TestPlan from an Input.

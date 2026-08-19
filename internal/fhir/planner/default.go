@@ -35,8 +35,12 @@ func (p *DefaultPlanner) Plan(ctx context.Context, input Input) (*TestPlan, erro
 	if err != nil {
 		return nil, err
 	}
+	writeBase := input.WriteBaseURL
+	if writeBase == "" {
+		writeBase = input.BaseURL
+	}
 	return &TestPlan{
-		Root:    buildProvisionPlan(input.BaseURL, ds),
+		Root:    buildProvisionPlan(writeBase, ds),
 		Dataset: ds,
 	}, nil
 }

@@ -53,7 +53,11 @@ func newRNG(seedString string) *rand.Rand {
 
 // BuildOptions controls AST construction behavior.
 type BuildOptions struct {
-	BaseURL                        string
+	BaseURL string
+	// WriteBaseURL, when set, is used for write requests (PUT/PATCH/POST/DELETE)
+	// instead of BaseURL, so resource creation can target a different endpoint
+	// than read/search requests. When empty, write requests use BaseURL.
+	WriteBaseURL                   string
 	Registry                       *registry.Registry
 	PreferredProfileURLsByResource map[string][]string
 	// Strength is the interaction strength used when generating. When unset (or
@@ -109,7 +113,7 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 			resourceSeq.Steps = append(resourceSeq.Steps,
 				&ast.Request{
 					Method: "PUT",
-					URL:    joinInstanceURL(options.BaseURL, resourceType, setupResourceID(resourceType)),
+					URL:    joinInstanceURL(baseURLForMethod(options, "PUT"), resourceType, setupResourceID(resourceType)),
 					Headers: map[string]string{
 						"Content-Type": "application/fhir+json",
 					},
@@ -185,6 +189,21 @@ func joinURL(baseURL, resourceType string) string {
 
 func joinInstanceURL(baseURL, resourceType, id string) string {
 	return joinURL(baseURL, resourceType) + "/" + strings.TrimPrefix(id, "/")
+}
+
+// baseURLForMethod returns the base URL to use for a request of the given
+// method: write methods (PUT/PATCH/POST/DELETE) use the write base URL when
+// configured, while read/search (GET) requests use the read base URL.
+func baseURLForMethod(options BuildOptions, method string) string {
+	switch method {
+	case "GET":
+		return options.BaseURL
+	default:
+		if options.WriteBaseURL != "" {
+			return options.WriteBaseURL
+		}
+		return options.BaseURL
+	}
 }
 
 func buildBodyTemplate(req coverage.CoverageRequirement, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
@@ -1808,7 +1827,7 @@ func buildSingleRequirementCase(req coverage.CoverageRequirement, options BuildO
 	return &ast.Sequence{Steps: []ast.Node{
 		&ast.Request{
 			Method: "PUT",
-			URL:    joinInstanceURL(options.BaseURL, req.ResourceType, requestID),
+			URL:    joinInstanceURL(baseURLForMethod(options, "PUT"), req.ResourceType, requestID),
 			Headers: map[string]string{
 				"Content-Type":           "application/fhir+json",
 				"X-Momus-Requirement-ID": req.ID,
