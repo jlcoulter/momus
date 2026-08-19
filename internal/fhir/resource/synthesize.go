@@ -46,6 +46,10 @@ func synthesizeResource(reg *registry.Registry, resourceType, profileURL, id str
 		profileURL = defaultProfile(reg, resourceType)
 	}
 	if profileURL != "" {
+		// Declare conformance to the profile via meta.profile so the target
+		// server (e.g. HAPI) can validate the resource against it; servers
+		// commonly reject resources that omit meta.profile.
+		body["meta"] = map[string]any{"profile": []any{profileURL}}
 		resolved, err := reg.ResolveProfile(profileURL)
 		if err == nil && resolved != nil && resolved.Root != nil {
 			populateChildren(body, resolved.Root, reg, refs, exhaustive, rng)
@@ -465,20 +469,29 @@ func isRepeatable(def *model.ElementDefinition) bool {
 // defaultCodeByLeaf maps common element leaf names to realistic codes for
 // elements whose terminology binding could not be resolved from the registry.
 var defaultCodeByLeaf = map[string]string{
-	"status":   "active",
-	"gender":   "female",
-	"priority": "routine",
-	"severity": "moderate",
-	"class":    "inpatient",
-	"use":      "usual",
-	"mode":     "production",
-	"state":    "active",
+	"status":     "active",
+	"gender":     "female",
+	"priority":   "routine",
+	"severity":   "moderate",
+	"class":      "inpatient",
+	"use":        "usual",
+	"mode":       "production",
+	"state":      "active",
+	"daysOfWeek": "mon",
+	"daysofweek": "mon",
 }
 
 // defaultCodeValue returns a realistic default code for an unresolvable bound
 // code element, preferring a field-specific default and falling back to a
-// neutral token rather than the raw leaf name.
+// neutral token rather than the raw leaf name. The path is used to disambiguate
+// leaves that share a name across different bindings (e.g. role).
 func defaultCodeValue(path string) string {
+	lower := strings.ToLower(path)
+	// Provenance.entity.role is bound to ProvenanceEntityRole (codes such as
+	// derivation/revision/source), distinct from agent.role's binding.
+	if strings.Contains(lower, ".entity.role") || strings.HasSuffix(lower, ".entity.role") {
+		return "source"
+	}
 	leaf := strings.ToLower(leafName(path))
 	if code, ok := defaultCodeByLeaf[leaf]; ok {
 		return code

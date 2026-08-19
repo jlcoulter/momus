@@ -68,6 +68,11 @@ func (g *DatasetGenerator) Generate(ctx context.Context, req model.DataRequireme
 		if targetType == "" {
 			continue
 		}
+		// Skip abstract base types (e.g. Resource, DomainResource): they cannot
+		// be instantiated as concrete data and FHIR servers reject them.
+		if isAbstractResourceType(targetType) {
+			continue
+		}
 		targetProfile := primaryProfile(rel.Target.Profile)
 		targetID := targetInstanceID(targetType, targetProfile)
 		body, err := synthesizeResource(g.reg, targetType, targetProfile, targetID, nil, g.exhaustive, newRNG(targetID))
@@ -123,6 +128,21 @@ func primaryProfile(profiles []string) string {
 		}
 	}
 	return ""
+}
+
+// abstractResourceTypes are FHIR types with kind "resource" that are abstract
+// base types and cannot be instantiated as concrete data.
+var abstractResourceTypes = map[string]bool{
+	"Resource":          true,
+	"DomainResource":    true,
+	"CanonicalResource": true,
+	"MetadataResource":  true,
+}
+
+// isAbstractResourceType reports whether resourceType is an abstract FHIR base
+// type that must not be instantiated as a concrete resource.
+func isAbstractResourceType(resourceType string) bool {
+	return abstractResourceTypes[strings.TrimSpace(resourceType)]
 }
 
 func instanceID(req model.DataRequirement, index int) string {

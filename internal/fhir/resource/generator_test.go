@@ -237,6 +237,64 @@ func TestGenerateDefaultOmitsOptionalElements(t *testing.T) {
 	}
 }
 
+func TestGenerateDeclaresProfileConformance(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewGeneratorWithOptions(reg, Options{})
+
+	ds, err := gen.Generate(context.Background(), model.DataRequirement{
+		Resource:    model.ResourceRequirement{Type: "Observation", Profile: []string{obsProfile}},
+		Cardinality: model.Exactly(1),
+	})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+	obs := requireInstance(t, ds, "momus-Observation")
+	meta, ok := obs.Resource["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected meta on generated resource, got %v", obs.Resource["meta"])
+	}
+	profiles, ok := meta["profile"].([]any)
+	if !ok || len(profiles) != 1 || profiles[0] != obsProfile {
+		t.Fatalf("meta.profile = %v, want [%s]", meta["profile"], obsProfile)
+	}
+}
+
+func TestGenerateSkipsAbstractRelationshipTargets(t *testing.T) {
+	reg := testRegistry(t)
+	g := NewGeneratorWithOptions(reg, Options{})
+
+	// A relationship targeting the abstract base type "Resource" must not
+	// generate an instantiable resource for it.
+	ds, err := g.Generate(context.Background(), model.DataRequirement{
+		Resource:    model.ResourceRequirement{Type: "Observation", Profile: []string{obsProfile}},
+		Cardinality: model.Exactly(1),
+		Relationships: []model.RelationshipRequirement{{
+			Path:   "Observation.subject",
+			Target: model.ResourceRequirement{Type: "Resource"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+	for id, inst := range ds.Resources {
+		if inst.ResourceType == "Resource" {
+			t.Fatalf("generated abstract Resource instance %s; abstract types must be skipped", id)
+		}
+	}
+}
+
+func TestDefaultCodeValueAvoidsInvalidUNK(t *testing.T) {
+	if got := defaultCodeValue("Provenance.entity.role"); got != "source" {
+		t.Fatalf("Provenance.entity.role = %q, want source", got)
+	}
+	if got := defaultCodeValue("HealthcareService.availableTime.daysOfWeek"); got != "mon" {
+		t.Fatalf("daysOfWeek = %q, want mon", got)
+	}
+	if got := defaultCodeValue("Provenance.agent.role"); got == "source" {
+		t.Fatal("agent.role must not reuse the entity.role default")
+	}
+}
+
 func TestGenerateExhaustivePreservesResourceID(t *testing.T) {
 	reg := testRegistry(t)
 	gen := NewGeneratorWithOptions(reg, Options{Exhaustive: true})
