@@ -2,31 +2,6 @@ package ast
 
 import "fmt"
 
-// DecodePlan is the inverse of EncodePlan. It reads the "version" string and
-// the "root" node from a JSON-friendly map (typically produced by unmarshaling
-// a serialized test plan file into map[string]any).
-func DecodePlan(raw map[string]any) (*Plan, error) {
-	version, _ := raw["version"].(string)
-
-	rootRaw, ok := raw["root"]
-	if !ok {
-		return nil, fmt.Errorf("decode plan: missing \"root\"")
-	}
-	rootMap, ok := rootRaw.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("decode plan: \"root\" must be a JSON object, got %T", rootRaw)
-	}
-	root, err := DecodeNode(rootMap)
-	if err != nil {
-		return nil, fmt.Errorf("decode plan: %w", err)
-	}
-
-	return &Plan{
-		Version: version,
-		Root:    root,
-	}, nil
-}
-
 // DecodeNode is the inverse of EncodeNode. It switches on the "type" tag and
 // reconstructs the concrete node. Unknown or missing types produce an error.
 func DecodeNode(raw map[string]any) (Node, error) {

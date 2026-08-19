@@ -5,6 +5,22 @@ import (
 	"testing"
 )
 
+// decodePlanRoot decodes an encoded plan (from EncodePlan) via DecodeNode,
+// mirroring how the CLI loads a test plan without a whole-plan decoder.
+func decodePlanRoot(t *testing.T, encoded map[string]any) (*Plan, error) {
+	t.Helper()
+	rootRaw, ok := encoded["root"]
+	if !ok {
+		t.Fatal("encoded plan missing root")
+	}
+	root, err := DecodeNode(rootRaw.(map[string]any))
+	if err != nil {
+		return nil, err
+	}
+	version, _ := encoded["version"].(string)
+	return &Plan{Version: version, Root: root}, nil
+}
+
 func TestDecodeRoundTrip(t *testing.T) {
 	original := &Plan{
 		Version: "1",
@@ -40,9 +56,9 @@ func TestDecodeRoundTrip(t *testing.T) {
 		t.Fatalf("EncodePlan: %v", err)
 	}
 
-	decoded, err := DecodePlan(encoded)
+	decoded, err := decodePlanRoot(t, encoded)
 	if err != nil {
-		t.Fatalf("DecodePlan: %v", err)
+		t.Fatalf("decodePlanRoot: %v", err)
 	}
 
 	if decoded.Version != original.Version {
@@ -143,9 +159,9 @@ func TestDecodePlanParallel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncodePlan: %v", err)
 	}
-	decoded, err := DecodePlan(encoded)
+	decoded, err := decodePlanRoot(t, encoded)
 	if err != nil {
-		t.Fatalf("DecodePlan: %v", err)
+		t.Fatalf("decodePlanRoot: %v", err)
 	}
 
 	par, ok := decoded.Root.(*Parallel)
