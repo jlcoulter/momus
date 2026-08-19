@@ -76,6 +76,37 @@ func TestBuildSetupDatasetAddsIDSearchSeed(t *testing.T) {
 	}
 }
 
+// TestSearchSeedIDStaysWithinFHIRLimit verifies that search seed ids derived
+// from long requirement ids never exceed FHIR's 64-character id limit (a longer
+// id is rejected by servers, e.g. HAPI-0521).
+func TestSearchSeedIDStaysWithinFHIRLimit(t *testing.T) {
+	longID := "search|Endpoint|connection-type|search-multiple-results"
+	for i := 0; i < 3; i++ {
+		id := searchSeedID(coverage.CoverageRequirement{ID: longID, ResourceType: "Endpoint"}, i)
+		if len(id) > 64 {
+			t.Fatalf("search seed id %q is %d chars, want <= 64", id, len(id))
+		}
+		if !validFHIRID(id) {
+			t.Fatalf("search seed id %q is not a valid FHIR id", id)
+		}
+	}
+}
+
+// validFHIRID reports whether s matches the FHIR id regex [A-Za-z0-9\-\.]{1,64}.
+func validFHIRID(s string) bool {
+	if len(s) == 0 || len(s) > 64 {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '.':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 func TestSearchSeedSkipsNonMatchableSearch(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{

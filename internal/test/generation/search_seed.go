@@ -105,10 +105,22 @@ func searchSeedID(req coverage.CoverageRequirement, index int) string {
 	if base == "" {
 		base = sanitizeFHIRID(req.ResourceType)
 	}
-	if index == 0 {
-		return "momus-search-" + base
+	const prefix = "momus-search-"
+	suffix := ""
+	if index > 0 {
+		suffix = fmt.Sprintf("-%d", index+1)
 	}
-	return fmt.Sprintf("momus-search-%s-%d", base, index+1)
+	// FHIR ids are at most 64 characters. Budget the prefix and the index suffix
+	// so the full id stays within the limit even for long requirement ids.
+	maxBase := 64 - len(prefix) - len(suffix)
+	if len(base) > maxBase {
+		base = base[:maxBase]
+	}
+	base = strings.TrimRight(base, "-.")
+	if base == "" {
+		base = "seed"
+	}
+	return prefix + base + suffix
 }
 
 // applySearchMatch sets the search value on the element(s) the search parameter
