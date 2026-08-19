@@ -60,6 +60,42 @@ func PlanDependencies(requirements []CoverageRequirement) (*DependencyPlan, erro
 	return &DependencyPlan{Levels: levels, Dependencies: dependencies}, nil
 }
 
+// PlanLevels builds a DependencyPlan from an explicit set of resource types and
+// a dependency map, ignoring dependencies that reference types outside the set.
+func PlanLevels(resourceTypes []string, dependencies map[string][]string) (*DependencyPlan, error) {
+	resourceSet := make(map[string]struct{}, len(resourceTypes))
+	for _, rt := range resourceTypes {
+		if strings.TrimSpace(rt) != "" {
+			resourceSet[rt] = struct{}{}
+		}
+	}
+	if len(resourceSet) == 0 {
+		return &DependencyPlan{Levels: nil, Dependencies: map[string][]string{}}, nil
+	}
+
+	filtered := make(map[string][]string, len(dependencies))
+	for child, deps := range dependencies {
+		for _, dep := range deps {
+			if dep == child {
+				continue
+			}
+			if _, ok := resourceSet[dep]; !ok {
+				continue
+			}
+			filtered[child] = appendUnique(filtered[child], dep)
+		}
+	}
+	for rt := range resourceSet {
+		sort.Strings(filtered[rt])
+	}
+
+	levels, err := topologicalLevels(resourceSet, filtered)
+	if err != nil {
+		return nil, err
+	}
+	return &DependencyPlan{Levels: levels, Dependencies: filtered}, nil
+}
+
 func topologicalLevels(resourceSet map[string]struct{}, dependencies map[string][]string) ([][]string, error) {
 	inDegree := make(map[string]int, len(resourceSet))
 	reverse := make(map[string][]string, len(resourceSet))

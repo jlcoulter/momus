@@ -74,7 +74,7 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 		return nil, errors.New("coverage plan is required")
 	}
 
-	depPlan, err := coverage.PlanDependencies(plan.Requirements)
+	depPlan, err := buildDependencyPlan(plan, options)
 	if err != nil {
 		return nil, err
 	}
