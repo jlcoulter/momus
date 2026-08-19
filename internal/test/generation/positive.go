@@ -640,10 +640,76 @@ func generateSliceValue(slice *model.SliceNode, reg *registry.Registry) (any, bo
 		if valueMap, ok := value.(map[string]any); ok {
 			populateRequiredChildren(valueMap, synthetic, reg)
 			applySimpleConstraints(valueMap, synthetic, reg)
+			applySliceConstractions(valueMap, slice)
 		}
 		return value, true
 	}
-	return generateSingleValue(synthetic, reg)
+	value, ok := generateSingleValue(synthetic, reg)
+	if valueMap, ok := value.(map[string]any); ok {
+		applySliceConstractions(valueMap, slice)
+	}
+	return value, ok
+}
+
+// applySliceConstractions overlays a slice's Fixed/Pattern child values onto a
+// generated value so the element satisfies the slice's discriminator. For
+// example, an Organization.address:physical slice constrains `type` to the
+// pattern "physical", so the generated address gets type="physical". Without
+// this, a required slice is not matched and servers reject the resource.
+func applySliceConstractions(value map[string]any, slice *model.SliceNode) {
+	if value == nil || slice == nil {
+		return
+	}
+	for _, name := range sortedSliceChildren(slice) {
+		child := slice.Children[name]
+		if child == nil || child.Definition == nil {
+			continue
+		}
+		def := child.Definition
+		prop := propertyNameForNode(child)
+		if prop == "" || prop == "id" {
+			continue
+		}
+		if def.Fixed != nil {
+			value[prop] = def.Fixed
+			continue
+		}
+		if def.Pattern != nil {
+			if patternMap, ok := def.Pattern.(map[string]any); ok {
+				mergeSlicePattern(value, prop, patternMap)
+			} else {
+				value[prop] = def.Pattern
+			}
+		}
+	}
+}
+
+func sortedSliceChildren(slice *model.SliceNode) []string {
+	out := make([]string, 0, len(slice.Children))
+	for name := range slice.Children {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// mergeSlicePattern merges a pattern object into value at prop, recursing into
+// nested objects and arrays so a patterned Coding/CodeableConcept lands.
+func mergeSlicePattern(value map[string]any, prop string, pattern map[string]any) {
+	current, ok := value[prop].(map[string]any)
+	if !ok {
+		value[prop] = cloneMap(pattern)
+		return
+	}
+	for k, v := range pattern {
+		if subMap, ok := v.(map[string]any); ok {
+			if existing, ok := current[k].(map[string]any); ok {
+				mergeSlicePattern(existing, k, subMap)
+				continue
+			}
+		}
+		current[k] = v
+	}
 }
 
 func generateDatatypeValueFromProfile(profileURL string, reg *registry.Registry) (any, bool) {

@@ -73,7 +73,7 @@ func searchAcceptValue(req coverage.CoverageRequirement, options BuildOptions) s
 		return "momus-search"
 	}
 	switch primaryTypeCode(def) {
-	case "code":
+	case "code", "Coding", "CodeableConcept":
 		if bound, ok := resolveBoundCoding(def, options.Registry); ok && bound.Code != "" {
 			return bound.Code
 		}

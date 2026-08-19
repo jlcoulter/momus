@@ -231,7 +231,10 @@ func searchLeafType(resourceType, elementPath string, reg *registry.Registry) (t
 }
 
 // setPathLeaf sets a primitive string value at a dotted element path within the
-// resource body, creating intermediate objects as needed.
+// resource body, creating intermediate objects as needed. Intermediate
+// containers that are repeatable arrays are descended into (their first
+// element) rather than being replaced with an object, so e.g. address.city sets
+// the city of the first address in the array.
 func setPathLeaf(body map[string]any, path string, value string) {
 	segs := strings.Split(path, ".")
 	if len(segs) == 0 {
@@ -239,14 +242,35 @@ func setPathLeaf(body map[string]any, path string, value string) {
 	}
 	cur := body
 	for i := 0; i < len(segs)-1; i++ {
-		next, ok := cur[segs[i]].(map[string]any)
-		if !ok {
-			next = map[string]any{}
-			cur[segs[i]] = next
-		}
-		cur = next
+		cur = descendContainer(cur, segs[i])
 	}
 	cur[segs[len(segs)-1]] = value
+}
+
+// descendContainer moves cur into the child named by key, handling a map
+// directly and descending into the first element of a repeatable array. It
+// creates the child as a map when absent.
+func descendContainer(cur map[string]any, key string) map[string]any {
+	switch v := cur[key].(type) {
+	case map[string]any:
+		return v
+	case []any:
+		if len(v) == 0 {
+			el := map[string]any{}
+			cur[key] = []any{el}
+			return el
+		}
+		if el, ok := v[0].(map[string]any); ok {
+			return el
+		}
+		el := map[string]any{}
+		v[0] = el
+		return el
+	default:
+		el := map[string]any{}
+		cur[key] = el
+		return el
+	}
 }
 
 // setNameLeaf places the search value on a HumanName (which FHIR string search

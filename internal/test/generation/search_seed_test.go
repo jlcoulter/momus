@@ -187,6 +187,105 @@ func TestSearchSeedUsesValidBoundCode(t *testing.T) {
 	}
 }
 
+// TestSearchSeedKeepsRepeatableAddressArray verifies that setting a nested
+// search value (e.g. address.city) keeps a repeatable complex container as an
+// array rather than collapsing it to an object.
+func TestSearchSeedKeepsRepeatableAddressArray(t *testing.T) {
+	// Existing array container: descend into its first element, keep the array.
+	body := map[string]any{"address": []any{map[string]any{"city": "Erewhon"}}}
+	setPathLeaf(body, "address.city", "momus-search")
+	arr, ok := body["address"].([]any)
+	if !ok {
+		t.Fatalf("address = %T %v, want a JSON array", body["address"], body["address"])
+	}
+	if a, ok := arr[0].(map[string]any); !ok || a["city"] != "momus-search" {
+		t.Fatalf("address[0].city = %v, want momus-search", arr[0])
+	}
+}
+
+// TestSearchSeedUsesValidBoundCodeableConcept verifies that a token search on a
+// CodeableConcept bound to a value set uses a valid code from that set.
+func TestSearchSeedUsesValidBoundCodeableConcept(t *testing.T) {
+	reg := registry.New()
+	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/spc", ComposeIncludes: []model.ValueSetInclude{{System: "http://example.org/cs/spc", Concepts: []model.ConceptReference{{Code: "spc1"}}}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/hs", Type: "HealthcareService", Elements: []model.ElementDefinition{
+		{Path: "HealthcareService", Min: 0, Max: "*"},
+		{Path: "HealthcareService.active", Min: 1, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+		{Path: "HealthcareService.serviceProvisionCode", Min: 0, Max: "*", Types: []model.ElementType{{Code: "CodeableConcept"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/spc"}},
+	}})
+	reg.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/HealthcareService-service-provision-code", Name: "service-provision-code", Code: "service-provision-code", Base: []string{"HealthcareService"}, Type: "token", Expression: "HealthcareService.serviceProvisionCode"})
+
+	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
+		{ID: "search|HealthcareService|service-provision-code|valid", ResourceType: "HealthcareService", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchValid, SearchCode: "service-provision-code"},
+	}}
+	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
+
+	ds, err := BuildSetupDataset(plan, opts)
+	if err != nil {
+		t.Fatalf("BuildSetupDataset returned error: %v", err)
+	}
+	for _, inst := range ds.Resources {
+		raw, ok := inst.Resource["serviceProvisionCode"]
+		if !ok {
+			continue
+		}
+		arr, ok := raw.([]any)
+		if !ok {
+			t.Fatalf("serviceProvisionCode = %T, want array", raw)
+		}
+		first, ok := arr[0].(map[string]any)
+		if !ok {
+			t.Fatalf("serviceProvisionCode[0] = %T", arr[0])
+		}
+		coding, ok := first["coding"].([]any)
+		if !ok || len(coding) == 0 {
+			t.Fatalf("serviceProvisionCode[0] missing coding: %v", first)
+		}
+		c, _ := coding[0].(map[string]any)
+		if code, _ := c["code"].(string); code != "spc1" {
+			t.Fatalf("serviceProvisionCode code = %v, want spc1 (valid bound code)", c["code"])
+		}
+	}
+}
+
+// TestSliceAppliesDiscriminatorPattern verifies that a required slice's child
+// Pattern (e.g. address:physical type="physical") is stamped onto the generated
+// element so the slice is matched.
+func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/org", Type: "Organization", Elements: []model.ElementDefinition{
+		{Path: "Organization", Min: 0, Max: "*"},
+		{Path: "Organization.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		{Path: "Organization.address", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Address"}}},
+		{ID: "Organization.address:physical", Path: "Organization.address", SliceName: "physical", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Address"}}},
+		{ID: "Organization.address:physical.type", Path: "Organization.address.type", SliceName: "", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}, Pattern: "physical"},
+	}})
+	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
+		{ID: "c1", ProfileURL: "http://example.org/StructureDefinition/org", ResourceType: "Organization", ElementPath: "Organization.name", Variant: coverage.CoverageVariantValidMin},
+	}}
+	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
+
+	ds, err := BuildSetupDataset(plan, opts)
+	if err != nil {
+		t.Fatalf("BuildSetupDataset returned error: %v", err)
+	}
+	inst, ok := ds.Resources[setupResourceID("Organization")]
+	if !ok {
+		t.Fatalf("missing Organization seed")
+	}
+	addr, ok := inst.Resource["address"].([]any)
+	if !ok || len(addr) == 0 {
+		t.Fatalf("address = %T, want array", inst.Resource["address"])
+	}
+	first, ok := addr[0].(map[string]any)
+	if !ok {
+		t.Fatalf("address[0] = %T", addr[0])
+	}
+	if first["type"] != "physical" {
+		t.Fatalf("address[0].type = %v, want physical (slice discriminator)", first["type"])
+	}
+}
+
 // TestSearchSeedSkipsNonMatchableSearch verifies that a boolean search (where
 // "momus-search" is not a valid value) produces no matching seed; the search
 // remains status-only.
