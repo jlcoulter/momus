@@ -3,8 +3,10 @@ package provisioning
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -122,6 +124,104 @@ func TestProvisionReturnsErrorOnNon2xx(t *testing.T) {
 	res := New(server.URL, &Options{HTTPClient: server.Client()}).ProvisionAll(context.Background(), ds)
 	if res.Failed == 0 {
 		t.Fatal("expected failure for non-2xx response")
+	}
+}
+
+func TestProvisionFailureReportsOperationOutcomeReason(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{
+			"resourceType": "OperationOutcome",
+			"issue": [{
+				"severity": "error",
+				"diagnostics": "Location.physicalType: minimum required = 1, but only found 0",
+				"location": ["Location.physicalType", "Line[1]"],
+				"expression": ["Location.physicalType"]
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	ds := &model.Dataset{
+		Resources: map[string]*model.ResourceInstance{
+			"loc": {LocalID: "loc", ResourceType: "Location", Resource: map[string]any{"resourceType": "Location", "id": "loc"}},
+		},
+	}
+	res := New(server.URL, &Options{HTTPClient: server.Client()}).ProvisionAll(context.Background(), ds)
+	if res.Failed != 1 || len(res.Failures) != 1 {
+		t.Fatalf("Failed = %d, Failures = %d, want 1/1", res.Failed, len(res.Failures))
+	}
+	f := res.Failures[0]
+	if f.ID != "loc" || f.ResourceType != "Location" {
+		t.Fatalf("failure identity = %s/%s, want loc/Location", f.ResourceType, f.ID)
+	}
+	if f.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("Status = %d, want 422", f.Status)
+	}
+	if !strings.Contains(f.Reason, "minimum required = 1") {
+		t.Fatalf("Reason = %q, want it to contain the OperationOutcome diagnostics", f.Reason)
+	}
+	if !strings.Contains(f.Reason, "Location.physicalType") {
+		t.Fatalf("Reason = %q, want it to contain the issue location", f.Reason)
+	}
+	if !strings.Contains(f.Response, "OperationOutcome") {
+		t.Fatalf("Response = %q, want the raw response body", f.Response)
+	}
+	if !strings.Contains(string(f.Resource), "\"resourceType\":\"Location\"") {
+		t.Fatalf("Resource = %s, want the rejected payload", f.Resource)
+	}
+	desc := f.Describe()
+	if !strings.Contains(desc, "Location/loc") || !strings.Contains(desc, "HTTP 422") {
+		t.Fatalf("Describe = %q, want resource identity and status", desc)
+	}
+}
+
+func TestProvisionFailureCapsIssuesAndFallsBackToRawBody(t *testing.T) {
+	issues := make([]string, 0, 5)
+	for i := 0; i < 5; i++ {
+		issues = append(issues, fmt.Sprintf(`{"severity":"error","diagnostics":"issue %d"}`, i))
+	}
+	outcome := `{"resourceType":"OperationOutcome","issue":[` + strings.Join(issues, ",") + `]}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/Location/many" {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(outcome))
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("plain text rejection"))
+	}))
+	defer server.Close()
+
+	ds := &model.Dataset{
+		Resources: map[string]*model.ResourceInstance{
+			"many":  {LocalID: "many", ResourceType: "Location", Resource: map[string]any{"resourceType": "Location", "id": "many"}},
+			"plain": {LocalID: "plain", ResourceType: "Location", Resource: map[string]any{"resourceType": "Location", "id": "plain"}},
+		},
+	}
+	res := New(server.URL, &Options{HTTPClient: server.Client()}).ProvisionAll(context.Background(), ds)
+	if res.Failed != 2 {
+		t.Fatalf("Failed = %d, want 2", res.Failed)
+	}
+	var many, plain Failure
+	for _, f := range res.Failures {
+		switch f.ID {
+		case "many":
+			many = f
+		case "plain":
+			plain = f
+		}
+	}
+	if !strings.Contains(many.Reason, "(+2 more issues)") {
+		t.Fatalf("Reason = %q, want issue cap indicator", many.Reason)
+	}
+	if plain.Reason != "plain text rejection" {
+		t.Fatalf("Reason = %q, want raw body fallback for non-OperationOutcome response", plain.Reason)
+	}
+	if plain.Status != http.StatusBadRequest {
+		t.Fatalf("Status = %d, want 400", plain.Status)
 	}
 }
 

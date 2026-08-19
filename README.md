@@ -342,6 +342,18 @@ Write requests (PUT/PATCH/POST/DELETE) go to `--write-base-url`; GET
 read/search requests go to `--base-url`. The same flag is available on
 `coverage ast`, `coverage plan`, `api ast`, and `api run`.
 
+When the server rejects a seeded resource (for example, HAPI validation
+failure), the run prints each rejected resource with the server's reason
+parsed from the OperationOutcome response:
+
+```
+WARNING: dataset seeding incomplete — 41 of 42 resources uploaded. Data seeding is essential to achieve full coverage success. Fix the failing resources and re-run.
+  - Location/momus-setup-location (HTTP 422): error: Location.physicalType: minimum required = 1, but only found 0 (Location.physicalType, Line[1])
+```
+
+Run with `--debug` to also write the rejected payloads and full server
+responses to `.momus/output/provision-failures.json` for inspection or replay.
+
 Generate realistic bulk data as NDJSON (newline-delimited JSON, the FHIR Bulk
 Data `$export` format):
 

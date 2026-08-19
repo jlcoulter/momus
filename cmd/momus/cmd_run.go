@@ -101,7 +101,16 @@ func newRunCmd(cfg *config) *cobra.Command {
 			// user must be told when the dataset was not fully uploaded.
 			seed := provisioner.ProvisionAll(cmd.Context(), testPlan.Dataset)
 			if !seed.Complete() {
-				fmt.Printf("WARNING: dataset seeding incomplete — %d of %d resources uploaded; failed: %v. Data seeding is essential to achieve full coverage success. Fix the failing resources and re-run.\n", seed.Provisioned, seed.Provisioned+seed.Failed, seed.FailedIDs)
+				fmt.Printf("WARNING: dataset seeding incomplete — %d of %d resources uploaded. Data seeding is essential to achieve full coverage success. Fix the failing resources and re-run.\n", seed.Provisioned, seed.Provisioned+seed.Failed)
+				for _, failure := range seed.Failures {
+					fmt.Printf("  - %s\n", failure.Describe())
+				}
+				if !cfg.debug {
+					fmt.Printf("Run with --debug to write the rejected payloads and full server responses to %s for inspection.\n", debugOutputDir)
+				}
+				if err := writeDebugProvisionFailures(cfg.debug, seed.Failures); err != nil {
+					return err
+				}
 			} else {
 				fmt.Printf("Dataset seeded: %d resources uploaded ahead of execution\n", seed.Provisioned)
 			}

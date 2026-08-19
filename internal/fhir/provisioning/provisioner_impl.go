@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -55,6 +58,39 @@ type Result struct {
 	// FailedIDs lists the local ids of the failed resources, in provisioning
 	// order.
 	FailedIDs []string
+	// Failures describes each failed resource in provisioning order, including
+	// why the server rejected it (parsed from the OperationOutcome response when
+	// available) and the payload that was rejected.
+	Failures []Failure
+}
+
+// Failure describes a single resource the server rejected during provisioning.
+type Failure struct {
+	// ID is the local id of the failed resource.
+	ID string
+	// ResourceType is the FHIR resource type of the failed resource.
+	ResourceType string
+	// Status is the HTTP status code the server returned; 0 when the request
+	// itself failed (transport error, marshal error).
+	Status int
+	// Reason is a human-readable summary of why the resource was rejected:
+	// OperationOutcome issue diagnostics when the server returned one, the
+	// response body otherwise.
+	Reason string
+	// Response is the raw response body, when one was received.
+	Response string
+	// Resource is the JSON payload that was rejected, when it could be
+	// marshalled.
+	Resource json.RawMessage
+}
+
+// Describe returns a one-line summary of the failure suitable for CLI output.
+func (f Failure) Describe() string {
+	status := fmt.Sprintf("HTTP %d", f.Status)
+	if f.Status == 0 {
+		status = "request failed"
+	}
+	return fmt.Sprintf("%s/%s (%s): %s", f.ResourceType, f.ID, status, f.Reason)
 }
 
 // Complete reports whether every resource in the dataset was provisioned.
@@ -79,6 +115,7 @@ func (p *ServerProvisioner) ProvisionAll(ctx context.Context, ds *model.Dataset)
 		if err := p.provisionInstance(ctx, instance); err != nil {
 			res.Failed++
 			res.FailedIDs = append(res.FailedIDs, id)
+			res.Failures = append(res.Failures, failureFromError(id, instance, err))
 			continue
 		}
 		res.Provisioned++
@@ -107,12 +144,134 @@ func (p *ServerProvisioner) provisionInstance(ctx context.Context, instance *mod
 		return fmt.Errorf("provision %s/%s: %w", instance.ResourceType, instance.LocalID, err)
 	}
 	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("provision %s/%s: read response: %w", instance.ResourceType, instance.LocalID, err)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("provision %s/%s: unexpected status %d", instance.ResourceType, instance.LocalID, resp.StatusCode)
+		return &provisionError{
+			resourceType: instance.ResourceType,
+			localID:      instance.LocalID,
+			status:       resp.StatusCode,
+			body:         respBody,
+		}
 	}
 	instance.ServerID = instance.LocalID
 	instance.Version = resp.Header.Get("ETag")
 	return nil
+}
+
+// provisionError carries the server's rejection of a single resource, including
+// the response body so the caller can surface why the server rejected it.
+type provisionError struct {
+	resourceType string
+	localID      string
+	status       int
+	body         []byte
+}
+
+func (e *provisionError) Error() string {
+	reason := operationOutcomeReason(e.body)
+	if reason == "" {
+		if len(e.body) == 0 {
+			reason = "no response body"
+		} else {
+			reason = truncate(strings.TrimSpace(string(e.body)), maxReasonLength)
+		}
+	}
+	return fmt.Sprintf("provision %s/%s: unexpected status %d: %s", e.resourceType, e.localID, e.status, reason)
+}
+
+// maxReasonLength caps the reason carried in a failure so a verbose server
+// response cannot flood CLI output; full bodies are kept in Failure.Response.
+const maxReasonLength = 500
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
+}
+
+// failureFromError converts a provisioning error into a structured Failure,
+// attaching the rejected payload so the failure can be replayed or inspected.
+func failureFromError(id string, instance *model.ResourceInstance, err error) Failure {
+	f := Failure{ID: id, ResourceType: instance.ResourceType, Reason: err.Error()}
+	if body, marshalErr := json.Marshal(instance.Resource); marshalErr == nil {
+		f.Resource = body
+	}
+	var pe *provisionError
+	if errors.As(err, &pe) {
+		f.Status = pe.status
+		f.Reason = operationOutcomeReason(pe.body)
+		if f.Reason == "" {
+			f.Reason = truncate(strings.TrimSpace(string(pe.body)), maxReasonLength)
+		}
+		if f.Reason == "" {
+			f.Reason = "no response body"
+		}
+		f.Response = string(pe.body)
+	}
+	return f
+}
+
+// operationOutcomeReason extracts a concise, human-readable reason from a FHIR
+// OperationOutcome response body (as returned by HAPI and most FHIR servers on
+// validation failure). Returns "" when the body is not a parseable
+// OperationOutcome.
+func operationOutcomeReason(body []byte) string {
+	var outcome struct {
+		ResourceType string `json:"resourceType"`
+		Issue        []struct {
+			Severity    string `json:"severity"`
+			Diagnostics string `json:"diagnostics"`
+			Details     *struct {
+				Text string `json:"text"`
+			} `json:"details"`
+			Location   []string `json:"location"`
+			Expression []string `json:"expression"`
+		} `json:"issue"`
+	}
+	if err := json.Unmarshal(body, &outcome); err != nil || outcome.ResourceType != "OperationOutcome" {
+		return ""
+	}
+	if len(outcome.Issue) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(outcome.Issue))
+	for _, issue := range outcome.Issue {
+		msg := issue.Diagnostics
+		if msg == "" && issue.Details != nil {
+			msg = issue.Details.Text
+		}
+		loc := ""
+		if len(issue.Location) > 0 {
+			loc = strings.Join(issue.Location, ", ")
+		} else if len(issue.Expression) > 0 {
+			loc = strings.Join(issue.Expression, ", ")
+		}
+		if msg == "" && loc == "" {
+			continue
+		}
+		switch {
+		case msg != "" && loc != "":
+			parts = append(parts, fmt.Sprintf("%s: %s (%s)", issue.Severity, msg, loc))
+		case msg != "":
+			parts = append(parts, fmt.Sprintf("%s: %s", issue.Severity, msg))
+		default:
+			parts = append(parts, fmt.Sprintf("%s: at %s", issue.Severity, loc))
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	// Cap the number of issues surfaced inline; the full response is retained
+	// on the Failure for inspection.
+	const maxIssues = 3
+	if len(parts) > maxIssues {
+		parts = append(parts[:maxIssues], fmt.Sprintf("(+%d more issues)", len(parts)-maxIssues))
+	}
+	return strings.Join(parts, "; ")
 }
 
 func (p *ServerProvisioner) applyAuth(req *http.Request) {

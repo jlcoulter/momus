@@ -15,6 +15,7 @@ import (
 	testbulk "github.com/jlcoulter/momus/internal/fhir/bulk"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
+	provisioning "github.com/jlcoulter/momus/internal/fhir/provisioning"
 	testast "github.com/jlcoulter/momus/internal/test/ast"
 	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
 	testrunner "github.com/jlcoulter/momus/internal/test/runner"
@@ -358,6 +359,20 @@ func writeDebugBulk(debug bool, instances []*model.ResourceInstance) error {
 	}
 	fmt.Fprintf(os.Stderr, "debug: wrote %s\n", path)
 	return nil
+}
+
+// writeDebugProvisionFailures writes provisioning failures (rejected payloads
+// and full server responses) to the debug output directory when debug mode is
+// enabled. It is a no-op otherwise.
+func writeDebugProvisionFailures(debug bool, failures []provisioning.Failure) error {
+	if !debug || len(failures) == 0 {
+		return nil
+	}
+	out, err := json.MarshalIndent(failures, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal provision failures: %w", err)
+	}
+	return writeDebugOutput(debug, "provision-failures.json", append(out, '\n'))
 }
 
 // writeDebugGraph writes the resolved dependency graph to the debug output
