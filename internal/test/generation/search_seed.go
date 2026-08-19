@@ -69,7 +69,7 @@ func buildSearchSeedInstances(req coverage.CoverageRequirement, count int, optio
 		params = append(params, sp)
 	}
 
-	value := searchQueryValue(req)
+	value := searchQueryValue(req, options)
 	resourceProfiles := uniqueProfileURLs(byResource[req.ResourceType])
 	setupProfileURL := ""
 	if len(resourceProfiles) > 0 {
