@@ -3,6 +3,7 @@ package bulk
 import (
 	"hash/fnv"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -22,7 +23,15 @@ func Link(datasets []*model.Dataset) []*model.ResourceInstance {
 		if ds == nil {
 			continue
 		}
-		for _, inst := range ds.Resources {
+		// Sort each dataset's resources by local id so the output order is
+		// deterministic (Go map iteration order is randomised).
+		ids := make([]string, 0, len(ds.Resources))
+		for id := range ds.Resources {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		for _, id := range ids {
+			inst := ds.Resources[id]
 			if inst == nil || inst.Resource == nil {
 				continue
 			}

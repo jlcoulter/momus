@@ -67,8 +67,21 @@ func TestLinkRewiresDanglingToSingleAvailableTarget(t *testing.T) {
 	}
 
 	out := Link(datasets)
-	obs := out[0].Resource
-	if got := obs["subject"].(map[string]any)["reference"]; got != "Patient/momus-Patient-1" {
+	var obs *model.ResourceInstance
+	for _, inst := range out {
+		if inst.ResourceType == "Observation" {
+			obs = inst
+			break
+		}
+	}
+	if obs == nil {
+		t.Fatal("expected an Observation instance in linked output")
+	}
+	subject, ok := obs.Resource["subject"].(map[string]any)
+	if !ok {
+		t.Fatalf("subject = %v, want a reference map", obs.Resource["subject"])
+	}
+	if got := subject["reference"]; got != "Patient/momus-Patient-1" {
 		t.Fatalf("subject reference = %v, want Patient/momus-Patient-1", got)
 	}
 }
@@ -89,10 +102,28 @@ func TestLinkIsDeterministicAndIgnoresURLs(t *testing.T) {
 
 	first := Link(datasets)
 	second := Link(datasets)
-	if got := first[0].Resource["content"].(map[string]any)["reference"]; got != "http://example.org/fhir/reference" {
+	var binary *model.ResourceInstance
+	for _, inst := range first {
+		if inst.ResourceType == "Binary" {
+			binary = inst
+			break
+		}
+	}
+	if binary == nil {
+		t.Fatal("expected a Binary instance in linked output")
+	}
+	content, ok := binary.Resource["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("content = %v, want a reference map", binary.Resource["content"])
+	}
+	if got := content["reference"]; got != "http://example.org/fhir/reference" {
 		t.Fatalf("URL reference was mutated: %v", got)
 	}
-	if got := first[0].Resource["subject"].(map[string]any)["reference"]; got != "Patient/momus-Patient-1" {
+	subject, ok := binary.Resource["subject"].(map[string]any)
+	if !ok {
+		t.Fatalf("subject = %v, want a reference map", binary.Resource["subject"])
+	}
+	if got := subject["reference"]; got != "Patient/momus-Patient-1" {
 		t.Fatalf("dangling ref not rewired: %v", got)
 	}
 	if len(first) != len(second) {
