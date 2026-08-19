@@ -70,6 +70,35 @@ func TestGenerateFromCoveragePlanExhaustiveAddsAndVariesOptionals(t *testing.T) 
 	}
 }
 
+// TestGenerateDatatypeFromProfilesPicksOneNotMerged verifies that when an
+// element lists several type profiles (e.g. all the AU Identifier variants on
+// Organization.identifier), generation uses a single profile rather than merging
+// all of them into a value that conforms to none.
+func TestGenerateDatatypeFromProfilesPicksOneNotMerged(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/profA", Type: "Identifier", Elements: []model.ElementDefinition{
+		{Path: "Identifier", Min: 0, Max: "*"},
+		{Path: "Identifier.system", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://example.org/system-a"},
+		{Path: "Identifier.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+	}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/profB", Type: "Identifier", Elements: []model.ElementDefinition{
+		{Path: "Identifier", Min: 0, Max: "*"},
+		{Path: "Identifier.system", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://example.org/system-b"},
+		{Path: "Identifier.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+	}})
+	v, ok := generateDatatypeValueFromProfiles([]model.ElementType{{Profile: []string{"http://example.org/profA", "http://example.org/profB"}}}, reg)
+	if !ok {
+		t.Fatal("expected a generated value")
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		t.Fatalf("value = %T, want a map", v)
+	}
+	if m["system"] != "http://example.org/system-a" {
+		t.Fatalf("system = %v, want the first profile's fixed system (profiles must not be merged)", m["system"])
+	}
+}
+
 // TestGenerateFromCoveragePlanOmitsProvisioning verifies that the generated AST
 // contains only test cases: provisioning is a separate stage (BuildSetupDataset +
 // provisioner), so no per-resource setup create requests or setup-bound

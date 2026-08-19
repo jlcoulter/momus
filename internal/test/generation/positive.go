@@ -739,28 +739,21 @@ func generateDatatypeValueFromProfiles(types []model.ElementType, reg *registry.
 	if reg == nil {
 		return nil, false
 	}
-	merged := map[string]any{}
-	hit := false
+	// Apply the first type profile that yields content, not a merge of all of
+	// them: an element may list several profiles (e.g. all the AU Identifier
+	// variants on Organization.identifier), and merging them produces a value
+	// that conforms to none.
 	for _, et := range types {
 		for _, profileURL := range et.Profile {
 			value, ok := generateDatatypeValueFromProfile(profileURL, reg)
-			if !ok {
-				continue
+			if ok {
+				if _, ok := value.(map[string]any); ok {
+					return value, true
+				}
 			}
-			valueMap, ok := value.(map[string]any)
-			if !ok {
-				continue
-			}
-			for key, val := range valueMap {
-				merged[key] = val
-			}
-			hit = true
 		}
 	}
-	if !hit {
-		return nil, false
-	}
-	return merged, true
+	return nil, false
 }
 
 func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, bool) {
@@ -894,14 +887,21 @@ func enrichGeneratedValueWithTypeProfiles(value any, def *model.ElementDefinitio
 	if !ok {
 		return value
 	}
+	// Enrich with the first type profile that contributes required fields. Do
+	// not merge all profiles: an element that lists several (e.g. all the AU
+	// Identifier variants) must be generated from one, not a Frankenstein of all.
 	for _, et := range def.Types {
 		for _, profileURL := range et.Profile {
 			resolved, err := reg.ResolveProfile(normalizeCanonical(profileURL))
 			if err != nil || resolved == nil || resolved.Root == nil {
 				continue
 			}
+			before := len(valueMap)
 			populateRequiredChildren(valueMap, resolved.Root, reg)
 			applySimpleConstraints(valueMap, resolved.Root, reg)
+			if len(valueMap) > before {
+				return valueMap
+			}
 		}
 	}
 	return valueMap
