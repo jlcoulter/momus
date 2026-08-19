@@ -30,6 +30,16 @@ func newRunCmd(cfg *config) *cobra.Command {
 			if writeBase == "" {
 				writeBase = cfg.baseURL
 			}
+			// Resolve write-specific basic auth credentials, falling back to the
+			// general API credentials when the write-specific ones are not set.
+			writeBasicUser := cfg.writeBasicUsername
+			if writeBasicUser == "" {
+				writeBasicUser = cfg.apiBasicUsername
+			}
+			writeBasicPass := cfg.writeBasicPassword
+			if writeBasicPass == "" {
+				writeBasicPass = cfg.apiBasicPassword
+			}
 
 			rootPath := args[0]
 			searchDir := cfg.depsDir
@@ -94,8 +104,8 @@ func newRunCmd(cfg *config) *cobra.Command {
 			}
 			provisioner := provisioning.New(writeBase, &provisioning.Options{
 				BearerToken:   cfg.apiBearerToken,
-				BasicUsername: cfg.apiBasicUsername,
-				BasicPassword: cfg.apiBasicPassword,
+				BasicUsername: writeBasicUser,
+				BasicPassword: writeBasicPass,
 			})
 			// Data seeding is essential to achieve full coverage success, so the
 			// user must be told when the dataset was not fully uploaded.
@@ -121,11 +131,13 @@ func newRunCmd(cfg *config) *cobra.Command {
 			}
 
 			report, err := testrunner.Execute(cmd.Context(), astPlan.Root, testrunner.ExecuteOptions{
-				BaseURL:       cfg.baseURL,
-				WriteBaseURL:  writeBase,
-				BearerToken:   cfg.apiBearerToken,
-				BasicUsername: cfg.apiBasicUsername,
-				BasicPassword: cfg.apiBasicPassword,
+				BaseURL:            cfg.baseURL,
+				WriteBaseURL:       writeBase,
+				BearerToken:        cfg.apiBearerToken,
+				BasicUsername:      cfg.apiBasicUsername,
+				BasicPassword:      cfg.apiBasicPassword,
+				WriteBasicUsername: cfg.writeBasicUsername,
+				WriteBasicPassword: cfg.writeBasicPassword,
 				// Capture request/response detail whenever an HTML report is
 				// requested, so failed cases can drill down into them.
 				IncludeDebug: cfg.debug || cfg.htmlReport != "",
@@ -215,6 +227,8 @@ func newRunCmd(cfg *config) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.apiBearerToken, "api-bearer-token", "", "bearer token used for API requests during coverage run")
 	cmd.Flags().StringVar(&cfg.apiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during coverage run")
 	cmd.Flags().StringVar(&cfg.apiBasicPassword, "api-basic-password", "", "basic auth password used for API requests during coverage run")
+	cmd.Flags().StringVar(&cfg.writeBasicUsername, "write-basic-username", "", "basic auth username used for write requests to --write-base-url; defaults to --api-basic-username")
+	cmd.Flags().StringVar(&cfg.writeBasicPassword, "write-basic-password", "", "basic auth password used for write requests to --write-base-url; defaults to --api-basic-password")
 	cmd.Flags().IntVar(&cfg.interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
 	cmd.Flags().BoolVar(&cfg.includeCases, "include-cases", false, "include the full per-case result array in the JSON report (large runs produce very large output)")
 	cmd.Flags().BoolVar(&cfg.exhaustive, "exhaustive", true, "populate optional elements to produce fuller, more realistic payloads")

@@ -28,7 +28,13 @@ type ExecuteOptions struct {
 	BearerToken   string
 	BasicUsername string
 	BasicPassword string
-	IncludeDebug  bool
+	// WriteBasicUsername and WriteBasicPassword, when set, are used for HTTP
+	// basic auth on write requests (PUT/PATCH/POST/DELETE) that target the write
+	// base URL, overriding the general BasicUsername/BasicPassword for those
+	// requests.
+	WriteBasicUsername string
+	WriteBasicPassword string
+	IncludeDebug       bool
 }
 
 const maxDebugBodyBytes = 4096
@@ -107,18 +113,20 @@ func Execute(ctx context.Context, plan ast.Node, options ExecuteOptions) (*Repor
 	}
 
 	exec := &executor{
-		ctx:           ctx,
-		client:        client,
-		baseURL:       strings.TrimRight(options.BaseURL, "/"),
-		writeBaseURL:  strings.TrimRight(options.WriteBaseURL, "/"),
-		bearerToken:   options.BearerToken,
-		basicUsername: options.BasicUsername,
-		basicPassword: options.BasicPassword,
-		includeDebug:  options.IncludeDebug,
-		report:        &Report{Cases: make([]CaseResult, 0)},
-		variables:     make(map[string]any),
-		created:       make(map[string]struct{}),
-		failuresBySig: make(map[string]*FailureSignature),
+		ctx:                ctx,
+		client:             client,
+		baseURL:            strings.TrimRight(options.BaseURL, "/"),
+		writeBaseURL:       strings.TrimRight(options.WriteBaseURL, "/"),
+		bearerToken:        options.BearerToken,
+		basicUsername:      options.BasicUsername,
+		basicPassword:      options.BasicPassword,
+		writeBasicUsername: options.WriteBasicUsername,
+		writeBasicPassword: options.WriteBasicPassword,
+		includeDebug:       options.IncludeDebug,
+		report:             &Report{Cases: make([]CaseResult, 0)},
+		variables:          make(map[string]any),
+		created:            make(map[string]struct{}),
+		failuresBySig:      make(map[string]*FailureSignature),
 	}
 
 	if err := exec.runNode(plan); err != nil {
@@ -131,23 +139,25 @@ func Execute(ctx context.Context, plan ast.Node, options ExecuteOptions) (*Repor
 }
 
 type executor struct {
-	ctx           context.Context
-	client        *http.Client
-	baseURL       string
-	writeBaseURL  string
-	bearerToken   string
-	basicUsername string
-	basicPassword string
-	includeDebug  bool
-	report        *Report
-	lastResult    assertions.Result
-	hasResult     bool
-	lastErr       error
-	lastDebug     *CaseDebug
-	variables     map[string]any
-	created       map[string]struct{}
-	failuresBySig map[string]*FailureSignature
-	ooFailures    int
+	ctx                context.Context
+	client             *http.Client
+	baseURL            string
+	writeBaseURL       string
+	bearerToken        string
+	basicUsername      string
+	basicPassword      string
+	writeBasicUsername string
+	writeBasicPassword string
+	includeDebug       bool
+	report             *Report
+	lastResult         assertions.Result
+	hasResult          bool
+	lastErr            error
+	lastDebug          *CaseDebug
+	variables          map[string]any
+	created            map[string]struct{}
+	failuresBySig      map[string]*FailureSignature
+	ooFailures         int
 }
 
 var variablePattern = regexp.MustCompile(`\{\{([a-zA-Z0-9_.-]+)\}\}`)
@@ -229,18 +239,20 @@ func (e *executor) child() *executor {
 		created[k] = struct{}{}
 	}
 	return &executor{
-		ctx:           e.ctx,
-		client:        e.client,
-		baseURL:       e.baseURL,
-		writeBaseURL:  e.writeBaseURL,
-		bearerToken:   e.bearerToken,
-		basicUsername: e.basicUsername,
-		basicPassword: e.basicPassword,
-		includeDebug:  e.includeDebug,
-		report:        &Report{Cases: make([]CaseResult, 0)},
-		variables:     variables,
-		created:       created,
-		failuresBySig: make(map[string]*FailureSignature),
+		ctx:                e.ctx,
+		client:             e.client,
+		baseURL:            e.baseURL,
+		writeBaseURL:       e.writeBaseURL,
+		bearerToken:        e.bearerToken,
+		basicUsername:      e.basicUsername,
+		basicPassword:      e.basicPassword,
+		writeBasicUsername: e.writeBasicUsername,
+		writeBasicPassword: e.writeBasicPassword,
+		includeDebug:       e.includeDebug,
+		report:             &Report{Cases: make([]CaseResult, 0)},
+		variables:          variables,
+		created:            created,
+		failuresBySig:      make(map[string]*FailureSignature),
 	}
 }
 
@@ -319,7 +331,7 @@ func (e *executor) executeRequest(reqNode *ast.Request) (assertions.Result, erro
 	for k, v := range reqNode.Headers {
 		req.Header.Set(k, v)
 	}
-	e.applyRequestAuth(req)
+	e.applyRequestAuth(req, reqNode.Method)
 
 	resp, err := e.client.Do(req)
 	if err != nil {
@@ -508,11 +520,17 @@ func replaceTemplateString(in string, vars map[string]any) string {
 	})
 }
 
-func (e *executor) applyRequestAuth(req *http.Request) {
+func (e *executor) applyRequestAuth(req *http.Request, method string) {
 	if req == nil {
 		return
 	}
 	if req.Header.Get("Authorization") != "" {
+		return
+	}
+	// Write requests that target the write base URL use the write-specific basic
+	// auth credentials when provided, overriding the general credentials.
+	if ast.IsWriteMethod(method) && e.writeBaseURL != "" && (e.writeBasicUsername != "" || e.writeBasicPassword != "") {
+		req.SetBasicAuth(e.writeBasicUsername, e.writeBasicPassword)
 		return
 	}
 	if e.bearerToken != "" {

@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -235,6 +236,54 @@ func TestExecuteAllowsResolvedSetupReferenceAfterSetupCreation(t *testing.T) {
 	}
 	if requestCount != 2 {
 		t.Fatalf("got %d HTTP requests, want 2", requestCount)
+	}
+}
+
+func TestExecuteAppliesWriteSpecificBasicAuth(t *testing.T) {
+	var writeAuth, readAuth string
+	writeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"1"}`))
+	}))
+	defer writeServer.Close()
+	readServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		readAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","total":1}`))
+	}))
+	defer readServer.Close()
+
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/test-1", Body: map[string]any{"resourceType": "Patient", "id": "test-1"}},
+		&ast.Assert{Description: "create", RequirementID: "req-1", Expression: "status in [200,201]"},
+		&ast.Request{Method: http.MethodGet, URL: "/Patient?name=momus-search"},
+		&ast.Assert{Description: "search", RequirementID: "req-2", Expression: "status in [200]"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{
+		BaseURL:            readServer.URL,
+		WriteBaseURL:       writeServer.URL,
+		HTTPClient:         readServer.Client(),
+		BasicUsername:      "read-user",
+		BasicPassword:      "read-pass",
+		WriteBasicUsername: "write-user",
+		WriteBasicPassword: "write-pass",
+	})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Failed != 0 {
+		t.Fatalf("unexpected failure report: %+v", report)
+	}
+	wantWrite := "Basic " + base64.StdEncoding.EncodeToString([]byte("write-user:write-pass"))
+	if writeAuth != wantWrite {
+		t.Fatalf("write request auth = %q, want %q", writeAuth, wantWrite)
+	}
+	wantRead := "Basic " + base64.StdEncoding.EncodeToString([]byte("read-user:read-pass"))
+	if readAuth != wantRead {
+		t.Fatalf("read request auth = %q, want %q", readAuth, wantRead)
 	}
 }
 

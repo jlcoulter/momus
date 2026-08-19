@@ -27,15 +27,17 @@ type config struct {
 	interactionStrength  int
 
 	// Target FHIR server / API
-	baseURL           string
-	writeBaseURL      string
-	capabilityBaseURL string
-	scopeToCapability bool
-	failOnUncovered   bool
-	apiBearerToken    string
-	apiBasicUsername  string
-	apiBasicPassword  string
-	includeCases      bool
+	baseURL            string
+	writeBaseURL       string
+	capabilityBaseURL  string
+	scopeToCapability  bool
+	failOnUncovered    bool
+	apiBearerToken     string
+	apiBasicUsername   string
+	apiBasicPassword   string
+	writeBasicUsername string
+	writeBasicPassword string
+	includeCases       bool
 
 	// Generation
 	exhaustive        bool

@@ -342,6 +342,20 @@ Write requests (PUT/PATCH/POST/DELETE) go to `--write-base-url`; GET
 read/search requests go to `--base-url`. The same flag is available on
 `coverage ast`, `coverage plan`, `api ast`, and `api run`.
 
+If the write endpoint requires different credentials than the read endpoint,
+pass `--write-basic-username` and `--write-basic-password`. These apply to
+write requests targeting `--write-base-url` (including dataset seeding) and
+default to `--api-basic-username` / `--api-basic-password` when unset:
+
+```sh
+go run ./cmd/momus coverage run package.tgz \
+  --base-url http://read.example/fhir \
+  --write-base-url http://write.example/fhir \
+  --api-basic-username read-user --api-basic-password read-pass \
+  --write-basic-username write-user --write-basic-password write-pass \
+  --output ./test-results.json
+```
+
 When the server rejects a seeded resource (for example, HAPI validation
 failure), the run prints each rejected resource with the server's reason
 parsed from the OperationOutcome response:
