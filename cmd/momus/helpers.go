@@ -332,6 +332,20 @@ func newDebugTracer(debug bool) *tracing.Tracer {
 	return tracing.New(os.Stderr)
 }
 
+// datasetResourceKeys returns the "Type/id" keys of every resource in a dataset,
+// used to mark seed resources as already-created so the runner's setup-reference
+// validation passes for test cases that reference them.
+func datasetResourceKeys(ds *model.Dataset) map[string]struct{} {
+	keys := make(map[string]struct{}, len(ds.Resources))
+	for _, inst := range ds.Resources {
+		if inst == nil || inst.ResourceType == "" || inst.LocalID == "" {
+			continue
+		}
+		keys[inst.ResourceType+"/"+inst.LocalID] = struct{}{}
+	}
+	return keys
+}
+
 // writeDebugOutput writes stage data to the debug output directory when debug
 // mode is enabled. It is a no-op otherwise. stage is the file name within the
 // debug output directory, e.g. "coverage-plan.json".

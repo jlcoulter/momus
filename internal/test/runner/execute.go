@@ -39,6 +39,11 @@ type ExecuteOptions struct {
 	// Tracer, when set, logs every HTTP request and response as it is made
 	// (used for --debug request/response tracing).
 	Tracer *tracing.Tracer
+	// PreCreated lists resource keys ("Type/id") that already exist on the server
+	// before execution, e.g. seed resources provisioned ahead of the run. They are
+	// treated as created so setup-reference validation passes for test cases that
+	// reference them.
+	PreCreated map[string]struct{}
 }
 
 const maxDebugBodyBytes = 4096
@@ -130,7 +135,7 @@ func Execute(ctx context.Context, plan ast.Node, options ExecuteOptions) (*Repor
 		tracer:             options.Tracer,
 		report:             &Report{Cases: make([]CaseResult, 0)},
 		variables:          make(map[string]any),
-		created:            make(map[string]struct{}),
+		created:            cloneStringSet(options.PreCreated),
 		failuresBySig:      make(map[string]*FailureSignature),
 	}
 
@@ -167,6 +172,15 @@ type executor struct {
 }
 
 var variablePattern = regexp.MustCompile(`\{\{([a-zA-Z0-9_.-]+)\}\}`)
+
+// cloneStringSet returns a copy of a string set, or an empty set when src is nil.
+func cloneStringSet(src map[string]struct{}) map[string]struct{} {
+	out := make(map[string]struct{}, len(src))
+	for k := range src {
+		out[k] = struct{}{}
+	}
+	return out
+}
 
 func (e *executor) runNode(node ast.Node) error {
 	switch n := node.(type) {

@@ -70,6 +70,11 @@ type BuildOptions struct {
 	// realistic. When false, only required and contract-driven elements are
 	// populated.
 	Exhaustive bool
+	// SkipSetup, when true, omits the per-resource setup create requests from the
+	// generated AST. Use this when the seed dataset is provisioned ahead of
+	// execution (e.g. coverage run), so the AST contains only test cases and the
+	// run has a clean provisioning phase followed by a testing phase.
+	SkipSetup bool
 }
 
 // GenerateFromCoveragePlan maps coverage requirements into a concrete AST.
@@ -102,24 +107,26 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 		for _, resourceType := range level {
 			resourceSeq := &ast.Sequence{Steps: make([]ast.Node, 0)}
 			deps := depPlan.Dependencies[resourceType]
-			setupInst := buildSetupResource(resourceType, options, deps, byResource)
 
-			resourceSeq.Steps = append(resourceSeq.Steps,
-				&ast.Request{
-					Method: "PUT",
-					URL:    joinInstanceURL(baseURLForMethod(options, "PUT"), resourceType, setupInst.LocalID),
-					Headers: map[string]string{
-						"Content-Type": "application/fhir+json",
+			if !options.SkipSetup {
+				setupInst := buildSetupResource(resourceType, options, deps, byResource)
+				resourceSeq.Steps = append(resourceSeq.Steps,
+					&ast.Request{
+						Method: "PUT",
+						URL:    joinInstanceURL(baseURLForMethod(options, "PUT"), resourceType, setupInst.LocalID),
+						Headers: map[string]string{
+							"Content-Type": "application/fhir+json",
+						},
+						Body: setupInst.Resource,
 					},
-					Body: setupInst.Resource,
-				},
-				&ast.Assert{
-					Description:   "setup create seed resource",
-					RequirementID: "setup:" + resourceType,
-					Expression:    "status in [200,201]",
-				},
-				&ast.Capture{Name: resourceType + ".id", Path: "id"},
-			)
+					&ast.Assert{
+						Description:   "setup create seed resource",
+						RequirementID: "setup:" + resourceType,
+						Expression:    "status in [200,201]",
+					},
+					&ast.Capture{Name: resourceType + ".id", Path: "id"},
+				)
+			}
 
 			for _, caseSeq := range buildResourceCases(byResource[resourceType], plan, options, deps) {
 				resourceSeq.Steps = append(resourceSeq.Steps, caseSeq)

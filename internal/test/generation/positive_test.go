@@ -70,6 +70,70 @@ func TestGenerateFromCoveragePlanExhaustiveAddsAndVariesOptionals(t *testing.T) 
 	}
 }
 
+func TestGenerateFromCoveragePlanSkipSetupOmitsSetupSteps(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+	}})
+	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
+		{ID: "req-1", ProfileURL: "http://example.org/StructureDefinition/patient", ResourceType: "Patient", ElementPath: "Patient.name", Variant: coverage.CoverageVariantValidMin},
+	}}
+
+	// Default generation keeps the per-resource setup create steps.
+	withSetup, err := GenerateFromCoveragePlan(plan, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg})
+	if err != nil {
+		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
+	}
+	if !hasSetupStep(withSetup.Root) {
+		t.Fatal("expected setup steps in default generation")
+	}
+
+	// SkipSetup omits them, leaving only requirement test cases.
+	skipped, err := GenerateFromCoveragePlan(plan, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg, SkipSetup: true})
+	if err != nil {
+		t.Fatalf("GenerateFromCoveragePlan(SkipSetup) returned error: %v", err)
+	}
+	if hasSetupStep(skipped.Root) {
+		t.Fatal("expected no setup steps when SkipSetup is set")
+	}
+	if RequirementCount(skipped) != 1 {
+		t.Fatalf("RequirementCount = %d, want 1", RequirementCount(skipped))
+	}
+}
+
+// hasSetupStep reports whether a plan contains any setup create request or
+// setup-bound assertion.
+func hasSetupStep(node ast.Node) bool {
+	found := false
+	var walk func(ast.Node)
+	walk = func(n ast.Node) {
+		if found {
+			return
+		}
+		switch typed := n.(type) {
+		case *ast.Sequence:
+			for _, step := range typed.Steps {
+				walk(step)
+			}
+		case *ast.Parallel:
+			for _, step := range typed.Steps {
+				walk(step)
+			}
+		case *ast.Assert:
+			if strings.HasPrefix(typed.RequirementID, "setup:") {
+				found = true
+			}
+		case *ast.Request:
+			if strings.Contains(typed.URL, "momus-setup-") {
+				found = true
+			}
+		}
+	}
+	walk(node)
+	return found
+}
+
 func firstRequestBody(t *testing.T, plan *ast.Plan) map[string]any {
 	t.Helper()
 	var body map[string]any

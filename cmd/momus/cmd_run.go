@@ -110,6 +110,7 @@ func newRunCmd(cfg *config) *cobra.Command {
 			})
 			// Data seeding is essential to achieve full coverage success, so the
 			// user must be told when the dataset was not fully uploaded.
+			fmt.Printf("Provisioning phase: uploading %d seed resources to %s\n", len(setupDataset.Resources), writeBase)
 			seed := provisioner.ProvisionAll(cmd.Context(), setupDataset)
 			if !seed.Complete() {
 				fmt.Printf("WARNING: dataset seeding incomplete — %d of %d resources uploaded. Data seeding is essential to achieve full coverage success. Fix the failing resources and re-run.\n", seed.Provisioned, seed.Provisioned+seed.Failed)
@@ -123,14 +124,28 @@ func newRunCmd(cfg *config) *cobra.Command {
 					return err
 				}
 			} else {
-				fmt.Printf("Dataset seeded: %d resources uploaded ahead of execution\n", seed.Provisioned)
+				fmt.Printf("Provisioning complete: %d resources uploaded ahead of execution\n", seed.Provisioned)
 			}
 
-			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: cfg.baseURL, WriteBaseURL: writeBase, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: cfg.interactionStrength, Exhaustive: cfg.exhaustive})
+			// --provision-only stops after the provisioning phase: the seed dataset
+			// is on the server and no tests are executed.
+			if cfg.provisionOnly {
+				if !seed.Complete() {
+					return fmt.Errorf("provisioning incomplete: %d of %d resources uploaded", seed.Provisioned, seed.Provisioned+seed.Failed)
+				}
+				fmt.Printf("Provisioning only: %d resources uploaded; skipping test execution\n", seed.Provisioned)
+				return nil
+			}
+
+			// The seed dataset is already on the server, so generate the AST with
+			// setup omitted: execution is a pure testing phase with no interleaved
+			// provisioning.
+			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: cfg.baseURL, WriteBaseURL: writeBase, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: cfg.interactionStrength, Exhaustive: cfg.exhaustive, SkipSetup: true})
 			if err != nil {
 				return err
 			}
 
+			fmt.Printf("Testing phase: executing %d test cases\n", testgeneration.RequirementCount(astPlan))
 			report, err := testrunner.Execute(cmd.Context(), astPlan.Root, testrunner.ExecuteOptions{
 				BaseURL:            cfg.baseURL,
 				WriteBaseURL:       writeBase,
@@ -143,6 +158,9 @@ func newRunCmd(cfg *config) *cobra.Command {
 				// requested, so failed cases can drill down into them.
 				IncludeDebug: cfg.debug || cfg.htmlReport != "",
 				Tracer:       newDebugTracer(cfg.debug),
+				// The seed resources were provisioned above, so mark them as
+				// already-created so setup-reference validation passes.
+				PreCreated: datasetResourceKeys(setupDataset),
 			})
 			if err != nil {
 				return err
@@ -223,6 +241,7 @@ func newRunCmd(cfg *config) *cobra.Command {
 	cmd.Flags().BoolVar(&cfg.includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
 	cmd.Flags().BoolVar(&cfg.scopeToCapability, "scope-to-capability", true, "limit derivation to CapabilityStatement server resources that support create")
 	cmd.Flags().BoolVar(&cfg.failOnUncovered, "fail-on-uncovered", false, "return non-zero exit code when contractual coverage has uncovered obligations")
+	cmd.Flags().BoolVar(&cfg.provisionOnly, "provision-only", false, "provision the seed dataset and stop without executing tests")
 	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target FHIR base URL for request execution")
 	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate FHIR base URL for resource creation (write) requests; defaults to --base-url")
 	cmd.Flags().StringVar(&cfg.capabilityBaseURL, "capability-base-url", "", "optional alternate FHIR base URL to fetch CapabilityStatement metadata for scope/profile selection")

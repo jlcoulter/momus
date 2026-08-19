@@ -12,6 +12,54 @@ import (
 	"github.com/jlcoulter/momus/internal/test/ast"
 )
 
+func TestExecutePreCreatedAllowsSetupReferenceValidation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"resourceType":"Patient","id":"momus-setup-patient"}`))
+	}))
+	defer server.Close()
+
+	// A setup request whose body references a seed resource that is provisioned
+	// ahead of execution (not created by this AST).
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{
+			Method:  http.MethodPut,
+			URL:     "/Patient/momus-setup-patient",
+			Headers: map[string]string{"Content-Type": "application/fhir+json"},
+			Body: map[string]any{
+				"resourceType": "Patient",
+				"id":           "momus-setup-patient",
+				"managingOrganization": map[string]any{
+					"reference": "Organization/momus-setup-organization",
+				},
+			},
+		},
+		&ast.Assert{Description: "create", RequirementID: "req-1", Expression: "status in [200,201]"},
+	}}
+
+	// Without PreCreated the reference is unresolved and the case fails.
+	without, err := Execute(context.Background(), plan, ExecuteOptions{BaseURL: server.URL, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if without.Passed != 0 || without.Failed != 1 {
+		t.Fatalf("expected failure without PreCreated, got %+v", without)
+	}
+
+	// With PreCreated the seed resource is treated as already created.
+	with, err := Execute(context.Background(), plan, ExecuteOptions{
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		PreCreated: map[string]struct{}{"Organization/momus-setup-organization": {}},
+	})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if with.Passed != 1 || with.Failed != 0 {
+		t.Fatalf("expected pass with PreCreated, got %+v", with)
+	}
+}
+
 func TestExecuteRoutesWriteAndReadRequestsToSeparateBaseURLs(t *testing.T) {
 	var writePath, readPath string
 	writeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
