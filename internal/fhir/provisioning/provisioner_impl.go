@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
+	"github.com/jlcoulter/momus/internal/tracing"
 )
 
 // Options configures a ServerProvisioner.
@@ -26,6 +27,9 @@ type Options struct {
 	// BasicUsername and BasicPassword enable HTTP basic auth.
 	BasicUsername string
 	BasicPassword string
+	// Tracer, when set, logs every provisioning request and response as it is
+	// made (used for --debug request/response tracing).
+	Tracer *tracing.Tracer
 }
 
 // ServerProvisioner writes a Dataset to a FHIR server by PUTting each
@@ -139,6 +143,10 @@ func (p *ServerProvisioner) provisionInstance(ctx context.Context, instance *mod
 	}
 	p.applyAuth(req)
 
+	if p.options.Tracer != nil {
+		p.options.Tracer.LogRequest(req, body)
+	}
+
 	resp, err := p.options.HTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("provision %s/%s: %w", instance.ResourceType, instance.LocalID, err)
@@ -147,6 +155,9 @@ func (p *ServerProvisioner) provisionInstance(ctx context.Context, instance *mod
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("provision %s/%s: read response: %w", instance.ResourceType, instance.LocalID, err)
+	}
+	if p.options.Tracer != nil {
+		p.options.Tracer.LogResponse(req, resp.StatusCode, resp.Header, respBody)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &provisionError{

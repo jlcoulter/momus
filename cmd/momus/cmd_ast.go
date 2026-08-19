@@ -47,7 +47,7 @@ func newAstCmd(cfg *config) *cobra.Command {
 				return err
 			}
 
-			coverageResourceTypes, coverageProfileURLs, preferredProfilesByResource, err := resourceScopeForRun(cmd, cfg)
+			coverageResourceTypes, coverageProfileURLs, preferredProfilesByResource, err := resourceScopeForRun(cmd, cfg, newDebugTracer(cfg.debug))
 			if err != nil {
 				return err
 			}

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
+	"github.com/jlcoulter/momus/internal/tracing"
 )
 
 // CapabilityFetchOptions configures live CapabilityStatement retrieval.
@@ -18,6 +19,9 @@ type CapabilityFetchOptions struct {
 	BearerToken   string
 	BasicUsername string
 	BasicPassword string
+	// Tracer, when set, logs the capability request and response as it is made
+	// (used for --debug request/response tracing).
+	Tracer *tracing.Tracer
 }
 
 // ResourceTypesFromCapabilityStatement returns resource types advertised by a single CapabilityStatement.
@@ -158,6 +162,10 @@ func FetchCapabilityStatement(ctx context.Context, baseURL string, options Capab
 	req.Header.Set("Accept", "application/fhir+json, application/json")
 	applyCapabilityRequestAuth(req, options)
 
+	if options.Tracer != nil {
+		options.Tracer.LogRequest(req, nil)
+	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -167,6 +175,9 @@ func FetchCapabilityStatement(ctx context.Context, baseURL string, options Capab
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
+	}
+	if options.Tracer != nil {
+		options.Tracer.LogResponse(req, resp.StatusCode, resp.Header, body)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("fetch capability statement from %s: status %d: %s", req.URL.String(), resp.StatusCode, strings.TrimSpace(string(body)))

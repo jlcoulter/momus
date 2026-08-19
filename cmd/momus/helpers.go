@@ -19,13 +19,14 @@ import (
 	testast "github.com/jlcoulter/momus/internal/test/ast"
 	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
 	testrunner "github.com/jlcoulter/momus/internal/test/runner"
+	"github.com/jlcoulter/momus/internal/tracing"
 	"github.com/spf13/cobra"
 )
 
 // resourceScopeForRun resolves the resource/profile scope for ast/run from the
 // target server's CapabilityStatement, falling back to the caller-provided
 // scope (or the loaded package) when the server is unreachable.
-func resourceScopeForRun(cmd *cobra.Command, cfg *config) ([]string, []string, map[string][]string, error) {
+func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer) ([]string, []string, map[string][]string, error) {
 	if !cfg.scopeToCapability {
 		return cfg.includeResourceTypes, cfg.includeProfileURLs, nil, nil
 	}
@@ -37,6 +38,7 @@ func resourceScopeForRun(cmd *cobra.Command, cfg *config) ([]string, []string, m
 		BearerToken:   cfg.apiBearerToken,
 		BasicUsername: cfg.apiBasicUsername,
 		BasicPassword: cfg.apiBasicPassword,
+		Tracer:        tracer,
 	})
 	if err != nil {
 		// When the target server is not reachable, fall back to the loaded
@@ -319,6 +321,16 @@ func dependencyLevelCount(root testast.Node) int {
 // debugOutputDir is the default directory where per-stage JSON artifacts are
 // written when --debug is enabled.
 var debugOutputDir = ".momus/output"
+
+// newDebugTracer returns a request/response tracer writing to stderr when debug
+// mode is enabled, or nil otherwise. It is used to surface every HTTP request a
+// run makes (capability fetch, provisioning, and test execution).
+func newDebugTracer(debug bool) *tracing.Tracer {
+	if !debug {
+		return nil
+	}
+	return tracing.New(os.Stderr)
+}
 
 // writeDebugOutput writes stage data to the debug output directory when debug
 // mode is enabled. It is a no-op otherwise. stage is the file name within the
