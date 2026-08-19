@@ -62,7 +62,7 @@ func operationCase(op *Operation, base, writeBase string) ast.Node {
 // generic sample). Write operations use writeBase when configured.
 func operationURL(op *Operation, base, writeBase string) string {
 	target := base
-	if isWriteMethod(op.Method) && writeBase != "" {
+	if ast.IsWriteMethod(op.Method) && writeBase != "" {
 		target = writeBase
 	}
 	path := op.Path
@@ -73,16 +73,6 @@ func operationURL(op *Operation, base, writeBase string) string {
 	}
 	path = pathParamPattern.ReplaceAllString(path, sampleScalar(""))
 	return target + path
-}
-
-// isWriteMethod reports whether the HTTP method creates or modifies a resource.
-func isWriteMethod(method string) bool {
-	switch method {
-	case http.MethodPost, http.MethodPut, http.MethodPatch:
-		return true
-	default:
-		return false
-	}
 }
 
 // operationRequestBody returns a sample JSON body for write operations that

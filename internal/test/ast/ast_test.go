@@ -1,6 +1,24 @@
 package ast
 
-import "testing"
+import (
+	"net/http"
+	"testing"
+)
+
+func TestIsWriteMethod(t *testing.T) {
+	writes := []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
+	for _, m := range writes {
+		if !IsWriteMethod(m) {
+			t.Errorf("IsWriteMethod(%q) = false, want true", m)
+		}
+	}
+	reads := []string{http.MethodGet, http.MethodHead, http.MethodOptions, ""}
+	for _, m := range reads {
+		if IsWriteMethod(m) {
+			t.Errorf("IsWriteMethod(%q) = true, want false", m)
+		}
+	}
+}
 
 func TestASTRepresentsSequence(t *testing.T) {
 	plan := &Sequence{Steps: []Node{

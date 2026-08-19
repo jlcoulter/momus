@@ -1,6 +1,8 @@
 // Package ast defines the abstract syntax tree for test plans.
 package ast
 
+import "net/http"
+
 // Node is a node in a test plan AST.
 type Node interface {
 	node()
@@ -66,3 +68,15 @@ func (*Parallel) node() {}
 func (*Request) node()  {}
 func (*Capture) node()  {}
 func (*Assert) node()   {}
+
+// IsWriteMethod reports whether the HTTP method creates or modifies a resource
+// (as opposed to a read/search). Write methods are routed to the write base URL
+// when a split read/write endpoint is configured.
+func IsWriteMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}

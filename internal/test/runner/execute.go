@@ -361,15 +361,13 @@ func (e *executor) executeRequest(reqNode *ast.Request) (assertions.Result, erro
 // method: write methods (PUT/PATCH/POST/DELETE) use the write base URL when
 // configured, while read/search (GET) requests use the read base URL.
 func (e *executor) baseURLForMethod(method string) string {
-	switch method {
-	case http.MethodGet:
-		return e.baseURL
-	default:
-		if e.writeBaseURL != "" {
-			return e.writeBaseURL
-		}
+	if !ast.IsWriteMethod(method) {
 		return e.baseURL
 	}
+	if e.writeBaseURL != "" {
+		return e.writeBaseURL
+	}
+	return e.baseURL
 }
 
 func isSetupRequest(url string) bool {

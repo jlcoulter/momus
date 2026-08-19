@@ -195,15 +195,13 @@ func joinInstanceURL(baseURL, resourceType, id string) string {
 // method: write methods (PUT/PATCH/POST/DELETE) use the write base URL when
 // configured, while read/search (GET) requests use the read base URL.
 func baseURLForMethod(options BuildOptions, method string) string {
-	switch method {
-	case "GET":
-		return options.BaseURL
-	default:
-		if options.WriteBaseURL != "" {
-			return options.WriteBaseURL
-		}
+	if !ast.IsWriteMethod(method) {
 		return options.BaseURL
 	}
+	if options.WriteBaseURL != "" {
+		return options.WriteBaseURL
+	}
+	return options.BaseURL
 }
 
 func buildBodyTemplate(req coverage.CoverageRequirement, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {

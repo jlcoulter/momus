@@ -24,6 +24,10 @@ func newRunCmd(cfg *config) *cobra.Command {
 			if cfg.baseURL == "" {
 				return fmt.Errorf("base URL is required; provide --base-url")
 			}
+			// Resolve the write base URL up front: the provisioner below needs a
+			// concrete URL (it does not default internally), while the library
+			// calls (planner, generation, runner) also default empty to baseURL as
+			// a safety net.
 			writeBase := cfg.writeBaseURL
 			if writeBase == "" {
 				writeBase = cfg.baseURL
