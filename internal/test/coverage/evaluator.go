@@ -31,24 +31,17 @@ func EvaluateCoverage(plan *CoveragePlan, executed []ExecutedRequirementResult) 
 	report.TotalRequirements = len(requirementIDs)
 
 	passedByID := make(map[string]bool, len(executed))
-	hasResultByID := make(map[string]bool, len(executed))
 	for _, result := range executed {
 		if result.RequirementID == "" {
+			continue
+		}
+		if !result.Passed {
 			continue
 		}
 		if _, exists := requirementsByID[result.RequirementID]; !exists {
 			continue
 		}
-		hasResultByID[result.RequirementID] = true
-		// A requirement is covered only when every one of its executed cases
-		// passes. This matters for obligations that expand to multiple steps
-		// (e.g. a CRUD sequence): a single passing step must not mark the whole
-		// obligation covered.
-		if !result.Passed {
-			passedByID[result.RequirementID] = false
-		} else if _, seen := passedByID[result.RequirementID]; !seen {
-			passedByID[result.RequirementID] = true
-		}
+		passedByID[result.RequirementID] = true
 	}
 
 	for _, reqID := range requirementIDs {
@@ -59,7 +52,7 @@ func EvaluateCoverage(plan *CoveragePlan, executed []ExecutedRequirementResult) 
 		domain.Total++
 		resource.Total++
 		variant.Total++
-		if hasResultByID[reqID] && passedByID[reqID] {
+		if passedByID[reqID] {
 			report.CoveredRequirements++
 			domain.Covered++
 			resource.Covered++

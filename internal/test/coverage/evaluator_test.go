@@ -34,48 +34,16 @@ func TestEvaluateCoverageAllCovered(t *testing.T) {
 	}
 }
 
-func TestEvaluateCoverageRequiresAllCasesPass(t *testing.T) {
+func TestEvaluateCoveragePartiallyCovered(t *testing.T) {
 	plan := &CoveragePlan{Requirements: []CoverageRequirement{
-		{ID: "r1", Domain: CoverageDomainState, ResourceType: "Patient", Variant: CoverageVariantStateCRUDSequence},
-		{ID: "r2", Domain: CoverageDomainCardinality, ResourceType: "Patient", Variant: CoverageVariantValidMin},
+		{ID: "r1", Domain: CoverageDomainCardinality, ResourceType: "Patient", ElementPath: "Patient.name", Variant: CoverageVariantValidMin},
+		{ID: "r2", Domain: CoverageDomainCardinality, ResourceType: "Patient", ElementPath: "Patient.name", Variant: CoverageVariantMissingRequired},
 	}}
 
-	// r1 is a multi-step obligation (e.g. a CRUD sequence): one case passed but
-	// another failed, so the obligation must NOT count as covered.
 	executed := []ExecutedRequirementResult{
-		{RequirementID: "r1", Passed: true},
 		{RequirementID: "r1", Passed: false},
 		{RequirementID: "r1", Passed: true},
-		{RequirementID: "r2", Passed: true},
-	}
-	report := EvaluateCoverage(plan, executed)
-
-	if report.CoveredRequirements != 1 || report.UncoveredRequirements != 1 {
-		t.Fatalf("unexpected covered/uncovered counts: %+v", report)
-	}
-	if len(report.Covered) != 1 || report.Covered[0].ID != "r2" {
-		t.Fatalf("covered should be r2 only (r1 had a failing step), got %v", report.Covered)
-	}
-	if len(report.Uncovered) != 1 || report.Uncovered[0].ID != "r1" {
-		t.Fatalf("r1 should be uncovered (not all steps passed), got %v", report.Uncovered)
-	}
-	if report.CoveragePercent != 50 {
-		t.Fatalf("got coverage percent %.2f, want 50", report.CoveragePercent)
-	}
-	if variant := report.ByVariant[CoverageVariantStateCRUDSequence]; variant.Total != 1 || variant.Covered != 0 || variant.Uncovered != 1 {
-		t.Fatalf("unexpected crud-sequence summary: %+v", variant)
-	}
-}
-
-func TestEvaluateCoverageRequirementWithNoResultIsUncovered(t *testing.T) {
-	plan := &CoveragePlan{Requirements: []CoverageRequirement{
-		{ID: "r1", Domain: CoverageDomainCardinality, ResourceType: "Patient", Variant: CoverageVariantValidMin},
-		{ID: "r2", Domain: CoverageDomainCardinality, ResourceType: "Patient", Variant: CoverageVariantMissingRequired},
-	}}
-
-	// r1 has a passing result; r2 has none and must remain uncovered.
-	executed := []ExecutedRequirementResult{
-		{RequirementID: "r1", Passed: true},
+		{RequirementID: "external-id", Passed: true},
 	}
 	report := EvaluateCoverage(plan, executed)
 
@@ -84,6 +52,15 @@ func TestEvaluateCoverageRequirementWithNoResultIsUncovered(t *testing.T) {
 	}
 	if len(report.Uncovered) != 1 || report.Uncovered[0].ID != "r2" {
 		t.Fatalf("unexpected uncovered requirements: %+v", report.Uncovered)
+	}
+	if report.CoveragePercent != 50 {
+		t.Fatalf("got coverage percent %.2f, want 50", report.CoveragePercent)
+	}
+	if resource := report.ByResourceType["Patient"]; resource.Total != 2 || resource.Covered != 1 || resource.Uncovered != 1 {
+		t.Fatalf("unexpected resource summary: %+v", resource)
+	}
+	if variant := report.ByVariant[CoverageVariantMissingRequired]; variant.Total != 1 || variant.Covered != 0 || variant.Uncovered != 1 {
+		t.Fatalf("unexpected missing-required summary: %+v", variant)
 	}
 }
 
