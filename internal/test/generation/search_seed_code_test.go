@@ -95,3 +95,49 @@ func TestSearchSeedKeepsRepeatableCodeableConcept(t *testing.T) {
 		}
 	}
 }
+
+// TestSearchSeedKeepsRepeatableCodePrimitive verifies that a token search on a
+// repeatable primitive `code` element (e.g. Endpoint.payloadMimeType) keeps the
+// value as an array of strings, never an object ("This property must be a simple
+// value, not an Object").
+func TestSearchSeedKeepsRepeatableCodePrimitive(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/endpoint", Type: "Endpoint", Elements: []model.ElementDefinition{
+		{Path: "Endpoint", Min: 0, Max: "*"},
+		{Path: "Endpoint.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Endpoint.connectionType", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Coding"}}},
+		{Path: "Endpoint.payloadMimeType", Min: 0, Max: "*", Types: []model.ElementType{{Code: "code"}}},
+	}})
+	reg.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Endpoint-payload-mimetype", Name: "payload-mimetype", Code: "payload-mimetype", Base: []string{"Endpoint"}, Type: "token", Expression: "Endpoint.payloadMimeType"})
+
+	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
+		{ID: "search|Endpoint|payload-mimetype|search-multiple-results", ResourceType: "Endpoint", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchMultipleResults, SearchCode: "payload-mimetype"},
+	}}
+	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
+
+	ds, err := BuildSetupDataset(plan, opts)
+	if err != nil {
+		t.Fatalf("BuildSetupDataset returned error: %v", err)
+	}
+	for _, inst := range ds.Resources {
+		pt, ok := inst.Resource["payloadMimeType"]
+		if !ok {
+			continue
+		}
+		switch v := pt.(type) {
+		case []any:
+			if len(v) == 0 {
+				t.Fatal("payloadMimeType is empty")
+			}
+			if s, ok := v[0].(string); !ok || s != "momus-search" {
+				t.Fatalf("payloadMimeType[0] = %T %v, want string momus-search", v[0], v[0])
+			}
+		case string:
+			if pt != "momus-search" {
+				t.Fatalf("payloadMimeType = %q, want momus-search", pt)
+			}
+		default:
+			t.Fatalf("payloadMimeType = %T %v, want a scalar string or array of strings", pt, pt)
+		}
+	}
+}

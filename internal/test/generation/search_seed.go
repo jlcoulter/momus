@@ -292,6 +292,30 @@ func setSearchCodeValue(body map[string]any, path string, value string, typeCode
 	if idx := strings.LastIndex(path, "."); idx >= 0 {
 		field = path[idx+1:]
 	}
+	if typeCode == "code" {
+		// A primitive code holds scalar strings. A repeatable code is an array of
+		// strings; set its first element to the string value, never an object
+		// (servers reject an object where a simple value is required).
+		raw, ok := body[field]
+		if !ok {
+			if repeatable {
+				body[field] = []any{value}
+			} else {
+				body[field] = value
+			}
+			return
+		}
+		if arr, ok := raw.([]any); ok {
+			if len(arr) == 0 {
+				body[field] = []any{value}
+				return
+			}
+			arr[0] = value
+			return
+		}
+		body[field] = value
+		return
+	}
 	raw, ok := body[field]
 	if !ok {
 		switch typeCode {
