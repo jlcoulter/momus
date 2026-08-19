@@ -1,4 +1,4 @@
-package resource
+package bulk
 
 import (
 	"context"
@@ -46,6 +46,21 @@ var commonReferenceTargets = map[string]map[string]string{
 	"ExplanationOfBenefit": {"patient": "Patient", "provider": "Practitioner"},
 }
 
+// CorpusGenerator produces a realistic corpus of random resources for bulk
+// `$export` data. It is a distinct bulk-export generator: unlike the
+// coverage-driven data pipeline (internal/test/generation), it synthesises
+// random, realistic instances per resource type and links references across
+// pools, rather than generating data required by coverage obligations.
+type CorpusGenerator struct {
+	reg        *registry.Registry
+	exhaustive bool
+}
+
+// NewCorpusGenerator returns a CorpusGenerator backed by reg.
+func NewCorpusGenerator(reg *registry.Registry, exhaustive bool) *CorpusGenerator {
+	return &CorpusGenerator{reg: reg, exhaustive: exhaustive}
+}
+
 // GenerateCorpus produces a realistic corpus of instances for each of the
 // given resource types. By default defaultCount instances are generated per
 // type; overrides, keyed by resource type, take precedence when present.
@@ -53,7 +68,7 @@ var commonReferenceTargets = map[string]map[string]string{
 // sensible, distributed web: dependents are spread over the available targets
 // deterministically, so several resources share a common target rather than
 // everything pointing at one instance.
-func (g *DatasetGenerator) GenerateCorpus(ctx context.Context, resourceTypes []string, defaultCount int, overrides map[string]int) (*model.Dataset, error) {
+func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []string, defaultCount int, overrides map[string]int) (*model.Dataset, error) {
 	_ = ctx
 	if g.reg == nil {
 		return nil, fmt.Errorf("generator requires a registry")
@@ -83,7 +98,7 @@ func (g *DatasetGenerator) GenerateCorpus(ctx context.Context, resourceTypes []s
 		}
 		for i := 0; i < count; i++ {
 			id := fmt.Sprintf("momus-%s-%d", sanitizeID(t), i+1)
-			body, err := synthesizeResource(g.reg, t, "", id, nil, true, newRNG(id))
+			body, err := synthesizeResource(g.reg, t, "", id, nil, g.exhaustive, newRNG(id))
 			if err != nil {
 				// A single unsynthesizable type must not abort the corpus.
 				break
@@ -111,7 +126,7 @@ func (g *DatasetGenerator) GenerateCorpus(ctx context.Context, resourceTypes []s
 // expandReferenceTargets grows the type set to a fixpoint: whenever an included
 // type references another type available in the registry, that type is added so
 // the generated corpus is self-contained and every reference resolves.
-func (g *DatasetGenerator) expandReferenceTargets(resourceTypes []string) []string {
+func (g *CorpusGenerator) expandReferenceTargets(resourceTypes []string) []string {
 	included := make(map[string]bool, len(resourceTypes))
 	for _, t := range resourceTypes {
 		included[t] = true
@@ -132,14 +147,14 @@ func (g *DatasetGenerator) expandReferenceTargets(resourceTypes []string) []stri
 	return resourceTypes
 }
 
-func (g *DatasetGenerator) hasResourceType(resourceType string) bool {
+func (g *CorpusGenerator) hasResourceType(resourceType string) bool {
 	return g.reg != nil && len(g.reg.ProfilesForResource(resourceType)) > 0
 }
 
 // referenceFields derives the reference element paths of a resource type and
 // their target resource types, from the type's resolved profile, falling back
 // to commonReferenceTargets for fields without a target profile.
-func (g *DatasetGenerator) referenceFields(resourceType string) map[string]string {
+func (g *CorpusGenerator) referenceFields(resourceType string) map[string]string {
 	out := make(map[string]string)
 	if profileURL := defaultProfile(g.reg, resourceType); profileURL != "" {
 		if resolved, err := g.reg.ResolveProfile(profileURL); err == nil && resolved != nil && resolved.Root != nil {
@@ -200,11 +215,25 @@ func resourceTypeOfProfile(reg *registry.Registry, profileURL string) string {
 	if reg == nil || strings.TrimSpace(profileURL) == "" {
 		return ""
 	}
-	resolved, err := reg.ResolveProfile(normalizeCanonical(profileURL))
+	resolved, err := reg.ResolveProfile(strings.TrimSpace(profileURL))
 	if err != nil || resolved == nil {
 		return ""
 	}
 	return resolved.ResourceType
+}
+
+// sanitizeID reduces an arbitrary string to a FHIR-compatible id segment.
+func sanitizeID(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '.':
+			b.WriteRune(r)
+		case r == ' ' || r == '|' || r == '/' || r == ':':
+			b.WriteByte('-')
+		}
+	}
+	return strings.Trim(b.String(), "-.")
 }
 
 // wireCorpusReferences sets each reference field of inst to a pool instance of
@@ -229,4 +258,24 @@ func hashCorpus(seed string) uint32 {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(seed))
 	return h.Sum32()
+}
+
+// setReferencePath places a FHIR reference at an element path, creating
+// intermediate containers as needed, so relationship targets are always wired
+// into the body even when the element is optional.
+func setReferencePath(body map[string]any, path string, target refTarget) {
+	parts := strings.Split(path, ".")
+	if len(parts) <= 1 {
+		return
+	}
+	cur := body
+	for i := 1; i < len(parts)-1; i++ {
+		next, ok := cur[parts[i]].(map[string]any)
+		if !ok {
+			next = map[string]any{}
+			cur[parts[i]] = next
+		}
+		cur = next
+	}
+	cur[parts[len(parts)-1]] = map[string]any{"reference": target.resourceType + "/" + target.localID}
 }

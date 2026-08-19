@@ -1,14 +1,46 @@
-package resource
+package bulk
 
 import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/jlcoulter/momus/internal/fhir/model"
+	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
+
+const obsProfile = "http://example.org/StructureDefinition/observation"
+const patientProfile = "http://example.org/StructureDefinition/patient"
+
+func testRegistry(t *testing.T) *registry.Registry {
+	t.Helper()
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  obsProfile,
+		Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+			{Path: "Observation.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Observation.subject", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{patientProfile}}}},
+			{Path: "Observation.code", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  patientProfile,
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient.birthDate", Min: 1, Max: "1", Types: []model.ElementType{{Code: "date"}}},
+		},
+	})
+	return reg
+}
 
 func TestGenerateCorpusWiresDistributedReferences(t *testing.T) {
 	reg := testRegistry(t)
-	gen := NewGeneratorWithOptions(reg, Options{Exhaustive: true})
+	gen := NewCorpusGenerator(reg, true)
 
 	ds, err := gen.GenerateCorpus(context.Background(), []string{"Observation", "Patient"}, 5, nil)
 	if err != nil {
@@ -50,7 +82,7 @@ func TestGenerateCorpusWiresDistributedReferences(t *testing.T) {
 
 func TestGenerateCorpusHonoursPerTypeCounts(t *testing.T) {
 	reg := testRegistry(t)
-	gen := NewGeneratorWithOptions(reg, Options{Exhaustive: true})
+	gen := NewCorpusGenerator(reg, true)
 
 	ds, err := gen.GenerateCorpus(context.Background(), []string{"Observation", "Patient"}, 3, map[string]int{"Patient": 7})
 	if err != nil {
@@ -70,7 +102,7 @@ func TestGenerateCorpusHonoursPerTypeCounts(t *testing.T) {
 
 func TestGenerateCorpusExpandsReferenceTargets(t *testing.T) {
 	reg := testRegistry(t)
-	gen := NewGeneratorWithOptions(reg, Options{Exhaustive: true})
+	gen := NewCorpusGenerator(reg, true)
 
 	// Only Observation requested; Patient is a reference target and must be
 	// pulled in automatically so references resolve.
@@ -91,7 +123,7 @@ func TestGenerateCorpusExpandsReferenceTargets(t *testing.T) {
 
 func TestGenerateCorpusRequiresTypes(t *testing.T) {
 	reg := testRegistry(t)
-	gen := NewGeneratorWithOptions(reg, Options{Exhaustive: true})
+	gen := NewCorpusGenerator(reg, true)
 	if _, err := gen.GenerateCorpus(context.Background(), nil, 3, nil); err == nil {
 		t.Fatal("expected error for empty resource types")
 	}

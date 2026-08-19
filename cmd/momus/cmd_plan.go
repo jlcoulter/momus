@@ -1,23 +1,23 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
-	fhirplanner "github.com/jlcoulter/momus/internal/fhir/planner"
-	fhirresource "github.com/jlcoulter/momus/internal/fhir/resource"
-	testast "github.com/jlcoulter/momus/internal/test/ast"
 	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
+	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 	"github.com/spf13/cobra"
 )
 
-// newPlanCmd returns the "coverage plan" command.
+// newPlanCmd returns the "coverage plan" command. It uses the exact same data
+// generation pipeline as "coverage ast" — one registry-driven core synthesises
+// both the seed dataset and the test AST — so there is a single data generation
+// path for all test and provisioned data.
 func newPlanCmd(cfg *config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "plan <path-to-package.tgz>",
-		Short: "Generate a Dataset and executable TestPlan from data requirements",
+		Short: "Generate a test plan (seed dataset + test AST) from derived coverage requirements",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rootPath := args[0]
@@ -58,34 +58,37 @@ func newPlanCmd(cfg *config) *cobra.Command {
 				return err
 			}
 
-			requirements, err := testcoverage.PlanToDataRequirements(coveragePlan)
+			buildOpts := testgeneration.BuildOptions{
+				BaseURL:                        cfg.baseURL,
+				WriteBaseURL:                   cfg.writeBaseURL,
+				Registry:                       reg,
+				PreferredProfileURLsByResource: nil,
+				Strength:                       cfg.interactionStrength,
+				Exhaustive:                     cfg.exhaustive,
+			}
+			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, buildOpts)
+			if err != nil {
+				return err
+			}
+			setupDataset, err := testgeneration.BuildSetupDataset(coveragePlan, buildOpts)
 			if err != nil {
 				return err
 			}
 
-			generator := fhirresource.NewGeneratorWithOptions(reg, fhirresource.Options{Exhaustive: cfg.exhaustive})
-			planner := fhirplanner.NewDefaultPlanner(generator)
-			testPlan, err := planner.Plan(cmd.Context(), fhirplanner.Input{BaseURL: cfg.baseURL, WriteBaseURL: cfg.writeBaseURL, Requirements: requirements})
+			out, err := encodeTestPlan(astPlan, setupDataset)
 			if err != nil {
-				return err
+				return fmt.Errorf("encode test plan: %w", err)
 			}
-
-			encoded, err := testast.EncodePlan(&testast.Plan{Version: "v1", Root: testPlan.Root})
-			if err != nil {
-				return err
-			}
-			out, err := json.MarshalIndent(encoded, "", "  ")
-			if err != nil {
-				return fmt.Errorf("marshal test plan: %w", err)
-			}
-
-			fmt.Printf("Planned %d resources from %d data requirements across %d dependency levels\n", len(testPlan.Dataset.Resources), len(requirements), dependencyLevelCount(testPlan.Root))
 			if cfg.outputPath == "" {
 				fmt.Println(string(out))
 			} else {
 				if err := writeOutputFile(cfg.outputPath, append(out, '\n')); err != nil {
 					return fmt.Errorf("write test plan to %s: %w", cfg.outputPath, err)
 				}
+			}
+
+			fmt.Printf("Generated test plan with %d requirement cases and %d seed resources from %d resolved packages\n", testgeneration.RequirementCount(astPlan), len(setupDataset.Resources), len(graph.Packages))
+			if cfg.outputPath != "" {
 				fmt.Printf("Test plan written to %s\n", cfg.outputPath)
 			}
 			return nil

@@ -225,7 +225,13 @@ func TestRegistryBuilderBuildRoutesSupportedResourceTypes(t *testing.T) {
 	if _, ok := r.SearchParameter("Observation", "code"); !ok {
 		t.Fatal("expected SearchParameter to be indexed")
 	}
-	if _, ok := r.CapabilityStatement("http://example.org/CapabilityStatement/a"); !ok {
+	foundCapability := false
+	for _, cs := range r.CapabilityStatements() {
+		if cs.URL == "http://example.org/CapabilityStatement/a" {
+			foundCapability = true
+		}
+	}
+	if !foundCapability {
 		t.Fatal("expected CapabilityStatement to be indexed")
 	}
 }

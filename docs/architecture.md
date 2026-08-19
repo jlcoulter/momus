@@ -124,8 +124,8 @@ re-derive or re-generate from the package.
 | `coverage ast <pkg>` | G→L | package | `test-plan.json` — carries the seed dataset (J) and the test AST (L) |
 | `coverage provision <test-plan.json>` | J | test plan | uploads the seed dataset up front, in dependency order |
 | `coverage run <test-plan.json> [--coverage-plan …]` | M→O | test plan (+ coverage plan) | executes the AST, evaluates coverage, emits the report |
-| `coverage plan <pkg>` | I→K | package | a `TestPlan` (Dataset + provision AST) via the formal `Planner` |
-| `coverage bulk <pkg>` | J | package | NDJSON bulk dataset (`$export` format) |
+| `coverage plan <pkg>` | G→L | package | same test plan as `coverage ast` — one unified generation pipeline |
+| `coverage bulk <pkg>` | J | package | NDJSON bulk corpus (random `$export` data; a distinct bulk-export generator in `internal/fhir/bulk`) |
 
 The main coverage run is a four-command sequence, each command owning one
 stage and passing its artifact to the next:
@@ -148,10 +148,12 @@ Keeping provisioning (J) separate from execution (M) is the reason the plan
 carries a concrete dataset rather than re-deriving from the package: the data is
 staged once, ahead of execution, and `coverage run` is a pure testing phase.
 
-Two parallel development paths exist alongside the run pipeline: `coverage plan`
-uses the formal `Planner` to go from `DataRequirement` → `Dataset` → provision
-`TestPlan` (one dataset can back many plans), and `coverage bulk` generates bulk
-NDJSON data for `$export` without tests or provisioning.
+There is a single data generation pipeline for all test and provisioned data:
+`coverage plan` produces exactly the same test plan as `coverage ast`, and both
+`provision` and `run` consume that plan. Bulk `$export` data (`coverage bulk`)
+uses a separate corpus generator in `internal/fhir/bulk`, which synthesises
+random, realistic instances and links references across pools — it is not part
+of the coverage-driven test/provisioned data pipeline.
 
 ## FHIR/API Registry
 
@@ -655,21 +657,21 @@ covered.
 - `internal/fhir/package` — package loading and registry building.
 - `internal/fhir/registry` — immutable FHIR/API knowledge index.
 - `internal/fhir/terminology` — terminology expansion and lookup.
-- `internal/fhir/resource` — resource `Generator` (registry-backed
-        `DatasetGenerator` turns `DataRequirement`s into concrete `Dataset`s).
-- `internal/fhir/planner` — planner interface and `TestPlan`; `DefaultPlanner`
-        turns `DataRequirement`s into a provision `TestPlan` (Dataset + AST).
+- `internal/fhir/bulk` — bulk NDJSON writing, cross-resource reference linking,
+        and the bulk-export `CorpusGenerator` (random realistic corpus for
+        `$export`; distinct from the coverage-driven data pipeline).
 - `internal/fhir/provisioning` — `Provisioner` (`ServerProvisioner` PUTs a
         `Dataset` to the server, dependency-ordered).
 - `internal/test/coverage` — coverage requirements, derivation, evaluation,
         and reporting.
-- `internal/test/generation` — positive, negative, and boundary generation.
-        Profile-driven body synthesis lives here; negative variants mutate an
-        otherwise-valid payload against exactly one constraint and assert
-        rejection. It also builds the seed `Dataset` (`BuildSetupDataset`) from
-        the data each coverage obligation needs, including search-matching seeds
-        and transitively-referenced types. `internal/test/ast` holds only node
-        definitions and encoding.
+- `internal/test/generation` — the single registry-driven data pipeline. Its
+        core, `synthesizeBody`, generates every body (provisioned seed resources
+        and test-case payloads) from the registry as the source of truth;
+        negative variants mutate an otherwise-valid payload against exactly one
+        constraint and assert rejection. `BuildSetupDataset` produces the seed
+        `Dataset` from the data each obligation needs, including search-matching
+        seeds and transitively-referenced types. `internal/test/ast` holds only
+        node definitions and encoding.
 - `internal/test/ast` — executable test AST.
 - `internal/test/runner` — test execution.
 - `internal/test/assertions` — assertion interface and evaluation.

@@ -269,18 +269,25 @@ func baseURLForMethod(options BuildOptions, method string) string {
 }
 
 func buildBodyTemplate(req coverage.CoverageRequirement, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
-	body := baseBodyTemplate(req.ResourceType, id, profileURLs, deps)
-	enrichBodyFromProfile(body, primaryProfileURL, reg)
-	if exhaustive {
-		enrichBodyExhaustive(body, primaryProfileURL, reg, newRNG(id))
-	}
-	normalizeGeneratedPayload(body)
-	normalizeResourceSpecificPayload(body)
+	// A test payload is the same registry-driven body synthesis as every other
+	// resource, with an optional negative mutation applied only when the test
+	// expects the server to reject it.
+	body := synthesizeBody(req.ResourceType, id, profileURLs, primaryProfileURL, deps, reg, exhaustive)
 	applyNegativeMutation(body, req, reg)
 	return body
 }
 
 func buildSetupBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
+	return synthesizeBody(resourceType, id, profileURLs, primaryProfileURL, deps, reg, exhaustive)
+}
+
+// synthesizeBody is the single registry-driven body-data core used for all
+// generated data — provisioned seed resources and test-case payloads alike. It
+// depends on the registry as the source of truth: it walks the resolved profile
+// to populate required (and, when exhaustive, optional) elements, resolves
+// bindings to real codes, and applies resource-specific normalisation. Keeping
+// one core means test data and provisioned data cannot drift apart.
+func synthesizeBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
 	body := baseBodyTemplate(resourceType, id, profileURLs, deps)
 	enrichBodyFromProfile(body, primaryProfileURL, reg)
 	if exhaustive {

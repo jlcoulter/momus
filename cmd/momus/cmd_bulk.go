@@ -10,7 +10,6 @@ import (
 	testbulk "github.com/jlcoulter/momus/internal/fhir/bulk"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
-	fhirresource "github.com/jlcoulter/momus/internal/fhir/resource"
 	"github.com/spf13/cobra"
 )
 
@@ -64,8 +63,8 @@ func newBulkCmd(cfg *config) *cobra.Command {
 				sort.Strings(resourceTypes)
 			}
 
-			generator := fhirresource.NewGeneratorWithOptions(reg, fhirresource.Options{Exhaustive: cfg.exhaustive})
-			corpus, err := generator.GenerateCorpus(cmd.Context(), resourceTypes, cfg.bulkCount, parsePerTypeCounts(cfg.bulkPerTypeCounts))
+			corpusGenerator := testbulk.NewCorpusGenerator(reg, cfg.exhaustive)
+			corpus, err := corpusGenerator.GenerateCorpus(cmd.Context(), resourceTypes, cfg.bulkCount, parsePerTypeCounts(cfg.bulkPerTypeCounts))
 			if err != nil {
 				return err
 			}

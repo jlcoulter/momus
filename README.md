@@ -81,22 +81,20 @@ Currently implemented:
   (GET / DELETE a nonexistent resource), and a full
   create-read-update-read-delete-read(404) sequence are derived per resource
   type and exercised as the corresponding HTTP requests
-- Registry-backed `DataRequirement` -> `Dataset` generator and a
-  dependency-ordered server `Provisioner` (building blocks, tested in
-  isolation; pipeline wiring lands with the planner, feature 8)
+- A single registry-driven data generation pipeline: one core (`synthesizeBody`)
+  generates both the seed `Dataset` and every test payload from the registry as
+  the source of truth, so test data and provisioned data cannot drift apart
+- A dependency-ordered server `Provisioner` (`coverage provision`) uploads the
+  seed dataset ahead of execution
 - Bulk NDJSON data generation (`coverage bulk`): a realistic corpus of
   resources across resource types with exhaustive, realistic values and
   references wired into a distributed, coherent web (dependents spread over
   shared targets rather than all pointing at one instance)
 - Generic dependency DAG planning for resource execution ordering
-- True `Planner` and `TestPlan` (`coverage plan`): turns `DataRequirement`s into
-  a `Dataset` via the feature-6 `Generator`, lays out an executable AST that
-  provisions the dataset in dependency order (`Parallel` per level, levels in
-  `Sequence`, targets before dependents), and attaches the `Dataset` to the
-  `TestPlan` so one dataset can back multiple plans
-- Test plan generation from coverage requirements (`coverage ast`): emits the
-  seed dataset plus a test-only AST; provisioning (`coverage provision`) and
-  execution (`coverage run`) both consume the test plan, not the package
+- Unified test plan generation (`coverage plan` and `coverage ast` produce the
+  same artifact): emits the seed dataset plus a test-only AST; provisioning
+  (`coverage provision`) and execution (`coverage run`) both consume the test
+  plan, not the package
 - Assertion expression engine: `status in [..]` plus `body.<path>`, `header.<name>`,
   and `variable.<name>` comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`) so
   assertions can inspect response bodies, headers, and captured variables

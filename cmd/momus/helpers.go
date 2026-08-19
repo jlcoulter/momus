@@ -309,15 +309,7 @@ func writeOutputFile(path string, data []byte) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-// dependencyLevelCount returns the number of dependency levels in a plan root
-// built by the planner (a Sequence of Parallel levels).
-func dependencyLevelCount(root testast.Node) int {
-	if seq, ok := root.(*testast.Sequence); ok {
-		return len(seq.Steps)
-	}
-	return 0
-}
-
+// writeDebugOutput writes stage data to the debug output directory when debug
 // debugOutputDir is the default directory where per-stage JSON artifacts are
 // written when --debug is enabled.
 var debugOutputDir = ".momus/output"

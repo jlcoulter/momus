@@ -26,8 +26,7 @@ type Registry struct {
 	codeSystems          map[string]*model.CodeSystem
 	capabilityStatements map[string]*model.CapabilityStatement
 
-	searchParameters            map[string]*model.SearchParameter
-	searchParametersForResource map[string][]*model.SearchParameter
+	searchParameters map[string]*model.SearchParameter
 
 	profilesByResource map[string][]*model.StructureDefinition
 
@@ -43,13 +42,12 @@ type Registry struct {
 // New returns an empty Registry.
 func New() *Registry {
 	return &Registry{
-		structureDefinitions:        make(map[string]*model.StructureDefinition),
-		valueSets:                   make(map[string]*model.ValueSet),
-		codeSystems:                 make(map[string]*model.CodeSystem),
-		capabilityStatements:        make(map[string]*model.CapabilityStatement),
-		searchParameters:            make(map[string]*model.SearchParameter),
-		searchParametersForResource: make(map[string][]*model.SearchParameter),
-		profilesByResource:          make(map[string][]*model.StructureDefinition),
+		structureDefinitions: make(map[string]*model.StructureDefinition),
+		valueSets:            make(map[string]*model.ValueSet),
+		codeSystems:          make(map[string]*model.CodeSystem),
+		capabilityStatements: make(map[string]*model.CapabilityStatement),
+		searchParameters:     make(map[string]*model.SearchParameter),
+		profilesByResource:   make(map[string][]*model.StructureDefinition),
 	}
 }
 
@@ -104,7 +102,6 @@ func (r *Registry) AddSearchParameter(sp *model.SearchParameter) {
 	}
 	for _, base := range sp.Base {
 		r.searchParameters[searchParameterKey(base, sp.Code)] = sp
-		r.searchParametersForResource[base] = append(r.searchParametersForResource[base], sp)
 	}
 }
 
@@ -196,14 +193,6 @@ func (r *Registry) CodeSystem(url string) (*model.CodeSystem, bool) {
 	return cs, ok
 }
 
-// CapabilityStatement returns the CapabilityStatement for a canonical URL.
-func (r *Registry) CapabilityStatement(url string) (*model.CapabilityStatement, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	cs, ok := r.capabilityStatements[url]
-	return cs, ok
-}
-
 // CapabilityStatements returns every indexed CapabilityStatement.
 func (r *Registry) CapabilityStatements() []*model.CapabilityStatement {
 	r.mu.RLock()
@@ -236,17 +225,6 @@ func (r *Registry) SearchParameters() []*model.SearchParameter {
 		seen[sp] = struct{}{}
 		out = append(out, sp)
 	}
-	return out
-}
-
-// SearchParametersForResource returns all SearchParameters for a resource
-// type.
-func (r *Registry) SearchParametersForResource(resourceType string) []*model.SearchParameter {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	params := r.searchParametersForResource[resourceType]
-	out := make([]*model.SearchParameter, len(params))
-	copy(out, params)
 	return out
 }
 
