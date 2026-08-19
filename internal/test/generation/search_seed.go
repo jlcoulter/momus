@@ -136,8 +136,15 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 	}
 	typeCode := searchLeafType(resourceType, elementPath, reg)
 	switch typeCode {
-	case "string", "code", "uri", "markdown", "id", "oid", "uuid", "base64Binary":
+	case "string", "markdown", "uri", "url", "id", "oid", "uuid", "base64Binary":
 		setPathLeaf(body, elementPath, value)
+		return true
+	case "code", "Coding", "CodeableConcept":
+		// A token search matches the code: for a primitive code it is the scalar,
+		// for a Coding it is the object's `code` member, and for a CodeableConcept
+		// it is the first coding's `code`. Set the appropriate member without
+		// ever adding an illegal property (e.g. `coding` on a Coding).
+		setSearchCodeValue(body, elementPath, value)
 		return true
 	case "HumanName":
 		// A string search on HumanName matches the text/family tokens; ensure the
@@ -146,9 +153,6 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 		return true
 	case "Address":
 		setAddressLeaf(body, elementPath, value)
-		return true
-	case "CodeableConcept", "Coding":
-		setCodeLeaf(body, elementPath, value)
 		return true
 	default:
 		// boolean/date/number/quantity/reference/choice: "momus-search" is not a
@@ -269,29 +273,42 @@ func setAddressLeaf(body map[string]any, path string, value string) {
 	setFieldLeaf(body, path, "text", value)
 }
 
-// setCodeLeaf places the search value as a code on a CodeableConcept/Coding so
-// token search can match it.
-func setCodeLeaf(body map[string]any, path string, value string) {
+// setSearchCodeValue places a code value that a token search can match on the
+// target element, handling a primitive code (scalar), a Coding (its `code`
+// member), and a CodeableConcept (its first coding's `code`). It never adds an
+// illegal property such as `coding` on a Coding.
+func setSearchCodeValue(body map[string]any, path string, value string) {
 	field := path
 	if idx := strings.LastIndex(path, "."); idx >= 0 {
 		field = path[idx+1:]
 	}
 	raw, ok := body[field]
 	if !ok {
-		body[field] = map[string]any{"coding": []any{map[string]any{"code": value}}}
+		body[field] = map[string]any{"code": value}
 		return
 	}
-	if codeable, ok := raw.(map[string]any); ok {
-		if coding, ok := codeable["coding"].([]any); ok && len(coding) > 0 {
+	switch v := raw.(type) {
+	case map[string]any:
+		if _, hasCode := v["code"]; hasCode {
+			// A Coding: set its code member.
+			v["code"] = value
+			return
+		}
+		if coding, ok := v["coding"].([]any); ok && len(coding) > 0 {
 			if first, ok := coding[0].(map[string]any); ok {
 				first["code"] = value
 				return
 			}
+			coding[0] = map[string]any{"code": value}
+			return
 		}
-		codeable["coding"] = []any{map[string]any{"code": value}}
-		return
+		v["code"] = value
+	case string:
+		// A primitive code: set the scalar.
+		body[field] = value
+	default:
+		body[field] = map[string]any{"code": value}
 	}
-	body[field] = map[string]any{"coding": []any{map[string]any{"code": value}}}
 }
 
 // setFieldLeaf sets a string sub-field on the first element of a (possibly
