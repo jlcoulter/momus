@@ -88,26 +88,51 @@ func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []st
 	// every reference resolves even when the caller requested a subset.
 	resourceTypes = g.expandReferenceTargets(resourceTypes)
 
-	// Pass 1: generate instances of each type. References are left as
-	// dangling placeholders and wired in pass 2 once all pools exist. Types that
-	// cannot be synthesised (e.g. abstract or unresolved profiles) are skipped.
-	for _, t := range resourceTypes {
-		count := defaultCount
-		if c, ok := overrides[t]; ok && c > 0 {
-			count = c
-		}
-		for i := 0; i < count; i++ {
-			id := fmt.Sprintf("momus-%s-%d", sanitizeID(t), i+1)
-			body, err := synthesizeResource(g.reg, t, "", id, nil, g.exhaustive, newRNG(id))
-			if err != nil {
-				// A single unsynthesizable type must not abort the corpus.
-				break
+	// Pass 1: generate instances of each type. Types that cannot be synthesised
+	// (e.g. abstract or unresolved profiles) are skipped. Each type is generated
+	// in its own goroutine so the whole corpus is synthesised in parallel, and
+	// results are fanned-in through a channel and reordered deterministically by
+	// the original type index so the dataset (and Pass 2's reference wiring)
+	// stays reproducible. The registry is safe for concurrent reads.
+	type corpusResult struct {
+		index     int
+		instances []*model.ResourceInstance
+	}
+	resultCh := make(chan corpusResult, len(resourceTypes))
+	for idx, t := range resourceTypes {
+		go func(idx int, t string) {
+			count := defaultCount
+			if c, ok := overrides[t]; ok && c > 0 {
+				count = c
 			}
-			if body == nil || len(body) == 0 {
-				break
+			instances := make([]*model.ResourceInstance, 0, count)
+			for i := 0; i < count; i++ {
+				id := fmt.Sprintf("momus-%s-%d", sanitizeID(t), i+1)
+				body, err := synthesizeResource(g.reg, t, "", id, nil, g.exhaustive, newRNG(id))
+				if err != nil {
+					// A single unsynthesizable type must not abort the corpus.
+					break
+				}
+				if body == nil || len(body) == 0 {
+					break
+				}
+				instances = append(instances, &model.ResourceInstance{LocalID: id, ResourceType: t, Profile: "", Resource: body})
 			}
-			ds.Resources[id] = &model.ResourceInstance{LocalID: id, ResourceType: t, Profile: "", Resource: body}
-			pools[t] = append(pools[t], id)
+			resultCh <- corpusResult{index: idx, instances: instances}
+		}(idx, t)
+	}
+
+	// Fan-in the per-type results, then merge them in the original type order so
+	// the dataset and reference wiring are deterministic.
+	results := make([]corpusResult, len(resourceTypes))
+	for range resourceTypes {
+		r := <-resultCh
+		results[r.index] = r
+	}
+	for _, res := range results {
+		for _, inst := range res.instances {
+			ds.Resources[inst.LocalID] = inst
+			pools[inst.ResourceType] = append(pools[inst.ResourceType], inst.LocalID)
 		}
 	}
 
