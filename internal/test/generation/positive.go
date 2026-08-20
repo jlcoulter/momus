@@ -225,13 +225,6 @@ func BuildSetupDataset(plan *coverage.CoveragePlan, options BuildOptions) (*mode
 				continue
 			}
 			ds.Resources[inst.LocalID] = inst
-			for _, dep := range deps {
-				ds.Relationships = append(ds.Relationships, model.Reference{
-					SourceID: inst.LocalID,
-					Path:     resourceType + "." + dep,
-					TargetID: setupResourceID(dep),
-				})
-			}
 		}
 	}
 
@@ -242,13 +235,17 @@ func BuildSetupDataset(plan *coverage.CoveragePlan, options BuildOptions) (*mode
 		appendSearchSeedResources(ds, req, options, byResource)
 	}
 
-	// Record relationships from the actual generated resource bodies (in
-	// addition to the dependency-plan edges above) so provisioning orders
-	// targets before dependents even when a reference was not a declared
-	// coverage dependency target (e.g. a search-seed resource referencing
-	// momus-setup-<Type>). Without this, provisionOrder falls back to
-	// alphabetical ID ordering and dependents are created before their
-	// targets, failing with HAPI-1094 "not found".
+	// Record relationships from the actual generated resource bodies so
+	// provisioning orders targets before dependents. The relationship graph must
+	// reflect only references that actually appear in a resource body: the
+	// dependency plan lists every declared reference target, but a setup resource
+	// may not populate an optional reference, so recording those edges creates
+	// false dependencies and, worse, dependency cycles (e.g. Organization lists
+	// Endpoint as a target while Endpoint lists Organization, even though the
+	// bodies reference only one direction). A cyclic graph defeats the
+	// provisioner's topological sort, which then falls back to alphabetical ID
+	// order and creates dependents before their targets, failing with HAPI-1094
+	// "not found". Scanning the bodies keeps the graph acyclic and correct.
 	recordBodyReferences(ds)
 	return ds, nil
 }
