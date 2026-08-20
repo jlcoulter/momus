@@ -298,9 +298,16 @@ func (r *Registry) resolveElements(sd *model.StructureDefinition, seen map[strin
 	return merged
 }
 
-// elementKey returns a unique key for an element: its path plus slice name when
-// sliced (slices share a path), otherwise its path.
+// elementKey returns a unique merge key for an element: its path plus slice
+// name when sliced (slices share a path), otherwise its path. For slice children
+// whose slice context lives only in their ID (e.g. an ID of
+// "Organization.extension:suppressed.url" with a plain path), the ID's slice
+// segment is preserved so the slice member keys distinct from its base element
+// (task #30); otherwise a SliceName is used when present.
 func elementKey(el model.ElementDefinition) string {
+	if key := model.ElementSliceKey(el.ID, el.Path); key != el.Path {
+		return key
+	}
 	if el.SliceName != "" {
 		return el.Path + ":" + el.SliceName
 	}

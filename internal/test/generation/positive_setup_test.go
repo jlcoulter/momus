@@ -400,3 +400,78 @@ func TestSynthesizeBodyStripsSelfReferences(t *testing.T) {
 		}
 	}
 }
+
+// TestApplySliceConstraintsRecursesIntoNestedCoding verifies that a slice's
+// Fixed value carried several levels deep is applied to the generated value. The
+// suppressedBy sub-extension constrains its value[x].coding to a fixed
+// organisation-initiated coding; without recursion applySliceConstractions only
+// touched the slice's direct children, leaving a generic placeholder coding the
+// server rejects.
+func TestApplySliceConstraintsRecursesIntoNestedCoding(t *testing.T) {
+	reg := registry.New()
+	reg.AddCodeSystem(&model.CodeSystem{URL: "http://example.org/CodeSystem/responsible-party-type", Concepts: []model.CodeSystemConcept{
+		{Code: "organisation-initiated", Display: "Organisation initiated"},
+	}})
+
+	fixedCoding := map[string]any{
+		"system": "http://example.org/CodeSystem/responsible-party-type",
+		"code":   "organisation-initiated",
+	}
+	slice := &model.SliceNode{
+		Name:       "suppressedBy",
+		Definition: &model.ElementDefinition{Path: "Organization.extension.extension", SliceName: "suppressedBy", Min: 1, Max: "1"},
+		Children: map[string]*model.ElementNode{
+			"url": {
+				Name: "url", Path: "Organization.extension.extension.url",
+				Definition: &model.ElementDefinition{Path: "Organization.extension.extension.url", Min: 1, Max: "1", Fixed: "suppressedBy"},
+			},
+			"value[x]": {
+				Name: "value[x]", Path: "Organization.extension.extension.value[x]",
+				Definition: &model.ElementDefinition{Path: "Organization.extension.extension.value[x]", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}},
+				Children: map[string]*model.ElementNode{
+					"coding": {
+						Name: "coding", Path: "Organization.extension.extension.value[x].coding",
+						Definition: &model.ElementDefinition{Path: "Organization.extension.extension.value[x].coding", Min: 1, Max: "1", Fixed: fixedCoding, Types: []model.ElementType{{Code: "Coding"}}},
+					},
+				},
+			},
+		},
+	}
+
+	// A value generated generically with a placeholder coding and a stale
+	// placeholder text (e.g. "Value[x]" synthesized by the fallback generator).
+	value := map[string]any{
+		"url": "suppressedBy",
+		"valueCodeableConcept": map[string]any{
+			"coding": []any{map[string]any{"system": "http://example.org", "code": "value-x"}},
+			"text":   "Value[x]",
+		},
+	}
+	applySliceConstractions(value, slice, reg)
+
+	cc, ok := value["valueCodeableConcept"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected valueCodeableConcept map, got %T", value["valueCodeableConcept"])
+	}
+	// The stale generic placeholder text must be dropped when the coding is fixed.
+	if _, hasText := cc["text"]; hasText {
+		t.Fatalf("stale placeholder text should be removed once coding is fixed, got %#v", cc["text"])
+	}
+	codings, ok := cc["coding"].([]any)
+	if !ok || len(codings) != 1 {
+		t.Fatalf("expected a single coding, got %#v", cc["coding"])
+	}
+	coding, ok := codings[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected coding map, got %T", codings[0])
+	}
+	if coding["code"] != "organisation-initiated" {
+		t.Fatalf("got code %v, want organisation-initiated", coding["code"])
+	}
+	if coding["system"] != "http://example.org/CodeSystem/responsible-party-type" {
+		t.Fatalf("got system %v, want responsible-party-type", coding["system"])
+	}
+	if coding["display"] != "Organisation initiated" {
+		t.Fatalf("got display %v, want canonical Organisation initiated", coding["display"])
+	}
+}

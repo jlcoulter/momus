@@ -883,25 +883,106 @@ func applySliceConstractions(value map[string]any, slice *model.SliceNode, reg *
 		if child == nil || child.Definition == nil {
 			continue
 		}
-		def := child.Definition
-		prop := propertyNameForNode(child)
-		if prop == "" || prop == "id" {
-			continue
+		applySliceChildConstraints(value, child, reg)
+	}
+}
+
+// applySliceChildConstraints applies one slice-child's Fixed/Pattern onto the
+// generated value, recursing into nested children (e.g. a CodeableConcept's
+// coding) so a Fixed value carried several levels deep is applied. The slice's
+// discriminator often constrains a nested element (for example the suppressedBy
+// sub-extension's value[x].coding must be the fixed organisation-initiated
+// coding); without recursion that required value is left as a generic
+// placeholder and the server rejects the resource.
+func applySliceChildConstraints(value map[string]any, child *model.ElementNode, reg *registry.Registry) {
+	if value == nil || child == nil || child.Definition == nil {
+		return
+	}
+	def := child.Definition
+	prop := propertyNameForNode(child)
+	if prop == "" || prop == "id" {
+		return
+	}
+	if def.Fixed != nil {
+		value[prop] = wrapFixedSlice(value[prop], def, def.Fixed)
+		normaliseCodingDisplay(value[prop], reg)
+		// A slice that fixes a CodeableConcept's coding fully determines the
+		// concept; a `text` synthesized by the generic fallback (e.g. "Value[x]")
+		// is stale and misleading, so drop it. If the slice itself fixes text it
+		// is reapplied when the text child is processed.
+		if prop == "coding" {
+			delete(value, "text")
 		}
-		if def.Fixed != nil {
-			value[prop] = def.Fixed
+		return
+	}
+	if def.Pattern != nil {
+		if patternMap, ok := def.Pattern.(map[string]any); ok {
+			mergeSlicePattern(value, prop, patternMap)
 			normaliseCodingDisplay(value[prop], reg)
-			continue
+			if prop == "coding" {
+				delete(value, "text")
+			}
+		} else {
+			value[prop] = def.Pattern
 		}
-		if def.Pattern != nil {
-			if patternMap, ok := def.Pattern.(map[string]any); ok {
-				mergeSlicePattern(value, prop, patternMap)
-				normaliseCodingDisplay(value[prop], reg)
-			} else {
-				value[prop] = def.Pattern
+		return
+	}
+	// No Fixed/Pattern on this child itself: recurse into its nested children,
+	// applying their Fixed/Pattern onto the corresponding nested generated value.
+	recurseSliceChildConstraints(value, prop, child, reg)
+}
+
+// recurseSliceChildConstraints descends into an existing generated value at prop
+// (an object or array of objects) and applies child's nested element constraints.
+func recurseSliceChildConstraints(value map[string]any, prop string, child *model.ElementNode, reg *registry.Registry) {
+	raw, ok := value[prop]
+	if !ok {
+		return
+	}
+	switch typed := raw.(type) {
+	case map[string]any:
+		applySliceNodeChildren(typed, child, reg)
+	case []any:
+		for _, item := range typed {
+			if m, ok := item.(map[string]any); ok {
+				applySliceNodeChildren(m, child, reg)
 			}
 		}
 	}
+}
+
+// applySliceNodeChildren applies each of node's children's constraints onto the
+// target value, recursing for nested children that carry no direct Fixed/Pattern.
+func applySliceNodeChildren(value map[string]any, node *model.ElementNode, reg *registry.Registry) {
+	if value == nil || node == nil {
+		return
+	}
+	for _, name := range sortedNodeChildren(node) {
+		applySliceChildConstraints(value, node.Children[name], reg)
+	}
+}
+
+func sortedNodeChildren(node *model.ElementNode) []string {
+	out := make([]string, 0, len(node.Children))
+	for name := range node.Children {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// wrapFixedSlice returns the Fixed value in the correct shape for the target
+// property: if the generated target is already an array (or the element is
+// repeatable), the fixed value is wrapped in a single-element array so the
+// existing array shape is preserved.
+func wrapFixedSlice(current any, def *model.ElementDefinition, fixed any) any {
+	if _, isArray := current.([]any); isArray {
+		return []any{fixed}
+	}
+	if elementAllowsMultiple(def) {
+		return []any{fixed}
+	}
+	return fixed
 }
 
 func sortedSliceChildren(slice *model.SliceNode) []string {
