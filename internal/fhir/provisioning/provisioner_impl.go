@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -111,18 +112,41 @@ func (p *ServerProvisioner) ProvisionAll(ctx context.Context, ds *model.Dataset)
 	if p.baseURL == "" || ds == nil {
 		return res
 	}
-	for _, id := range provisionOrder(ds) {
-		instance := ds.Resources[id]
-		if instance == nil {
-			continue
+	// Provision one dependency level at a time: every resource in a level depends
+	// only on resources in earlier levels, so all of a level's PUTs can run
+	// concurrently, while later levels wait for their targets to exist. Failures
+	// within a level are reported in deterministic (level, sorted-id) order.
+	for _, level := range provisionLevels(ds) {
+		type provisionOutcome struct {
+			id       string
+			instance *model.ResourceInstance
+			err      error
 		}
-		if err := p.provisionInstance(ctx, instance); err != nil {
-			res.Failed++
-			res.FailedIDs = append(res.FailedIDs, id)
-			res.Failures = append(res.Failures, failureFromError(id, instance, err))
-			continue
+		outcomes := make([]provisionOutcome, len(level))
+		var wg sync.WaitGroup
+		for i, id := range level {
+			instance := ds.Resources[id]
+			if instance == nil {
+				continue
+			}
+			wg.Add(1)
+			go func(i int, instance *model.ResourceInstance) {
+				defer wg.Done()
+				outcomes[i] = provisionOutcome{id: instance.LocalID, instance: instance, err: p.provisionInstance(ctx, instance)}
+			}(i, instance)
 		}
-		res.Provisioned++
+		wg.Wait()
+		// Collect results in level order (level is already sorted) so failure
+		// reporting is deterministic despite concurrent execution.
+		for _, o := range outcomes {
+			if o.err != nil {
+				res.Failed++
+				res.FailedIDs = append(res.FailedIDs, o.id)
+				res.Failures = append(res.Failures, failureFromError(o.id, o.instance, o.err))
+				continue
+			}
+			res.Provisioned++
+		}
 	}
 	return res
 }
@@ -298,10 +322,13 @@ func (p *ServerProvisioner) applyAuth(req *http.Request) {
 	}
 }
 
-// provisionOrder returns resource ids in dependency order (targets first)
-// using the dataset's recorded relationships. Resources without relationships
-// are ordered deterministically.
-func provisionOrder(ds *model.Dataset) []string {
+// provisionLevels returns resource ids grouped into dependency levels such that
+// every resource in a level depends only on resources in earlier levels, so each
+// level can be provisioned concurrently once the previous level completes.
+// Resources without relationships are ordered deterministically; ids not reached
+// by the dependency graph (e.g. cyclic relationships) form a final level in a
+// stable order.
+func provisionLevels(ds *model.Dataset) [][]string {
 	ids := make([]string, 0, len(ds.Resources))
 	for id := range ds.Resources {
 		ids = append(ids, id)
@@ -327,38 +354,39 @@ func provisionOrder(ds *model.Dataset) []string {
 		sort.Strings(dependents[target])
 	}
 
-	ready := make([]string, 0)
-	for id, d := range depended {
-		if d == 0 {
-			ready = append(ready, id)
-		}
-	}
-	sort.Strings(ready)
-
-	order := make([]string, 0, len(ids))
+	var levels [][]string
 	remaining := len(depended)
-	for remaining > 0 && len(ready) > 0 {
-		next := ready[0]
-		ready = ready[1:]
-		order = append(order, next)
-		remaining--
-		for _, child := range dependents[next] {
-			depended[child]--
-			if depended[child] == 0 {
-				ready = append(ready, child)
-				sort.Strings(ready)
+	for remaining > 0 {
+		ready := make([]string, 0)
+		for id, d := range depended {
+			if d == 0 {
+				ready = append(ready, id)
+			}
+		}
+		if len(ready) == 0 {
+			// Cycle: emit the not-yet-emitted ids as a final level in a stable
+			// order rather than looping forever.
+			level := make([]string, 0)
+			for _, id := range ids {
+				if depended[id] > 0 {
+					level = append(level, id)
+					depended[id] = -1
+				}
+			}
+			if len(level) > 0 {
+				levels = append(levels, level)
+			}
+			break
+		}
+		sort.Strings(ready)
+		levels = append(levels, ready)
+		for _, id := range ready {
+			depended[id] = -1 // emitted; must not be reconsidered as ready
+			remaining--
+			for _, child := range dependents[id] {
+				depended[child]--
 			}
 		}
 	}
-	// Append any ids not reached (e.g. cyclic relationships) in a stable order.
-	reached := make(map[string]bool, len(order))
-	for _, id := range order {
-		reached[id] = true
-	}
-	for _, id := range ids {
-		if !reached[id] {
-			order = append(order, id)
-		}
-	}
-	return order
+	return levels
 }
