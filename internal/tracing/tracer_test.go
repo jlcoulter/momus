@@ -71,14 +71,12 @@ func TestTracerIsConcurrencySafe(t *testing.T) {
 	tr := New(&buf)
 
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 50 {
+		wg.Go(func() {
 			req, _ := http.NewRequest(http.MethodGet, "http://host/fhir/Patient", nil)
 			tr.LogRequest(req, nil)
 			tr.LogResponse(req, http.StatusOK, nil, nil)
-		}()
+		})
 	}
 	wg.Wait()
 
