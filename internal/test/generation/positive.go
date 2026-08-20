@@ -70,6 +70,13 @@ type BuildOptions struct {
 	// realistic. When false, only required and contract-driven elements are
 	// populated.
 	Exhaustive bool
+	// CapabilityResourceTypes, when non-nil, restricts the seed dataset (and the
+	// transitive reference closure) to resource types the target server's
+	// CapabilityStatement declares. This makes the capability statement define the
+	// test plan: only server-supported resource types are provisioned, so we never
+	// send something the server does not advertise. When nil/empty, all registry
+	// types are allowed.
+	CapabilityResourceTypes map[string]struct{}
 }
 
 // GenerateFromCoveragePlan maps coverage requirements into a concrete AST.
@@ -190,6 +197,13 @@ func BuildSetupDataset(plan *coverage.CoveragePlan, options BuildOptions) (*mode
 			// instantiated and must never be provisioned.
 			if isAbstractResourceType(resourceType) {
 				continue
+			}
+			// When a capability scope is set, only seed resource types the server
+			// declares, so provisioning never sends an unsupported type.
+			if options.CapabilityResourceTypes != nil {
+				if _, ok := options.CapabilityResourceTypes[resourceType]; !ok {
+					continue
+				}
 			}
 			deps := depPlan.Dependencies[resourceType]
 			inst := buildSetupResource(resourceType, options, deps, byResource)
@@ -1243,19 +1257,23 @@ func primaryTypeCode(def *model.ElementDefinition) string {
 func referencePlaceholder(def *model.ElementDefinition, reg *registry.Registry) string {
 	if def != nil {
 		for _, canonical := range def.TargetProfile {
-			if resourceType := resolveTargetResourceType(canonical, reg); resourceType != "" {
+			if resourceType := resolveTargetResourceType(canonical, reg); resourceType != "" && !isAbstractResourceType(resourceType) {
 				return resourceType + "/" + setupResourceID(resourceType)
 			}
 		}
 		for _, et := range def.Types {
 			for _, canonical := range et.TargetProfile {
-				if resourceType := resolveTargetResourceType(canonical, reg); resourceType != "" {
+				if resourceType := resolveTargetResourceType(canonical, reg); resourceType != "" && !isAbstractResourceType(resourceType) {
 					return resourceType + "/" + setupResourceID(resourceType)
 				}
 			}
 		}
 	}
-	return "Resource/" + setupResourceID("Resource")
+	// No concrete target profile: reference a representative provisioned type
+	// rather than the abstract base "Resource" (which is never provisioned). A
+	// Reference to a real provisioned resource resolves on the server; pointing
+	// at the abstract Resource type produces a dangling reference.
+	return "Organization/" + setupResourceID("Organization")
 }
 
 func normalizeReferenceType(value map[string]any, def *model.ElementDefinition, reg *registry.Registry) {

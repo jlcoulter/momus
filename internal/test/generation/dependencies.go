@@ -39,6 +39,10 @@ func buildDependencyPlan(plan *coverage.CoveragePlan, options BuildOptions) (*co
 	// Transitive closure over profile reference targets. Worklist-driven so each
 	// newly discovered type's own references are followed, guaranteeing every
 	// transitively-referenced type is seeded and ordered before its dependents.
+	// When a capability scope is set, only reference targets the server declares
+	// are added, so the plan never provisions a resource type the server does not
+	// support.
+	allowed := options.CapabilityResourceTypes
 	queue := make([]string, 0, len(resourceSet))
 	for rt := range resourceSet {
 		queue = append(queue, rt)
@@ -55,6 +59,11 @@ func buildDependencyPlan(plan *coverage.CoveragePlan, options BuildOptions) (*co
 		for _, target := range profileReferenceTargets(options.Registry, profileURL) {
 			if target == rt {
 				continue
+			}
+			if allowed != nil {
+				if _, ok := allowed[target]; !ok {
+					continue
+				}
 			}
 			dependencies[rt] = appendUniqueString(dependencies[rt], target)
 			if _, ok := resourceSet[target]; !ok {

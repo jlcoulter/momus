@@ -63,7 +63,17 @@ func newAstCmd(cfg *config) *cobra.Command {
 				return err
 			}
 
-			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, testgeneration.BuildOptions{BaseURL: cfg.baseURL, WriteBaseURL: cfg.writeBaseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: cfg.interactionStrength, Exhaustive: cfg.exhaustive})
+			// The server's CapabilityStatement defines the test plan: derivation is
+			// scoped to the resource types/profiles it declares, and the seed dataset
+			// is restricted to those resource types so we only provision what the
+			// server advertises.
+			capabilityTypes := make(map[string]struct{}, len(coverageResourceTypes))
+			for _, t := range coverageResourceTypes {
+				capabilityTypes[t] = struct{}{}
+			}
+			buildOpts := testgeneration.BuildOptions{BaseURL: cfg.baseURL, WriteBaseURL: cfg.writeBaseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: cfg.interactionStrength, Exhaustive: cfg.exhaustive, CapabilityResourceTypes: capabilityTypes}
+
+			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, buildOpts)
 			if err != nil {
 				return err
 			}
@@ -71,10 +81,17 @@ func newAstCmd(cfg *config) *cobra.Command {
 			// carries the exact resources the test cases reference. The dataset is
 			// provisioned separately by "coverage provision"; carrying it in the
 			// plan lets provisioning and execution work from the plan alone.
-			setupDataset, err := testgeneration.BuildSetupDataset(coveragePlan, testgeneration.BuildOptions{BaseURL: cfg.baseURL, WriteBaseURL: cfg.writeBaseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: cfg.interactionStrength, Exhaustive: cfg.exhaustive})
+			setupDataset, err := testgeneration.BuildSetupDataset(coveragePlan, buildOpts)
 			if err != nil {
 				return err
 			}
+
+			// The server's CapabilityStatement defines the test plan: derivation was
+			// scoped to the resource types/profiles it declares. Surface hard evidence
+			// that the plan we are about to write only sends server-supported things.
+			ev := verifyPlanAgainstCapability(cmd.Context(), cfg, reg, setupDataset)
+			reportCapabilityEvidence(ev, cfg.baseURL)
+
 			out, err := encodeTestPlan(astPlan, setupDataset)
 			if err != nil {
 				return fmt.Errorf("encode test plan: %w", err)

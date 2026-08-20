@@ -159,6 +159,39 @@ func TestBuildSetupDatasetExcludesAbstractReferenceTypes(t *testing.T) {
 	}
 }
 
+// TestBuildSetupDatasetRespectsCapabilityScope verifies that when the server's
+// CapabilityStatement declares a resource-type scope, the seed dataset (and the
+// transitive reference closure) is restricted to those types — the capability
+// statement defines the test plan.
+func TestBuildSetupDatasetRespectsCapabilityScope(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+	}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/observation", Type: "Observation", Elements: []model.ElementDefinition{
+		{Path: "Observation", Min: 0, Max: "*"},
+		{Path: "Observation.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Observation.subject", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
+	}})
+	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
+		{ID: "o-1", ProfileURL: "http://example.org/StructureDefinition/observation", ResourceType: "Observation", ElementPath: "Observation.subject", Variant: coverage.CoverageVariantValidMin},
+	}}
+
+	// Server only supports Observation, not Patient (a reference target).
+	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg, CapabilityResourceTypes: map[string]struct{}{"Observation": {}}}
+	ds, err := BuildSetupDataset(plan, opts)
+	if err != nil {
+		t.Fatalf("BuildSetupDataset returned error: %v", err)
+	}
+	if _, ok := ds.Resources[setupResourceID("Patient")]; ok {
+		t.Fatal("Patient must not be seeded when it is outside the capability scope")
+	}
+	if _, ok := ds.Resources[setupResourceID("Observation")]; !ok {
+		t.Fatal("Observation must be seeded (supported by the capability statement)")
+	}
+}
+
 // TestBuildSetupDatasetRecordsDependencyRelationships verifies that the seed
 // dataset records relationships so provisioning orders targets before
 // dependents.
