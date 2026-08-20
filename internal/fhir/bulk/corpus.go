@@ -287,7 +287,11 @@ func hashCorpus(seed string) uint32 {
 
 // setReferencePath places a FHIR reference at an element path, creating
 // intermediate containers as needed, so relationship targets are always wired
-// into the body even when the element is optional.
+// into the body even when the element is optional. It walks through both scalar
+// containers and repeatable (array) containers without clobbering them: a
+// repeatable intermediate is descended into at its first element, and a
+// repeatable reference field receives the reference at its first element rather
+// than being replaced by a single object (which would produce invalid FHIR).
 func setReferencePath(body map[string]any, path string, target refTarget) {
 	parts := strings.Split(path, ".")
 	if len(parts) <= 1 {
@@ -295,12 +299,59 @@ func setReferencePath(body map[string]any, path string, target refTarget) {
 	}
 	cur := body
 	for i := 1; i < len(parts)-1; i++ {
-		next, ok := cur[parts[i]].(map[string]any)
-		if !ok {
-			next = map[string]any{}
-			cur[parts[i]] = next
+		cur = descendForReference(cur, parts[i])
+		if cur == nil {
+			return
 		}
-		cur = next
 	}
-	cur[parts[len(parts)-1]] = map[string]any{"reference": target.resourceType + "/" + target.localID}
+	setReferenceLeaf(cur, parts[len(parts)-1], target)
+}
+
+// descendForReference returns the map to continue wiring into for the given
+// segment, descending through a scalar map or into the first element of a
+// repeatable (array) container instead of overwriting it.
+func descendForReference(parent map[string]any, key string) map[string]any {
+	switch v := parent[key].(type) {
+	case map[string]any:
+		return v
+	case []any:
+		if len(v) == 0 {
+			child := map[string]any{}
+			parent[key] = []any{child}
+			return child
+		}
+		if child, ok := v[0].(map[string]any); ok {
+			return child
+		}
+		child := map[string]any{}
+		v[0] = child
+		return child
+	default:
+		child := map[string]any{}
+		parent[key] = child
+		return child
+	}
+}
+
+// setReferenceLeaf sets the reference value at the leaf of a path, preserving
+// an existing scalar object or descending into the first element of a repeatable
+// (array) reference field.
+func setReferenceLeaf(obj map[string]any, key string, target refTarget) {
+	ref := target.resourceType + "/" + target.localID
+	switch v := obj[key].(type) {
+	case map[string]any:
+		v["reference"] = ref
+	case []any:
+		if len(v) == 0 {
+			obj[key] = []any{map[string]any{"reference": ref}}
+			return
+		}
+		if el, ok := v[0].(map[string]any); ok {
+			el["reference"] = ref
+			return
+		}
+		v[0] = map[string]any{"reference": ref}
+	default:
+		obj[key] = map[string]any{"reference": ref}
+	}
 }
