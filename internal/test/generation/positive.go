@@ -1122,9 +1122,10 @@ func resolveBoundCoding(def *model.ElementDefinition, reg *registry.Registry) (g
 		return coding, true
 	}
 	for _, include := range vs.ComposeIncludes {
-		if len(include.Concepts) > 0 {
-			concept := include.Concepts[0]
-			return generatedCoding{System: include.System, Code: concept.Code, Display: concept.Display}, true
+		for _, concept := range include.Concepts {
+			if isMeaningfulCoding(concept.Code, concept.Display) {
+				return generatedCoding{System: include.System, Code: concept.Code, Display: concept.Display}, true
+			}
 		}
 		if include.System == "" {
 			continue
@@ -1138,9 +1139,29 @@ func resolveBoundCoding(def *model.ElementDefinition, reg *registry.Registry) (g
 	return generatedCoding{}, false
 }
 
+// meaningfulCodingCodes are codes that represent null/placeholder values (not a
+// real, meaningful code). Generation must avoid them so bound elements get a
+// meaningful code from the package rather than e.g. the v2-0203 "XX" null code.
+var meaningfulCodingCodes = map[string]bool{
+	"XX": true, "UNK": true, "UN": true, "NULL": true, "NIL": true,
+	"N/A": true, "NA": true, "NI": true, "OTH": true, "OT": true,
+}
+
+// isMeaningfulCoding reports whether a code should be used as a generated value:
+// non-empty and not a placeholder/null code.
+func isMeaningfulCoding(code, display string) bool {
+	if strings.TrimSpace(code) == "" {
+		return false
+	}
+	if meaningfulCodingCodes[strings.ToUpper(strings.TrimSpace(code))] {
+		return false
+	}
+	return true
+}
+
 func firstExpansionCoding(entries []model.ValueSetExpansionContains) (generatedCoding, bool) {
 	for _, entry := range entries {
-		if entry.Code != "" {
+		if entry.Code != "" && isMeaningfulCoding(entry.Code, entry.Display) {
 			return generatedCoding{System: entry.System, Code: entry.Code, Display: entry.Display}, true
 		}
 		if coding, ok := firstExpansionCoding(entry.Contains); ok {
@@ -1152,7 +1173,7 @@ func firstExpansionCoding(entries []model.ValueSetExpansionContains) (generatedC
 
 func firstCodeSystemConcept(concepts []model.CodeSystemConcept) (model.CodeSystemConcept, bool) {
 	for _, concept := range concepts {
-		if concept.Code != "" {
+		if concept.Code != "" && isMeaningfulCoding(concept.Code, concept.Display) {
 			return concept, true
 		}
 		if child, ok := firstCodeSystemConcept(concept.Concepts); ok {

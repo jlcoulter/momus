@@ -12,6 +12,20 @@ import (
 	"github.com/jlcoulter/momus/internal/test/coverage"
 )
 
+// TestResolveBoundCodingSkipsPlaceholders verifies that binding resolution skips
+// placeholder/null codes (e.g. v2-0203 "XX") and returns a meaningful code from
+// the package, so generated CodeableConcepts don't carry a null placeholder.
+func TestResolveBoundCodingSkipsPlaceholders(t *testing.T) {
+	reg := registry.New()
+	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/vs", ComposeIncludes: []model.ValueSetInclude{{System: "http://example.org/cs", Concepts: []model.ConceptReference{{Code: "XX", Display: "Null"}, {Code: "RI", Display: "Resource identifier"}}}}})
+	reg.AddCodeSystem(&model.CodeSystem{URL: "http://example.org/cs", Concepts: []model.CodeSystemConcept{{Code: "XX", Display: "Null"}, {Code: "RI", Display: "Resource identifier"}}})
+	def := &model.ElementDefinition{Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/vs"}}
+	c, ok := resolveBoundCoding(def, reg)
+	if !ok || c.Code != "RI" {
+		t.Fatalf("resolveBoundCoding=%+v ok=%v, want a meaningful code (RI), not the XX placeholder", c, ok)
+	}
+}
+
 // TestGenerateValidABNAndACN verifies the generator emits valid ABN/ACN values
 // (satisfying the AU mod-89 check digit), so identifiers conform to the
 // au-australianbusinessnumber/au-australiancompanynumber profiles and their
