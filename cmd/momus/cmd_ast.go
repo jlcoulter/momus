@@ -66,12 +66,21 @@ func newAstCmd(cfg *config) *cobra.Command {
 			// The server's CapabilityStatement defines the test plan: derivation is
 			// scoped to the resource types/profiles it declares, and the seed dataset
 			// is restricted to those resource types so we only provision what the
-			// server advertises.
-			capabilityTypes := make(map[string]struct{}, len(coverageResourceTypes))
-			for _, t := range coverageResourceTypes {
-				capabilityTypes[t] = struct{}{}
+			// server advertises. When the capability is unreachable or declares
+			// nothing, no restriction is applied.
+			buildOpts := testgeneration.BuildOptions{BaseURL: cfg.baseURL, WriteBaseURL: cfg.writeBaseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: cfg.interactionStrength, Exhaustive: cfg.exhaustive}
+			if len(coverageResourceTypes) > 0 {
+				buildOpts.CapabilityResourceTypes = make(map[string]struct{}, len(coverageResourceTypes))
+				for _, t := range coverageResourceTypes {
+					buildOpts.CapabilityResourceTypes[t] = struct{}{}
+				}
 			}
-			buildOpts := testgeneration.BuildOptions{BaseURL: cfg.baseURL, WriteBaseURL: cfg.writeBaseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: cfg.interactionStrength, Exhaustive: cfg.exhaustive, CapabilityResourceTypes: capabilityTypes}
+			if len(coverageProfileURLs) > 0 {
+				buildOpts.CapabilityProfiles = make(map[string]struct{}, len(coverageProfileURLs))
+				for _, p := range coverageProfileURLs {
+					buildOpts.CapabilityProfiles[p] = struct{}{}
+				}
+			}
 
 			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, buildOpts)
 			if err != nil {

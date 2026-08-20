@@ -77,6 +77,12 @@ type BuildOptions struct {
 	// send something the server does not advertise. When nil/empty, all registry
 	// types are allowed.
 	CapabilityResourceTypes map[string]struct{}
+	// CapabilityProfiles, when non-nil, restricts the seed dataset to resource
+	// profiles the target server's CapabilityStatement declares (via the resource
+	// entry's profile/supportedProfile). A resource type whose selected profile is
+	// not supported is skipped, so we never claim conformance to a profile the
+	// server cannot validate. When nil/empty, all profiles are allowed.
+	CapabilityProfiles map[string]struct{}
 }
 
 // GenerateFromCoveragePlan maps coverage requirements into a concrete AST.
@@ -151,6 +157,13 @@ func buildSetupResource(resourceType string, options BuildOptions, deps []string
 	}
 	setupProfiles := orderedProfilesForResource(resourceType, setupProfileURL, options.PreferredProfileURLsByResource)
 	setupPrimaryProfile := firstProfileURL(setupProfiles)
+	// Capability-gated: only seed a resource whose selected profile the server
+	// declares, so we never provision something the server cannot validate.
+	if options.CapabilityProfiles != nil && setupPrimaryProfile != "" {
+		if _, ok := options.CapabilityProfiles[setupPrimaryProfile]; !ok {
+			return nil
+		}
+	}
 	id := setupResourceID(resourceType)
 	body := buildSetupBody(resourceType, id, setupProfiles, setupPrimaryProfile, deps, options.Registry, options.Exhaustive)
 	return &model.ResourceInstance{
@@ -207,6 +220,10 @@ func BuildSetupDataset(plan *coverage.CoveragePlan, options BuildOptions) (*mode
 			}
 			deps := depPlan.Dependencies[resourceType]
 			inst := buildSetupResource(resourceType, options, deps, byResource)
+			if inst == nil {
+				// Gated out by the capability scope (unsupported type or profile).
+				continue
+			}
 			ds.Resources[inst.LocalID] = inst
 			for _, dep := range deps {
 				ds.Relationships = append(ds.Relationships, model.Reference{

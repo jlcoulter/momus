@@ -159,6 +159,28 @@ func TestBuildSetupDatasetExcludesAbstractReferenceTypes(t *testing.T) {
 	}
 }
 
+// TestBuildSetupDatasetRespectsCapabilityProfileScope verifies that a resource
+// whose selected profile the server's CapabilityStatement does not declare is not
+// seeded (capability-gated filtering).
+func TestBuildSetupDatasetRespectsCapabilityProfileScope(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/org-unsupported", Type: "Organization", Elements: []model.ElementDefinition{
+		{Path: "Organization", Min: 0, Max: "*"},
+		{Path: "Organization.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+	}})
+	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
+		{ID: "o-1", ProfileURL: "http://example.org/StructureDefinition/org-unsupported", ResourceType: "Organization", ElementPath: "Organization.name", Variant: coverage.CoverageVariantValidMin},
+	}}
+	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg, CapabilityProfiles: map[string]struct{}{"http://example.org/StructureDefinition/other": {}}}
+	ds, err := BuildSetupDataset(plan, opts)
+	if err != nil {
+		t.Fatalf("BuildSetupDataset returned error: %v", err)
+	}
+	if _, ok := ds.Resources[setupResourceID("Organization")]; ok {
+		t.Fatal("Organization must not be seeded when its profile is outside the capability scope")
+	}
+}
+
 // TestBuildSetupDatasetRespectsCapabilityScope verifies that when the server's
 // CapabilityStatement declares a resource-type scope, the seed dataset (and the
 // transitive reference closure) is restricted to those types — the capability
