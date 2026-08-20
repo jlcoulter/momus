@@ -1061,3 +1061,90 @@ func collectAsserts(node ast.Node) []*ast.Assert {
 	walk(node)
 	return out
 }
+
+// TestOptionalSliceIncludedRandomly verifies that an optional (Min == 0) slice
+// is included only some of the time — with optionalInclusionProbability when an
+// RNG is supplied, and never when the RNG is nil (the required/nil path) — while
+// a required slice (Min > 0) is always present. This models how real data
+// varies: optional extension slices such as the HCPD "suppressed" extension
+// appear in a fraction of payloads rather than never (or always).
+func TestOptionalSliceIncludedRandomly(t *testing.T) {
+	// A node with one required slice and one optional slice, both on a repeatable
+	// element so generateRepeatedValue is exercised.
+	node := &model.ElementNode{
+		Name:       "extension",
+		Path:       "Organization.extension",
+		Definition: &model.ElementDefinition{Path: "Organization.extension", Min: 0, Max: "*"},
+		Slices: map[string]*model.SliceNode{
+			"required": {Name: "required", Definition: &model.ElementDefinition{Path: "Organization.extension", SliceName: "required", Min: 1, Max: "1"}, Children: map[string]*model.ElementNode{
+				"url": {Name: "url", Path: "Organization.extension.url", Definition: &model.ElementDefinition{Path: "Organization.extension.url", Min: 1, Max: "1", Fixed: "http://example.org/required"}},
+			}},
+			"optional": {Name: "optional", Definition: &model.ElementDefinition{Path: "Organization.extension", SliceName: "optional", Min: 0, Max: "1"}, Children: map[string]*model.ElementNode{
+				"url": {Name: "url", Path: "Organization.extension.url", Definition: &model.ElementDefinition{Path: "Organization.extension.url", Min: 1, Max: "1", Fixed: "http://example.org/optional"}},
+			}},
+		},
+	}
+	reg := registry.New()
+
+	// nil RNG: the required slice is present, the optional slice is never emitted.
+	val, ok := generateRepeatedValue(node, reg, nil)
+	if !ok {
+		t.Fatal("generateRepeatedValue returned false with nil RNG")
+	}
+	arr := val.([]any)
+	urls := sliceURLs(arr)
+	if !contains(urls, "http://example.org/required") {
+		t.Fatalf("required slice missing in nil-RNG output: %v", urls)
+	}
+	if contains(urls, "http://example.org/optional") {
+		t.Fatalf("optional slice must be omitted with nil RNG, got %v", urls)
+	}
+
+	// With an RNG, the optional slice must appear in a non-empty subset across
+	// many seeds (never always-absent and never always-present), matching
+	// optionalInclusionProbability.
+	var everPresent, everAbsent int
+	const trials = 200
+	for i := 0; i < trials; i++ {
+		rng := newRNG("seed-" + strconv.Itoa(i))
+		val, ok := generateRepeatedValue(node, reg, rng)
+		if !ok {
+			t.Fatalf("generateRepeatedValue returned nil with RNG seed %d", i)
+		}
+		urls := sliceURLs(val.([]any))
+		if contains(urls, "http://example.org/required") {
+			// required slice always present
+		}
+		if contains(urls, "http://example.org/optional") {
+			everPresent++
+		} else {
+			everAbsent++
+		}
+	}
+	if everPresent == 0 || everAbsent == 0 {
+		t.Fatalf("optional slice inclusion is not random across seeds (present=%d absent=%d)", everPresent, everAbsent)
+	}
+}
+
+func sliceURLs(arr []any) []string {
+	out := make([]string, 0, len(arr))
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if u, ok := m["url"].(string); ok {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+func contains(haystack []string, needle string) bool {
+	for _, s := range haystack {
+		if s == needle {
+			return true
+		}
+	}
+	return false
+}

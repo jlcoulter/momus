@@ -549,7 +549,7 @@ func populateOptionalChildren(value map[string]any, node *model.ElementNode, reg
 		if rng != nil && rng.Float64() > optionalInclusionProbability {
 			continue
 		}
-		if generated, ok := generateRequiredValue(child, reg); ok {
+		if generated, ok := generateRequiredValue(child, reg, rng); ok {
 			value[propName] = generated
 		}
 	}
@@ -673,7 +673,7 @@ func populateRequiredChildren(body map[string]any, node *model.ElementNode, reg 
 		if _, exists := body[propertyName]; exists && !prefersContractValue(child) {
 			continue
 		}
-		if value, ok := generateRequiredValue(child, reg); ok {
+		if value, ok := generateRequiredValue(child, reg, nil); ok {
 			body[propertyName] = value
 		}
 	}
@@ -765,19 +765,29 @@ func upperCamelTypeName(typeCode string) string {
 	return strings.ToUpper(typeCode[:1]) + typeCode[1:]
 }
 
-func generateRequiredValue(node *model.ElementNode, reg *registry.Registry) (any, bool) {
+func generateRequiredValue(node *model.ElementNode, reg *registry.Registry, rng *rand.Rand) (any, bool) {
 	if node == nil || node.Definition == nil {
 		return nil, false
 	}
 	def := node.Definition
 	if elementAllowsMultiple(def) || def.Min > 1 {
-		return generateRepeatedValue(node, reg)
+		return generateRepeatedValue(node, reg, rng)
 	}
 	if len(node.Slices) > 0 {
 		for _, sliceName := range sortedSliceNames(node.Slices) {
 			slice := node.Slices[sliceName]
-			if slice == nil || slice.Definition == nil || slice.Definition.Min <= 0 {
+			if slice == nil || slice.Definition == nil {
 				continue
+			}
+			// A required slice (Min > 0) is always present. An optional slice
+			// (Min == 0) is added only some of the time to simulate real data:
+			// without an RNG it stays omitted (the required/nil path), with an
+			// RNG it is included with optionalInclusionProbability so presence
+			// varies realistically across requests.
+			if slice.Definition.Min <= 0 {
+				if rng == nil || rng.Float64() > optionalInclusionProbability {
+					continue
+				}
 			}
 			return generateSliceValue(slice, reg)
 		}
@@ -785,7 +795,7 @@ func generateRequiredValue(node *model.ElementNode, reg *registry.Registry) (any
 	return generateSingleValue(node, reg)
 }
 
-func generateRepeatedValue(node *model.ElementNode, reg *registry.Registry) (any, bool) {
+func generateRepeatedValue(node *model.ElementNode, reg *registry.Registry, rng *rand.Rand) (any, bool) {
 	values := make([]any, 0)
 	sliceNames := make([]string, 0, len(node.Slices))
 	for name := range node.Slices {
@@ -794,10 +804,22 @@ func generateRepeatedValue(node *model.ElementNode, reg *registry.Registry) (any
 	sort.Strings(sliceNames)
 	for _, name := range sliceNames {
 		slice := node.Slices[name]
-		if slice == nil || slice.Definition == nil || slice.Definition.Min <= 0 {
+		if slice == nil || slice.Definition == nil {
 			continue
 		}
-		for i := 0; i < slice.Definition.Min; i++ {
+		// Required slices (Min > 0) always appear; optional slices (Min == 0)
+		// are included only some of the time so generated payloads vary like
+		// real data. A nil RNG means the optional slice is omitted.
+		if slice.Definition.Min <= 0 {
+			if rng == nil || rng.Float64() > optionalInclusionProbability {
+				continue
+			}
+		}
+		count := slice.Definition.Min
+		if count < 1 {
+			count = 1
+		}
+		for i := 0; i < count; i++ {
 			if value, ok := generateSliceValue(slice, reg); ok {
 				values = append(values, value)
 			}
@@ -1129,7 +1151,7 @@ func applySimpleConstraints(value map[string]any, node *model.ElementNode, reg *
 			right := matches[2]
 			if value[left] == nil && value[right] == nil {
 				if child := node.Children[left]; child != nil {
-					if generated, ok := generateRequiredValue(child, reg); ok {
+					if generated, ok := generateRequiredValue(child, reg, nil); ok {
 						value[left] = generated
 					}
 				}
@@ -1229,7 +1251,7 @@ func generateMatchingCollectionCandidate(node *model.ElementNode, fieldName stri
 			}
 		}
 	}
-	if candidate, ok := generateRequiredValue(node, reg); ok {
+	if candidate, ok := generateRequiredValue(node, reg, nil); ok {
 		if candidateMap, ok := candidate.(map[string]any); ok {
 			for _, value := range wanted {
 				if current, ok := candidateMap[fieldName].(string); ok && current == value {
