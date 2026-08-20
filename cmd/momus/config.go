@@ -31,7 +31,6 @@ type config struct {
 	writeBaseURL      string
 	capabilityBaseURL string
 	metadataFile      string
-	scopeToCapability bool
 	failOnUncovered   bool
 	coveragePlanPath  string
 	includeCases      bool

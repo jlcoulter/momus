@@ -23,13 +23,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// resourceScopeForRun resolves the resource/profile scope for ast/run from the
-// target server's CapabilityStatement, falling back to the caller-provided
-// scope (or the loaded package) when the server is unreachable.
+// resourceScopeForRun resolves the resource/profile/search scope for ast/run
+// from the target server's CapabilityStatement, falling back to the
+// caller-provided scope (or the loaded package) when the server is unreachable.
 //
-// Search parameter codes are always extracted from the CapabilityStatement
-// when available, regardless of scopeToCapability, so the test plan is always
-// scoped to only the search parameters the server declares.
+// The CapabilityStatement always defines the test plan: resource types,
+// profiles, and search parameters are scoped to what the server declares. When
+// the server is unreachable or no CapabilityStatement is available, the
+// caller-provided scope (or the loaded package) is used as the source of truth.
 func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer) ([]string, []string, map[string][]string, map[string][]string, error) {
 	metadataBaseURL := strings.TrimSpace(cfg.capabilityBaseURL)
 	if metadataBaseURL == "" {
@@ -53,37 +54,27 @@ func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer
 		})
 	}
 
-	// Extract search codes from the CapabilityStatement whenever available.
-	var capabilitySearchCodes map[string][]string
-	if capabilityStatement != nil {
-		capabilitySearchCodes = testcoverage.SearchCodesFromCapabilityStatement(capabilityStatement)
-	}
-
-	// When scopeToCapability is disabled, return the caller-provided scope with
-	// whatever search codes we extracted.
-	if !cfg.scopeToCapability {
-		return cfg.includeResourceTypes, cfg.includeProfileURLs, nil, capabilitySearchCodes, nil
-	}
-
-	// When the server was unreachable and scopeToCapability is enabled, fall back
-	// to the loaded package as the source of truth.
-	if fetchErr != nil {
-		if isServerUnavailable(fetchErr) {
-			fmt.Fprintf(os.Stderr, "WARNING: target server unreachable (%v); falling back to package definitions as source of truth\n", fetchErr)
-			return cfg.includeResourceTypes, cfg.includeProfileURLs, nil, capabilitySearchCodes, nil
-		}
+	// When the server was reachable but returned an error, surface it.
+	if fetchErr != nil && !isServerUnavailable(fetchErr) {
 		return nil, nil, nil, nil, fetchErr
 	}
 
-	// When no CapabilityStatement is available at all, return the caller-provided
-	// scope with whatever search codes we extracted (likely nil).
-	if capabilityStatement == nil {
-		return cfg.includeResourceTypes, cfg.includeProfileURLs, nil, capabilitySearchCodes, nil
+	// When the server was unreachable, warn and fall back.
+	if fetchErr != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: target server unreachable (%v); falling back to package definitions as source of truth\n", fetchErr)
 	}
 
+	// When no CapabilityStatement is available, return the caller-provided scope.
+	if capabilityStatement == nil {
+		return cfg.includeResourceTypes, cfg.includeProfileURLs, nil, nil, nil
+	}
+
+	// The CapabilityStatement always defines the test plan: extract resource
+	// types, profiles, and search codes from what the server declares.
 	capabilityTypes := testcoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, true)
 	capabilityProfiles := testcoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, true)
 	capabilityProfilesByResource := testcoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, true)
+	capabilitySearchCodes := testcoverage.SearchCodesFromCapabilityStatement(capabilityStatement)
 	if len(capabilityTypes) == 0 {
 		// Some CapabilityStatements omit per-resource create interactions.
 		// Fall back to server-declared resource/profile scope instead of unscoped derivation.
