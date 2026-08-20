@@ -200,3 +200,103 @@ func TestSetReferencePathDescendsIntoRepeatableContainer(t *testing.T) {
 		t.Fatalf("performer[0].actor.reference = %v, want Practitioner/prac-3", actor["reference"])
 	}
 }
+
+// TestBulkSynthesizesSlicedExtensionWithFixedCoding verifies that the bulk
+// synthesizer emits sliced extensions and resolves their nested Fixed coding. A
+// profile whose extension is sliced (e.g. the suppressed extension on
+// hcpd-organization) must appear in some instances with its required
+// suppressedBy sub-extension carrying the fixed organisation-initiated coding,
+// rather than being dropped or left with a generic placeholder coding.
+func TestBulkSynthesizesSlicedExtensionWithFixedCoding(t *testing.T) {
+	suppressedURL := "http://example.org/StructureDefinition/suppressed"
+	fixedCoding := map[string]any{
+		"system": "http://example.org/CodeSystem/responsible-party-type",
+		"code":   "organisation-initiated",
+	}
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: suppressedURL, Type: "Extension",
+		Elements: []model.ElementDefinition{
+			{Path: "Extension", Min: 0, Max: "1"},
+			{Path: "Extension.url", Min: 1, Max: "1", Fixed: suppressedURL},
+			{Path: "Extension.extension", Min: 1, Max: "*"},
+			{ID: "Extension.extension:suppressedBy", Path: "Extension.extension", SliceName: "suppressedBy", Min: 1, Max: "1"},
+			{ID: "Extension.extension:suppressedBy.url", Path: "Extension.extension.url", Min: 1, Max: "1", Fixed: "suppressedBy"},
+			{ID: "Extension.extension:suppressedBy.value[x]", Path: "Extension.extension.value[x]", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}},
+			{ID: "Extension.extension:suppressedBy.value[x].coding", Path: "Extension.extension.value[x].coding", Min: 1, Max: "1", Fixed: fixedCoding, Types: []model.ElementType{{Code: "Coding"}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://example.org/StructureDefinition/org", Type: "Organization", Kind: "resource",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "1"},
+			{Path: "Organization.extension", Min: 0, Max: "*"},
+			{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Extension", Profile: []string{suppressedURL}}}},
+			{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: "1", Fixed: suppressedURL},
+			{ID: "Organization.extension:suppressed.extension", Path: "Organization.extension.extension", Min: 1, Max: "*"},
+			{ID: "Organization.extension:suppressed.extension:suppressedBy", Path: "Organization.extension.extension", SliceName: "suppressedBy", Min: 1, Max: "1"},
+			{ID: "Organization.extension:suppressed.extension:suppressedBy.url", Path: "Organization.extension.extension.url", Min: 1, Max: "1", Fixed: "suppressedBy"},
+			{ID: "Organization.extension:suppressed.extension:suppressedBy.value[x]", Path: "Organization.extension.extension.value[x]", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}},
+			{ID: "Organization.extension:suppressed.extension:suppressedBy.value[x].coding", Path: "Organization.extension.extension.value[x].coding", Min: 1, Max: "1", Fixed: fixedCoding, Types: []model.ElementType{{Code: "Coding"}}},
+		},
+	})
+
+	// synthesizeSliceValue must resolve the suppressed slice's nested fixed coding.
+	resolved, err := reg.ResolveProfile("http://example.org/StructureDefinition/org")
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	ext := resolved.Root.Children["extension"]
+	if ext == nil {
+		t.Fatal("expected extension child node")
+	}
+	suppressed := ext.Slices["suppressed"]
+	if suppressed == nil {
+		t.Fatal("expected suppressed slice")
+	}
+	val := synthesizeSliceValue(suppressed, reg, nil, newRNG("test"))
+	m, ok := val.(map[string]any)
+	if !ok {
+		t.Fatalf("synthesizeSliceValue = %T, want map", val)
+	}
+	if m["url"] != suppressedURL {
+		t.Fatalf("suppressed url = %v, want %s", m["url"], suppressedURL)
+	}
+	rawExt, ok := m["extension"].([]any)
+	if !ok || len(rawExt) == 0 {
+		t.Fatalf("suppressed extension missing nested suppressedBy, got %#v", m)
+	}
+	sub, ok := rawExt[0].(map[string]any)
+	if !ok || sub["url"] != "suppressedBy" {
+		t.Fatalf("expected suppressedBy sub-extension, got %#v", rawExt[0])
+	}
+	cc, ok := sub["valueCodeableConcept"].(map[string]any)
+	if !ok {
+		t.Fatalf("suppressedBy missing valueCodeableConcept, got %#v", sub)
+	}
+	codings, ok := cc["coding"].([]any)
+	if !ok || len(codings) == 0 {
+		t.Fatalf("suppressedBy valueCodeableConcept missing coding, got %#v", cc)
+	}
+	coding, ok := codings[0].(map[string]any)
+	if !ok || coding["code"] != "organisation-initiated" {
+		t.Fatalf("suppressedBy coding = %#v, want organisation-initiated", codings[0])
+	}
+}
+
+// TestDefaultProfilePrefersScopedProfile verifies that defaultProfile prefers a
+// scoped (package) profile over the base FHIR profile for a resource type, so
+// package-specific extensions are exercised by bulk generation.
+func TestDefaultProfilePrefersScopedProfile(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Organization", Type: "Organization", Kind: "resource"})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/org", Type: "Organization", Kind: "resource"})
+	reg.SetScope([]string{"http://example.org/StructureDefinition/org"})
+	if got := defaultProfile(reg, "Organization"); got != "http://example.org/StructureDefinition/org" {
+		t.Fatalf("defaultProfile = %q, want scoped example profile", got)
+	}
+	reg.SetScope(nil)
+	if got := defaultProfile(reg, "Organization"); got != "http://hl7.org/fhir/StructureDefinition/Organization" {
+		t.Fatalf("defaultProfile unscoped = %q, want first (base) profile", got)
+	}
+}

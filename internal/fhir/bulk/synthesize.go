@@ -63,6 +63,29 @@ func defaultProfile(reg *registry.Registry, resourceType string) string {
 		return ""
 	}
 	profiles := reg.ProfilesForResource(resourceType)
+	if len(profiles) == 0 {
+		return ""
+	}
+	// Prefer a scoped (package) profile — e.g. hcpd-organization over the base
+	// FHIR Organization — so package-specific extensions (such as the suppressed
+	// extension) are exercised. The registry is scoped to the selected package's
+	// StructureDefinitions, so a profile whose URL is in scope is the profile the
+	// user is testing against.
+	inScope := make(map[string]bool)
+	for _, sd := range reg.ScopedStructureDefinitions() {
+		if sd != nil && sd.URL != "" {
+			inScope[normalizeCanonical(sd.URL)] = true
+		}
+	}
+	for _, p := range profiles {
+		if p == nil || strings.TrimSpace(p.URL) == "" {
+			continue
+		}
+		if inScope[normalizeCanonical(p.URL)] {
+			return p.URL
+		}
+	}
+	// Fall back to the first non-empty profile.
 	for _, p := range profiles {
 		if p != nil && strings.TrimSpace(p.URL) != "" {
 			return p.URL
@@ -74,6 +97,8 @@ func defaultProfile(reg *registry.Registry, resourceType string) string {
 // populateChildren fills the children of a node into body. Required (Min > 0)
 // children are always populated; optional children are populated only in
 // exhaustive mode, and then randomly, so presence varies across instances.
+// Sliced children (node.Slices) are emitted as array members of the same
+// property: required slices always, optional slices randomly.
 func populateChildren(body map[string]any, node *model.ElementNode, reg *registry.Registry, refs map[string]refTarget, exhaustive bool, rng *rand.Rand) {
 	if body == nil || node == nil {
 		return
@@ -92,6 +117,14 @@ func populateChildren(body map[string]any, node *model.ElementNode, reg *registr
 		if propName == "" || propName == "id" {
 			// Skip the resource/element id: ids are assigned by the generator or
 			// the target server and must not be synthesised.
+			continue
+		}
+		// A sliced child emits each slice as a member of the same property, so the
+		// generic base value is not synthesised in addition to its slices.
+		if len(child.Slices) > 0 {
+			if members := synthesizeSliceMembers(child, reg, refs, exhaustive, rng); len(members) > 0 {
+				body[propName] = members
+			}
 			continue
 		}
 		if child.Definition == nil {
@@ -122,6 +155,193 @@ func populateChildren(body map[string]any, node *model.ElementNode, reg *registr
 		} else {
 			body[propName] = value
 		}
+	}
+}
+
+// synthesizeSliceMembers emits the included slices of a sliced child as an array
+// of members sharing the child's property name. Required slices (Min > 0) are
+// always present; optional slices are present with optionalInclusionProbability
+// in exhaustive mode, so a sliced extension like the HCPD suppressed extension
+// appears in a fraction of instances like real data.
+func synthesizeSliceMembers(node *model.ElementNode, reg *registry.Registry, refs map[string]refTarget, exhaustive bool, rng *rand.Rand) []any {
+	if node == nil {
+		return nil
+	}
+	names := make([]string, 0, len(node.Slices))
+	for name := range node.Slices {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var members []any
+	for _, name := range names {
+		slice := node.Slices[name]
+		if slice == nil || slice.Definition == nil {
+			continue
+		}
+		required := slice.Definition.Min > 0
+		if !required {
+			if !exhaustive {
+				continue
+			}
+			if rng != nil && rng.Float64() > optionalInclusionProbability {
+				continue
+			}
+		}
+		if value := synthesizeSliceValue(slice, reg, refs, rng); value != nil {
+			members = append(members, value)
+		}
+	}
+	return members
+}
+
+// synthesizeSliceValue synthesises the value for a single slice member, using
+// the slice's children (and applying nested Fixed/Pattern constraints) so a
+// sliced extension such as suppressed resolves its nested coding to the profile's
+// fixed value rather than a generic placeholder.
+func synthesizeSliceValue(slice *model.SliceNode, reg *registry.Registry, refs map[string]refTarget, rng *rand.Rand) any {
+	if slice == nil || slice.Definition == nil {
+		return nil
+	}
+	synthetic := &model.ElementNode{
+		Name:       slice.Definition.Name,
+		Path:       slice.Definition.Path,
+		Definition: slice.Definition,
+		Children:   slice.Children,
+		Slices:     make(map[string]*model.SliceNode),
+	}
+	value := synthesizeNodeValue(synthetic, reg, refs, rng)
+	if value == nil {
+		return nil
+	}
+	if m, ok := value.(map[string]any); ok {
+		applySliceConstraints(m, slice, reg)
+	}
+	return value
+}
+
+// applySliceConstraints overlays a slice's Fixed/Pattern child values onto a
+// synthesised slice value, recursing into nested children (e.g. a
+// CodeableConcept's coding) so a Fixed value carried several levels deep (such as
+// the suppressedBy sub-extension's value[x].coding) is applied rather than left
+// as a generic placeholder.
+func applySliceConstraints(value map[string]any, slice *model.SliceNode, reg *registry.Registry) {
+	if value == nil || slice == nil {
+		return
+	}
+	for _, name := range sortedSliceChildren(slice) {
+		child := slice.Children[name]
+		if child == nil || child.Definition == nil {
+			continue
+		}
+		applySliceChildConstraints(value, child, reg)
+	}
+}
+
+// applySliceChildConstraints applies one slice-child's Fixed/Pattern onto the
+// value, recursing into nested children that carry no direct Fixed/Pattern.
+func applySliceChildConstraints(value map[string]any, child *model.ElementNode, reg *registry.Registry) {
+	if value == nil || child == nil || child.Definition == nil {
+		return
+	}
+	def := child.Definition
+	prop := nodePropertyName(child)
+	if prop == "" || prop == "id" {
+		return
+	}
+	if def.Fixed != nil {
+		value[prop] = wrapBulkFixed(value[prop], def, def.Fixed)
+		if prop == "coding" {
+			delete(value, "text")
+		}
+		return
+	}
+	if def.Pattern != nil {
+		if patternMap, ok := def.Pattern.(map[string]any); ok {
+			mergeBulkSlicePattern(value, prop, patternMap)
+			if prop == "coding" {
+				delete(value, "text")
+			}
+		} else {
+			value[prop] = def.Pattern
+		}
+		return
+	}
+	recurseSliceChildConstraints(value, prop, child, reg)
+}
+
+func recurseSliceChildConstraints(value map[string]any, prop string, child *model.ElementNode, reg *registry.Registry) {
+	raw, ok := value[prop]
+	if !ok {
+		return
+	}
+	switch typed := raw.(type) {
+	case map[string]any:
+		applySliceNodeChildren(typed, child, reg)
+	case []any:
+		for _, item := range typed {
+			if m, ok := item.(map[string]any); ok {
+				applySliceNodeChildren(m, child, reg)
+			}
+		}
+	}
+}
+
+func applySliceNodeChildren(value map[string]any, node *model.ElementNode, reg *registry.Registry) {
+	if value == nil || node == nil {
+		return
+	}
+	for _, name := range sortedNodeChildren(node) {
+		applySliceChildConstraints(value, node.Children[name], reg)
+	}
+}
+
+func sortedSliceChildren(slice *model.SliceNode) []string {
+	out := make([]string, 0, len(slice.Children))
+	for name := range slice.Children {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func sortedNodeChildren(node *model.ElementNode) []string {
+	out := make([]string, 0, len(node.Children))
+	for name := range node.Children {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// wrapBulkFixed returns the Fixed value in the correct shape for the target
+// property: if the target is already an array (or the element is repeatable) the
+// fixed value is wrapped in a single-element array.
+func wrapBulkFixed(current any, def *model.ElementDefinition, fixed any) any {
+	if _, isArray := current.([]any); isArray {
+		return []any{fixed}
+	}
+	if isRepeatable(def) {
+		return []any{fixed}
+	}
+	return fixed
+}
+
+// mergeBulkSlicePattern merges a pattern object into value at prop, recursing
+// into nested objects and arrays so a patterned Coding/CodeableConcept lands.
+func mergeBulkSlicePattern(value map[string]any, prop string, pattern map[string]any) {
+	current, ok := value[prop].(map[string]any)
+	if !ok {
+		value[prop] = cloneMap(pattern)
+		return
+	}
+	for k, v := range pattern {
+		if subMap, ok := v.(map[string]any); ok {
+			if existing, ok := current[k].(map[string]any); ok {
+				mergeBulkSlicePattern(existing, k, subMap)
+				continue
+			}
+		}
+		current[k] = v
 	}
 }
 
