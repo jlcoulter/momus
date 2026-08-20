@@ -2,6 +2,7 @@ package generation
 
 import (
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -252,5 +253,115 @@ func TestBuildSetupDatasetRecordsDependencyRelationships(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected relationship Observation -> Patient, got %+v", ds.Relationships)
+	}
+}
+
+// TestBuildSetupDatasetRecordsReferencesFromResourceBody verifies that the
+// seed dataset records relationships for references that appear in the
+// generated resource body but were not modelled as dependency targets — e.g. a
+// search seed resource referencing momus-setup-<Type>. Without this, the
+// provisioner would order dependents before their targets and fail with
+// HAPI-1094 "not found".
+func TestBuildSetupDatasetRecordsReferencesFromResourceBody(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/endpoint", Type: "Endpoint", Elements: []model.ElementDefinition{
+		{Path: "Endpoint", Min: 0, Max: "*"},
+		{Path: "Endpoint.connectionType", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Coding"}}},
+	}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/healthcareservice", Type: "HealthcareService", Elements: []model.ElementDefinition{
+		{Path: "HealthcareService", Min: 0, Max: "*"},
+		{Path: "HealthcareService.characteristic", Min: 0, Max: "*", Types: []model.ElementType{{Code: "CodeableConcept"}}},
+		{Path: "HealthcareService.endpoint", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
+	}})
+	reg.AddSearchParameter(&model.SearchParameter{URL: "http://example.org/SearchParameter/hs-characteristic", Name: "characteristic", Code: "characteristic", Base: []string{"HealthcareService"}, Type: "token", Expression: "HealthcareService.characteristic"})
+
+	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
+		{ID: "hs-char", ProfileURL: "http://example.org/StructureDefinition/healthcareservice", ResourceType: "HealthcareService", ElementPath: "HealthcareService.endpoint", Variant: coverage.CoverageVariantValidMin},
+		{ID: "hs-search", ResourceType: "HealthcareService", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchValid, SearchCode: "characteristic"},
+	}}
+	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
+
+	ds, err := BuildSetupDataset(plan, opts)
+	if err != nil {
+		t.Fatalf("BuildSetupDataset returned error: %v", err)
+	}
+
+	// The setup Endpoint is seeded because HealthcareService depends on it.
+	endpointLocalID := setupResourceID("Endpoint")
+	if _, ok := ds.Resources[endpointLocalID]; !ok {
+		t.Fatalf("expected setup Endpoint %s in dataset, got %v", endpointLocalID, keysOf(ds.Resources))
+	}
+
+	// Find a search seed HealthcareService that references the setup Endpoint in
+	// its generated body, and assert the relationship was recorded by the body
+	// scan even though the search requirement carried no DependencyTargets.
+	var searchSeedID string
+	for id, inst := range ds.Resources {
+		if strings.HasPrefix(id, "momus-search-") && inst.ResourceType == "HealthcareService" {
+			searchSeedID = id
+			break
+		}
+	}
+	if searchSeedID == "" {
+		t.Fatalf("expected a search seed HealthcareService resource, got %v", keysOf(ds.Resources))
+	}
+
+	found := false
+	for _, rel := range ds.Relationships {
+		if rel.SourceID == searchSeedID && rel.TargetID == endpointLocalID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected relationship search seed %s -> Endpoint %s, got %+v", searchSeedID, endpointLocalID, ds.Relationships)
+	}
+}
+
+// TestApplySliceConstractionsNormalisesCodingDisplay verifies that a slice
+// pattern coding whose display is absent is normalised to the canonical
+// CodeSystem display via applySliceConstractions.
+func TestApplySliceConstractionsNormalisesCodingDisplay(t *testing.T) {
+	reg := registry.New()
+	reg.AddCodeSystem(&model.CodeSystem{URL: "http://terminology.hl7.org/CodeSystem/v2-0203", Concepts: []model.CodeSystemConcept{
+		{Code: "XX", Display: "Organization identifier"},
+	}})
+
+	slice := &model.SliceNode{
+		Name:       "Local",
+		Definition: &model.ElementDefinition{Path: "Endpoint.identifier", Min: 1, Max: "1"},
+		Children: map[string]*model.ElementNode{
+			"type": {
+				Name: "type",
+				Path: "Endpoint.identifier.type",
+				Definition: &model.ElementDefinition{
+					Path: "Endpoint.identifier.type",
+					Pattern: map[string]any{
+						"coding": []any{map[string]any{"system": "http://terminology.hl7.org/CodeSystem/v2-0203", "code": "XX"}},
+					},
+				},
+			},
+		},
+	}
+
+	value := map[string]any{"type": map[string]any{"coding": []any{map[string]any{"system": "http://example.org", "code": "other"}}}}
+	applySliceConstractions(value, slice, reg)
+
+	typ, ok := value["type"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected type map, got %T", value["type"])
+	}
+	codings, ok := typ["coding"].([]any)
+	if !ok || len(codings) == 0 {
+		t.Fatalf("expected codings, got %#v", typ["coding"])
+	}
+	coding, ok := codings[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected coding map, got %T", codings[0])
+	}
+	if coding["code"] != "XX" {
+		t.Fatalf("got code %v, want XX", coding["code"])
+	}
+	if coding["display"] != "Organization identifier" {
+		t.Fatalf("got display %v, want Organization identifier", coding["display"])
 	}
 }

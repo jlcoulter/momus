@@ -241,7 +241,97 @@ func BuildSetupDataset(plan *coverage.CoveragePlan, options BuildOptions) (*mode
 	for _, req := range plan.Requirements {
 		appendSearchSeedResources(ds, req, options, byResource)
 	}
+
+	// Record relationships from the actual generated resource bodies (in
+	// addition to the dependency-plan edges above) so provisioning orders
+	// targets before dependents even when a reference was not a declared
+	// coverage dependency target (e.g. a search-seed resource referencing
+	// momus-setup-<Type>). Without this, provisionOrder falls back to
+	// alphabetical ID ordering and dependents are created before their
+	// targets, failing with HAPI-1094 "not found".
+	recordBodyReferences(ds)
 	return ds, nil
+}
+
+// recordBodyReferences scans every resource body in ds for "reference" fields
+// of the form "<Type>/<id>" and records a Relationship for each one whose target
+// is a resource present in the dataset. This makes provisioning order targets
+// before dependents for references the dependency plan did not model.
+func recordBodyReferences(ds *model.Dataset) {
+	if ds == nil {
+		return
+	}
+	typeByLocalID := make(map[string]string, len(ds.Resources))
+	for _, inst := range ds.Resources {
+		if inst != nil && inst.LocalID != "" {
+			typeByLocalID[inst.LocalID] = inst.ResourceType
+		}
+	}
+
+	seen := make(map[string]struct{})
+	for _, inst := range ds.Resources {
+		if inst == nil || inst.Resource == nil {
+			continue
+		}
+		walkBodyRefs(inst, inst.Resource, typeByLocalID, ds, seen, "")
+	}
+}
+
+// walkBodyRefs recursively descends a resource body, recording a
+// relationship for every "reference" value of the form "<Type>/<id>" whose
+// target exists in the dataset. path is the dotted path accumulated so far.
+func walkBodyRefs(inst *model.ResourceInstance, node any, typeByLocalID map[string]string, ds *model.Dataset, seen map[string]struct{}, path string) {
+	switch v := node.(type) {
+	case map[string]any:
+		for key, val := range v {
+			childPath := key
+			if path != "" {
+				childPath = path + "." + key
+			}
+			if key == "reference" {
+				if ref, ok := val.(string); ok {
+					targetID := referenceTargetID(ref)
+					if targetID != "" && targetID != inst.LocalID {
+						if targetType, ok := typeByLocalID[targetID]; ok && targetType != "" {
+							edge := inst.LocalID + "\x00" + targetID + "\x00" + childPath
+							if _, dup := seen[edge]; !dup {
+								seen[edge] = struct{}{}
+								ds.Relationships = append(ds.Relationships, model.Reference{
+									SourceID: inst.LocalID,
+									Path:     childPath,
+									TargetID: targetID,
+								})
+							}
+						}
+					}
+				}
+				continue
+			}
+			walkBodyRefs(inst, val, typeByLocalID, ds, seen, childPath)
+		}
+	case []any:
+		for _, el := range v {
+			walkBodyRefs(inst, el, typeByLocalID, ds, seen, path)
+		}
+	}
+}
+
+// referenceTargetID parses a FHIR reference string "<Type>/<id>" and returns
+// the id portion, or "" when the reference is not an absolute local reference
+// (e.g. "#fragment", "http://...", or just an id).
+func referenceTargetID(ref string) string {
+	trimmed := strings.TrimSpace(ref)
+	if trimmed == "" {
+		return ""
+	}
+	slash := strings.Index(trimmed, "/")
+	if slash <= 0 || slash == len(trimmed)-1 {
+		return ""
+	}
+	if strings.ContainsAny(trimmed, ":#?") {
+		return ""
+	}
+	return trimmed[slash+1:]
 }
 
 // RequirementCount returns the number of requirement-bound Assertions in a
@@ -324,13 +414,19 @@ func buildSetupBody(resourceType, id string, profileURLs []string, primaryProfil
 // bindings to real codes, and applies resource-specific normalisation. Keeping
 // one core means test data and provisioned data cannot drift apart.
 func synthesizeBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
-	body := baseBodyTemplate(resourceType, id, profileURLs, deps)
+	body := baseBodyTemplate(resourceType, id, profileURLs, deps, reg, primaryProfileURL)
 	enrichBodyFromProfile(body, primaryProfileURL, reg)
 	if exhaustive {
 		enrichBodyExhaustive(body, primaryProfileURL, reg, newRNG(id))
 	}
 	normalizeGeneratedPayload(body)
 	normalizeResourceSpecificPayload(body)
+	// Final pass: resolve any coding display that is missing or echoes its code
+	// to the canonical CodeSystem display. This covers every generation path
+	// (datatype profiles, slice patterns, bound codings), not just slice
+	// constraints, so e.g. an identifier type coding with code "XX" gets the
+	// canonical "Organization identifier" display instead of echoing "XX".
+	normalisePayloadCodingDisplays(body, reg)
 	return body
 }
 
@@ -415,7 +511,7 @@ func recurseExhaustive(raw any, node *model.ElementNode, reg *registry.Registry,
 	}
 }
 
-func baseBodyTemplate(resourceType, id string, profileURLs, deps []string) map[string]any {
+func baseBodyTemplate(resourceType, id string, profileURLs, deps []string, reg *registry.Registry, primaryProfileURL string) map[string]any {
 	body := map[string]any{
 		"resourceType": resourceType,
 		"id":           id,
@@ -424,7 +520,7 @@ func baseBodyTemplate(resourceType, id string, profileURLs, deps []string) map[s
 		body["meta"] = meta
 	}
 
-	attachDependencyReferences(body, resourceType, deps)
+	attachDependencyReferences(body, resourceType, primaryProfileURL, deps, reg)
 	return body
 }
 
@@ -676,13 +772,13 @@ func generateSliceValue(slice *model.SliceNode, reg *registry.Registry) (any, bo
 		if valueMap, ok := value.(map[string]any); ok {
 			populateRequiredChildren(valueMap, synthetic, reg)
 			applySimpleConstraints(valueMap, synthetic, reg)
-			applySliceConstractions(valueMap, slice)
+			applySliceConstractions(valueMap, slice, reg)
 		}
 		return value, true
 	}
 	value, ok := generateSingleValue(synthetic, reg)
 	if valueMap, ok := value.(map[string]any); ok {
-		applySliceConstractions(valueMap, slice)
+		applySliceConstractions(valueMap, slice, reg)
 	}
 	return value, ok
 }
@@ -692,7 +788,11 @@ func generateSliceValue(slice *model.SliceNode, reg *registry.Registry) (any, bo
 // example, an Organization.address:physical slice constrains `type` to the
 // pattern "physical", so the generated address gets type="physical". Without
 // this, a required slice is not matched and servers reject the resource.
-func applySliceConstractions(value map[string]any, slice *model.SliceNode) {
+//
+// Codings materialised from a slice pattern are normalised so their display
+// resolves to the canonical CodeSystem display rather than echoing the code
+// (e.g. "XX" instead of "Organization identifier").
+func applySliceConstractions(value map[string]any, slice *model.SliceNode, reg *registry.Registry) {
 	if value == nil || slice == nil {
 		return
 	}
@@ -708,11 +808,13 @@ func applySliceConstractions(value map[string]any, slice *model.SliceNode) {
 		}
 		if def.Fixed != nil {
 			value[prop] = def.Fixed
+			normaliseCodingDisplay(value[prop], reg)
 			continue
 		}
 		if def.Pattern != nil {
 			if patternMap, ok := def.Pattern.(map[string]any); ok {
 				mergeSlicePattern(value, prop, patternMap)
+				normaliseCodingDisplay(value[prop], reg)
 			} else {
 				value[prop] = def.Pattern
 			}
@@ -1148,12 +1250,19 @@ var meaningfulCodingCodes = map[string]bool{
 }
 
 // isMeaningfulCoding reports whether a code should be used as a generated value:
-// non-empty and not a placeholder/null code.
+// non-empty, not a placeholder/null code, and not a v3 abstract/group code
+// (which begin with an underscore and are not valid instance values).
 func isMeaningfulCoding(code, display string) bool {
 	if strings.TrimSpace(code) == "" {
 		return false
 	}
-	if meaningfulCodingCodes[strings.ToUpper(strings.TrimSpace(code))] {
+	trimmed := strings.ToUpper(strings.TrimSpace(code))
+	if meaningfulCodingCodes[trimmed] {
+		return false
+	}
+	// v3 code systems mark abstract/group concepts with a leading underscore
+	// (e.g. _ActAccommodationReason). They are not valid instance values.
+	if strings.HasPrefix(trimmed, "_") {
 		return false
 	}
 	return true
@@ -1195,6 +1304,107 @@ func codingToMap(coding generatedCoding) map[string]any {
 		out["display"] = coding.Display
 	}
 	return out
+}
+
+// normaliseCodingDisplay resolves a coding's display to the canonical CodeSystem
+// display so a pattern/fixed that only carries system+code does not echo the
+// code as the display (e.g. "XX" instead of "Organization identifier"). It
+// operates on a value that is either a Coding/CodeableConcept map (with a
+// "coding" array) or an array of codings.
+func normaliseCodingDisplay(v any, reg *registry.Registry) {
+	switch t := v.(type) {
+	case map[string]any:
+		if codings, ok := t["coding"].([]any); ok {
+			for _, c := range codings {
+				normaliseCoding(c, reg)
+			}
+		}
+	case []any:
+		for _, c := range t {
+			normaliseCoding(c, reg)
+		}
+	}
+}
+
+// normalisePayloadCodingDisplays recursively walks a generated payload and
+// normalises every coding's display to the canonical CodeSystem display. It is
+// the final safeguard applied after all generation paths, so a coding that was
+// materialised from a datatype profile or a slice pattern with only system+code
+// never ships with a display that merely echoes its code.
+func normalisePayloadCodingDisplays(v any, reg *registry.Registry) {
+	if reg == nil {
+		return
+	}
+	switch t := v.(type) {
+	case map[string]any:
+		normaliseCodingDisplay(t, reg)
+		for _, val := range t {
+			normalisePayloadCodingDisplays(val, reg)
+		}
+	case []any:
+		for _, el := range t {
+			normalisePayloadCodingDisplays(el, reg)
+		}
+	}
+}
+
+// normaliseCoding fixes the display on a single coding map. If a canonical
+// display is known it is set; if the display merely echoes the code and no
+// canonical display is known, the display is dropped rather than echoed.
+func normaliseCoding(c any, reg *registry.Registry) {
+	m, ok := c.(map[string]any)
+	if !ok {
+		return
+	}
+	system, _ := m["system"].(string)
+	code, _ := m["code"].(string)
+	if system == "" || code == "" {
+		return
+	}
+	current, _ := m["display"].(string)
+	if current != "" && current != code {
+		// An intentional, non-echoed display is preserved.
+		return
+	}
+	resolved := resolveCodingDisplay(reg, system, code)
+	switch {
+	case resolved != "":
+		m["display"] = resolved
+	case current == code:
+		// Never echo the code as the display when the canonical display is not
+		// known.
+		delete(m, "display")
+	}
+}
+
+// resolveCodingDisplay returns the canonical display for code in the CodeSystem
+// at system, or "" when the CodeSystem or concept is not indexed.
+func resolveCodingDisplay(reg *registry.Registry, system, code string) string {
+	if reg == nil || system == "" || code == "" {
+		return ""
+	}
+	cs, ok := reg.CodeSystem(system)
+	if !ok || cs == nil {
+		return ""
+	}
+	if c := findCodeSystemConceptByCode(cs.Concepts, code); c != nil {
+		return c.Display
+	}
+	return ""
+}
+
+// findCodeSystemConceptByCode returns the first CodeSystemConcept matching code,
+// walking nested Concepts, or nil when not found.
+func findCodeSystemConceptByCode(concepts []model.CodeSystemConcept, code string) *model.CodeSystemConcept {
+	for i := range concepts {
+		if concepts[i].Code == code {
+			return &concepts[i]
+		}
+		if child := findCodeSystemConceptByCode(concepts[i].Concepts, code); child != nil {
+			return child
+		}
+	}
+	return nil
 }
 
 func mergePatternWithBinding(pattern any, typeCode string, binding generatedCoding, hasBinding bool) (any, bool) {
@@ -2065,7 +2275,7 @@ func stableChecksum(value string) int {
 	return sum
 }
 
-func attachDependencyReferences(body map[string]any, resourceType string, deps []string) {
+func attachDependencyReferences(body map[string]any, resourceType, primaryProfileURL string, deps []string, reg *registry.Registry) {
 	for _, dep := range deps {
 		switch dep {
 		case "Patient":
@@ -2076,7 +2286,25 @@ func attachDependencyReferences(body map[string]any, resourceType string, deps [
 			case "Appointment":
 				body["participant"] = []map[string]any{{"actor": ref, "status": "accepted"}}
 			default:
-				body["subject"] = ref
+				// Resolve the element that actually references the dependency from the
+				// profile instead of hard-coding "subject": resources such as
+				// Provenance reference patients via "target" (and have no "subject"
+				// element), so writing "subject" would be an undeclared property.
+				name := ""
+				if reg != nil {
+					name = dependencyReferenceElementName(resourceType, primaryProfileURL, dep, reg)
+				}
+				if name == "" && reg == nil {
+					// No registry (legacy call path): preserve the historical
+					// "subject" placement rather than dropping the reference.
+					name = "subject"
+				}
+				// With a registry present, only emit the reference under an element
+				// the profile actually declares. If no element references the
+				// dependency, omit it rather than writing an undeclared property.
+				if name != "" {
+					body[name] = ref
+				}
 			}
 		case "Encounter":
 			body["encounter"] = map[string]any{"reference": dep + "/" + setupResourceID(dep)}
@@ -2084,6 +2312,39 @@ func attachDependencyReferences(body map[string]any, resourceType string, deps [
 			body["result"] = []map[string]any{{"reference": dep + "/" + setupResourceID(dep)}}
 		}
 	}
+}
+
+// dependencyReferenceElementName returns the JSON property name of the resource
+// element that references the given dependency resource type, resolved from the
+// primary profile's element tree. It returns "" when no top-level Reference
+// element targets the dependency type (callers then omit the reference rather
+// than emitting it under an undeclared property).
+func dependencyReferenceElementName(resourceType, primaryProfileURL, dependency string, reg *registry.Registry) string {
+	if reg == nil || dependency == "" {
+		return ""
+	}
+	profileURL := primaryProfileURL
+	if profileURL == "" {
+		profileURL = "http://hl7.org/fhir/StructureDefinition/" + resourceType
+	}
+	resolved, err := reg.ResolveProfile(normalizeCanonical(profileURL))
+	if err != nil || resolved == nil || resolved.Root == nil {
+		return ""
+	}
+	for _, child := range resolved.Root.Children {
+		if child == nil || child.Definition == nil {
+			continue
+		}
+		if primaryTypeCode(child.Definition) != "Reference" {
+			continue
+		}
+		if firstTargetResourceType(child.Definition, reg) == dependency {
+			if name := propertyNameForNode(child); name != "" {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // buildSingleRequirementCase builds the strength-1 test for a single coverage

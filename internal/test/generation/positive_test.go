@@ -26,7 +26,97 @@ func TestResolveBoundCodingSkipsPlaceholders(t *testing.T) {
 	}
 }
 
-// TestGenerateValidABNAndACN verifies the generator emits valid ABN/ACN values
+// TestResolveCodingDisplayFillsCanonicalFromCodeSystem verifies that a coding
+// whose display is missing or echoes the code is normalised to the canonical
+// CodeSystem display, and that an unknown code does not echo the code as the
+// display.
+func TestResolveCodingDisplayFillsCanonicalFromCodeSystem(t *testing.T) {
+	reg := registry.New()
+	reg.AddCodeSystem(&model.CodeSystem{URL: "http://terminology.hl7.org/CodeSystem/v2-0203", Concepts: []model.CodeSystemConcept{
+		{Code: "XX", Display: "Organization identifier"},
+		{Code: "RI", Display: "Resource identifier"},
+	}})
+
+	// Display missing: fill the canonical display.
+	missing := map[string]any{"system": "http://terminology.hl7.org/CodeSystem/v2-0203", "code": "XX"}
+	normaliseCoding(missing, reg)
+	if missing["display"] != "Organization identifier" {
+		t.Fatalf("missing-display got %q, want Organization identifier", missing["display"])
+	}
+
+	// Display echoes the code: replace with the canonical.
+	echored := map[string]any{"system": "http://terminology.hl7.org/CodeSystem/v2-0203", "code": "XX", "display": "XX"}
+	normaliseCoding(echored, reg)
+	if echored["display"] != "Organization identifier" {
+		t.Fatalf("echoed-display got %q, want Organization identifier", echored["display"])
+	}
+
+	// Unknown code, display echoes the code: drop the display, never echo it.
+	unknown := map[string]any{"system": "http://terminology.hl7.org/CodeSystem/v2-0203", "code": "not-a-code", "display": "not-a-code"}
+	normaliseCoding(unknown, reg)
+	if _, ok := unknown["display"]; ok {
+		t.Fatalf("unknown-code display should be dropped, got %v", unknown["display"])
+	}
+
+	// A display that is intentional (not equal to the code) is preserved.
+	intentional := map[string]any{"system": "http://terminology.hl7.org/CodeSystem/v2-0203", "code": "XX", "display": "Deliberately different"}
+	normaliseCoding(intentional, reg)
+	if intentional["display"] != "Deliberately different" {
+		t.Fatalf("intentional display was overwritten: %v", intentional["display"])
+	}
+}
+
+// TestIsMeaningfulCodingRejectsV3AbstractCodes verifies that v3 abstract/group
+// codes (leading underscore) are not selected as generated values, while real
+// codes remain acceptable.
+func TestIsMeaningfulCodingRejectsV3AbstractCodes(t *testing.T) {
+	if isMeaningfulCoding("_ActAccommodationReason", "") {
+		t.Fatal("v3 abstract code _ActAccommodationReason must not be meaningful")
+	}
+	if !isMeaningfulCoding("RI", "Resource identifier") {
+		t.Fatal("RI must remain a meaningful code")
+	}
+	if isMeaningfulCoding("XX", "") {
+		t.Fatal("XX placeholder must remain non-meaningful")
+	}
+}
+
+// TestGeneratedProvenanceHasNoSubjectField verifies that a generated Provenance
+// references a Patient dependency via its declared "target" element (the R4
+// Provenance has no "subject" property) rather than an undeclared "subject".
+func TestGeneratedProvenanceHasNoSubjectField(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Kind: "resource", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+	}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/provenance", Type: "Provenance", Kind: "resource", Elements: []model.ElementDefinition{
+		{Path: "Provenance", Min: 0, Max: "*"},
+		{Path: "Provenance.target", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
+		{Path: "Provenance.recorded", Min: 1, Max: "1", Types: []model.ElementType{{Code: "instant"}}},
+	}})
+
+	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
+		{ID: "prov-1", ProfileURL: "http://example.org/StructureDefinition/provenance", ResourceType: "Provenance", ElementPath: "Provenance.target", DependencyTargets: []string{"Patient"}, Variant: coverage.CoverageVariantValidMin},
+	}}, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg})
+	if err != nil {
+		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
+	}
+
+	body := firstRequestBody(t, plan)
+	if _, ok := body["subject"]; ok {
+		t.Fatalf("Provenance must not carry a subject element, got %v", sortedBodyKeys(body))
+	}
+	target, ok := body["target"].([]any)
+	if !ok || len(target) == 0 {
+		t.Fatalf("expected Provenance target reference element, got %v", sortedBodyKeys(body))
+	}
+	targetRef, ok := target[0].(map[string]any)
+	if !ok || targetRef["reference"] != "Patient/momus-setup-patient" {
+		t.Fatalf("got target reference %v, want Patient/momus-setup-patient", targetRef)
+	}
+}
+
 // (satisfying the AU mod-89 check digit), so identifiers conform to the
 // au-australianbusinessnumber/au-australiancompanynumber profiles and their
 // slices resolve on the server.
