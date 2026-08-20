@@ -1,6 +1,7 @@
 package coverage
 
 import (
+	"fmt"
 	"html/template"
 	"sort"
 )
@@ -35,11 +36,12 @@ type htmlDrill struct {
 
 // htmlPolarityGroup is a Positive or Negative sub-grouping within a drill.
 type htmlPolarityGroup struct {
-	Name   string // "Positive" or "Negative"
-	Total  int
-	Passed int
-	Failed int
-	Items  []HTMLItem
+	Name    string // "Positive" or "Negative"
+	Total   int
+	Passed  int
+	Failed  int
+	Percent float64
+	Items   []HTMLItem
 }
 
 // htmlReport is the data model for the rendered HTML report.
@@ -208,6 +210,8 @@ func splitByPolarity(items []HTMLItem) []htmlPolarityGroup {
 			pos.Items = append(pos.Items, it)
 		}
 	}
+	pos.Percent = percent(pos.Passed, pos.Total)
+	neg.Percent = percent(neg.Passed, neg.Total)
 	groups := make([]htmlPolarityGroup, 0, 2)
 	if pos.Total > 0 {
 		groups = append(groups, pos)
@@ -239,7 +243,25 @@ func percentOfVariant(m map[CoverageVariant]DomainCoverageSummary, name string) 
 	return 0
 }
 
-var reportTemplate = template.Must(template.New("report").Parse(`<!DOCTYPE html>
+func rowFillStyle(percent float64) template.CSS {
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 100 {
+		percent = 100
+	}
+	return template.CSS(fmt.Sprintf("--success-pct: %.1f%%;", percent))
+}
+
+var reportTemplate = template.Must(template.New("report").Funcs(template.FuncMap{
+	"rowFillStyle": rowFillStyle,
+	"itemPercent": func(passed bool) float64 {
+		if passed {
+			return 100
+		}
+		return 0
+	},
+}).Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -256,7 +278,13 @@ var reportTemplate = template.Must(template.New("report").Parse(`<!DOCTYPE html>
   .fail { color:#c62828; font-weight:600; }
   details { margin:0.25rem 0; border:1px solid #ddd; border-radius:6px; padding:0.25rem 0.75rem; }
   details details { margin-left:0.5rem; }
-  summary { cursor:pointer; font-weight:600; }
+	summary { cursor:pointer; font-weight:600; }
+	.coverage-row {
+		background-image: linear-gradient(90deg, #d9f5de 0, #d9f5de var(--success-pct), transparent var(--success-pct), transparent 100%);
+		border-radius:4px;
+		padding:0.25rem 0.5rem;
+		margin:-0.25rem -0.5rem;
+	}
   dl { margin:0.5rem 0; }
   dt { font-weight:600; margin-top:0.4rem; }
   dd { margin:0 0 0 1rem; }
@@ -280,13 +308,13 @@ var reportTemplate = template.Must(template.New("report").Parse(`<!DOCTYPE html>
 <h2>{{.Title}}</h2>
 {{range $group := .Drills}}
 <details>
-  <summary>{{$group.Name}} — {{printf "%.1f" $group.Percent}}% ({{$group.Passed}} passed / {{$group.Failed}} failed / {{$group.Total}} total)</summary>
+	<summary class="coverage-row" style="{{rowFillStyle $group.Percent}}">{{$group.Name}} — {{printf "%.1f" $group.Percent}}% ({{$group.Passed}} passed / {{$group.Failed}} failed / {{$group.Total}} total)</summary>
   {{range $pol := $group.Groups}}
   <details>
-    <summary>{{$pol.Name}} — {{$pol.Passed}} passed / {{$pol.Failed}} failed / {{$pol.Total}} total</summary>
+		<summary class="coverage-row" style="{{rowFillStyle $pol.Percent}}">{{$pol.Name}} — {{printf "%.1f" $pol.Percent}}% ({{$pol.Passed}} passed / {{$pol.Failed}} failed / {{$pol.Total}} total)</summary>
     {{range $item := $pol.Items}}
     <details>
-      <summary>{{if $item.Passed}}<span class="pass">PASS</span>{{else}}<span class="fail">FAIL</span>{{end}} — {{$item.ID}}</summary>
+			<summary class="coverage-row" style="{{rowFillStyle (itemPercent $item.Passed)}}">{{if $item.Passed}}<span class="pass">PASS</span>{{else}}<span class="fail">FAIL</span>{{end}} — {{$item.ID}}</summary>
       <dl>
         <dt>Assert</dt><dd>{{$item.Expression}}</dd>
         <dt>Domain</dt><dd>{{$item.Domain}}</dd>

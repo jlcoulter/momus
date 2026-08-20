@@ -131,3 +131,28 @@ func TestRenderHTMLComputesPercentFromItemsWithoutEvaluation(t *testing.T) {
 		t.Fatalf("HTML report missing item-derived datatype percentage 100.0%%\n%s", html)
 	}
 }
+
+func TestRenderHTMLAddsPercentageFillToRows(t *testing.T) {
+	items := []HTMLItem{
+		{ID: "req-pass", Domain: "cardinality", Resource: "Patient", Variant: "valid-min", Passed: true},
+		{ID: "req-fail", Domain: "cardinality", Resource: "Patient", Variant: "missing-required", Passed: false},
+	}
+
+	out, err := RenderHTML(EvaluationReport{}, items)
+	if err != nil {
+		t.Fatalf("RenderHTML returned error: %v", err)
+	}
+	html := string(out)
+
+	for _, want := range []string{
+		`class="coverage-row" style="--success-pct: 50.0%;"`,
+		`Positive — 100.0% (1 passed / 0 failed / 1 total)`,
+		`Negative — 0.0% (0 passed / 1 failed / 1 total)`,
+		`style="--success-pct: 100.0%;"><span class="pass">PASS</span> — req-pass`,
+		`style="--success-pct: 0.0%;"><span class="fail">FAIL</span> — req-fail`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("HTML report missing %q\n%s", want, html)
+		}
+	}
+}
