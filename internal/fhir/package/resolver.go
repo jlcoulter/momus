@@ -411,7 +411,7 @@ func ensureDependencyArchive(index map[string]string, downloadDir string, dep De
 	debug("dependency archive not found locally, attempting remote fetch", "name", dep.Name, "version", dep.Version, "downloadDir", downloadDir)
 	resolvedDep, downloadedPath, fetchErr := fetchDependencyArchive(dep, downloadDir)
 	if fetchErr != nil {
-		return "", err
+		return "", fmt.Errorf("fetch dependency %s@%s: %w", dep.Name, dep.Version, fetchErr)
 	}
 
 	index[packageKey(resolvedDep.Name, resolvedDep.Version)] = downloadedPath

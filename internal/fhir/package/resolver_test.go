@@ -82,15 +82,33 @@ func TestResolveLocalPackageGraphCycle(t *testing.T) {
 
 func TestResolveLocalPackageGraphMissingDependency(t *testing.T) {
 	dir := t.TempDir()
+	downloadDir := filepath.Join(dir, ".momus", "packages")
 
 	rootPath := writePackageArchive(t, dir, "a.pkg", "1.0.0", map[string]string{"missing.pkg": "1.0.0"})
 
-	_, err := ResolveLocalPackageGraphWithOptions(rootPath, ResolveOptions{DepsDir: dir, ConflictPolicy: ConflictPolicyRootWins})
+	// Missing locally and not fetchable remotely; use a controlled registry that
+	// always fails so the test does not depend on the real network. The error must
+	// surface the fetch failure (with context), not a stale local not-found error.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	oldBaseURLs := packageRegistryBaseURLs
+	oldClient := httpClient
+	packageRegistryBaseURLs = []string{server.URL}
+	httpClient = server.Client()
+	defer func() {
+		packageRegistryBaseURLs = oldBaseURLs
+		httpClient = oldClient
+	}()
+
+	_, err := ResolveLocalPackageGraphWithOptions(rootPath, ResolveOptions{DepsDir: dir, DownloadDir: downloadDir, ConflictPolicy: ConflictPolicyRootWins})
 	if err == nil {
 		t.Fatal("expected missing dependency error, got nil")
 	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Fatalf("expected not found error, got %v", err)
+	if !strings.Contains(err.Error(), "fetch dependency missing.pkg@1.0.0") {
+		t.Fatalf("expected fetch-failure error, got %v", err)
 	}
 }
 
@@ -408,4 +426,46 @@ func countOccurrences(values []string, target string) int {
 		}
 	}
 	return count
+}
+
+// TestResolveLocalPackageGraphSurfacesRemoteFetchError verifies that when a
+// dependency is missing locally and the remote fetch fails, the returned error
+// surfaces the actual fetch failure (with context) rather than the stale local
+// "not found" error from findDependencyArchive, which previously masked the
+// real cause (e.g. a transient network or registry failure).
+func TestResolveLocalPackageGraphSurfacesRemoteFetchError(t *testing.T) {
+	dir := t.TempDir()
+	downloadDir := filepath.Join(dir, ".momus", "packages")
+	rootPath := writePackageArchive(t, dir, "a.pkg", "1.0.0", map[string]string{"b.pkg": "1.0.0"})
+
+	// The registry always fails (404 on metadata) so the remote fetch cannot
+	// succeed; the resolved error must reflect this, not the local lookup miss.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	oldBaseURLs := packageRegistryBaseURLs
+	oldClient := httpClient
+	packageRegistryBaseURLs = []string{server.URL}
+	httpClient = server.Client()
+	defer func() {
+		packageRegistryBaseURLs = oldBaseURLs
+		httpClient = oldClient
+	}()
+
+	_, err := ResolveLocalPackageGraphWithOptions(rootPath, ResolveOptions{DepsDir: dir, DownloadDir: downloadDir, ConflictPolicy: ConflictPolicyRootWins})
+	if err == nil {
+		t.Fatal("expected a dependency resolution error, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "fetch dependency b.pkg@1.0.0") {
+		t.Fatalf("error does not surface the fetch failure with context: %v", err)
+	}
+	if !strings.Contains(msg, "unexpected status 404") {
+		t.Fatalf("error does not surface the underlying fetch cause: %v", err)
+	}
+	if strings.Contains(msg, "dependency archive not found for b.pkg@1.0.0") {
+		t.Fatalf("error still masks the real fetch cause with the local not-found error: %v", err)
+	}
 }
