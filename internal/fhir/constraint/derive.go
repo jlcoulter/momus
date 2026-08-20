@@ -20,45 +20,89 @@ func Derive(r *registry.Registry) ([]Constraint, error) {
 		return nil, errors.New("registry is required")
 	}
 
-	out := make([]Constraint, 0)
-	seen := make(map[string]struct{})
-
-	appendUnique := func(c Constraint) {
-		if c.ID == "" {
-			return
-		}
-		if _, ok := seen[c.ID]; ok {
-			return
-		}
-		seen[c.ID] = struct{}{}
-		out = append(out, c)
-	}
+	all := make([]Constraint, 0)
 
 	for _, sd := range r.StructureDefinitions() {
 		if sd == nil {
 			continue
 		}
 		for _, element := range sd.Elements {
-			for _, c := range deriveElementConstraints(sd, element) {
-				appendUnique(c)
-			}
+			all = append(all, deriveElementConstraints(sd, element)...)
 		}
 	}
 
 	for _, sp := range r.SearchParameters() {
-		for _, c := range deriveSearchConstraints(sp) {
-			appendUnique(c)
-		}
+		all = append(all, deriveSearchConstraints(sp)...)
 	}
 
 	for _, cs := range r.CapabilityStatements() {
-		for _, c := range deriveCapabilityConstraints(cs) {
-			appendUnique(c)
+		all = append(all, deriveCapabilityConstraints(cs)...)
+	}
+
+	return dedupSorted(all), nil
+}
+
+// DeriveScoped extracts the constraint model for the registry's scoped
+// StructureDefinitions (the test-generation subjects), resolving each subject's
+// full element tree through the registry's parent (BaseDefinition) chain via
+// ResolveElements. Inherited elements are therefore attributed to the subject
+// profile that inherits them, so their obligations surface on the scoped
+// profile rather than being dropped. Search parameters and capability
+// statements are global and are derived from every indexed resource, matching
+// Derive.
+//
+// When no scope has been set, ScopedStructureDefinitions returns every indexed
+// StructureDefinition and the element set matches Derive exactly.
+func DeriveScoped(r *registry.Registry) ([]Constraint, error) {
+	if r == nil {
+		return nil, errors.New("registry is required")
+	}
+
+	all := make([]Constraint, 0)
+
+	for _, sd := range r.ScopedStructureDefinitions() {
+		if sd == nil {
+			continue
+		}
+		elements, err := r.ResolveElements(sd.URL)
+		if err != nil {
+			// A scoped subject should always be indexed; if it is not, skip it
+			// rather than failing derivation for the whole registry.
+			continue
+		}
+		for _, element := range elements {
+			all = append(all, deriveElementConstraints(sd, element)...)
 		}
 	}
 
+	for _, sp := range r.SearchParameters() {
+		all = append(all, deriveSearchConstraints(sp)...)
+	}
+
+	for _, cs := range r.CapabilityStatements() {
+		all = append(all, deriveCapabilityConstraints(cs)...)
+	}
+
+	return dedupSorted(all), nil
+}
+
+// dedupSorted de-duplicates constraints by ID (dropping empty IDs) and returns
+// them sorted by ID. Results are deterministic regardless of iteration order.
+func dedupSorted(constraints []Constraint) []Constraint {
+	seen := make(map[string]struct{})
+	out := make([]Constraint, 0, len(constraints))
+	for _, c := range constraints {
+		if c.ID == "" {
+			continue
+		}
+		if _, ok := seen[c.ID]; ok {
+			continue
+		}
+		seen[c.ID] = struct{}{}
+		out = append(out, c)
+	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out, nil
+	return out
 }
 
 // deriveElementConstraints converts a single StructureDefinition element into

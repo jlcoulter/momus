@@ -447,3 +447,62 @@ func TestDerivePlanScopedToRootPackage(t *testing.T) {
 		}
 	}
 }
+
+// TestDerivePlanInheritsParentElementsThroughRegistry verifies that a
+// differential-only subject profile inherits its parent's elements through the
+// registry, so inherited elements (e.g. Patient.name supplied by the parent)
+// surface as coverage obligations attributed to the subject profile. The parent
+// must not be a test subject.
+func TestDerivePlanInheritsParentElementsThroughRegistry(t *testing.T) {
+	baseURL := "http://example.org/StructureDefinition/base-patient"
+	childURL := "http://example.org/StructureDefinition/child-patient"
+
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  baseURL,
+		Type: "Patient",
+		Kind: "resource",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		},
+	})
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:            childURL,
+		Type:           "Patient",
+		Kind:           "resource",
+		BaseDefinition: baseURL,
+		// Differential-only: no Patient.name element, so the parent must supply
+		// it through the registry's parent-chain merge.
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.identifier", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Identifier"}}},
+		},
+	})
+
+	r.SetScope([]string{childURL})
+
+	plan, err := DerivePlan(r, DeriveOptions{})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+
+	var inheritedFound bool
+	for _, req := range plan.Requirements {
+		if req.ProfileURL != childURL {
+			t.Fatalf("requirement %s scoped to out-of-scope profile %q", req.ID, req.ProfileURL)
+		}
+		if req.ProfileURL == baseURL {
+			t.Fatalf("requirement %s attributed to parent profile", req.ID)
+		}
+		if req.ResourceType != "Patient" {
+			t.Fatalf("requirement %s resource type %q, want Patient", req.ID, req.ResourceType)
+		}
+		if req.ElementPath == "Patient.name" {
+			inheritedFound = true
+		}
+	}
+	if !inheritedFound {
+		t.Fatal("expected a requirement for the inherited Patient.name element")
+	}
+}

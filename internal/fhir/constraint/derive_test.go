@@ -223,6 +223,90 @@ func TestDeriveRequiresRegistry(t *testing.T) {
 	}
 }
 
+func TestDeriveScopedRequiresRegistry(t *testing.T) {
+	if _, err := DeriveScoped(nil); err == nil {
+		t.Fatal("expected error for nil registry")
+	}
+}
+
+// TestDeriveScopedMergesParentChain verifies that a differential-only subject
+// profile inherits its parent's elements/constraints through the registry, and
+// that those inherited constraints are attributed to the subject (child) profile
+// URL rather than the parent. It also confirms Derive (the unscoped dump) is
+// unchanged and still attributes the same constraint to the parent.
+func TestDeriveScopedMergesParentChain(t *testing.T) {
+	parentURL := "http://example.org/StructureDefinition/base-patient"
+	childURL := "http://example.org/StructureDefinition/child-patient"
+
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  parentURL,
+		Type: "Patient",
+		Kind: "resource",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		},
+	})
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:            childURL,
+		Type:           "Patient",
+		Kind:           "resource",
+		BaseDefinition: parentURL,
+		// Differential-only: no Patient.name and no root Patient element, so the
+		// parent must supply them through the registry.
+		Elements: []model.ElementDefinition{
+			{Path: "Patient.identifier", Min: 1, Max: "1"},
+		},
+	})
+
+	r.SetScope([]string{childURL})
+
+	derived, err := DeriveScoped(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Inherited cardinality attributed to the child (subject) profile.
+	inheritedCard := requireConstraint(t, derived, KindCardinality, ID(childURL, "Patient.name", string(KindCardinality)))
+	if inheritedCard.Min != 1 || inheritedCard.Max != "*" {
+		t.Fatalf("inherited cardinality = %d..%s, want 1..*", inheritedCard.Min, inheritedCard.Max)
+	}
+	if inheritedCard.ProfileURL != childURL {
+		t.Fatalf("inherited cardinality ProfileURL = %q, want child %q", inheritedCard.ProfileURL, childURL)
+	}
+
+	// Inherited datatype constraint, also attributed to the child.
+	inheritedType := requireConstraint(t, derived, KindDatatype, ID(childURL, "Patient.name", string(KindDatatype), "HumanName"))
+	if inheritedType.ResourceType != "Patient" || inheritedType.Datatype != "HumanName" {
+		t.Fatalf("unexpected inherited datatype constraint: %+v", inheritedType)
+	}
+
+	// The child's own differential element also produces constraints.
+	childCard := requireConstraint(t, derived, KindCardinality, ID(childURL, "Patient.identifier", string(KindCardinality)))
+	if childCard.Min != 1 || childCard.Max != "1" {
+		t.Fatalf("child cardinality = %d..%s, want 1..1", childCard.Min, childCard.Max)
+	}
+
+	// The parent must NOT be attributed constraints under the scoped derivation.
+	for _, c := range derived {
+		if c.ProfileURL == parentURL {
+			t.Fatalf("DeriveScoped attributed constraint to out-of-scope parent: %+v", c)
+		}
+	}
+
+	// Derive (the unscoped dump) must remain unchanged: it still attributes the
+	// inherited constraint to the parent profile.
+	unscoped, err := Derive(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parentCard := requireConstraint(t, unscoped, KindCardinality, ID(parentURL, "Patient.name", string(KindCardinality)))
+	if parentCard.ProfileURL != parentURL {
+		t.Fatalf("Derive parent cardinality ProfileURL = %q, want %q", parentCard.ProfileURL, parentURL)
+	}
+}
+
 func TestIDDropsEmptyParts(t *testing.T) {
 	if got := ID("", string(KindSearch), "Observation", "code"); got != "search|Observation|code" {
 		t.Fatalf("got %q", got)

@@ -253,6 +253,22 @@ func (r *Registry) ResolveProfile(url string) (*model.ResolvedProfile, error) {
 	return model.NewResolvedProfile(sd.URL, sd.Type, elements), nil
 }
 
+// ResolveElements returns the flat, parent-merged ElementDefinition list for
+// the StructureDefinition at url. Parent elements (walked via BaseDefinition)
+// are merged first; child elements override parent elements with the same
+// elementKey (path, or path:sliceName when sliced) and append new paths. The
+// returned slice preserves slice definitions and slice-child elements, which
+// the ResolvedProfile.Elements map intentionally drops.
+//
+// Returns ErrNotFound when url is not indexed.
+func (r *Registry) ResolveElements(url string) ([]model.ElementDefinition, error) {
+	sd, ok := r.StructureDefinition(url)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, url)
+	}
+	return r.resolveElements(sd, make(map[string]bool)), nil
+}
+
 // resolveElements returns the full element set for sd by resolving its parent
 // (baseDefinition) dependency chain and merging: child elements override parent
 // elements with the same path, preserving order. This ensures inherited elements

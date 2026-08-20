@@ -35,7 +35,7 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 
 	options = normalizeOptions(options)
 
-	constraints, err := constraint.Derive(r)
+	constraints, err := constraint.DeriveScoped(r)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,11 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 			}
 		}
 
-		for _, element := range profile.Elements {
+		elements, err := r.ResolveElements(profile.URL)
+		if err != nil {
+			continue
+		}
+		for _, element := range elements {
 			if strings.Contains(element.Path, ".") {
 				foundDerivableElements = true
 			}
