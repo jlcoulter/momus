@@ -9,28 +9,68 @@ import (
 
 // buildOperationCase builds a single operation or state-transition case: a
 // request (read/update/patch/delete/history or a negative transition) with an
-// assertion carrying the coverage trace.
+// assertion carrying the coverage trace. Instance operations create their own
+// dedicated resource first so they never operate on (or destroy) the shared
+// provisioned seed that other cases and payloads depend on.
 func buildOperationCase(req coverage.CoverageRequirement, options BuildOptions) ast.Node {
 	method, path, expression, expected := operationSpec(req, options)
-	var body any
-	contentType := "application/fhir+json"
+
+	// Negative state transitions and server-level custom operations run a single
+	// request against a well-known target and must not create an instance.
+	if isStandaloneOperation(req) {
+		url := joinURL(baseURLForMethod(options, method), req.ResourceType) + path
+		return &ast.Sequence{Steps: []ast.Node{
+			&ast.Request{
+				Method:  method,
+				URL:     url,
+				Headers: map[string]string{"Content-Type": "application/fhir+json", "X-Momus-Requirement-ID": req.ID},
+			},
+			operationAssert(req, expression, expected),
+		}}
+	}
+
+	// Instance operations (read/update/patch/delete/history and the default)
+	// run against a dedicated, per-requirement instance that this case creates
+	// itself. This isolates each operation from the shared seed: a DELETE removes
+	// only the dedicated instance and can never delete a seed resource that other
+	// cases or payloads reference. The dedicated id is deterministic.
+	id := requirementResourceID(req)
+	createBody := operationUpdateBody(req, options, id)
+	createHeaders := map[string]string{"Content-Type": "application/fhir+json", "X-Momus-Requirement-ID": req.ID}
+	createURL := joinInstanceURL(baseURLForMethod(options, "PUT"), req.ResourceType, id)
+	opURL := joinURL(baseURLForMethod(options, method), req.ResourceType) + path
+
+	var opBody any
+	opContentType := "application/fhir+json"
 	switch req.Variant {
 	case coverage.CoverageVariantOperationUpdate:
-		body = operationUpdateBody(req, options, setupResourceID(req.ResourceType))
+		opBody = createBody
 	case coverage.CoverageVariantOperationPatch:
-		body = []any{map[string]any{"op": "add", "path": "/", "value": map[string]any{"status": "active"}}}
-		contentType = "application/json-patch+json"
+		opBody = []any{map[string]any{"op": "add", "path": "/", "value": map[string]any{"status": "active"}}}
+		opContentType = "application/json-patch+json"
 	}
-	url := joinURL(baseURLForMethod(options, method), req.ResourceType) + path
+	opHeaders := map[string]string{"Content-Type": opContentType, "X-Momus-Requirement-ID": req.ID}
+
 	return &ast.Sequence{Steps: []ast.Node{
-		&ast.Request{
-			Method:  method,
-			URL:     url,
-			Headers: map[string]string{"Content-Type": contentType, "X-Momus-Requirement-ID": req.ID},
-			Body:    body,
-		},
+		&ast.Request{Method: "PUT", URL: createURL, Headers: createHeaders, Body: createBody},
+		operationAssert(req, "status in [200,201]", "accept"),
+		&ast.Request{Method: method, URL: opURL, Headers: opHeaders, Body: opBody},
 		operationAssert(req, expression, expected),
 	}}
+}
+
+// isStandaloneOperation reports whether the variant runs a single request with
+// no instance: state transitions operate on a known-missing id and custom
+// operations are server-level URLs.
+func isStandaloneOperation(req coverage.CoverageRequirement) bool {
+	switch req.Variant {
+	case coverage.CoverageVariantStateReadNonexistent,
+		coverage.CoverageVariantStateDeleteNonexistent,
+		coverage.CoverageVariantOperationCustom:
+		return true
+	default:
+		return false
+	}
 }
 
 // buildCRUDCase builds a full create -> read -> update -> read -> delete ->
@@ -79,7 +119,7 @@ func operationAssert(req coverage.CoverageRequirement, expression, expected stri
 // expression, and expected outcome for an operation or state variant.
 func operationSpec(req coverage.CoverageRequirement, options BuildOptions) (method, path, expression, expected string) {
 	_ = options
-	target := setupResourceID(req.ResourceType)
+	target := requirementResourceID(req)
 	missing := "momus-missing"
 	switch req.Variant {
 	case coverage.CoverageVariantOperationRead:

@@ -9,12 +9,13 @@ import (
 )
 
 func TestGenerateRoutesWriteAndReadRequestsToSeparateBaseURLs(t *testing.T) {
+	reqs := []coverage.CoverageRequirement{
+		{ID: "op-read", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationRead},
+		{ID: "op-update", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationUpdate},
+		{ID: "search-1", ResourceType: "Organization", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchValid, SearchCode: "_id"},
+	}
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
-		Requirements: []coverage.CoverageRequirement{
-			{ID: "op-read", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationRead},
-			{ID: "op-update", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationUpdate},
-			{ID: "search-1", ResourceType: "Organization", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchValid, SearchCode: "_id"},
-		},
+		Requirements: reqs,
 	}, BuildOptions{BaseURL: "http://read.example/fhir", WriteBaseURL: "http://write.example/fhir"})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
@@ -40,10 +41,10 @@ func TestGenerateRoutesWriteAndReadRequestsToSeparateBaseURLs(t *testing.T) {
 	}
 	walk(plan.Root)
 
-	if got["op-read"] != "GET http://read.example/fhir/Organization/momus-setup-organization" {
+	if got["op-read"] != "GET http://read.example/fhir/Organization/"+requirementResourceID(reqs[0]) {
 		t.Fatalf("read request = %q, want read base URL", got["op-read"])
 	}
-	if got["op-update"] != "PUT http://write.example/fhir/Organization/momus-setup-organization" {
+	if got["op-update"] != "PUT http://write.example/fhir/Organization/"+requirementResourceID(reqs[1]) {
 		t.Fatalf("write request = %q, want write base URL", got["op-update"])
 	}
 	if got["search-1"] != "GET http://read.example/fhir/Organization?_id=momus-search" {
@@ -52,15 +53,16 @@ func TestGenerateRoutesWriteAndReadRequestsToSeparateBaseURLs(t *testing.T) {
 }
 
 func TestGenerateOperationCasesEmitCorrectRequests(t *testing.T) {
+	reqs := []coverage.CoverageRequirement{
+		{ID: "op-1", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationRead},
+		{ID: "op-2", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationDelete},
+		{ID: "op-3", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationUpdate},
+		{ID: "op-4", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationHistory},
+		{ID: "st-1", ResourceType: "Organization", Domain: coverage.CoverageDomainState, Variant: coverage.CoverageVariantStateReadNonexistent},
+		{ID: "st-2", ResourceType: "Organization", Domain: coverage.CoverageDomainState, Variant: coverage.CoverageVariantStateDeleteNonexistent},
+	}
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
-		Requirements: []coverage.CoverageRequirement{
-			{ID: "op-1", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationRead},
-			{ID: "op-2", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationDelete},
-			{ID: "op-3", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationUpdate},
-			{ID: "op-4", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationHistory},
-			{ID: "st-1", ResourceType: "Organization", Domain: coverage.CoverageDomainState, Variant: coverage.CoverageVariantStateReadNonexistent},
-			{ID: "st-2", ResourceType: "Organization", Domain: coverage.CoverageDomainState, Variant: coverage.CoverageVariantStateDeleteNonexistent},
-		},
+		Requirements: reqs,
 	}, BuildOptions{BaseURL: "http://localhost:8080/fhir"})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
@@ -86,13 +88,14 @@ func TestGenerateOperationCasesEmitCorrectRequests(t *testing.T) {
 	}
 	walk(plan.Root)
 
+	base := "http://localhost:8080/fhir/Organization"
 	want := map[string]string{
-		"op-1": "GET http://localhost:8080/fhir/Organization/momus-setup-organization",
-		"op-2": "DELETE http://localhost:8080/fhir/Organization/momus-setup-organization",
-		"op-3": "PUT http://localhost:8080/fhir/Organization/momus-setup-organization",
-		"op-4": "GET http://localhost:8080/fhir/Organization/momus-setup-organization/_history",
-		"st-1": "GET http://localhost:8080/fhir/Organization/momus-missing",
-		"st-2": "DELETE http://localhost:8080/fhir/Organization/momus-missing",
+		"op-1": "GET " + base + "/" + requirementResourceID(reqs[0]),
+		"op-2": "DELETE " + base + "/" + requirementResourceID(reqs[1]),
+		"op-3": "PUT " + base + "/" + requirementResourceID(reqs[2]),
+		"op-4": "GET " + base + "/" + requirementResourceID(reqs[3]) + "/_history",
+		"st-1": "GET " + base + "/momus-missing",
+		"st-2": "DELETE " + base + "/momus-missing",
 	}
 	for id, w := range want {
 		if got[id] != w {
@@ -222,4 +225,57 @@ func TestWriteRequestBodyIDMatchesURLID(t *testing.T) {
 		}
 	}
 	walk(plan.Root)
+}
+
+// TestOperationDeleteTargetsDedicatedInstanceNotSeed verifies that an operation
+// DELETE runs against a dedicated, per-requirement instance rather than the
+// shared provisioned seed resource. Deleting the seed would break every other
+// case (and payload) that references it, and the outcome would depend on the
+// arbitrary ordering of requirement ids.
+func TestOperationDeleteTargetsDedicatedInstanceNotSeed(t *testing.T) {
+	req := coverage.CoverageRequirement{ID: "op-del", ResourceType: "Organization", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationDelete}
+	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
+		Requirements: []coverage.CoverageRequirement{req},
+	}, BuildOptions{BaseURL: "http://localhost:8080/fhir"})
+	if err != nil {
+		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
+	}
+
+	dedicated := "Organization/" + requirementResourceID(req)
+	var sawCreate, sawDelete bool
+	var walk func(ast.Node)
+	walk = func(node ast.Node) {
+		switch n := node.(type) {
+		case *ast.Sequence:
+			for _, step := range n.Steps {
+				walk(step)
+			}
+		case *ast.Parallel:
+			for _, step := range n.Steps {
+				walk(step)
+			}
+		case *ast.Request:
+			if strings.Contains(n.URL, "momus-setup-organization") {
+				t.Fatalf("operation case must not target the shared seed, got %s %s", n.Method, n.URL)
+			}
+			switch n.Method {
+			case "PUT":
+				if strings.HasSuffix(n.URL, dedicated) {
+					sawCreate = true
+				}
+			case "DELETE":
+				if strings.HasSuffix(n.URL, dedicated) {
+					sawDelete = true
+				}
+			}
+		}
+	}
+	walk(plan.Root)
+
+	if !sawCreate {
+		t.Fatal("expected the operation case to create its dedicated instance via PUT")
+	}
+	if !sawDelete {
+		t.Fatalf("expected DELETE to target the dedicated instance %s", dedicated)
+	}
 }
