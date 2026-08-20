@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -35,7 +37,18 @@ type capabilityEvidence struct {
 func verifyPlanAgainstCapability(ctx context.Context, cfg *config, reg *registry.Registry, dataset *model.Dataset) capabilityEvidence {
 	ev := capabilityEvidence{}
 	var cs *model.CapabilityStatement
-	if cfg != nil && cfg.baseURL != "" {
+	// A local metadata file takes precedence over a live fetch: it lets the
+	// caller supply server metadata from a saved CapabilityStatement when the
+	// server is unreachable or not yet running.
+	if cfg != nil && cfg.metadataFile != "" {
+		loaded, err := loadMetadataFile(cfg.metadataFile)
+		if err == nil {
+			cs = loaded
+			ev.Source = "file"
+		} else {
+			ev.Error = err
+		}
+	} else if cfg != nil && cfg.baseURL != "" {
 		fetched, err := testcoverage.FetchCapabilityStatement(ctx, cfg.baseURL, testcoverage.CapabilityFetchOptions{
 			BearerToken:   cfg.apiBearerToken,
 			BasicUsername: cfg.apiBasicUsername,
@@ -106,6 +119,82 @@ func verifyPlanAgainstCapability(ctx context.Context, cfg *config, reg *registry
 	sort.Strings(ev.PlanProfiles)
 	sort.Strings(ev.UnsupportedProfiles)
 	return ev
+}
+
+// loadMetadataFile reads a local CapabilityStatement JSON file and returns the
+// parsed model. This bypasses the live /metadata fetch, letting the caller
+// supply server metadata from a saved file when the server is unreachable or
+// not yet running.
+func loadMetadataFile(path string) (*model.CapabilityStatement, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read metadata file %s: %w", path, err)
+	}
+	return parseCapabilityStatement(data)
+}
+
+// parseCapabilityStatement decodes raw JSON bytes into a model.CapabilityStatement.
+// It validates the resourceType field.
+func parseCapabilityStatement(data []byte) (*model.CapabilityStatement, error) {
+	var raw struct {
+		ResourceType string `json:"resourceType"`
+		URL          string `json:"url"`
+		Version      string `json:"version"`
+		Name         string `json:"name"`
+		Status       string `json:"status"`
+		FhirVersion  string `json:"fhirVersion"`
+		Rest         []struct {
+			Mode     string `json:"mode"`
+			Resource []struct {
+				Type             string   `json:"type"`
+				Profile          string   `json:"profile"`
+				SupportedProfile []string `json:"supportedProfile"`
+				Interaction      []struct {
+					Code string `json:"code"`
+				} `json:"interaction"`
+				Operation []struct {
+					Name       string `json:"name"`
+					Definition string `json:"definition"`
+				} `json:"operation"`
+			} `json:"resource"`
+		} `json:"rest"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("decode capability statement: %w", err)
+	}
+	if raw.ResourceType != "CapabilityStatement" {
+		return nil, fmt.Errorf("expected CapabilityStatement, got %q", raw.ResourceType)
+	}
+	rest := make([]model.CapabilityStatementRest, 0, len(raw.Rest))
+	for _, rb := range raw.Rest {
+		resources := make([]model.CapabilityStatementRestResource, 0, len(rb.Resource))
+		for _, res := range rb.Resource {
+			interactions := make([]model.CapabilityStatementInteraction, 0, len(res.Interaction))
+			for _, in := range res.Interaction {
+				interactions = append(interactions, model.CapabilityStatementInteraction{Code: in.Code})
+			}
+			ops := make([]model.CapabilityStatementOperation, 0, len(res.Operation))
+			for _, op := range res.Operation {
+				ops = append(ops, model.CapabilityStatementOperation{Name: op.Name, Definition: op.Definition})
+			}
+			resources = append(resources, model.CapabilityStatementRestResource{
+				Type:             res.Type,
+				Profile:          res.Profile,
+				SupportedProfile: res.SupportedProfile,
+				Interaction:      interactions,
+				Operation:        ops,
+			})
+		}
+		rest = append(rest, model.CapabilityStatementRest{Mode: rb.Mode, Resource: resources})
+	}
+	return &model.CapabilityStatement{
+		URL:         raw.URL,
+		Version:     raw.Version,
+		Name:        raw.Name,
+		Status:      raw.Status,
+		FhirVersion: raw.FhirVersion,
+		Rest:        rest,
+	}, nil
 }
 
 // packageCapabilityStatement returns the first CapabilityStatement indexed in

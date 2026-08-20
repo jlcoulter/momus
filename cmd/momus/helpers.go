@@ -34,22 +34,34 @@ func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer
 	if metadataBaseURL == "" {
 		metadataBaseURL = cfg.baseURL
 	}
-	capabilityStatement, err := testcoverage.FetchCapabilityStatement(cmd.Context(), metadataBaseURL, testcoverage.CapabilityFetchOptions{
-		BearerToken:   cfg.apiBearerToken,
-		BasicUsername: cfg.apiBasicUsername,
-		BasicPassword: cfg.apiBasicPassword,
-		Tracer:        tracer,
-	})
-	if err != nil {
-		// When the target server is not reachable, fall back to the loaded
-		// package as the source of truth rather than failing the run. Other
-		// errors (a reachable server returning an auth or protocol error) are
-		// surfaced so misconfiguration is not silently ignored.
-		if isServerUnavailable(err) {
-			fmt.Fprintf(os.Stderr, "WARNING: target server unreachable (%v); falling back to package definitions as source of truth\n", err)
-			return cfg.includeResourceTypes, cfg.includeProfileURLs, nil, nil
+	var capabilityStatement *model.CapabilityStatement
+	var err error
+	if cfg.metadataFile != "" {
+		// A local metadata file supplies the CapabilityStatement directly,
+		// bypassing the live /metadata fetch.
+		loaded, loadErr := loadMetadataFile(cfg.metadataFile)
+		if loadErr != nil {
+			return nil, nil, nil, loadErr
 		}
-		return nil, nil, nil, err
+		capabilityStatement = loaded
+	} else {
+		capabilityStatement, err = testcoverage.FetchCapabilityStatement(cmd.Context(), metadataBaseURL, testcoverage.CapabilityFetchOptions{
+			BearerToken:   cfg.apiBearerToken,
+			BasicUsername: cfg.apiBasicUsername,
+			BasicPassword: cfg.apiBasicPassword,
+			Tracer:        tracer,
+		})
+		if err != nil {
+			// When the target server is not reachable, fall back to the loaded
+			// package as the source of truth rather than failing the run. Other
+			// errors (a reachable server returning an auth or protocol error) are
+			// surfaced so misconfiguration is not silently ignored.
+			if isServerUnavailable(err) {
+				fmt.Fprintf(os.Stderr, "WARNING: target server unreachable (%v); falling back to package definitions as source of truth\n", err)
+				return cfg.includeResourceTypes, cfg.includeProfileURLs, nil, nil
+			}
+			return nil, nil, nil, err
+		}
 	}
 	capabilityTypes := testcoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, true)
 	capabilityProfiles := testcoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, true)
