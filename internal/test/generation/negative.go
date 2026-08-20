@@ -2,7 +2,9 @@ package generation
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
@@ -47,19 +49,50 @@ func elementSegments(path string) []string {
 	return parts[1:]
 }
 
+// choiceKeyMatches reports whether key is the concrete serialization of the
+// choice element name, i.e. name followed by a capitalized datatype suffix (e.g.
+// "value" matches "valueString", "valueQuantity"). FHIR choice properties carry
+// no separator, so a plain prefix match on name + "." would miss them.
+func choiceKeyMatches(key, name string) bool {
+	if len(key) <= len(name) || !strings.HasPrefix(key, name) {
+		return false
+	}
+	return unicode.IsUpper(rune(key[len(name)]))
+}
+
 // lookupChild finds a property by exact name, falling back to a choice-type key
-// that starts with "name." (e.g. "value" -> "valueString").
+// (e.g. "value" -> "valueString").
 func lookupChild(m map[string]any, name string) (any, string, bool) {
 	if v, ok := m[name]; ok {
 		return v, name, true
 	}
-	prefix := name + "."
 	for k, v := range m {
-		if strings.HasPrefix(k, prefix) {
+		if choiceKeyMatches(k, name) {
 			return v, k, true
 		}
 	}
 	return nil, "", false
+}
+
+// resolveLeafKey returns the actual property key holding the leaf named name in
+// parent, resolving a choice-type prefix (e.g. "value" -> "valueString"). It
+// returns "" when the leaf is absent. A FHIR payload carries at most one choice
+// variant, so the sorted-first match is a deterministic single candidate.
+func resolveLeafKey(parent map[string]any, name string) string {
+	if _, ok := parent[name]; ok {
+		return name
+	}
+	matches := make([]string, 0, 1)
+	for k := range parent {
+		if choiceKeyMatches(k, name) {
+			matches = append(matches, k)
+		}
+	}
+	if len(matches) == 0 {
+		return ""
+	}
+	sort.Strings(matches)
+	return matches[0]
 }
 
 // descendParent walks to the container holding the leaf, descending into the
@@ -93,31 +126,40 @@ func descendParent(body map[string]any, segments []string) (map[string]any, stri
 	return cur, segments[len(segments)-1], true
 }
 
-func deletePath(body map[string]any, path string) {
+// resolveLeafContainer returns the container map and the actual property key for
+// the leaf of path, resolving a choice-type prefix (e.g. "value" ->
+// "valueString") on the leaf. found is false when the leaf is absent, so callers
+// no-op instead of creating an illegal bare choice key.
+func resolveLeafContainer(body map[string]any, path string) (map[string]any, string, bool) {
 	segments := elementSegments(path)
 	if len(segments) == 0 {
-		return
+		return nil, "", false
 	}
 	if len(segments) == 1 {
-		delete(body, segments[0])
-		return
+		if key := resolveLeafKey(body, segments[0]); key != "" {
+			return body, key, true
+		}
+		return nil, "", false
 	}
 	parent, key, ok := descendParent(body, segments)
+	if !ok {
+		return nil, "", false
+	}
+	if leaf := resolveLeafKey(parent, key); leaf != "" {
+		return parent, leaf, true
+	}
+	return nil, "", false
+}
+
+func deletePath(body map[string]any, path string) {
+	parent, key, ok := resolveLeafContainer(body, path)
 	if ok {
 		delete(parent, key)
 	}
 }
 
 func setPath(body map[string]any, path string, value any) {
-	segments := elementSegments(path)
-	if len(segments) == 0 {
-		return
-	}
-	if len(segments) == 1 {
-		body[segments[0]] = value
-		return
-	}
-	parent, key, ok := descendParent(body, segments)
+	parent, key, ok := resolveLeafContainer(body, path)
 	if ok {
 		parent[key] = value
 	}
@@ -160,20 +202,9 @@ func wrongDatatypeValue(req coverage.CoverageRequirement, reg *registry.Registry
 // setBogusCode replaces the code of a coded (code/Coding/CodeableConcept) field
 // with a value that does not exist in any real value set.
 func setBogusCode(body map[string]any, path string) {
-	segments := elementSegments(path)
-	if len(segments) == 0 {
+	parent, key, ok := resolveLeafContainer(body, path)
+	if !ok {
 		return
-	}
-	var parent map[string]any
-	var key string
-	if len(segments) == 1 {
-		parent, key = body, segments[0]
-	} else {
-		var ok bool
-		parent, key, ok = descendParent(body, segments)
-		if !ok {
-			return
-		}
 	}
 	switch v := parent[key].(type) {
 	case map[string]any:
@@ -201,20 +232,9 @@ func bogusCodedValue(m map[string]any) {
 
 // referenceMapsAt returns the Reference object(s) at an element path.
 func referenceMapsAt(body map[string]any, path string) []map[string]any {
-	segments := elementSegments(path)
-	if len(segments) == 0 {
+	parent, key, ok := resolveLeafContainer(body, path)
+	if !ok {
 		return nil
-	}
-	var parent map[string]any
-	var key string
-	if len(segments) == 1 {
-		parent, key = body, segments[0]
-	} else {
-		var ok bool
-		parent, key, ok = descendParent(body, segments)
-		if !ok {
-			return nil
-		}
 	}
 	var out []map[string]any
 	switch v := parent[key].(type) {
