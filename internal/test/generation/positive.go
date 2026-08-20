@@ -419,6 +419,12 @@ func synthesizeBody(resourceType, id string, profileURLs []string, primaryProfil
 	if exhaustive {
 		enrichBodyExhaustive(body, primaryProfileURL, reg, newRNG(id))
 	}
+	// A resource must never reference itself: HAPI validates referential
+	// integrity at create time, so a self-reference (e.g. Location.partOf ->
+	// Location/momus-setup-location on the setup Location) is rejected before
+	// the resource exists. Strip any Reference object or array element whose
+	// reference equals the resource's own logical reference.
+	stripSelfReferences(body, resourceType+"/"+id)
 	normalizeGeneratedPayload(body)
 	normalizeResourceSpecificPayload(body)
 	// Final pass: resolve any coding display that is missing or echoes its code
@@ -428,6 +434,62 @@ func synthesizeBody(resourceType, id string, profileURLs []string, primaryProfil
 	// canonical "Organization identifier" display instead of echoing "XX".
 	normalisePayloadCodingDisplays(body, reg)
 	return body
+}
+
+// stripSelfReferences removes any FHIR Reference object (a map containing a
+// "reference" key) whose reference equals selfRef, deleting the enclosing
+// property (for object-valued references) or the array element (for arrays of
+// references). It walks the payload recursively. Optional self-referencing
+// elements (e.g. Location.partOf) become absent, which is valid; required
+// self-references are pathological and would be rejected by the server
+// regardless.
+func stripSelfReferences(v any, selfRef string) {
+	if selfRef == "" {
+		return
+	}
+	switch t := v.(type) {
+	case map[string]any:
+		for key, val := range t {
+			if refObj, ok := val.(map[string]any); ok && referenceIs(refObj, selfRef) {
+				delete(t, key)
+				continue
+			}
+			if arr, ok := val.([]any); ok {
+				t[key] = filterSelfReferences(arr, selfRef)
+				stripSelfReferences(t[key], selfRef)
+				continue
+			}
+			stripSelfReferences(val, selfRef)
+		}
+	case []any:
+		filtered := filterSelfReferences(t, selfRef)
+		for _, el := range filtered {
+			stripSelfReferences(el, selfRef)
+		}
+	}
+}
+
+// filterSelfReferences drops array elements that are Reference objects pointing
+// at selfRef, returning the filtered slice.
+func filterSelfReferences(arr []any, selfRef string) []any {
+	out := arr[:0]
+	for _, el := range arr {
+		if refObj, ok := el.(map[string]any); ok && referenceIs(refObj, selfRef) {
+			continue
+		}
+		out = append(out, el)
+	}
+	return out
+}
+
+// referenceIs reports whether m is a FHIR Reference object whose "reference"
+// field equals ref.
+func referenceIs(m map[string]any, ref string) bool {
+	if m == nil {
+		return false
+	}
+	r, ok := m["reference"].(string)
+	return ok && r == ref
 }
 
 // enrichBodyExhaustive populates optional elements of the resolved profile
@@ -1747,6 +1809,54 @@ func normalizeResourceSpecificPayload(body map[string]any) {
 		ensureEndpointKnownIdentifier(body)
 	case "Practitioner":
 		normalizePractitionerFields(body)
+		ensureRecordedSexOrGenderValue(body)
+	}
+}
+
+// recordedSexOrGenderExtensionURL is the canonical URL of the
+// individual-recordedSexOrGender extension that hcpd-practitioner requires on
+// Practitioner.extension.
+const recordedSexOrGenderExtensionURL = "http://hl7.org/fhir/StructureDefinition/individual-recordedSexOrGender"
+
+// ensureRecordedSexOrGenderValue ensures the Practitioner's required
+// recordedSexOrGender extension carries its required nested "value"
+// sub-extension. The extension is required (Min 1) on hcpd-practitioner and its
+// "value" slice is also required (Min 1); momus's slice generation emits other
+// optional sub-extensions (e.g. genderElementQualifier) but not the required
+// "value" slice, so without this the server rejects the resource with
+// "Slice 'Extension.extension:value': a matching slice is required, but not
+// found".
+func ensureRecordedSexOrGenderValue(body map[string]any) {
+	rawExt, ok := body["extension"].([]any)
+	if !ok {
+		return
+	}
+	for _, raw := range rawExt {
+		ext, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if url, _ := ext["url"].(string); url != recordedSexOrGenderExtensionURL {
+			continue
+		}
+		rawSub, _ := ext["extension"].([]any)
+		for _, s := range rawSub {
+			if sub, ok := s.(map[string]any); ok {
+				if u, _ := sub["url"].(string); u == "value" {
+					return // required value slice already present
+				}
+			}
+		}
+		ext["extension"] = append(rawSub, map[string]any{
+			"url": "value",
+			"valueCodeableConcept": map[string]any{
+				"coding": []any{map[string]any{
+					"system": "http://hl7.org/fhir/administrative-gender",
+					"code":   "male",
+				}},
+			},
+		})
+		return
 	}
 }
 

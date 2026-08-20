@@ -371,18 +371,18 @@ func setSearchCodeValue(body map[string]any, path string, value string, typeCode
 	switch v := raw.(type) {
 	case map[string]any:
 		if _, hasCode := v["code"]; hasCode {
-			v["code"] = value
+			resetCodingForSearchValue(v, nil, value)
 			return
 		}
 		if coding, ok := v["coding"].([]any); ok && len(coding) > 0 {
 			if first, ok := coding[0].(map[string]any); ok {
-				first["code"] = value
+				resetCodingForSearchValue(first, v, value)
 				return
 			}
 			coding[0] = map[string]any{"code": value}
 			return
 		}
-		v["code"] = value
+		resetCodingForSearchValue(v, nil, value)
 	case []any:
 		if len(v) == 0 {
 			cur[field] = []any{map[string]any{"code": value}}
@@ -394,22 +394,38 @@ func setSearchCodeValue(body map[string]any, path string, value string, typeCode
 			return
 		}
 		if _, hasCode := first["code"]; hasCode {
-			first["code"] = value
+			resetCodingForSearchValue(first, nil, value)
 			return
 		}
 		if coding, ok := first["coding"].([]any); ok && len(coding) > 0 {
 			if c, ok := coding[0].(map[string]any); ok {
-				c["code"] = value
+				resetCodingForSearchValue(c, first, value)
 				return
 			}
 			coding[0] = map[string]any{"code": value}
 			return
 		}
-		first["code"] = value
+		resetCodingForSearchValue(first, nil, value)
 	case string:
 		cur[field] = value
 	default:
 		cur[field] = map[string]any{"code": value}
+	}
+}
+
+// resetCodingForSearchValue overwrites a coding's code with the search value
+// and drops any system/display (and the enclosing CodeableConcept text) that
+// belonged to the previously-generated concept. Without this, a search value
+// overwrites only the code, leaving a stale system+display from a different
+// concept (e.g. connectionType "dicom-wado-rs" with the smd-interfaces
+// system), which servers reject as an unknown code. owner is the enclosing
+// CodeableConcept (whose text referred to the old coding) or nil.
+func resetCodingForSearchValue(coding map[string]any, owner map[string]any, value string) {
+	coding["code"] = value
+	delete(coding, "system")
+	delete(coding, "display")
+	if owner != nil {
+		delete(owner, "text")
 	}
 }
 

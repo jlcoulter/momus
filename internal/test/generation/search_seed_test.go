@@ -314,3 +314,66 @@ func TestSearchSeedSkipsNonMatchableSearch(t *testing.T) {
 		}
 	}
 }
+
+// TestSetSearchCodeValueClearsStaleSystemDisplay verifies that overwriting an
+// existing coding's code with a search value drops the stale system/display
+// (and CodeableConcept text) from the replaced concept, so the coding is
+// internally consistent rather than a Frankenstein (e.g. connectionType code
+// "dicom-wado-rs" with the smd-interfaces system).
+func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
+	// Coding element: stale system/display removed.
+	body := map[string]any{
+		"connectionType": map[string]any{
+			"system":  "http://hl7.org.au/fhir/CodeSystem/smd-interfaces",
+			"code":    "http://ns.electronichealth.net.au/smd/intf/SealedImmediateMessageDelivery/TLS/2010",
+			"display": "Sealed Immediate Message Delivery",
+		},
+	}
+	setSearchCodeValue(body, "connectionType", "dicom-wado-rs", "Coding", false)
+	ct, ok := body["connectionType"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected connectionType map, got %T", body["connectionType"])
+	}
+	if ct["code"] != "dicom-wado-rs" {
+		t.Fatalf("got code %v, want dicom-wado-rs", ct["code"])
+	}
+	if _, ok := ct["system"]; ok {
+		t.Fatalf("stale system not cleared: %v", ct["system"])
+	}
+	if _, ok := ct["display"]; ok {
+		t.Fatalf("stale display not cleared: %v", ct["display"])
+	}
+
+	// CodeableConcept example: stale coding system/display and text removed.
+	concept := map[string]any{
+		"type": map[string]any{
+			"coding": []any{map[string]any{"system": "http://example.org", "code": "old", "display": "Old"}},
+			"text":   "Old",
+		},
+	}
+	setSearchCodeValue(concept, "type", "new", "CodeableConcept", false)
+	typ, ok := concept["type"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected type map, got %T", concept["type"])
+	}
+	if _, ok := typ["text"]; ok {
+		t.Fatalf("stale CodeableConcept text not cleared: %v", typ["text"])
+	}
+	codings, ok := typ["coding"].([]any)
+	if !ok || len(codings) == 0 {
+		t.Fatalf("expected codings, got %#v", typ["coding"])
+	}
+	coding, ok := codings[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected coding map, got %T", codings[0])
+	}
+	if coding["code"] != "new" {
+		t.Fatalf("got code %v, want new", coding["code"])
+	}
+	if _, ok := coding["system"]; ok {
+		t.Fatalf("stale coding system not cleared: %v", coding["system"])
+	}
+	if _, ok := coding["display"]; ok {
+		t.Fatalf("stale coding display not cleared: %v", coding["display"])
+	}
+}

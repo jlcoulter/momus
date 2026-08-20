@@ -365,3 +365,38 @@ func TestApplySliceConstractionsNormalisesCodingDisplay(t *testing.T) {
 		t.Fatalf("got display %v, want Organization identifier", coding["display"])
 	}
 }
+
+// TestSynthesizeBodyStripsSelfReferences verifies that a generated resource
+// never references itself. The setup Location's optional partOf (Reference ->
+// Location) resolves to Location/momus-setup-location, which is the resource's
+// own logical reference and would fail create-time referential integrity; it
+// must be stripped. A search-seed Location's partOf referencing the setup
+// Location is not a self-reference and must be preserved.
+func TestSynthesizeBodyStripsSelfReferences(t *testing.T) {
+	locationURL := "http://example.org/StructureDefinition/location"
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: locationURL, Type: "Location", Kind: "resource", Elements: []model.ElementDefinition{
+		{Path: "Location", Min: 0, Max: "*"},
+		{Path: "Location.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		{Path: "Location.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{locationURL}}}},
+	}})
+
+	// Setup Location: its partOf resolves to its own reference and must be
+	// stripped.
+	setupBody := synthesizeBody("Location", "momus-setup-location", []string{locationURL}, locationURL, nil, reg, true)
+	if _, ok := setupBody["partOf"]; ok {
+		t.Fatalf("setup Location must not self-reference via partOf, got %+v", setupBody["partOf"])
+	}
+	if setupBody["name"] == nil {
+		t.Fatal("expected Location.name to remain present after self-reference strip")
+	}
+
+	// Search-seed Location: partOf references the setup Location, not itself,
+	// so it must be preserved when present.
+	seed := synthesizeBody("Location", "momus-search-loc", []string{locationURL}, locationURL, nil, reg, true)
+	if partOf, ok := seed["partOf"].(map[string]any); ok {
+		if ref, _ := partOf["reference"].(string); ref == "Location/momus-search-loc" {
+			t.Fatalf("search-seed Location self-reference not stripped: %v", ref)
+		}
+	}
+}

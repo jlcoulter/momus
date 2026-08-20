@@ -81,6 +81,52 @@ func TestIsMeaningfulCodingRejectsV3AbstractCodes(t *testing.T) {
 	}
 }
 
+// TestGeneratedPractitionerRecordedSexOrGenderHasValueSlice verifies that the
+// generated Practitioner's required recordedSexOrGender extension carries its
+// required nested "value" sub-extension, so the server does not reject it with
+// "Slice 'Extension.extension:value': a matching slice is required, but not
+// found".
+func TestGeneratedPractitionerRecordedSexOrGenderHasValueSlice(t *testing.T) {
+	body := map[string]any{
+		"resourceType": "Practitioner",
+		"extension": []any{
+			map[string]any{
+				"url":       recordedSexOrGenderExtensionURL,
+				"extension": []any{map[string]any{"url": "genderElementQualifier", "valueBoolean": true}},
+			},
+		},
+	}
+
+	ensureRecordedSexOrGenderValue(body)
+
+	rawExt, ok := body["extension"].([]any)
+	if !ok || len(rawExt) == 0 {
+		t.Fatalf("expected Practitioner extension array, got %#v", body["extension"])
+	}
+	ext, ok := rawExt[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected extension map, got %T", rawExt[0])
+	}
+	subExt, ok := ext["extension"].([]any)
+	if !ok {
+		t.Fatalf("expected nested extension array, got %#v", ext["extension"])
+	}
+	var foundValue bool
+	for _, s := range subExt {
+		if sub, ok := s.(map[string]any); ok {
+			if u, _ := sub["url"].(string); u == "value" {
+				foundValue = true
+				if _, ok := sub["valueCodeableConcept"]; !ok {
+					t.Fatalf("value slice missing valueCodeableConcept: %#v", sub)
+				}
+			}
+		}
+	}
+	if !foundValue {
+		t.Fatalf("recordedSexOrGender extension missing required value slice: %#v", ext["extension"])
+	}
+}
+
 // TestGeneratedProvenanceHasNoSubjectField verifies that a generated Provenance
 // references a Patient dependency via its declared "target" element (the R4
 // Provenance has no "subject" property) rather than an undeclared "subject".
