@@ -26,6 +26,18 @@ type CapabilityStatementRestResource struct {
 	// Operation lists custom operations ($name) the server supports for this
 	// resource type.
 	Operation []CapabilityStatementOperation
+	// SearchParam lists search parameters the server supports for this resource
+	// type. When non-empty, only these search parameters should be included in
+	// the test plan; when empty, no search-parameter restriction is applied.
+	SearchParam []CapabilityStatementSearchParam
+}
+
+// CapabilityStatementSearchParam represents a search parameter declared in a
+// CapabilityStatement resource entry.
+type CapabilityStatementSearchParam struct {
+	Name       string
+	Definition string
+	Type       string
 }
 
 // CapabilityStatementOperation represents a custom operation ($name) supported

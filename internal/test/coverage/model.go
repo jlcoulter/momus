@@ -148,6 +148,12 @@ type DeriveOptions struct {
 	// Strength is the interaction strength of the plan (1 = individual
 	// requirement coverage, 2 = pairwise interaction coverage).
 	Strength int
+	// CapabilitySearchCodes, when non-nil, restricts search obligations to only
+	// those search parameter codes the server's CapabilityStatement declares for
+	// each resource type. The map key is the resource type; the value is the set
+	// of declared search codes. When a resource type is absent from the map, no
+	// search-parameter restriction applies for that type.
+	CapabilitySearchCodes map[string][]string
 }
 
 // PruneReason describes why an element was excluded from derivation.

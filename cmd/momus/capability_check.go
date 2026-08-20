@@ -156,6 +156,11 @@ func parseCapabilityStatement(data []byte) (*model.CapabilityStatement, error) {
 					Name       string `json:"name"`
 					Definition string `json:"definition"`
 				} `json:"operation"`
+				SearchParam []struct {
+					Name       string `json:"name"`
+					Definition string `json:"definition"`
+					Type       string `json:"type"`
+				} `json:"searchParam"`
 			} `json:"resource"`
 		} `json:"rest"`
 	}
@@ -177,12 +182,21 @@ func parseCapabilityStatement(data []byte) (*model.CapabilityStatement, error) {
 			for _, op := range res.Operation {
 				ops = append(ops, model.CapabilityStatementOperation{Name: op.Name, Definition: op.Definition})
 			}
+			searchParams := make([]model.CapabilityStatementSearchParam, 0, len(res.SearchParam))
+			for _, sp := range res.SearchParam {
+				searchParams = append(searchParams, model.CapabilityStatementSearchParam{
+					Name:       sp.Name,
+					Definition: sp.Definition,
+					Type:       sp.Type,
+				})
+			}
 			resources = append(resources, model.CapabilityStatementRestResource{
 				Type:             res.Type,
 				Profile:          res.Profile,
 				SupportedProfile: res.SupportedProfile,
 				Interaction:      interactions,
 				Operation:        ops,
+				SearchParam:      searchParams,
 			})
 		}
 		rest = append(rest, model.CapabilityStatementRest{Mode: rb.Mode, Resource: resources})

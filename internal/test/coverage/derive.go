@@ -137,8 +137,11 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 		appendObligations(plan, seen, c, de)
 	}
 
-	// Search constraints (including the universal `_parameters`) produce search
-	// coverage obligations for every in-scope resource type.
+	// Search constraints produce search coverage obligations for every in-scope
+	// resource type. When the server's CapabilityStatement declares search
+	// parameters (CapabilitySearchCodes), only those declared codes are included;
+	// universal parameters like _content and _parameters are excluded unless the
+	// server explicitly declares them.
 	scopedTypes := sortedSetKeys(inScopeResourceTypes)
 	searchCodesByType := make(map[string][]string)
 	for _, c := range constraints {
@@ -147,12 +150,18 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 		}
 		if isUniversalSearchBase(c.ResourceType) {
 			for _, rt := range scopedTypes {
+				if !isSearchCodeAllowed(rt, c.SearchCode, options.CapabilitySearchCodes) {
+					continue
+				}
 				appendSearchObligations(plan, seen, c, rt)
 				searchCodesByType[rt] = appendUniqueString(searchCodesByType[rt], c.SearchCode)
 			}
 			continue
 		}
 		if _, ok := inScopeResourceTypes[c.ResourceType]; ok {
+			if !isSearchCodeAllowed(c.ResourceType, c.SearchCode, options.CapabilitySearchCodes) {
+				continue
+			}
 			appendSearchObligations(plan, seen, c, c.ResourceType)
 			searchCodesByType[c.ResourceType] = appendUniqueString(searchCodesByType[c.ResourceType], c.SearchCode)
 		}
@@ -604,6 +613,29 @@ func isLowValuePath(path string) bool {
 // isUniversalSearchBase reports whether a search parameter base denotes the
 // universal parameters that apply to every resource type. In FHIR these are
 // defined against the abstract Resource base rather than "*".
+// isSearchCodeAllowed reports whether a search parameter code should be included
+// for a resource type when the server's CapabilityStatement declares search
+// parameters. When CapabilitySearchCodes is nil (no capability scope), all
+// codes are allowed. When the resource type is absent from the map, all codes
+// are allowed for that type (the server did not restrict search for it).
+// When the resource type is present, only codes in its declared set are allowed.
+func isSearchCodeAllowed(resourceType, code string, capabilityCodes map[string][]string) bool {
+	if capabilityCodes == nil {
+		return true
+	}
+	codes, ok := capabilityCodes[resourceType]
+	if !ok {
+		// Resource type not in the capability search map: no restriction.
+		return true
+	}
+	for _, c := range codes {
+		if strings.EqualFold(c, code) {
+			return true
+		}
+	}
+	return false
+}
+
 func isUniversalSearchBase(resourceType string) bool {
 	switch resourceType {
 	case "*", "Resource", "DomainResource":

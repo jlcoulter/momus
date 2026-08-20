@@ -26,9 +26,9 @@ import (
 // resourceScopeForRun resolves the resource/profile scope for ast/run from the
 // target server's CapabilityStatement, falling back to the caller-provided
 // scope (or the loaded package) when the server is unreachable.
-func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer) ([]string, []string, map[string][]string, error) {
+func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer) ([]string, []string, map[string][]string, map[string][]string, error) {
 	if !cfg.scopeToCapability {
-		return cfg.includeResourceTypes, cfg.includeProfileURLs, nil, nil
+		return cfg.includeResourceTypes, cfg.includeProfileURLs, nil, nil, nil
 	}
 	metadataBaseURL := strings.TrimSpace(cfg.capabilityBaseURL)
 	if metadataBaseURL == "" {
@@ -41,7 +41,7 @@ func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer
 		// bypassing the live /metadata fetch.
 		loaded, loadErr := loadMetadataFile(cfg.metadataFile)
 		if loadErr != nil {
-			return nil, nil, nil, loadErr
+			return nil, nil, nil, nil, loadErr
 		}
 		capabilityStatement = loaded
 	} else {
@@ -58,12 +58,13 @@ func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer
 			// surfaced so misconfiguration is not silently ignored.
 			if isServerUnavailable(err) {
 				fmt.Fprintf(os.Stderr, "WARNING: target server unreachable (%v); falling back to package definitions as source of truth\n", err)
-				return cfg.includeResourceTypes, cfg.includeProfileURLs, nil, nil
+				return cfg.includeResourceTypes, cfg.includeProfileURLs, nil, nil, nil
 			}
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 	}
 	capabilityTypes := testcoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, true)
+	capabilitySearchCodes := testcoverage.SearchCodesFromCapabilityStatement(capabilityStatement)
 	capabilityProfiles := testcoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, true)
 	capabilityProfilesByResource := testcoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, true)
 	if len(capabilityTypes) == 0 {
@@ -74,12 +75,12 @@ func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer
 		capabilityProfilesByResource = testcoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, false)
 	}
 	if len(capabilityProfiles) > 0 {
-		return intersectCaseInsensitive(cfg.includeResourceTypes, capabilityTypes), intersectCaseInsensitive(cfg.includeProfileURLs, capabilityProfiles), capabilityProfilesByResource, nil
+		return intersectCaseInsensitive(cfg.includeResourceTypes, capabilityTypes), intersectCaseInsensitive(cfg.includeProfileURLs, capabilityProfiles), capabilityProfilesByResource, capabilitySearchCodes, nil
 	}
 	if len(capabilityTypes) == 0 {
-		return cfg.includeResourceTypes, cfg.includeProfileURLs, capabilityProfilesByResource, nil
+		return cfg.includeResourceTypes, cfg.includeProfileURLs, capabilityProfilesByResource, capabilitySearchCodes, nil
 	}
-	return intersectCaseInsensitive(cfg.includeResourceTypes, capabilityTypes), cfg.includeProfileURLs, capabilityProfilesByResource, nil
+	return intersectCaseInsensitive(cfg.includeResourceTypes, capabilityTypes), cfg.includeProfileURLs, capabilityProfilesByResource, capabilitySearchCodes, nil
 }
 
 // isServerUnavailable reports whether a fetch error means the target server

@@ -143,6 +143,54 @@ func SupportedProfileURLsByResourceFromCapabilityStatement(cs *model.CapabilityS
 	return out
 }
 
+// SearchCodesFromCapabilityStatement returns the set of search parameter codes
+// declared by the server's CapabilityStatement, grouped by resource type. When
+// a resource entry declares no searchParam, that resource type is absent from
+// the map, meaning no search-parameter restriction applies for that type.
+func SearchCodesFromCapabilityStatement(cs *model.CapabilityStatement) map[string][]string {
+	if cs == nil {
+		return nil
+	}
+
+	grouped := make(map[string]map[string]struct{})
+	for _, rest := range cs.Rest {
+		if rest.Mode != "" && !strings.EqualFold(rest.Mode, "server") {
+			continue
+		}
+		for _, resource := range rest.Resource {
+			resourceType := strings.TrimSpace(resource.Type)
+			if resourceType == "" {
+				continue
+			}
+			for _, sp := range resource.SearchParam {
+				name := strings.TrimSpace(sp.Name)
+				if name == "" {
+					continue
+				}
+				if _, ok := grouped[resourceType]; !ok {
+					grouped[resourceType] = make(map[string]struct{})
+				}
+				grouped[resourceType][name] = struct{}{}
+			}
+		}
+	}
+
+	if len(grouped) == 0 {
+		return nil
+	}
+
+	out := make(map[string][]string, len(grouped))
+	for resourceType, codes := range grouped {
+		values := make([]string, 0, len(codes))
+		for code := range codes {
+			values = append(values, code)
+		}
+		sort.Strings(values)
+		out[resourceType] = values
+	}
+	return out
+}
+
 // FetchCapabilityStatement loads the live server CapabilityStatement from /metadata.
 func FetchCapabilityStatement(ctx context.Context, baseURL string, options CapabilityFetchOptions) (*model.CapabilityStatement, error) {
 	trimmedBaseURL := strings.TrimRight(strings.TrimSpace(baseURL), "/")
@@ -199,6 +247,15 @@ func FetchCapabilityStatement(ctx context.Context, baseURL string, options Capab
 				Interaction      []struct {
 					Code string `json:"code"`
 				} `json:"interaction"`
+				Operation []struct {
+					Name       string `json:"name"`
+					Definition string `json:"definition"`
+				} `json:"operation"`
+				SearchParam []struct {
+					Name       string `json:"name"`
+					Definition string `json:"definition"`
+					Type       string `json:"type"`
+				} `json:"searchParam"`
 			} `json:"resource"`
 		} `json:"rest"`
 	}
@@ -217,11 +274,25 @@ func FetchCapabilityStatement(ctx context.Context, baseURL string, options Capab
 			for _, interaction := range resource.Interaction {
 				interactions = append(interactions, model.CapabilityStatementInteraction{Code: interaction.Code})
 			}
+			ops := make([]model.CapabilityStatementOperation, 0, len(resource.Operation))
+			for _, op := range resource.Operation {
+				ops = append(ops, model.CapabilityStatementOperation{Name: op.Name, Definition: op.Definition})
+			}
+			searchParams := make([]model.CapabilityStatementSearchParam, 0, len(resource.SearchParam))
+			for _, sp := range resource.SearchParam {
+				searchParams = append(searchParams, model.CapabilityStatementSearchParam{
+					Name:       sp.Name,
+					Definition: sp.Definition,
+					Type:       sp.Type,
+				})
+			}
 			resources = append(resources, model.CapabilityStatementRestResource{
 				Type:             resource.Type,
 				Profile:          resource.Profile,
 				SupportedProfile: resource.SupportedProfile,
 				Interaction:      interactions,
+				Operation:        ops,
+				SearchParam:      searchParams,
 			})
 		}
 		rest = append(rest, model.CapabilityStatementRest{

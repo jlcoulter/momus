@@ -45,19 +45,20 @@ func newAstCmd(cfg *config) *cobra.Command {
 				return err
 			}
 
-			coverageResourceTypes, coverageProfileURLs, preferredProfilesByResource, err := resourceScopeForRun(cmd, cfg, newDebugTracer(cfg.debug))
+			coverageResourceTypes, coverageProfileURLs, preferredProfilesByResource, coverageSearchCodes, err := resourceScopeForRun(cmd, cfg, newDebugTracer(cfg.debug))
 			if err != nil {
 				return err
 			}
 
 			coveragePlan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
-				IncludeResourceTypes: coverageResourceTypes,
-				IncludeProfileURLs:   coverageProfileURLs,
-				ExcludePathPrefixes:  cfg.excludePathPrefixes,
-				MustSupportOnly:      cfg.mustSupportOnly,
-				IncludeOptional:      cfg.includeOptional,
-				IncludeLowValuePaths: cfg.includeLowValuePaths,
-				Strength:             cfg.interactionStrength,
+				IncludeResourceTypes:  coverageResourceTypes,
+				IncludeProfileURLs:    coverageProfileURLs,
+				ExcludePathPrefixes:   cfg.excludePathPrefixes,
+				MustSupportOnly:       cfg.mustSupportOnly,
+				IncludeOptional:       cfg.includeOptional,
+				IncludeLowValuePaths:  cfg.includeLowValuePaths,
+				Strength:              cfg.interactionStrength,
+				CapabilitySearchCodes: coverageSearchCodes,
 			})
 			if err != nil {
 				return err
