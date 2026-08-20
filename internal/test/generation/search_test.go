@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/fhir/model"
+	"github.com/jlcoulter/momus/internal/fhir/registry"
 	"github.com/jlcoulter/momus/internal/test/ast"
 	"github.com/jlcoulter/momus/internal/test/coverage"
 )
@@ -88,5 +90,62 @@ func TestBuildSearchCasesEmitGETRequests(t *testing.T) {
 	}
 	if searchGETs != 2 {
 		t.Fatalf("got %d search GET requests, want 2", searchGETs)
+	}
+}
+
+// TestSearchInvalidValuePerType is a matrix check that the invalid-value search
+// obligation produces a genuinely invalid value (and a reject assertion) only for
+// search parameter types with a strict lexical grammar, and a type-valid,
+// non-matching value (with an accept-200 assertion) for types where a conformant
+// server accepts any syntactically valid value instead of returning a 4xx.
+func TestSearchInvalidValuePerType(t *testing.T) {
+	reg := registry.New()
+	addSP := func(code, typ string) {
+		reg.AddSearchParameter(&model.SearchParameter{Code: code, Base: []string{"Observation"}, Type: typ})
+	}
+	addSP("num", "number")
+	addSP("dt", "date")
+	addSP("str", "string")
+	addSP("tok", "token")
+	addSP("uri", "uri")
+	addSP("ref", "reference")
+	addSP("qty", "quantity")
+
+	options := BuildOptions{Registry: reg}
+	tests := []struct {
+		code       string
+		wantReject bool
+	}{
+		{"num", true},
+		{"dt", true},
+		{"str", false},
+		{"tok", false},
+		{"uri", false},
+		{"ref", false},
+		{"qty", false},
+	}
+	for _, tc := range tests {
+		req := coverage.CoverageRequirement{ID: "inv-" + tc.code, ResourceType: "Observation", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchInvalidValue, SearchCode: tc.code}
+		value, expectReject := searchInvalidValue(req, options)
+		if expectReject != tc.wantReject {
+			t.Errorf("%s: expectReject = %v, want %v", tc.code, expectReject, tc.wantReject)
+		}
+		if value == "" {
+			t.Errorf("%s: empty invalid value", tc.code)
+		}
+
+		assert := searchAssert(req, options)
+		if tc.wantReject {
+			if !strings.Contains(assert.Expression, "400") {
+				t.Errorf("%s: reject assertion expression = %q, want a 4xx", tc.code, assert.Expression)
+			}
+		} else {
+			if assert.Expression != "status in [200]" {
+				t.Errorf("%s: accept assertion expression = %q, want status in [200]", tc.code, assert.Expression)
+			}
+			if assert.Trace == nil || assert.Trace.Expected != "accept" {
+				t.Errorf("%s: accept assertion trace expected = %+v, want accept", tc.code, assert.Trace)
+			}
+		}
 	}
 }
