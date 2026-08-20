@@ -7,6 +7,48 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/model"
 )
 
+// TestResolveProfileResolvesParentChain verifies that ResolveProfile merges the
+// parent (baseDefinition) dependency chain, so a differential profile inherits
+// its base's elements and constraints, and child elements override the parent's.
+func TestResolveProfileResolvesParentChain(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://hl7.org/fhir/StructureDefinition/Identifier",
+		Type: "Identifier",
+		Elements: []model.ElementDefinition{
+			{Path: "Identifier", Min: 0, Max: "*"},
+			{Path: "Identifier.system", Min: 0, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
+			{Path: "Identifier.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:            "http://example.org/StructureDefinition/abn",
+		Type:           "Identifier",
+		BaseDefinition: "http://hl7.org/fhir/StructureDefinition/Identifier",
+		Elements: []model.ElementDefinition{
+			{Path: "Identifier", Min: 0, Max: "*"},
+			{Path: "Identifier.system", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://hl7.org.au/id/abn"},
+			{Path: "Identifier.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}, Constraints: []model.ElementConstraint{{Key: "inv-abn-0", Severity: "error", Expression: "value.matches('^([0-9]{11})$')"}}},
+		},
+	})
+
+	res, err := r.ResolveProfile("http://example.org/StructureDefinition/abn")
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	system := res.Elements["Identifier.system"]
+	if system == nil || system.Definition == nil {
+		t.Fatal("Identifier.system missing after parent-chain resolution")
+	}
+	if system.Definition.Fixed != "http://hl7.org.au/id/abn" {
+		t.Fatalf("system fixed = %v, want the child's override", system.Definition.Fixed)
+	}
+	value := res.Elements["Identifier.value"]
+	if value == nil || value.Definition == nil || len(value.Definition.Constraints) == 0 {
+		t.Fatal("Identifier.value must inherit the child's invariant constraint")
+	}
+}
+
 func TestRegistryIndexesStructureDefinitionByURL(t *testing.T) {
 	r := New()
 	sd := &model.StructureDefinition{

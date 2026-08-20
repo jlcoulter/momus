@@ -249,5 +249,44 @@ func (r *Registry) ResolveProfile(url string) (*model.ResolvedProfile, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrNotFound, url)
 	}
-	return model.NewResolvedProfile(sd.URL, sd.Type, sd.Elements), nil
+	elements := r.resolveElements(sd, make(map[string]bool))
+	return model.NewResolvedProfile(sd.URL, sd.Type, elements), nil
+}
+
+// resolveElements returns the full element set for sd by resolving its parent
+// (baseDefinition) dependency chain and merging: child elements override parent
+// elements with the same path, preserving order. This ensures inherited elements
+// and constraints (e.g. a profile's base Identifier structure) are available to
+// generation even when a profile is a differential.
+func (r *Registry) resolveElements(sd *model.StructureDefinition, seen map[string]bool) []model.ElementDefinition {
+	if sd == nil || seen[sd.URL] {
+		return nil
+	}
+	seen[sd.URL] = true
+	parentSD, _ := r.StructureDefinition(sd.BaseDefinition)
+	parent := r.resolveElements(parentSD, seen)
+	merged := make([]model.ElementDefinition, 0, len(parent)+len(sd.Elements))
+	index := make(map[string]int, len(parent)+len(sd.Elements))
+	for _, el := range parent {
+		index[elementKey(el)] = len(merged)
+		merged = append(merged, el)
+	}
+	for _, el := range sd.Elements {
+		if idx, ok := index[elementKey(el)]; ok {
+			merged[idx] = el
+		} else {
+			index[elementKey(el)] = len(merged)
+			merged = append(merged, el)
+		}
+	}
+	return merged
+}
+
+// elementKey returns a unique key for an element: its path plus slice name when
+// sliced (slices share a path), otherwise its path.
+func elementKey(el model.ElementDefinition) string {
+	if el.SliceName != "" {
+		return el.Path + ":" + el.SliceName
+	}
+	return el.Path
 }
