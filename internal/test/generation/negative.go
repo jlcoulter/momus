@@ -19,23 +19,29 @@ func isNegativeVariant(variant coverage.CoverageVariant) bool {
 
 // applyNegativeMutation mutates an otherwise-valid payload so that it violates
 // exactly the one constraint identified by the requirement variant. Positive
-// variants are left unchanged.
-func applyNegativeMutation(body map[string]any, req coverage.CoverageRequirement, reg *registry.Registry) {
+// variants are left unchanged. It returns whether the mutation produced a
+// concrete violation: false when the requirement's element is not present in the
+// payload, in which case the caller should skip the negative test rather than
+// emit a reject assertion a conformant server would accept.
+func applyNegativeMutation(body map[string]any, req coverage.CoverageRequirement, reg *registry.Registry) bool {
 	switch req.Variant {
 	case coverage.CoverageVariantMissingRequired,
 		coverage.CoverageVariantTerminologyAbsent:
-		deletePath(body, req.ElementPath)
+		return deletePath(body, req.ElementPath)
 	case coverage.CoverageVariantDatatypeNull:
-		setPath(body, req.ElementPath, nil)
+		return setPath(body, req.ElementPath, nil)
 	case coverage.CoverageVariantDatatypeInvalidLexical,
 		coverage.CoverageVariantDatatypeWrongJSONType:
-		setPath(body, req.ElementPath, wrongDatatypeValue(req, reg))
+		return setPath(body, req.ElementPath, wrongDatatypeValue(req, reg))
 	case coverage.CoverageVariantTerminologyInvalid:
-		setBogusCode(body, req.ElementPath)
+		return setBogusCode(body, req.ElementPath)
 	case coverage.CoverageVariantReferenceWrongTarget:
-		mutateReferenceType(body, req.ElementPath)
+		return mutateReferenceType(body, req.ElementPath)
 	case coverage.CoverageVariantReferenceDangling:
-		mutateReferenceDangling(body, req.ElementPath)
+		return mutateReferenceDangling(body, req.ElementPath)
+	default:
+		// Positive variants require no mutation.
+		return true
 	}
 }
 
@@ -151,18 +157,28 @@ func resolveLeafContainer(body map[string]any, path string) (map[string]any, str
 	return nil, "", false
 }
 
-func deletePath(body map[string]any, path string) {
+// deletePath deletes the leaf at path, returning whether a leaf was present and
+// removed (false when the element is absent from the payload, in which case no
+// violation is created by deletion).
+func deletePath(body map[string]any, path string) bool {
 	parent, key, ok := resolveLeafContainer(body, path)
-	if ok {
-		delete(parent, key)
+	if !ok {
+		return false
 	}
+	delete(parent, key)
+	return true
 }
 
-func setPath(body map[string]any, path string, value any) {
+// setPath sets the leaf at path to value, reporting whether a leaf was present
+// and modified (false when the element is absent, so no invalid value could be
+// placed).
+func setPath(body map[string]any, path string, value any) bool {
 	parent, key, ok := resolveLeafContainer(body, path)
-	if ok {
-		parent[key] = value
+	if !ok {
+		return false
 	}
+	parent[key] = value
+	return true
 }
 
 // wrongDatatypeValue produces a value that violates the element's datatype in
@@ -200,23 +216,28 @@ func wrongDatatypeValue(req coverage.CoverageRequirement, reg *registry.Registry
 }
 
 // setBogusCode replaces the code of a coded (code/Coding/CodeableConcept) field
-// with a value that does not exist in any real value set.
-func setBogusCode(body map[string]any, path string) {
+// with a value that does not exist in any real value set. It reports whether a
+// coded leaf was found and mutated.
+func setBogusCode(body map[string]any, path string) bool {
 	parent, key, ok := resolveLeafContainer(body, path)
 	if !ok {
-		return
+		return false
 	}
 	switch v := parent[key].(type) {
 	case map[string]any:
 		bogusCodedValue(v)
+		return true
 	case []any:
 		if len(v) > 0 {
 			if m, ok := v[0].(map[string]any); ok {
 				bogusCodedValue(m)
+				return true
 			}
 		}
+		return false
 	default:
 		parent[key] = "not-a-real-code"
+		return true
 	}
 }
 
@@ -250,21 +271,33 @@ func referenceMapsAt(body map[string]any, path string) []map[string]any {
 	return out
 }
 
-// mutateReferenceType retargets references to a different resource type.
-func mutateReferenceType(body map[string]any, path string) {
-	for _, ref := range referenceMapsAt(body, path) {
+// mutateReferenceType retargets references to a different resource type,
+// reporting whether any reference was retargeted.
+func mutateReferenceType(body map[string]any, path string) bool {
+	refs := referenceMapsAt(body, path)
+	if len(refs) == 0 {
+		return false
+	}
+	for _, ref := range refs {
 		id := referenceID(ref["reference"])
 		ref["type"] = "Organization"
 		ref["reference"] = "Organization/" + id
 	}
+	return true
 }
 
-// mutateReferenceDangling retargets references to a nonexistent resource.
-func mutateReferenceDangling(body map[string]any, path string) {
-	for _, ref := range referenceMapsAt(body, path) {
+// mutateReferenceDangling retargets references to a nonexistent resource,
+// reporting whether any reference was retargeted.
+func mutateReferenceDangling(body map[string]any, path string) bool {
+	refs := referenceMapsAt(body, path)
+	if len(refs) == 0 {
+		return false
+	}
+	for _, ref := range refs {
 		ref["reference"] = "Patient/momus-does-not-exist"
 		ref["type"] = "Patient"
 	}
+	return true
 }
 
 func referenceID(ref any) string {

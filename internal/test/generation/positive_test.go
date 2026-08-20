@@ -368,12 +368,21 @@ func sortedBodyKeys(m map[string]any) []string {
 }
 
 func TestGenerateFromCoveragePlanBuildsPerRequirementSequence(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/patient",
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		},
+	})
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
 		Requirements: []coverage.CoverageRequirement{
 			{ID: "req-1", ProfileURL: "http://example.org/StructureDefinition/patient", ResourceType: "Patient", ElementPath: "Patient.name", Variant: coverage.CoverageVariantValidMin, Min: 1, Max: "*"},
 			{ID: "req-2", ProfileURL: "http://example.org/StructureDefinition/patient", ResourceType: "Patient", ElementPath: "Patient.name", Variant: coverage.CoverageVariantMissingRequired, Min: 1, Max: "*"},
 		},
-	}, BuildOptions{BaseURL: "http://localhost:8080/fhir"})
+	}, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
 	}
@@ -973,12 +982,21 @@ func TestNormalizeReferenceTypeUsesTargetResourceType(t *testing.T) {
 }
 
 func TestGenerateFromCoveragePlanGeneratesNegativeVariants(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/observation",
+		Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
 		Requirements: []coverage.CoverageRequirement{
 			{ID: "d-valid", ProfileURL: "http://example.org/StructureDefinition/observation", ResourceType: "Observation", ElementPath: "Observation.value", Variant: coverage.CoverageVariantDatatypeValid},
 			{ID: "d-invalid", ProfileURL: "http://example.org/StructureDefinition/observation", ResourceType: "Observation", ElementPath: "Observation.value", Variant: coverage.CoverageVariantDatatypeInvalidLexical},
 		},
-	}, BuildOptions{BaseURL: "http://localhost:8080/fhir"})
+	}, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
 	}
@@ -1011,11 +1029,20 @@ func collectAssertExpressions(node ast.Node, into map[string]bool) {
 }
 
 func TestGenerateFromCoveragePlanCarriesTraceToAssertions(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/observation",
+		Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "date"}}},
+		},
+	})
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
 		Requirements: []coverage.CoverageRequirement{
 			{ID: "req|obs|datatype-invalid-lexical", ConstraintID: "profile|Observation.value|datatype|date", ProfileURL: "http://example.org/StructureDefinition/observation", ResourceType: "Observation", ElementPath: "Observation.value", Domain: coverage.CoverageDomainDatatype, Variant: coverage.CoverageVariantDatatypeInvalidLexical},
 		},
-	}, BuildOptions{BaseURL: "http://localhost:8080/fhir"})
+	}, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
 	}

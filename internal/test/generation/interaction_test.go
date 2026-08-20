@@ -40,8 +40,24 @@ func interactionPlan() *coverage.CoveragePlan {
 	}
 }
 
+// interactionRegistry returns a registry whose Patient profile declares the
+// elements used by interactionPlan, so negative mutations have a present target.
+func interactionRegistry() *registry.Registry {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  interactionProfile,
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient.birthDate", Min: 1, Max: "1", Types: []model.ElementType{{Code: "date"}}},
+		},
+	})
+	return r
+}
+
 func TestGenerateFromCoveragePlanStrengthTwoGroupsAccepts(t *testing.T) {
-	plan, err := GenerateFromCoveragePlan(interactionPlan(), BuildOptions{BaseURL: "http://localhost:8080/fhir", Strength: 2})
+	plan, err := GenerateFromCoveragePlan(interactionPlan(), BuildOptions{BaseURL: "http://localhost:8080/fhir", Strength: 2, Registry: interactionRegistry()})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
 	}
@@ -118,7 +134,7 @@ func TestGenerateFromCoveragePlanStrengthTwoGroupsAccepts(t *testing.T) {
 }
 
 func TestGenerateFromCoveragePlanStrengthTwoHasFewerRequestsThanRequirements(t *testing.T) {
-	plan, err := GenerateFromCoveragePlan(interactionPlan(), BuildOptions{BaseURL: "http://localhost:8080/fhir", Strength: 2})
+	plan, err := GenerateFromCoveragePlan(interactionPlan(), BuildOptions{BaseURL: "http://localhost:8080/fhir", Strength: 2, Registry: interactionRegistry()})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
 	}
@@ -143,7 +159,7 @@ func TestGenerateFromCoveragePlanStrengthTwoHasFewerRequestsThanRequirements(t *
 }
 
 func TestGenerateFromCoveragePlanStrengthOneKeepsPerRequirementTests(t *testing.T) {
-	plan, err := GenerateFromCoveragePlan(interactionPlan(), BuildOptions{BaseURL: "http://localhost:8080/fhir", Strength: 1})
+	plan, err := GenerateFromCoveragePlan(interactionPlan(), BuildOptions{BaseURL: "http://localhost:8080/fhir", Strength: 1, Registry: interactionRegistry()})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
 	}

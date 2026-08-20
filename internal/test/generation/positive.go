@@ -391,13 +391,14 @@ func baseURLForMethod(options BuildOptions, method string) string {
 	return options.BaseURL
 }
 
-func buildBodyTemplate(req coverage.CoverageRequirement, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
+func buildBodyTemplate(req coverage.CoverageRequirement, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) (map[string]any, bool) {
 	// A test payload is the same registry-driven body synthesis as every other
 	// resource, with an optional negative mutation applied only when the test
-	// expects the server to reject it.
+	// expects the server to reject it. The bool reports whether the mutation
+	// produced a concrete violation (false when the target element is absent).
 	body := synthesizeBody(req.ResourceType, id, profileURLs, primaryProfileURL, deps, reg, exhaustive)
-	applyNegativeMutation(body, req, reg)
-	return body
+	applied := applyNegativeMutation(body, req, reg)
+	return body, applied
 }
 
 func buildSetupBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
@@ -2477,11 +2478,19 @@ func dependencyReferenceElementName(resourceType, primaryProfileURL, dependency 
 }
 
 // buildSingleRequirementCase builds the strength-1 test for a single coverage
-// requirement: one request carrying that requirement's body plus its assert.
+// requirement: one request carrying that requirement's body plus its assert. It
+// returns nil when a negative requirement's target element is absent from the
+// synthesized payload (so no concrete violation could be constructed); the
+// caller skips such cases rather than emitting a reject test a conformant
+// server would accept.
 func buildSingleRequirementCase(req coverage.CoverageRequirement, options BuildOptions, deps []string) ast.Node {
 	requestID := requirementResourceID(req)
 	caseProfiles := orderedProfilesForResource(req.ResourceType, req.ProfileURL, options.PreferredProfileURLsByResource)
 	casePrimaryProfile := firstProfileURL(caseProfiles)
+	body, applied := buildBodyTemplate(req, requestID, caseProfiles, casePrimaryProfile, deps, options.Registry, options.Exhaustive)
+	if isNegativeVariant(req.Variant) && !applied {
+		return nil
+	}
 	return &ast.Sequence{Steps: []ast.Node{
 		&ast.Request{
 			Method: "PUT",
@@ -2490,7 +2499,7 @@ func buildSingleRequirementCase(req coverage.CoverageRequirement, options BuildO
 				"Content-Type":           "application/fhir+json",
 				"X-Momus-Requirement-ID": req.ID,
 			},
-			Body: buildBodyTemplate(req, requestID, caseProfiles, casePrimaryProfile, deps, options.Registry, options.Exhaustive),
+			Body: body,
 		},
 		buildRequirementAssert(req),
 	}}

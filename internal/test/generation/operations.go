@@ -151,7 +151,8 @@ func operationSpec(req coverage.CoverageRequirement, options BuildOptions) (meth
 func operationUpdateBody(req coverage.CoverageRequirement, options BuildOptions, id string) map[string]any {
 	profiles := orderedProfilesForResource(req.ResourceType, req.ProfileURL, options.PreferredProfileURLsByResource)
 	primaryProfile := firstProfileURL(profiles)
-	return buildBodyTemplate(req, id, profiles, primaryProfile, nil, options.Registry, true)
+	body, _ := buildBodyTemplate(req, id, profiles, primaryProfile, nil, options.Registry, true)
+	return body
 }
 
 // crudResourceID returns the deterministic resource id used by a CRUD sequence.

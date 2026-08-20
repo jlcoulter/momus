@@ -175,3 +175,53 @@ func TestRegistryScopeIgnoresUnknownURLs(t *testing.T) {
 		t.Fatalf("scoped ScopedStructureDefinitions returned %d, want 1", got)
 	}
 }
+
+// TestResolveElementsKeepsIDBasedSliceChildrenDistinct (task #30) verifies that a
+// slice child whose slice context lives only in its ID does not override its base
+// element during the parent-chain merge. Before the fix, elementKey ignored the ID
+// slice segment, so the base extension.url and the suppressed slice's extension.url
+// collided and one clobbered the other.
+func TestResolveElementsKeepsIDBasedSliceChildrenDistinct(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/base-org",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "1"},
+			{Path: "Organization.extension", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Extension"}}},
+			// The base element that the child's ID-based slice child shares a path with.
+			{Path: "Organization.extension.url", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
+		},
+	})
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:            "http://example.org/StructureDefinition/org",
+		Type:           "Organization",
+		BaseDefinition: "http://example.org/StructureDefinition/base-org",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization.extension", Min: 0, Max: "*"},
+			{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 0, Max: "1"},
+			// A slice child whose slice context lives only in its ID (no SliceName).
+			{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: "1", Fixed: "http://example.org/suppressed"},
+		},
+	})
+
+	els, err := r.ResolveElements("http://example.org/StructureDefinition/org")
+	if err != nil {
+		t.Fatalf("ResolveElements: %v", err)
+	}
+	var hasBaseURL, hasSliceURL bool
+	for _, el := range els {
+		if el.Path == "Organization.extension.url" && el.ID == "" && el.Fixed == nil {
+			hasBaseURL = true
+		}
+		if el.ID == "Organization.extension:suppressed.url" && el.Fixed == "http://example.org/suppressed" {
+			hasSliceURL = true
+		}
+	}
+	if !hasBaseURL {
+		t.Fatal("base Organization.extension.url element was clobbered by the ID-based slice child")
+	}
+	if !hasSliceURL {
+		t.Fatal("ID-based slice child Organization.extension:suppressed.url missing after merge")
+	}
+}

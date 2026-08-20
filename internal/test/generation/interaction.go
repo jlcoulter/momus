@@ -43,14 +43,18 @@ func buildResourceCases(reqs []coverage.CoverageRequirement, plan *coverage.Cove
 
 	if effectiveStrength(plan, options) < 2 {
 		for _, req := range rest {
-			cases = append(cases, buildSingleRequirementCase(req, options, deps))
+			if node := buildSingleRequirementCase(req, options, deps); node != nil {
+				cases = append(cases, node)
+			}
 		}
 		return cases
 	}
 
 	selected := selectInteractionCandidates(rest)
 	for _, cand := range selected {
-		cases = append(cases, buildCandidateCase(cand, options, deps))
+		if node := buildCandidateCase(cand, options, deps); node != nil {
+			cases = append(cases, node)
+		}
 	}
 	return cases
 }
@@ -223,6 +227,7 @@ func buildCandidateCase(cand candidateTest, options BuildOptions, deps []string)
 	requestID := requirementResourceID(seed)
 	profiles := orderedProfilesForResource(seed.ResourceType, seed.ProfileURL, options.PreferredProfileURLsByResource)
 	primaryProfile := firstProfileURL(profiles)
+	body, applied := buildBodyTemplate(seed, requestID, profiles, primaryProfile, deps, options.Registry, options.Exhaustive)
 
 	request := &ast.Request{
 		Method: "PUT",
@@ -231,11 +236,17 @@ func buildCandidateCase(cand candidateTest, options BuildOptions, deps []string)
 			"Content-Type":           "application/fhir+json",
 			"X-Momus-Requirement-ID": seed.ID,
 		},
-		Body: buildBodyTemplate(seed, requestID, profiles, primaryProfile, deps, options.Registry, options.Exhaustive),
+		Body: body,
 	}
 
 	seq := &ast.Sequence{Steps: []ast.Node{request}}
 	if cand.negative != nil {
+		// A negative candidate whose target element is absent from the payload has
+		// no concrete violation to assert; skip it rather than emit a reject test
+		// a conformant server would accept.
+		if !applied {
+			return nil
+		}
 		seq.Steps = append(seq.Steps, buildRequirementAssert(*cand.negative))
 		return seq
 	}

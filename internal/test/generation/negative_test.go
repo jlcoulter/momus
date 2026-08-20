@@ -3,6 +3,8 @@ package generation
 import (
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/fhir/model"
+	"github.com/jlcoulter/momus/internal/fhir/registry"
 	"github.com/jlcoulter/momus/internal/test/coverage"
 )
 
@@ -164,5 +166,57 @@ func TestReferenceMapsAtChoiceElement(t *testing.T) {
 	}
 	if refs[0]["reference"] != "Patient/momus-setup-patient" {
 		t.Fatalf("reference = %v", refs[0]["reference"])
+	}
+}
+
+// TestNegativeMutationSkippedWhenElementAbsent verifies that a negative
+// requirement whose target element is not present in the synthesized payload is
+// skipped (no reject test is emitted), because the mutation could not construct
+// a concrete violation and a conformant server would accept the payload.
+func TestNegativeMutationSkippedWhenElementAbsent(t *testing.T) {
+	// No registry: the body cannot be populated, so Observation.value is absent
+	// and the negative datatype case must be skipped entirely.
+	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
+		Requirements: []coverage.CoverageRequirement{
+			{ID: "d-invalid", ProfileURL: "http://example.org/StructureDefinition/observation", ResourceType: "Observation", ElementPath: "Observation.value", Variant: coverage.CoverageVariantDatatypeInvalidLexical},
+		},
+	}, BuildOptions{BaseURL: "http://localhost:8080/fhir"})
+	if err != nil {
+		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
+	}
+	if got := RequirementCount(plan); got != 0 {
+		t.Fatalf("got %d generated cases, want 0 (negative case skipped when element absent)", got)
+	}
+	expressions := map[string]bool{}
+	collectAssertExpressions(plan.Root, expressions)
+	if expressions["status in [400,412,422]"] {
+		t.Fatal("must not emit a reject assertion when no violation could be constructed")
+	}
+
+	// With a registry declaring a required value element, the case is generated.
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/observation",
+		Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+	plan2, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
+		Requirements: []coverage.CoverageRequirement{
+			{ID: "d-invalid", ProfileURL: "http://example.org/StructureDefinition/observation", ResourceType: "Observation", ElementPath: "Observation.value", Variant: coverage.CoverageVariantDatatypeInvalidLexical},
+		},
+	}, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg})
+	if err != nil {
+		t.Fatalf("GenerateFromCoveragePlan (with registry) returned error: %v", err)
+	}
+	if got := RequirementCount(plan2); got != 1 {
+		t.Fatalf("got %d generated cases, want 1 (negative case generated when element present)", got)
+	}
+	expressions2 := map[string]bool{}
+	collectAssertExpressions(plan2.Root, expressions2)
+	if !expressions2["status in [400,412,422]"] {
+		t.Fatal("expected a negative (reject) assertion when the element is present")
 	}
 }
