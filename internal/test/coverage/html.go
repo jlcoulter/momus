@@ -21,15 +21,25 @@ type HTMLItem struct {
 	ResponseBody  string
 }
 
-// htmlDrill is one expandable group (a domain, resource type, or variant) with
-// its items and pass/fail summary.
+// htmlDrill is one expandable group (a domain, resource type, or variant)
+// with its items split into Positive (accept) and Negative (reject) polarity
+// sub-groups, each with its own pass/fail summary.
 type htmlDrill struct {
 	Name    string
 	Total   int
 	Passed  int
 	Failed  int
 	Percent float64
-	Items   []HTMLItem
+	Groups  []htmlPolarityGroup
+}
+
+// htmlPolarityGroup is a Positive or Negative sub-grouping within a drill.
+type htmlPolarityGroup struct {
+	Name   string // "Positive" or "Negative"
+	Total  int
+	Passed int
+	Failed int
+	Items  []HTMLItem
 }
 
 // htmlReport is the data model for the rendered HTML report.
@@ -88,8 +98,9 @@ func groupItems(items []HTMLItem, key func(HTMLItem) string, percent func(string
 
 	drills := make([]htmlDrill, 0, len(names))
 	for _, name := range names {
-		drill := htmlDrill{Name: name, Percent: percent(name), Items: byName[name]}
-		for _, it := range drill.Items {
+		groupItems := byName[name]
+		drill := htmlDrill{Name: name, Percent: percent(name)}
+		for _, it := range groupItems {
 			drill.Total++
 			if it.Passed {
 				drill.Passed++
@@ -97,9 +108,45 @@ func groupItems(items []HTMLItem, key func(HTMLItem) string, percent func(string
 				drill.Failed++
 			}
 		}
+		drill.Groups = splitByPolarity(groupItems)
 		drills = append(drills, drill)
 	}
 	return drills
+}
+
+// splitByPolarity divides items into Positive (accept) and Negative (reject)
+// sub-groups using CoverageVariant.IsReject, preserving the original item order
+// within each sub-group.
+func splitByPolarity(items []HTMLItem) []htmlPolarityGroup {
+	pos := htmlPolarityGroup{Name: "Positive"}
+	neg := htmlPolarityGroup{Name: "Negative"}
+	for _, it := range items {
+		if CoverageVariant(it.Variant).IsReject() {
+			neg.Total++
+			if it.Passed {
+				neg.Passed++
+			} else {
+				neg.Failed++
+			}
+			neg.Items = append(neg.Items, it)
+		} else {
+			pos.Total++
+			if it.Passed {
+				pos.Passed++
+			} else {
+				pos.Failed++
+			}
+			pos.Items = append(pos.Items, it)
+		}
+	}
+	groups := make([]htmlPolarityGroup, 0, 2)
+	if pos.Total > 0 {
+		groups = append(groups, pos)
+	}
+	if neg.Total > 0 {
+		groups = append(groups, neg)
+	}
+	return groups
 }
 
 func percentOf(m map[CoverageDomain]DomainCoverageSummary, name string) float64 {
@@ -165,21 +212,26 @@ var reportTemplate = template.Must(template.New("report").Parse(`<!DOCTYPE html>
 {{range $group := .Drills}}
 <details>
   <summary>{{$group.Name}} — {{printf "%.1f" $group.Percent}}% ({{$group.Passed}} passed / {{$group.Failed}} failed / {{$group.Total}} total)</summary>
-  {{range $item := $group.Items}}
+  {{range $pol := $group.Groups}}
   <details>
-    <summary>{{if $item.Passed}}<span class="pass">PASS</span>{{else}}<span class="fail">FAIL</span>{{end}} — {{$item.ID}}</summary>
-    <dl>
-      <dt>Assert</dt><dd>{{$item.Expression}}</dd>
-      <dt>Domain</dt><dd>{{$item.Domain}}</dd>
-      <dt>Resource</dt><dd>{{$item.Resource}}</dd>
-      <dt>Variant</dt><dd>{{$item.Variant}}</dd>
-      <dt>Status</dt><dd>{{$item.StatusCode}}</dd>
-      <dt>Request</dt><dd>{{$item.RequestMethod}} {{$item.RequestURL}}</dd>
-      <dt>Request Body</dt><dd><pre>{{$item.RequestBody}}</pre></dd>
-      <dt>Response Body</dt><dd><pre>{{$item.ResponseBody}}</pre></dd>
-    </dl>
+    <summary>{{$pol.Name}} — {{$pol.Passed}} passed / {{$pol.Failed}} failed / {{$pol.Total}} total</summary>
+    {{range $item := $pol.Items}}
+    <details>
+      <summary>{{if $item.Passed}}<span class="pass">PASS</span>{{else}}<span class="fail">FAIL</span>{{end}} — {{$item.ID}}</summary>
+      <dl>
+        <dt>Assert</dt><dd>{{$item.Expression}}</dd>
+        <dt>Domain</dt><dd>{{$item.Domain}}</dd>
+        <dt>Resource</dt><dd>{{$item.Resource}}</dd>
+        <dt>Variant</dt><dd>{{$item.Variant}}</dd>
+        <dt>Status</dt><dd>{{$item.StatusCode}}</dd>
+        <dt>Request</dt><dd>{{$item.RequestMethod}} {{$item.RequestURL}}</dd>
+        <dt>Request Body</dt><dd><pre>{{$item.RequestBody}}</pre></dd>
+        <dt>Response Body</dt><dd><pre>{{$item.ResponseBody}}</pre></dd>
+      </dl>
+    </details>
+    {{end}}
   </details>
-  {{end}}
+  {{else}}<p>No items.</p>{{end}}
 </details>
 {{else}}<p>No items.</p>{{end}}
 {{end}}
