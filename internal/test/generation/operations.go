@@ -16,7 +16,7 @@ func buildOperationCase(req coverage.CoverageRequirement, options BuildOptions) 
 	contentType := "application/fhir+json"
 	switch req.Variant {
 	case coverage.CoverageVariantOperationUpdate:
-		body = operationUpdateBody(req, options)
+		body = operationUpdateBody(req, options, setupResourceID(req.ResourceType))
 	case coverage.CoverageVariantOperationPatch:
 		body = []any{map[string]any{"op": "add", "path": "/", "value": map[string]any{"status": "active"}}}
 		contentType = "application/json-patch+json"
@@ -38,7 +38,7 @@ func buildOperationCase(req coverage.CoverageRequirement, options BuildOptions) 
 func buildCRUDCase(req coverage.CoverageRequirement, options BuildOptions) ast.Node {
 	resourceType := req.ResourceType
 	id := crudResourceID(resourceType)
-	body := operationUpdateBody(req, options)
+	body := operationUpdateBody(req, options, id)
 	headers := map[string]string{"Content-Type": "application/fhir+json", "X-Momus-Requirement-ID": req.ID}
 	crudURL := func(method string) string {
 		return joinURL(baseURLForMethod(options, method), resourceType) + "/" + id
@@ -105,11 +105,13 @@ func operationSpec(req coverage.CoverageRequirement, options BuildOptions) (meth
 }
 
 // operationUpdateBody synthesises a resource body for an update operation using
-// the same profile-driven generation as positive test payloads.
-func operationUpdateBody(req coverage.CoverageRequirement, options BuildOptions) map[string]any {
+// the same profile-driven generation as positive test payloads. The id must
+// match the resource id used in the request URL (servers reject a PUT whose
+// body id disagrees with the URL id, e.g. HAPI-0420).
+func operationUpdateBody(req coverage.CoverageRequirement, options BuildOptions, id string) map[string]any {
 	profiles := orderedProfilesForResource(req.ResourceType, req.ProfileURL, options.PreferredProfileURLsByResource)
 	primaryProfile := firstProfileURL(profiles)
-	return buildBodyTemplate(req, setupResourceID(req.ResourceType), profiles, primaryProfile, nil, options.Registry, true)
+	return buildBodyTemplate(req, id, profiles, primaryProfile, nil, options.Registry, true)
 }
 
 // crudResourceID returns the deterministic resource id used by a CRUD sequence.

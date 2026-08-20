@@ -1,6 +1,7 @@
 package generation
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/test/ast"
@@ -174,4 +175,51 @@ func TestBuildCustomOperationCase(t *testing.T) {
 	if got["op-custom"] != "GET http://localhost:8080/fhir/Organization/$everything" {
 		t.Fatalf("custom operation case = %q", got["op-custom"])
 	}
+}
+
+// TestWriteRequestBodyIDMatchesURLID ensures the resource id embedded in a write
+// request body matches the id in the request URL. Conformant FHIR servers reject
+// a PUT whose body id disagrees with the URL id (e.g. HAPI-0420), so a mismatch
+// would make every update/CRUD case fail against a real server.
+func TestWriteRequestBodyIDMatchesURLID(t *testing.T) {
+	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
+		Requirements: []coverage.CoverageRequirement{
+			{ID: "crud-1", ResourceType: "Organization", Domain: coverage.CoverageDomainState, Variant: coverage.CoverageVariantStateCRUDSequence},
+			{ID: "op-update", ResourceType: "Patient", Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationUpdate},
+		},
+	}, BuildOptions{BaseURL: "http://localhost:8080/fhir"})
+	if err != nil {
+		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
+	}
+
+	var walk func(ast.Node)
+	walk = func(node ast.Node) {
+		switch n := node.(type) {
+		case *ast.Sequence:
+			for _, step := range n.Steps {
+				walk(step)
+			}
+		case *ast.Parallel:
+			for _, step := range n.Steps {
+				walk(step)
+			}
+		case *ast.Request:
+			if !ast.IsWriteMethod(n.Method) || n.Body == nil {
+				return
+			}
+			body, ok := n.Body.(map[string]any)
+			if !ok {
+				t.Fatalf("write request %s %s has a non-object body %T", n.Method, n.URL, n.Body)
+			}
+			bodyID, _ := body["id"].(string)
+			if bodyID == "" {
+				t.Fatalf("write request %s %s body has no id", n.Method, n.URL)
+			}
+			wantSuffix := "/" + bodyID
+			if !strings.HasSuffix(n.URL, wantSuffix) {
+				t.Fatalf("write request %s %s body id %q does not match the URL resource id", n.Method, n.URL, bodyID)
+			}
+		}
+	}
+	walk(plan.Root)
 }
