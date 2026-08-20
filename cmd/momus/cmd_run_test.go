@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -163,5 +164,25 @@ func TestRunCmdUsesDatasetForPreCreated(t *testing.T) {
 	summary := payload["summary"].(map[string]any)
 	if summary["passedCases"] != float64(1) {
 		t.Fatalf("passedCases = %v, want 1 (seed reference should resolve)", summary["passedCases"])
+	}
+}
+
+// TestRunCmdFailOnUncoveredRequiresCoveragePlan verifies that --fail-on-uncovered
+// without --coverage-plan is rejected up front. Without this guard the coverage
+// evaluation stays at its zero value (no uncovered obligations), so the gate
+// would silently never fail and CI would get a green run with no enforcement.
+func TestRunCmdFailOnUncoveredRequiresCoveragePlan(t *testing.T) {
+	cfg := &config{}
+	cmd := newRunCmd(cfg)
+	cfg.failOnUncovered = true
+	cmd.SetContext(context.Background())
+	// The plan path is never read because the guard runs before plan loading;
+	// any path exercises the error branch.
+	err := cmd.RunE(cmd, []string{"does-not-exist.json"})
+	if err == nil {
+		t.Fatal("expected an error when --fail-on-uncovered is set without --coverage-plan, got nil")
+	}
+	if !strings.Contains(err.Error(), "--fail-on-uncovered requires --coverage-plan") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

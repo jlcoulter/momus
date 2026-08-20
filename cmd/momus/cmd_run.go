@@ -24,6 +24,9 @@ func newRunCmd(cfg *config) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			planPath := args[0]
+			if cfg.failOnUncovered && cfg.coveragePlanPath == "" {
+				return fmt.Errorf("--fail-on-uncovered requires --coverage-plan; provide the plan to evaluate contractual coverage against")
+			}
 			raw, err := os.ReadFile(planPath)
 			if err != nil {
 				return fmt.Errorf("read test plan %s: %w", planPath, err)
