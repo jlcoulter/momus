@@ -1321,6 +1321,14 @@ func normalizeGeneratedIdentifier(identifier map[string]any) {
 	}
 	if system == "http://ns.electronichealth.net.au/id/hi/hpii/1.0" {
 		identifier["value"] = generateHPIINumber()
+		return
+	}
+	if system == "http://hl7.org.au/id/abn" {
+		identifier["value"] = generateABN()
+		return
+	}
+	if system == "http://hl7.org.au/id/acn" {
+		identifier["value"] = generateACN()
 	}
 }
 
@@ -1426,6 +1434,70 @@ func appendLuhnCheckDigit(number string) string {
 	}
 	checkDigit := (10 - (sum % 10)) % 10
 	return number + strconv.Itoa(checkDigit)
+}
+
+// generateABN returns a valid 11-digit Australian Business Number. ABNs satisfy
+// a mod-89 check digit: subtract 1 from the first digit, weight the 11 digits by
+// [10,1,3,5,7,9,11,13,15,17,19], and the sum must be divisible by 89.
+func generateABN() string {
+	seed := uint64(stableChecksum("abn"))
+	weights := []int{10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
+	for i := uint64(0); i < 100000; i++ {
+		n := 1000000000 + (seed+i)%9000000000 // 10 digits, first digit 1-9
+		prefix := fmt.Sprintf("%010d", n)
+		if full, ok := appendMod89Check(prefix, weights, true); ok {
+			return full
+		}
+	}
+	return "51824753556"
+}
+
+// generateACN returns a valid 9-digit Australian Company Number (mod-89 check
+// digit, weights [10,1,3,5,7,9,11,13,15]).
+func generateACN() string {
+	seed := uint64(stableChecksum("acn"))
+	weights := []int{10, 1, 3, 5, 7, 9, 11, 13, 15}
+	for i := uint64(0); i < 100000; i++ {
+		n := 10000000 + (seed+i)%90000000 // 8 digits, first digit 1-9
+		prefix := fmt.Sprintf("%08d", n)
+		if full, ok := appendMod89Check(prefix, weights, false); ok {
+			return full
+		}
+	}
+	return "0050043679"
+}
+
+// appendMod89Check appends a check digit (0-9) to prefix so the full number
+// satisfies the ABN/ACN mod-89 weighting scheme. weights covers every digit
+// (the prefix digits plus the appended check digit). When subtractFirst is true
+// (ABN), 1 is subtracted from the first digit before weighting. It returns
+// (full, true) when a valid check digit exists, otherwise ("", false).
+func appendMod89Check(prefix string, weights []int, subtractFirst bool) (string, bool) {
+	for c := 0; c <= 9; c++ {
+		full := prefix + strconv.Itoa(c)
+		if mod89Valid(full, weights, subtractFirst) {
+			return full, true
+		}
+	}
+	return "", false
+}
+
+func mod89Valid(number string, weights []int, subtractFirst bool) bool {
+	if len(number) != len(weights) {
+		return false
+	}
+	sum := 0
+	for i := 0; i < len(number); i++ {
+		d := int(number[i] - '0')
+		if d < 0 || d > 9 {
+			return false
+		}
+		if i == 0 && subtractFirst {
+			d -= 1
+		}
+		sum += d * weights[i]
+	}
+	return sum%89 == 0
 }
 
 func normalizeResourceSpecificPayload(body map[string]any) {
