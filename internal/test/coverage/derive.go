@@ -453,8 +453,13 @@ func appendObligations(plan *CoveragePlan, seen map[string]struct{}, c constrain
 			addRequirement(plan, seen, c, de, CoverageDomainTerminology, variant)
 		}
 	case constraint.KindInvariant:
+		// Only the positive satisfies obligation is derived. A concrete
+		// invariant-violates payload cannot be constructed reliably (that would
+		// require evaluating the FHIRPath invariant expression, which is not yet
+		// implemented), and nulling the subject element does not break most
+		// invariants, so deriving a violates obligation would generate a test that
+		// a conformant server accepts and the reject assertion would falsely fail.
 		addRequirement(plan, seen, c, de, CoverageDomainInvariant, CoverageVariantInvariantSatisfies)
-		addRequirement(plan, seen, c, de, CoverageDomainInvariant, CoverageVariantInvariantViolates)
 	case constraint.KindReference:
 		for _, variant := range []CoverageVariant{
 			CoverageVariantReferenceValid,

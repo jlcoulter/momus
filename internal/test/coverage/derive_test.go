@@ -330,8 +330,13 @@ func TestDerivePlanEmitMultiDomainObligations(t *testing.T) {
 			t.Fatalf("expected terminology variant %s", v)
 		}
 	}
-	if !hasVariant(plan, CoverageVariantInvariantSatisfies) || !hasVariant(plan, CoverageVariantInvariantViolates) {
-		t.Fatal("expected invariant satisfies and violates variants")
+	// Only the positive invariant satisfies obligation is derived; violates is not
+	// (a concrete violation cannot be constructed reliably).
+	if !hasVariant(plan, CoverageVariantInvariantSatisfies) {
+		t.Fatal("expected invariant satisfies variant")
+	}
+	if hasVariant(plan, CoverageVariantInvariantViolates) {
+		t.Fatal("invariant violates must not be derived (no reliable violation can be constructed)")
 	}
 	for _, v := range []CoverageVariant{
 		CoverageVariantReferenceValid,

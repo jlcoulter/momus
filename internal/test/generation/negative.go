@@ -23,8 +23,7 @@ func applyNegativeMutation(body map[string]any, req coverage.CoverageRequirement
 	case coverage.CoverageVariantMissingRequired,
 		coverage.CoverageVariantTerminologyAbsent:
 		deletePath(body, req.ElementPath)
-	case coverage.CoverageVariantDatatypeNull,
-		coverage.CoverageVariantInvariantViolates:
+	case coverage.CoverageVariantDatatypeNull:
 		setPath(body, req.ElementPath, nil)
 	case coverage.CoverageVariantDatatypeInvalidLexical,
 		coverage.CoverageVariantDatatypeWrongJSONType:
