@@ -72,17 +72,86 @@ func RenderHTML(evaluation EvaluationReport, items []HTMLItem) ([]byte, error) {
 }
 
 func buildHTMLReport(evaluation EvaluationReport, items []HTMLItem) htmlReport {
+	hasEvaluation := evaluation.TotalRequirements > 0
 	return htmlReport{
-		CoveragePercent:       evaluation.CoveragePercent,
-		TotalRequirements:     evaluation.TotalRequirements,
-		CoveredRequirements:   evaluation.CoveredRequirements,
-		UncoveredRequirements: evaluation.UncoveredRequirements,
+		CoveragePercent:       overallPercent(evaluation, items),
+		TotalRequirements:     totalRequirements(evaluation, items),
+		CoveredRequirements:   coveredRequirements(evaluation, items),
+		UncoveredRequirements: totalRequirements(evaluation, items) - coveredRequirements(evaluation, items),
 		Sections: []htmlSection{
-			{Title: "By Domain", Drills: groupItems(items, func(it HTMLItem) string { return it.Domain }, func(name string) float64 { return percentOf(evaluation.ByDomain, name) })},
-			{Title: "By Resource Type", Drills: groupItems(items, func(it HTMLItem) string { return it.Resource }, func(name string) float64 { return percentOfResource(evaluation.ByResourceType, name) })},
-			{Title: "By Variant", Drills: groupItems(items, func(it HTMLItem) string { return it.Variant }, func(name string) float64 { return percentOfVariant(evaluation.ByVariant, name) })},
+			{Title: "By Domain", Drills: groupItems(items, func(it HTMLItem) string { return it.Domain }, func(name string) float64 {
+				return drillPercent(evaluation, items, name, hasEvaluation, func(it HTMLItem) string { return it.Domain }, func(n string) float64 { return percentOf(evaluation.ByDomain, n) })
+			})},
+			{Title: "By Resource Type", Drills: groupItems(items, func(it HTMLItem) string { return it.Resource }, func(name string) float64 {
+				return drillPercent(evaluation, items, name, hasEvaluation, func(it HTMLItem) string { return it.Resource }, func(n string) float64 { return percentOfResource(evaluation.ByResourceType, n) })
+			})},
+			{Title: "By Variant", Drills: groupItems(items, func(it HTMLItem) string { return it.Variant }, func(name string) float64 {
+				return drillPercent(evaluation, items, name, hasEvaluation, func(it HTMLItem) string { return it.Variant }, func(n string) float64 { return percentOfVariant(evaluation.ByVariant, n) })
+			})},
 		},
 	}
+}
+
+// overallPercent returns the coverage percentage: from the evaluation when it
+// has obligations, otherwise derived from the executed items (passed / total).
+func overallPercent(evaluation EvaluationReport, items []HTMLItem) float64 {
+	if evaluation.TotalRequirements > 0 {
+		return evaluation.CoveragePercent
+	}
+	passed := 0
+	for _, it := range items {
+		if it.Passed {
+			passed++
+		}
+	}
+	return percent(passed, len(items))
+}
+
+func totalRequirements(evaluation EvaluationReport, items []HTMLItem) int {
+	if evaluation.TotalRequirements > 0 {
+		return evaluation.TotalRequirements
+	}
+	return len(items)
+}
+
+func coveredRequirements(evaluation EvaluationReport, items []HTMLItem) int {
+	if evaluation.TotalRequirements > 0 {
+		return evaluation.CoveredRequirements
+	}
+	covered := 0
+	for _, it := range items {
+		if it.Passed {
+			covered++
+		}
+	}
+	return covered
+}
+
+// drillPercent returns the coverage percentage for a drill group. When the
+// evaluation has per-group data it uses that; otherwise it derives the
+// percentage from the executed items in the group (passed / total).
+func drillPercent(evaluation EvaluationReport, items []HTMLItem, name string, hasEvaluation bool, key func(HTMLItem) string, fromEvaluation func(string) float64) float64 {
+	if hasEvaluation {
+		return fromEvaluation(name)
+	}
+	passed, total := 0, 0
+	for _, it := range items {
+		if key(it) != name {
+			continue
+		}
+		total++
+		if it.Passed {
+			passed++
+		}
+	}
+	return percent(passed, total)
+}
+
+func percent(passed, total int) float64 {
+	if total <= 0 {
+		return 0
+	}
+	return (float64(passed) / float64(total)) * 100
 }
 
 func groupItems(items []HTMLItem, key func(HTMLItem) string, percent func(string) float64) []htmlDrill {

@@ -99,3 +99,35 @@ func TestRenderHTMLGroupsByPolarity(t *testing.T) {
 		t.Fatalf("negative item req-neg not under Negative heading: neg=%d item=%d", negIdx, negItemIdx)
 	}
 }
+
+// TestRenderHTMLComputesPercentFromItemsWithoutEvaluation verifies that when no
+// coverage evaluation is supplied (no --coverage-plan), the report derives the
+// coverage percentage from the executed items (passed / total) instead of
+// showing 0.0%.
+func TestRenderHTMLComputesPercentFromItemsWithoutEvaluation(t *testing.T) {
+	items := []HTMLItem{
+		{ID: "req-1", Domain: "cardinality", Resource: "Patient", Variant: "valid-min", Passed: true},
+		{ID: "req-2", Domain: "cardinality", Resource: "Patient", Variant: "missing-required", Passed: false},
+		{ID: "req-3", Domain: "datatype", Resource: "Patient", Variant: "datatype-valid", Passed: true},
+	}
+
+	// Empty evaluation (as when --coverage-plan is not supplied).
+	out, err := RenderHTML(EvaluationReport{}, items)
+	if err != nil {
+		t.Fatalf("RenderHTML returned error: %v", err)
+	}
+	html := string(out)
+
+	// 2 of 3 passed = 66.7%%.
+	if !strings.Contains(html, "66.7%") {
+		t.Fatalf("HTML report missing item-derived overall percentage 66.7%%\n%s", html)
+	}
+	// The cardinality drill has 1 passed / 2 total = 50.0%%.
+	if !strings.Contains(html, "cardinality — 50.0%") {
+		t.Fatalf("HTML report missing item-derived cardinality percentage 50.0%%\n%s", html)
+	}
+	// The datatype drill has 1 passed / 1 total = 100.0%%.
+	if !strings.Contains(html, "datatype — 100.0%") {
+		t.Fatalf("HTML report missing item-derived datatype percentage 100.0%%\n%s", html)
+	}
+}
