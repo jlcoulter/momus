@@ -887,6 +887,7 @@ func generateSliceValue(slice *model.SliceNode, reg *registry.Registry) (any, bo
 		Name:       slice.Definition.Name,
 		Path:       slice.Definition.Path,
 		Definition: slice.Definition,
+		ProfileURL: slice.ProfileURL,
 		Children:   slice.Children,
 		Slices:     make(map[string]*model.SliceNode),
 	}
@@ -1275,7 +1276,7 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 	if node.Definition.Fixed != nil {
 		return node.Definition.Fixed, true
 	}
-	boundCoding, hasBoundCoding := resolveBoundCoding(node.Definition, reg)
+	boundCoding, hasBoundCoding := resolveBoundCodingForNode(node, reg)
 	if node.Definition.Pattern != nil {
 		if merged, ok := mergePatternWithBinding(node.Definition.Pattern, typeCode, boundCoding, hasBoundCoding); ok {
 			return merged, true
@@ -1665,6 +1666,174 @@ func resolveBoundCoding(def *model.ElementDefinition, reg *registry.Registry) (g
 		}
 	}
 	return generatedCoding{}, false
+}
+
+// resolveBoundCodingForNode resolves a bound coding for an element node, falling
+// back to the package's own example instance data when the bound ValueSet or
+// CodeSystem is not present in the registry (or carries no meaningful code).
+//
+// The registry represents the package and its dependencies in full, so example
+// instances are a first-class source of conformant values. The example-driven
+// fallback prefers an instance whose meta.profile matches the node's profile,
+// and otherwise uses the first example of the resource type, so generation only
+// emits the synthetic example.org fallback in genuinely exceptional cases.
+func resolveBoundCodingForNode(node *model.ElementNode, reg *registry.Registry) (generatedCoding, bool) {
+	if node == nil || node.Path == "" {
+		return generatedCoding{}, false
+	}
+	if node.Definition != nil {
+		if coding, ok := resolveBoundCoding(node.Definition, reg); ok {
+			return coding, true
+		}
+	}
+	return resolveBoundCodingFromExample(node, reg)
+}
+
+// resolveBoundCodingFromExample looks for a real coding at the node's element
+// path within the package's example instance resources. It prefers an instance
+// whose meta.profile matches the node's profile URL, then falls back to the
+// first example of the resource type (derived from the leading path segment).
+func resolveBoundCodingFromExample(node *model.ElementNode, reg *registry.Registry) (generatedCoding, bool) {
+	if node == nil || node.Path == "" || reg == nil {
+		return generatedCoding{}, false
+	}
+	resourceType, path := splitResourcePath(node.Path)
+	if resourceType == "" || path == "" {
+		return generatedCoding{}, false
+	}
+	instances := reg.ResourcesForType(resourceType)
+	if len(instances) == 0 {
+		return generatedCoding{}, false
+	}
+
+	// First pass: prefer instances whose meta.profile matches the node's profile.
+	profileURL := normalizeCanonical(node.ProfileURL)
+	for _, inst := range instances {
+		if !hasProfile(inst.ProfileURLs, profileURL) {
+			continue
+		}
+		if coding, ok := codingAtPath(inst.Raw, path); ok {
+			return coding, true
+		}
+	}
+	// Second pass: any example of the resource type.
+	for _, inst := range instances {
+		if coding, ok := codingAtPath(inst.Raw, path); ok {
+			return coding, true
+		}
+	}
+	return generatedCoding{}, false
+}
+
+// splitResourcePath splits a canonical element path into its leading resource
+// type and the remainder. E.g. "PractitionerRole.code" -> ("PractitionerRole",
+// "code"); "Patient.communication" -> ("Patient", "communication").
+func splitResourcePath(path string) (resourceType, elementPath string) {
+	idx := strings.Index(path, ".")
+	if idx <= 0 {
+		return "", ""
+	}
+	return path[:idx], path[idx+1:]
+}
+
+// hasProfile reports whether profileURL (possibly versionless) matches any of
+// the resource's declared profile URLs.
+func hasProfile(profiles []string, profileURL string) bool {
+	if profileURL == "" {
+		return false
+	}
+	for _, p := range profiles {
+		if normalizeCanonical(p) == profileURL {
+			return true
+		}
+	}
+	return false
+}
+
+// codingAtPath walks a raw resource instance to the named element path and
+// returns the first meaningful coding found there. It handles both a single
+// element and a repeatable element (an array of objects). path is the
+// dot-separated path below the resource root, e.g. "communication" or
+// "code.coding". The final element is expected to carry a "coding" array.
+func codingAtPath(raw map[string]any, path string) (generatedCoding, bool) {
+	if raw == nil || path == "" {
+		return generatedCoding{}, false
+	}
+	segments := strings.Split(path, ".")
+	// Descend into the element structure, handling arrays of objects at each
+	// repeatable level (e.g. communication[0].coding[0]).
+	var cur any = raw
+	for _, seg := range segments {
+		switch typed := cur.(type) {
+		case map[string]any:
+			next, ok := typed[seg]
+			if !ok {
+				return generatedCoding{}, false
+			}
+			cur = next
+		case []any:
+			// Recurse into the first element of the array that has the segment.
+			found := false
+			for _, item := range typed {
+				if itemMap, ok := item.(map[string]any); ok {
+					if next, ok := itemMap[seg]; ok {
+						cur = next
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
+				return generatedCoding{}, false
+			}
+		default:
+			return generatedCoding{}, false
+		}
+	}
+	return firstCodingInValue(cur)
+}
+
+// firstCodingInValue extracts the first meaningful coding from a value that is
+// either a CodeableConcept (map with "coding"), a Coding (map with system+code),
+// or an array of those.
+func firstCodingInValue(v any) (generatedCoding, bool) {
+	switch typed := v.(type) {
+	case []any:
+		for _, item := range typed {
+			if coding, ok := firstCodingInValue(item); ok {
+				return coding, true
+			}
+		}
+		return generatedCoding{}, false
+	case map[string]any:
+		// CodeableConcept: look at coding array.
+		if codings, ok := typed["coding"].([]any); ok {
+			for _, c := range codings {
+				if cm, ok := c.(map[string]any); ok {
+					if coding, ok := codingFromMap(cm); ok {
+						return coding, true
+					}
+				}
+			}
+			return generatedCoding{}, false
+		}
+		// Bare Coding.
+		return codingFromMap(typed)
+	default:
+		return generatedCoding{}, false
+	}
+}
+
+// codingFromMap converts a raw coding map into a generatedCoding, returning
+// false when the code is empty or not meaningful.
+func codingFromMap(m map[string]any) (generatedCoding, bool) {
+	code, _ := m["code"].(string)
+	if !isMeaningfulCoding(code, "") {
+		return generatedCoding{}, false
+	}
+	system, _ := m["system"].(string)
+	display, _ := m["display"].(string)
+	return generatedCoding{System: system, Code: code, Display: display}, true
 }
 
 // meaningfulCodingCodes are codes that represent null/placeholder values (not a

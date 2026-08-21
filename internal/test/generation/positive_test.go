@@ -12,6 +12,57 @@ import (
 	"github.com/jlcoulter/momus/internal/test/coverage"
 )
 
+// TestResolveBoundCodingFallsBackToExample verifies that when the bound
+// ValueSet is not present in the registry, generation falls back to a real
+// coding from the package's example instance data — preferring an instance
+// whose meta.profile matches the node's profile.
+func TestResolveBoundCodingFallsBackToExample(t *testing.T) {
+	reg := registry.New()
+	reg.AddResource(&model.Resource{
+		ResourceType: "Patient",
+		ProfileURLs:  []string{"http://digitalhealth.gov.au/fhir/hcpd/StructureDefinition/hcpd-practitioner"},
+		Raw: map[string]any{
+			"resourceType": "Patient",
+			"communication": []any{
+				map[string]any{
+					"coding": []any{map[string]any{"system": "urn:ietf:bcp:47", "code": "it", "display": "Italian"}},
+				},
+			},
+		},
+	})
+	// A second Patient example with a different profile and a different code.
+	reg.AddResource(&model.Resource{
+		ResourceType: "Patient",
+		ProfileURLs:  []string{"http://example.org/StructureDefinition/other"},
+		Raw: map[string]any{
+			"communication": []any{
+				map[string]any{
+					"coding": []any{map[string]any{"system": "urn:ietf:bcp:47", "code": "en"}},
+				},
+			},
+		},
+	})
+
+	// No bound ValueSet, so resolveBoundCoding fails and the example fallback
+	// must pick the profile-matched instance's code ("it").
+	node := &model.ElementNode{
+		Path:       "Patient.communication",
+		ProfileURL: "http://digitalhealth.gov.au/fhir/hcpd/StructureDefinition/hcpd-practitioner",
+	}
+	c, ok := resolveBoundCodingForNode(node, reg)
+	if !ok || c.Code != "it" {
+		t.Fatalf("resolveBoundCodingForNode=%+v ok=%v, want the profile-matched code \"it\"", c, ok)
+	}
+
+	// A node with no matching profile falls back to the first example of the
+	// resource type.
+	node2 := &model.ElementNode{Path: "Patient.communication", ProfileURL: "http://example.org/StructureDefinition/none"}
+	c2, ok2 := resolveBoundCodingForNode(node2, reg)
+	if !ok2 || c2.Code == "" {
+		t.Fatalf("resolveBoundCodingForNode(no profile match)=%+v ok=%v, want any example code", c2, ok2)
+	}
+}
+
 // TestResolveBoundCodingSkipsPlaceholders verifies that binding resolution skips
 // placeholder/null codes (e.g. v2-0203 "XX") and returns a meaningful code from
 // the package, so generated CodeableConcepts don't carry a null placeholder.

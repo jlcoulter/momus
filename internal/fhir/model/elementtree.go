@@ -12,6 +12,12 @@ type ElementNode struct {
 	Path       string
 	Definition *ElementDefinition
 
+	// ProfileURL is the canonical URL of the profile (or base) this node was
+	// resolved from. It is set on every node when the tree is built from a
+	// resolved profile, and is used during generation to locate profile-matched
+	// example data for bound codings.
+	ProfileURL string
+
 	Children map[string]*ElementNode
 	Slices   map[string]*SliceNode
 }
@@ -21,6 +27,10 @@ type SliceNode struct {
 	Name       string
 	Definition *ElementDefinition
 	Children   map[string]*ElementNode
+
+	// ProfileURL is the canonical URL of the profile the slice was resolved
+	// from, matching ElementNode.ProfileURL.
+	ProfileURL string
 }
 
 // ResolvedProfile is a profile whose elements have been resolved into both
@@ -47,11 +57,39 @@ func NewResolvedProfile(canonical, resourceType string, defs []ElementDefinition
 	if root == nil {
 		return nil
 	}
+	// Stamp every node with the profile URL it was resolved from, so
+	// generation can locate profile-matched example data.
+	stampProfile(root, canonical)
 	return &ResolvedProfile{
 		Canonical:    canonical,
 		ResourceType: resourceType,
 		Root:         root,
 		Elements:     byPath,
+	}
+}
+
+// stampProfile recursively sets ProfileURL on every node (and its slices) in
+// the tree.
+func stampProfile(node *ElementNode, profileURL string) {
+	if node == nil {
+		return
+	}
+	node.ProfileURL = profileURL
+	for _, child := range node.Children {
+		stampProfile(child, profileURL)
+	}
+	for _, slice := range node.Slices {
+		stampSliceProfile(slice, profileURL)
+	}
+}
+
+func stampSliceProfile(slice *SliceNode, profileURL string) {
+	if slice == nil {
+		return
+	}
+	slice.ProfileURL = profileURL
+	for _, child := range slice.Children {
+		stampProfile(child, profileURL)
 	}
 }
 

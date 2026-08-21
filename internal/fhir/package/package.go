@@ -269,6 +269,15 @@ func ReadPackage(packagePath string) (*Package, error) {
 			debug("skipping non-fhir-or-invalid-json resource", "name", header.Name, "error", err)
 			continue
 		}
+		// A decoded instance Resource with an empty ResourceType is a non-FHIR
+		// JSON file that happened to parse (no "resourceType"); skip it. Other
+		// resources are retained, including instance/example resources now that
+		// the registry represents the package in full.
+		if instance, ok := res.(*model.Resource); ok && instance.ResourceType == "" {
+			skippedResources++
+			debug("skipping json resource without a resourceType", "name", header.Name)
+			continue
+		}
 		if res != nil {
 			pkg.Resources = append(pkg.Resources, res)
 			decodedResources++
@@ -430,8 +439,42 @@ func decodeResource(data []byte) (any, error) {
 			Expression: sp.Expression,
 		}, nil
 	default:
-		return nil, nil
+		// Any other resource type is an instance resource (e.g. an example
+		// Patient, Practitioner, or PractitionerRole shipped in the package).
+		// Keep it as an opaque Resource so the registry can index and traverse
+		// package example data as a source of conformant values. Non-FHIR JSON
+		// files (no resourceType) fall through to this branch with an empty
+		// ResourceType; the caller skips those via the returned error below.
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return nil, err
+		}
+		return &model.Resource{
+			ResourceType: env.ResourceType,
+			ProfileURLs:  decodeMetaProfiles(raw),
+			Raw:          raw,
+		}, nil
 	}
+}
+
+// decodeMetaProfiles extracts the canonical profile URLs declared in a
+// resource's meta.profile.
+func decodeMetaProfiles(raw map[string]any) []string {
+	meta, ok := raw["meta"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	profiles, ok := meta["profile"].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(profiles))
+	for _, p := range profiles {
+		if s, ok := p.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // decodeElementDefinitions decodes a slice of raw element definitions into a slice of model.ElementDefinition.

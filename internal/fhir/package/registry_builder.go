@@ -41,7 +41,7 @@ func (b *RegistryBuilder) buildFromPackages(pkgs []*Package, root *Package) (*re
 
 	debug("building registry from package set", "packages", len(pkgs))
 
-	var sdCount, vsCount, csCount, spCount, capCount, skipped int
+	var sdCount, vsCount, csCount, spCount, capCount, instanceCount, skipped int
 	for _, p := range pkgs {
 		if p == nil {
 			debug("registry build skipping nil package entry")
@@ -66,6 +66,11 @@ func (b *RegistryBuilder) buildFromPackages(pkgs []*Package, root *Package) (*re
 			case *model.CapabilityStatement:
 				r.AddCapabilityStatement(v)
 				capCount++
+			case *model.Resource:
+				r.AddResource(v)
+				// Instance resources are not counted toward the conformance
+				// counts; track them separately for the debug log.
+				instanceCount++
 			default:
 				skipped++
 				debug("registry skipping unsupported resource type", "type", res)
@@ -81,6 +86,15 @@ func (b *RegistryBuilder) buildFromPackages(pkgs []*Package, root *Package) (*re
 			}
 		}
 		r.SetScope(scope)
+
+		// Record the root package's CapabilityStatements as the source for the
+		// capability-scope overlay, so the overlay narrows to what the test
+		// subject declares it serves rather than unioning dependency statements.
+		for _, res := range root.Resources {
+			if cs, ok := res.(*model.CapabilityStatement); ok && cs != nil {
+				r.MarkRootCapabilityStatements(cs)
+			}
+		}
 	}
 
 	debug("registry build complete",
@@ -89,6 +103,7 @@ func (b *RegistryBuilder) buildFromPackages(pkgs []*Package, root *Package) (*re
 		"codeSystems", csCount,
 		"searchParameters", spCount,
 		"capabilityStatements", capCount,
+		"instanceResources", instanceCount,
 		"skipped", skipped,
 	)
 	return r, nil

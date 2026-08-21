@@ -10,6 +10,79 @@ import (
 // TestResolveProfileResolvesParentChain verifies that ResolveProfile merges the
 // parent (baseDefinition) dependency chain, so a differential profile inherits
 // its base's elements and constraints, and child elements override the parent's.
+func TestRegistryIndexesResourcesByType(t *testing.T) {
+	r := New()
+	r.AddResource(&model.Resource{ResourceType: "Patient", Raw: map[string]any{"id": "a"}})
+	r.AddResource(&model.Resource{ResourceType: "Patient", Raw: map[string]any{"id": "b"}})
+	r.AddResource(&model.Resource{ResourceType: "PractitionerRole", Raw: map[string]any{"id": "c"}})
+	// Nil and empty-type resources are ignored.
+	r.AddResource(nil)
+	r.AddResource(&model.Resource{})
+
+	patients := r.ResourcesForType("Patient")
+	if len(patients) != 2 {
+		t.Fatalf("got %d Patient resources, want 2", len(patients))
+	}
+	if got := len(r.ResourcesForType("PractitionerRole")); got != 1 {
+		t.Fatalf("got %d PractitionerRole resources, want 1", got)
+	}
+	if got := len(r.ResourcesForType("Observation")); got != 0 {
+		t.Fatalf("got %d Observation resources, want 0", got)
+	}
+}
+
+func TestRegistryOverlayCapabilityScope(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/hcpd-patient", Type: "Patient"})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/hcpd-org", Type: "Organization"})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Observation", Type: "Observation"})
+	// A server-mode CapabilityStatement that only serves Patient and Organization.
+	r.AddCapabilityStatement(&model.CapabilityStatement{
+		URL: "http://example.org/CapabilityStatement/server",
+		Rest: []model.CapabilityStatementRest{{
+			Mode: "server",
+			Resource: []model.CapabilityStatementRestResource{
+				{Type: "Patient"},
+				{Type: "Organization"},
+			},
+		}},
+	})
+	r.MarkRootCapabilityStatements(&model.CapabilityStatement{URL: "http://example.org/CapabilityStatement/server"})
+
+	// Before the overlay, everything is in scope (no scope set yet).
+	if got := len(r.ScopedStructureDefinitions()); got != 3 {
+		t.Fatalf("pre-overlay scoped defs = %d, want 3", got)
+	}
+
+	r.OverlayCapabilityScope()
+	scoped := r.ScopedStructureDefinitions()
+	if len(scoped) != 2 {
+		t.Fatalf("post-overlay scoped defs = %d, want 2", len(scoped))
+	}
+	for _, sd := range scoped {
+		if sd.Type == "Observation" {
+			t.Fatal("Observation should be out of scope (not served by the capability statement)")
+		}
+	}
+	// Out-of-scope defs remain resolvable for dependency resolution.
+	if _, ok := r.StructureDefinition("http://hl7.org/fhir/StructureDefinition/Observation"); !ok {
+		t.Fatal("out-of-scope Observation should remain indexed for dependency resolution")
+	}
+}
+
+func TestRegistryOverlayCapabilityScopeNoServer(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient"})
+	// Only client-mode entries: overlay must not narrow.
+	r.AddCapabilityStatement(&model.CapabilityStatement{
+		Rest: []model.CapabilityStatementRest{{Mode: "client", Resource: []model.CapabilityStatementRestResource{{Type: "Encounter"}}}},
+	})
+	r.OverlayCapabilityScope()
+	if got := len(r.ScopedStructureDefinitions()); got != 1 {
+		t.Fatalf("scoped defs = %d, want 1 (no server-mode narrowing)", got)
+	}
+}
+
 func TestResolveProfileResolvesParentChain(t *testing.T) {
 	r := New()
 	r.AddStructureDefinition(&model.StructureDefinition{

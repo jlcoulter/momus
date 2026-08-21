@@ -44,6 +44,13 @@ func newAstCmd(cfg *config) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Overlay the package's own CapabilityStatement as the reduced scope
+			// over the full registry: the registry indexes every package resource
+			// in full, but test generation is scoped to what the package declares
+			// it serves (server-mode resource types and supported profiles). This
+			// is distinct from the live-server capability fetch below; it applies
+			// the package's declared scope even when no server is reachable.
+			reg.OverlayCapabilityScope()
 
 			coverageResourceTypes, coverageProfileURLs, preferredProfilesByResource, coverageSearchCodes, err := resourceScopeForRun(cmd, cfg, newDebugTracer(cfg.debug))
 			if err != nil {

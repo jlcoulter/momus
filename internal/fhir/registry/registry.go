@@ -5,6 +5,7 @@ package registry
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -30,6 +31,12 @@ type Registry struct {
 
 	profilesByResource map[string][]*model.StructureDefinition
 
+	// resourcesByType indexes instance/example resources by FHIR resource type
+	// (e.g. all example Patient resources). The registry represents the package
+	// and its dependencies in full, so these are indexed alongside the
+	// conformance types.
+	resourcesByType map[string][]*model.Resource
+
 	// scoped reports whether a scope has been set. It is tracked separately
 	// from scopedStructureDefinitions so that an empty-but-set scope (e.g.
 	// SetScope([]string{""})) is a genuine empty selection rather than being
@@ -43,17 +50,26 @@ type Registry struct {
 	// sets, and so on). When no scope has been set, every indexed
 	// StructureDefinition is considered in scope.
 	scopedStructureDefinitions map[string]struct{}
+
+	// rootCapabilityStatementURLs is the set of canonical URLs of the
+	// CapabilityStatements declared by the root package (the test subject).
+	// The capability-scope overlay narrows test generation to what the root
+	// package's own server CapabilityStatement declares it serves, rather than
+	// unioning every dependency's CapabilityStatement.
+	rootCapabilityStatementURLs map[string]struct{}
 }
 
 // New returns an empty Registry.
 func New() *Registry {
 	return &Registry{
-		structureDefinitions: make(map[string]*model.StructureDefinition),
-		valueSets:            make(map[string]*model.ValueSet),
-		codeSystems:          make(map[string]*model.CodeSystem),
-		capabilityStatements: make(map[string]*model.CapabilityStatement),
-		searchParameters:     make(map[string]*model.SearchParameter),
-		profilesByResource:   make(map[string][]*model.StructureDefinition),
+		structureDefinitions:        make(map[string]*model.StructureDefinition),
+		valueSets:                   make(map[string]*model.ValueSet),
+		codeSystems:                 make(map[string]*model.CodeSystem),
+		capabilityStatements:        make(map[string]*model.CapabilityStatement),
+		searchParameters:            make(map[string]*model.SearchParameter),
+		profilesByResource:          make(map[string][]*model.StructureDefinition),
+		resourcesByType:             make(map[string][]*model.Resource),
+		rootCapabilityStatementURLs: make(map[string]struct{}),
 	}
 }
 
@@ -113,6 +129,26 @@ func (r *Registry) AddSearchParameter(sp *model.SearchParameter) {
 
 func searchParameterKey(resourceType, code string) string {
 	return resourceType + "\x00" + code
+}
+
+// AddResource indexes an instance/example resource by its FHIR resource type.
+func (r *Registry) AddResource(res *model.Resource) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if res == nil || res.ResourceType == "" {
+		return
+	}
+	r.resourcesByType[res.ResourceType] = append(r.resourcesByType[res.ResourceType], res)
+}
+
+// ResourcesForType returns every indexed instance/example resource of a given
+// FHIR resource type.
+func (r *Registry) ResourcesForType(resourceType string) []*model.Resource {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*model.Resource, 0, len(r.resourcesByType[resourceType]))
+	out = append(out, r.resourcesByType[resourceType]...)
+	return out
 }
 
 // StructureDefinition returns the StructureDefinition for a canonical URL.
@@ -177,6 +213,65 @@ func (r *Registry) ScopedStructureDefinitions() []*model.StructureDefinition {
 	return out
 }
 
+// SetScopeToResourceTypesAndProfiles narrows the scoped test-generation
+// subjects to those whose resource type is in types AND (when non-empty) whose
+// canonical URL is in profiles, intersecting with the current scope. This is
+// how a reduced scope — e.g. one derived from a CapabilityStatement — is
+// overlaid over the full registry, which indexes every package resource in
+// full. When no scope is currently set, every indexed definition is considered.
+func (r *Registry) SetScopeToResourceTypesAndProfiles(types, profiles []string) {
+	typeSet := toLowerSet(types)
+	profileSet := toLowerSet(profiles)
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var urls []string
+	if !r.scoped {
+		for u := range r.structureDefinitions {
+			urls = append(urls, u)
+		}
+	} else {
+		for u := range r.scopedStructureDefinitions {
+			urls = append(urls, u)
+		}
+	}
+	kept := make(map[string]struct{})
+	for _, u := range urls {
+		sd := r.structureDefinitions[u]
+		if sd == nil {
+			continue
+		}
+		if len(typeSet) > 0 {
+			if _, ok := typeSet[strings.ToLower(sd.Type)]; !ok {
+				continue
+			}
+		}
+		if len(profileSet) > 0 {
+			if _, ok := profileSet[strings.ToLower(sd.URL)]; !ok {
+				continue
+			}
+		}
+		kept[u] = struct{}{}
+	}
+	r.scoped = true
+	r.scopedStructureDefinitions = kept
+}
+
+// toLowerSet builds a case-insensitive set from a string slice, dropping empty
+// entries.
+func toLowerSet(values []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(values))
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		set[strings.ToLower(v)] = struct{}{}
+	}
+	return set
+}
+
 func (r *Registry) structureDefinitionsSnapshot() []*model.StructureDefinition {
 	out := make([]*model.StructureDefinition, 0, len(r.structureDefinitions))
 	for _, sd := range r.structureDefinitions {
@@ -210,6 +305,75 @@ func (r *Registry) CapabilityStatements() []*model.CapabilityStatement {
 		out = append(out, cs)
 	}
 	return out
+}
+
+// OverlayCapabilityScope narrows the scoped test-generation subjects to the
+// server-mode resource types and (when declared) supported profiles from the
+// ROOT package's own CapabilityStatement. This applies the reduced scope "of
+// just the package capability statement" over the full registry, so generated
+// resources are always 100% conformant with the package as production data.
+//
+// Only the root package's CapabilityStatements (marked via
+// MarkRootCapabilityStatements) are considered; the union of their server-mode
+// resource types and supportedProfile URLs is intersected into the current
+// scope. When no root CapabilityStatement declares any server-mode resource,
+// it returns without narrowing (the existing scope, or the full registry, is
+// preserved).
+func (r *Registry) OverlayCapabilityScope() {
+	r.mu.RLock()
+	csList := make([]*model.CapabilityStatement, 0, len(r.rootCapabilityStatementURLs))
+	for url := range r.rootCapabilityStatementURLs {
+		if cs, ok := r.capabilityStatements[url]; ok {
+			csList = append(csList, cs)
+		}
+	}
+	r.mu.RUnlock()
+
+	types := make(map[string]struct{})
+	profiles := make(map[string]struct{})
+	for _, cs := range csList {
+		for _, rest := range cs.Rest {
+			if rest.Mode != "" && !strings.EqualFold(rest.Mode, "server") {
+				continue
+			}
+			for _, res := range rest.Resource {
+				t := strings.TrimSpace(res.Type)
+				if t != "" {
+					types[strings.ToLower(t)] = struct{}{}
+				}
+				for _, p := range res.SupportedProfile {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						profiles[strings.ToLower(p)] = struct{}{}
+					}
+				}
+			}
+		}
+	}
+	if len(types) == 0 && len(profiles) == 0 {
+		return
+	}
+	typeList := make([]string, 0, len(types))
+	for t := range types {
+		typeList = append(typeList, t)
+	}
+	profileList := make([]string, 0, len(profiles))
+	for p := range profiles {
+		profileList = append(profileList, p)
+	}
+	r.SetScopeToResourceTypesAndProfiles(typeList, profileList)
+}
+
+// MarkRootCapabilityStatements records the canonical URLs of the CapabilityStatements
+// declared by the root package (the test subject), so the capability-scope
+// overlay considers only those rather than every dependency's CapabilityStatement.
+func (r *Registry) MarkRootCapabilityStatements(cs *model.CapabilityStatement) {
+	if cs == nil || cs.URL == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.rootCapabilityStatementURLs[cs.URL] = struct{}{}
 }
 
 // SearchParameter returns the SearchParameter for a resource type and code.
