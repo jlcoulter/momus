@@ -37,8 +37,16 @@ type ResolvedProfile struct {
 }
 
 // NewResolvedProfile builds a ResolvedProfile from element definitions.
+//
+// When no definition carries a non-empty Path, BuildElementTree yields a nil
+// root; returning a profile with a nil Root would panic downstream consumers
+// that dereference Root.Children. Guard by returning nil so callers can treat
+// the profile as unresolvable (task #32).
 func NewResolvedProfile(canonical, resourceType string, defs []ElementDefinition) *ResolvedProfile {
 	root, byPath := BuildElementTree(defs)
+	if root == nil {
+		return nil
+	}
 	return &ResolvedProfile{
 		Canonical:    canonical,
 		ResourceType: resourceType,

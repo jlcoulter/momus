@@ -228,6 +228,24 @@ func TestBuildElementTreeLeafIDSliceKeepsDefinition(t *testing.T) {
 	}
 }
 
+// TestNewResolvedProfileNilRootGuard (task #32) verifies that a profile whose
+// definitions all carry an empty Path (so BuildElementTree yields a nil root)
+// is guarded: NewResolvedProfile returns nil rather than a profile with a nil
+// Root that would panic downstream consumers dereferencing Root.Children.
+func TestNewResolvedProfileNilRootGuard(t *testing.T) {
+	profile := NewResolvedProfile(
+		"http://example.org/StructureDefinition/Empty",
+		"Empty",
+		[]ElementDefinition{
+			{Path: "", Name: "Empty"},
+			{Path: "", Name: "child"},
+		},
+	)
+	if profile != nil {
+		t.Fatalf("expected nil profile for empty paths, got %+v", profile)
+	}
+}
+
 // TestElementSliceKeyPreservesIDSliceContext (task #30) verifies that a merge key
 // derived from an element's ID keeps ID-based slice children distinct from their
 // base element, while plain paths and SliceName-only elements keep their expected
