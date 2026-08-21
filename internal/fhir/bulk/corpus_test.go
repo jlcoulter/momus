@@ -129,6 +129,54 @@ func TestGenerateCorpusRequiresTypes(t *testing.T) {
 	}
 }
 
+// TestGenerateCorpusHonoursCancellation verifies that a cancelled context stops
+// the parallel synthesis fan-in and surfaces the cancellation instead of
+// blocking on the per-type goroutines.
+func TestGenerateCorpusHonoursCancellation(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := gen.GenerateCorpus(ctx, []string{"Observation", "Patient"}, 5, nil); err == nil {
+		t.Fatal("expected error when context is cancelled")
+	}
+}
+
+// TestSynthesizeReferenceUsesTargetProfileType verifies that a Reference with no
+// wired target emits a placeholder typed by the element's TargetProfile rather
+// than always assuming Patient.
+func TestSynthesizeReferenceUsesTargetProfileType(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://example.org/StructureDefinition/obs", Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+			{Path: "Observation.performer", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner",
+		Elements: []model.ElementDefinition{
+			{Path: "Practitioner", Min: 0, Max: "*"},
+			{Path: "Practitioner.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "HumanName"}}},
+		},
+	})
+
+	body, err := synthesizeResource(reg, "Observation", "", "obs-1", nil, false, newRNG("obs-1"))
+	if err != nil {
+		t.Fatalf("synthesizeResource: %v", err)
+	}
+	perf, ok := body["performer"].(map[string]any)
+	if !ok {
+		t.Fatalf("performer = %#v, want map", body["performer"])
+	}
+	ref, _ := perf["reference"].(string)
+	if !strings.HasPrefix(ref, "Practitioner/") {
+		t.Fatalf("performer reference = %q, want Practitioner/… (target type from TargetProfile)", ref)
+	}
+}
+
 // TestGenerateCorpusDisambiguatesCollidingTypeIDs verifies that resource types
 // whose sanitized id segments collide (e.g. "A/B" and "A-B" both sanitize to
 // "A-B") still produce distinct local ids, so neither type's resources are

@@ -290,6 +290,59 @@ func TestProvisionSendsResourceBody(t *testing.T) {
 	}
 }
 
+// TestProvisionRejectsNilResource verifies that a resource instance with a nil
+// body is reported as a failure rather than being PUT as JSON null.
+func TestProvisionRejectsNilResource(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	ds := &model.Dataset{
+		Resources: map[string]*model.ResourceInstance{
+			"pat": {LocalID: "pat", ResourceType: "Patient", Resource: nil},
+		},
+	}
+	res := New(server.URL, &Options{HTTPClient: server.Client()}).ProvisionAll(context.Background(), ds)
+	if res.Failed != 1 || len(res.Failures) != 1 {
+		t.Fatalf("Failed = %d, Failures = %d, want 1/1", res.Failed, len(res.Failures))
+	}
+	if res.Failures[0].ID != "pat" {
+		t.Fatalf("failure id = %q, want pat", res.Failures[0].ID)
+	}
+	if !strings.Contains(res.Failures[0].Reason, "nil") {
+		t.Fatalf("Reason = %q, want it to mention the nil body", res.Failures[0].Reason)
+	}
+	if gotPath != "" {
+		t.Fatalf("server received a request for %q, want none (nil resource must not be PUT)", gotPath)
+	}
+}
+
+// TestProvisionTrimsTrailingSlashFromBaseURL verifies that a base URL with a
+// trailing slash does not produce a double-slash resource path.
+func TestProvisionTrimsTrailingSlashFromBaseURL(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	ds := &model.Dataset{
+		Resources: map[string]*model.ResourceInstance{
+			"pat": {LocalID: "pat", ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": "pat"}},
+		},
+	}
+	if res := New(server.URL+"/", &Options{HTTPClient: server.Client()}).ProvisionAll(context.Background(), ds); !res.Complete() {
+		t.Fatalf("provisioning incomplete: %d failed", res.Failed)
+	}
+	if gotPath != "/Patient/pat" {
+		t.Fatalf("PUT path = %q, want /Patient/pat (no double slash)", gotPath)
+	}
+}
+
 func TestResultCompleteEmptyDataset(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)

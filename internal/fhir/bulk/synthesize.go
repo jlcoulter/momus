@@ -733,7 +733,13 @@ func synthesizeNodeValue(node *model.ElementNode, reg *registry.Registry, refs m
 		if ref, ok := refs[node.Path]; ok {
 			return map[string]any{"reference": ref.resourceType + "/" + ref.localID}
 		}
-		return map[string]any{"reference": "Patient/unknown"}
+		// No wired target: emit a placeholder reference typed by the element's
+		// target profile rather than always assuming Patient.
+		targetType := referenceTargetType(def, reg)
+		if targetType == "" {
+			targetType = "Patient"
+		}
+		return map[string]any{"reference": targetType + "/unknown"}
 	default:
 		if value, ok := synthesizeProfileValue(def, reg, refs, rng); ok {
 			return value

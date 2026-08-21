@@ -69,7 +69,6 @@ func NewCorpusGenerator(reg *registry.Registry, exhaustive bool) *CorpusGenerato
 // deterministically, so several resources share a common target rather than
 // everything pointing at one instance.
 func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []string, defaultCount int, overrides map[string]int) (*model.Dataset, error) {
-	_ = ctx
 	if g.reg == nil {
 		return nil, fmt.Errorf("generator requires a registry")
 	}
@@ -128,11 +127,17 @@ func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []st
 	}
 
 	// Fan-in the per-type results, then merge them in the original type order so
-	// the dataset and reference wiring are deterministic.
+	// the dataset and reference wiring are deterministic. Cancellation is honoured
+	// here: if the context is done we stop waiting on the synthesis goroutines and
+	// surface the cancellation rather than blocking on the fan-in.
 	results := make([]corpusResult, len(resourceTypes))
 	for range resourceTypes {
-		r := <-resultCh
-		results[r.index] = r
+		select {
+		case r := <-resultCh:
+			results[r.index] = r
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 	var synthErrs []string
 	for _, res := range results {

@@ -187,11 +187,14 @@ func (p *ServerProvisioner) provisionBatch(ctx context.Context, ds *model.Datase
 }
 
 func (p *ServerProvisioner) provisionInstance(ctx context.Context, instance *model.ResourceInstance) error {
+	if instance.Resource == nil {
+		return fmt.Errorf("provision %s/%s: resource body is nil", instance.ResourceType, instance.LocalID)
+	}
 	body, err := json.Marshal(instance.Resource)
 	if err != nil {
 		return fmt.Errorf("marshal %s/%s: %w", instance.ResourceType, instance.LocalID, err)
 	}
-	url := fmt.Sprintf("%s/%s/%s", p.baseURL, instance.ResourceType, instance.LocalID)
+	url := fmt.Sprintf("%s/%s/%s", strings.TrimRight(p.baseURL, "/"), instance.ResourceType, instance.LocalID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(body))
 	if err != nil {
 		return err
