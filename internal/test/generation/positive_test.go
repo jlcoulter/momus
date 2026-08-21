@@ -1167,6 +1167,73 @@ func sliceURLs(arr []any) []string {
 	return out
 }
 
+// TestSliceFallbackAppliesSliceConstraints verifies that a value generated into a
+// sliced repeatable element honors the slice's Fixed/Pattern constraints, both when
+// the slice is required (generated via the slice loop) and when it is optional and
+// reached through the sliced fallback path. Without this, a bare value (e.g. a phone
+// lacking the use the personalPhoneNumber slice requires) matches no slice and a
+// conformant server rejects the resource.
+func TestSliceFallbackAppliesSliceConstraints(t *testing.T) {
+	makeSlice := func(min int) map[string]*model.SliceNode {
+		return map[string]*model.SliceNode{
+			"personalPhoneNumber": {
+				Name: "personalPhoneNumber",
+				Definition: &model.ElementDefinition{
+					Path:      "Practitioner.telecom",
+					SliceName: "personalPhoneNumber",
+					Min:       min,
+					Max:       "1",
+					Types:     []model.ElementType{{Code: "ContactPoint"}},
+				},
+				Children: map[string]*model.ElementNode{
+					"system": {Name: "system", Path: "Practitioner.telecom.system", Definition: &model.ElementDefinition{Path: "Practitioner.telecom.system", Min: 0, Max: "1", Fixed: "phone"}},
+					"use":    {Name: "use", Path: "Practitioner.telecom.use", Definition: &model.ElementDefinition{Path: "Practitioner.telecom.use", Min: 0, Max: "1", Fixed: "home"}},
+				},
+			},
+		}
+	}
+	reg := registry.New()
+	assertPhone := func(t *testing.T, arr any) {
+		t.Helper()
+		cp, ok := arr.([]any)[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected a ContactPoint map, got %T", arr)
+		}
+		if cp["use"] != "home" {
+			t.Fatalf("slice constraint use=home not applied, got %+v", cp)
+		}
+		if cp["system"] != "phone" {
+			t.Fatalf("slice constraint system=phone not applied, got %+v", cp)
+		}
+	}
+
+	// Required slice: generated through the slice loop.
+	required := &model.ElementNode{
+		Name:       "telecom",
+		Path:       "Practitioner.telecom",
+		Definition: &model.ElementDefinition{Path: "Practitioner.telecom", Min: 0, Max: "*"},
+		Slices:     makeSlice(1),
+	}
+	val, ok := generateRepeatedValue(required, reg, nil)
+	if !ok {
+		t.Fatal("generateRepeatedValue returned false for required slice")
+	}
+	assertPhone(t, val)
+
+	// Optional slice with nil RNG: reached through the sliced fallback path.
+	optional := &model.ElementNode{
+		Name:       "telecom",
+		Path:       "Practitioner.telecom",
+		Definition: &model.ElementDefinition{Path: "Practitioner.telecom", Min: 0, Max: "*"},
+		Slices:     makeSlice(0),
+	}
+	val, ok = generateRepeatedValue(optional, reg, nil)
+	if !ok {
+		t.Fatal("generateRepeatedValue returned false for optional slice")
+	}
+	assertPhone(t, val)
+}
+
 func contains(haystack []string, needle string) bool {
 	for _, s := range haystack {
 		if s == needle {

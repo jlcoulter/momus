@@ -844,6 +844,29 @@ func generateRepeatedValue(node *model.ElementNode, reg *registry.Registry, rng 
 		}
 	}
 	for len(values) < max(node.Definition.Min, 1) {
+		// A fallback value generated into a sliced collection must still conform to a
+		// slice, or a server flags it as matching no slice (e.g. a bare phone without
+		// the use=home the Practitioner.telecom:personalPhoneNumber slice requires).
+		// Prefer the slice whose discriminator agrees with the generic value (e.g. the
+		// phone slice for a phone ContactPoint) so the generated value stays internally
+		// consistent, and fall back to the first slice otherwise. Only when no slice can
+		// produce a value use the generic generator.
+		if len(node.Slices) > 0 {
+			if generic, ok := generateSingleValue(node, reg); ok {
+				if slice := matchingSlice(node, generic); slice != nil {
+					if value, ok := generateSliceValue(slice, reg); ok {
+						values = append(values, value)
+						continue
+					}
+				}
+			}
+			if first := firstSliceNode(node); first != nil {
+				if value, ok := generateSliceValue(first, reg); ok {
+					values = append(values, value)
+					continue
+				}
+			}
+		}
 		if value, ok := generateSingleValue(node, reg); ok {
 			values = append(values, value)
 		} else {
@@ -1017,11 +1040,13 @@ func isEmptyExtension(m map[string]any) bool {
 	return true
 }
 
-// applySliceConstractions overlays a slice's Fixed/Pattern child values onto a
-// generated value so the element satisfies the slice's discriminator. For
-// example, an Organization.address:physical slice constrains `type` to the
-// pattern "physical", so the generated address gets type="physical". Without
-// this, a required slice is not matched and servers reject the resource.
+// applySliceConstractions overlays a slice's Fixed/Pattern onto a generated value
+// so the element satisfies the slice's discriminator. This covers both the slice
+// element's own Fixed/Pattern (e.g. Practitioner.telecom:personalPhoneNumber has
+// pattern {"system":"phone","use":"home"}) and the Fixed/Pattern of its children
+// (e.g. an Organization.address:physical slice constrains `type` to the pattern
+// "physical"). Without applying these, a required slice is not matched and servers
+// reject the resource.
 //
 // Codings materialised from a slice pattern are normalised so their display
 // resolves to the canonical CodeSystem display rather than echoing the code
@@ -1030,12 +1055,47 @@ func applySliceConstractions(value map[string]any, slice *model.SliceNode, reg *
 	if value == nil || slice == nil {
 		return
 	}
+	applySliceElementConstraint(value, slice)
 	for _, name := range sortedSliceChildren(slice) {
 		child := slice.Children[name]
 		if child == nil || child.Definition == nil {
 			continue
 		}
 		applySliceChildConstraints(value, child, reg)
+	}
+}
+
+// applySliceElementConstraint overlays the slice element's own Fixed/Pattern onto
+// a generated value. FHIR slices commonly carry their discriminating values as a
+// pattern/fixed on the slice element itself rather than as per-child constraints,
+// so without applying it a generated value does not match the slice.
+func applySliceElementConstraint(value map[string]any, slice *model.SliceNode) {
+	if value == nil || slice == nil || slice.Definition == nil {
+		return
+	}
+	def := slice.Definition
+	if def.Fixed != nil {
+		if fixedMap, ok := def.Fixed.(map[string]any); ok {
+			for k, v := range fixedMap {
+				if subMap, ok := v.(map[string]any); ok {
+					mergeSlicePattern(value, k, subMap)
+				} else {
+					value[k] = v
+				}
+			}
+		}
+		return
+	}
+	if def.Pattern != nil {
+		if patternMap, ok := def.Pattern.(map[string]any); ok {
+			for k, v := range patternMap {
+				if subMap, ok := v.(map[string]any); ok {
+					mergeSlicePattern(value, k, subMap)
+				} else {
+					value[k] = v
+				}
+			}
+		}
 	}
 }
 
@@ -1507,6 +1567,54 @@ func sortedSliceNames(slices map[string]*model.SliceNode) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// firstSliceNode returns the first slice (deterministically sorted by name) of a
+// node, or nil when the node has no slices. It lets a sliced element's fallback
+// value be generated through a slice so the slice's Fixed/Pattern constraints apply.
+func firstSliceNode(node *model.ElementNode) *model.SliceNode {
+	if node == nil || len(node.Slices) == 0 {
+		return nil
+	}
+	names := sortedSliceNames(node.Slices)
+	slice := node.Slices[names[0]]
+	if slice == nil || slice.Definition == nil {
+		return nil
+	}
+	return slice
+}
+
+// matchingSlice returns the first slice whose discriminator agrees with an already
+// generated generic value, or nil. It compares each slice child's Fixed value to the
+// corresponding field of the generic value, so a phone ContactPoint matches the
+// phone slice (system=phone) rather than the email slice. This keeps a sliced
+// element's fallback value both conformant and internally consistent (e.g. a phone
+// number under system=phone rather than under system=email).
+func matchingSlice(node *model.ElementNode, generic any) *model.SliceNode {
+	gm, ok := generic.(map[string]any)
+	if !ok || node == nil {
+		return nil
+	}
+	for _, name := range sortedSliceNames(node.Slices) {
+		slice := node.Slices[name]
+		if slice == nil || slice.Definition == nil {
+			continue
+		}
+		for _, childName := range sortedSliceChildren(slice) {
+			child := slice.Children[childName]
+			if child == nil || child.Definition == nil || child.Definition.Fixed == nil {
+				continue
+			}
+			fixed, ok := child.Definition.Fixed.(string)
+			if !ok {
+				continue
+			}
+			if genericValue, ok := gm[childName].(string); ok && genericValue == fixed {
+				return slice
+			}
+		}
+	}
+	return nil
 }
 
 func synthesizeRegexExample(regex string) (string, bool) {
