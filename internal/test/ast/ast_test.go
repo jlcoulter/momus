@@ -84,3 +84,21 @@ func TestEncodeNodeOmitsTraceWhenNil(t *testing.T) {
 		t.Fatal("did not expect requirement trace when Trace is nil")
 	}
 }
+
+// TestNodeMethodsSatisfyInterface verifies each concrete node type implements
+// the Node interface (its unexported node() marker method) so the AST can be
+// traversed uniformly by the runner and encoder.
+func TestNodeMethodsSatisfyInterface(t *testing.T) {
+	nodes := []Node{
+		&Sequence{},
+		&Parallel{},
+		&Request{},
+		&Capture{},
+		&Assert{},
+	}
+	for _, n := range nodes {
+		// Calling node() directly exercises the marker method; a nil receiver
+		// would panic if the method were not implemented on the concrete type.
+		n.node()
+	}
+}
