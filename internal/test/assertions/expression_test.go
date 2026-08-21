@@ -2,6 +2,7 @@ package assertions
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -137,5 +138,53 @@ func TestParseBodyMissingKeyTreatsAsNil(t *testing.T) {
 	}
 	if err := eq.Evaluate(context.Background(), Result{Body: []byte(`{}`)}); err == nil {
 		t.Fatal("expected body.x == \"y\" to fail for absent x")
+	}
+}
+
+func TestToFloat(t *testing.T) {
+	cases := []struct {
+		in   any
+		want float64
+		ok   bool
+	}{
+		{float64(3.5), 3.5, true},
+		{float32(2.5), 2.5, true},
+		{int(7), 7, true},
+		{int64(9), 9, true},
+		{json.Number("12.5"), 12.5, true},
+		{json.Number("not-a-number"), 0, false},
+		{"3", 0, false},
+		{nil, 0, false},
+	}
+	for _, c := range cases {
+		got, ok := toFloat(c.in)
+		if got != c.want || ok != c.ok {
+			t.Fatalf("toFloat(%v) = %v, %v; want %v, %v", c.in, got, ok, c.want, c.ok)
+		}
+	}
+}
+
+func TestCompareValuesNumericAndString(t *testing.T) {
+	// Numeric ordering.
+	if ok, err := compareValues(3, ">", 2); err != nil || !ok {
+		t.Fatalf("compareValues(3,>,2) = %v, %v; want true", ok, err)
+	}
+	if ok, err := compareValues(2, ">", 3); err != nil || ok {
+		t.Fatalf("compareValues(2,>,3) = %v, %v; want false", ok, err)
+	}
+	// Mixed numeric/string -> error.
+	if _, err := compareValues(3, "==", "3"); err == nil {
+		t.Fatal("expected error comparing mixed numeric/string operands")
+	}
+	// String equality.
+	if ok, err := compareValues("a", "==", "a"); err != nil || !ok {
+		t.Fatalf("compareValues(a,==,a) = %v, %v; want true", ok, err)
+	}
+	if ok, err := compareValues("a", "!=", "b"); err != nil || !ok {
+		t.Fatalf("compareValues(a,!=,b) = %v, %v; want true", ok, err)
+	}
+	// Ordering non-numeric strings -> error.
+	if _, err := compareValues("a", ">", "b"); err == nil {
+		t.Fatal("expected error ordering non-numeric strings")
 	}
 }
