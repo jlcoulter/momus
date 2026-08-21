@@ -188,3 +188,76 @@ func TestDerivePlanUniversalSearchCodesRequireCapabilityDeclaration(t *testing.T
 		t.Fatal("expected declared type-specific active search obligation")
 	}
 }
+
+func TestDerivePlanIncludeUniversalSearchParams(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/org-profile",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.name", Min: 1, Max: "1"},
+		},
+	})
+	r.AddSearchParameter(&model.SearchParameter{
+		URL:  "http://hl7.org/fhir/SearchParameter/Resource-id",
+		Name: "_id",
+		Code: "_id",
+		Base: []string{"Resource"},
+		Type: "token",
+	})
+	r.AddSearchParameter(&model.SearchParameter{
+		URL:  "http://hl7.org/fhir/SearchParameter/Resource-count",
+		Name: "_count",
+		Code: "_count",
+		Base: []string{"Resource"},
+		Type: "number",
+	})
+	r.AddSearchParameter(&model.SearchParameter{
+		URL:  "http://hl7.org/fhir/SearchParameter/Organization-active",
+		Name: "active",
+		Code: "active",
+		Base: []string{"Organization"},
+		Type: "token",
+	})
+
+	// With no capability scope and no opt-in, universal parameters are excluded.
+	plan, err := DerivePlan(r, DeriveOptions{})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+	codes := map[string]bool{}
+	for _, req := range plan.Requirements {
+		if req.Domain == CoverageDomainSearch {
+			codes[req.SearchCode] = true
+		}
+	}
+	if codes["_id"] || codes["_count"] {
+		t.Fatalf("expected universal codes excluded without opt-in, got %v", codes)
+	}
+	if !codes["active"] {
+		t.Fatal("expected type-specific active search obligation without opt-in")
+	}
+
+	// With IncludeUniversalSearchParams, universal parameters are included for
+	// every in-scope type even when the server does not declare them.
+	plan2, err := DerivePlan(r, DeriveOptions{IncludeUniversalSearchParams: true})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+	codes2 := map[string]bool{}
+	for _, req := range plan2.Requirements {
+		if req.Domain == CoverageDomainSearch {
+			codes2[req.SearchCode] = true
+		}
+	}
+	if !codes2["_id"] {
+		t.Fatal("expected universal _id included with IncludeUniversalSearchParams")
+	}
+	if !codes2["_count"] {
+		t.Fatal("expected universal _count included with IncludeUniversalSearchParams")
+	}
+	if !codes2["active"] {
+		t.Fatal("expected type-specific active search obligation with IncludeUniversalSearchParams")
+	}
+}

@@ -48,6 +48,11 @@ What is implemented:
   invalid-value / multiple-results / invalid-modifier searches, read / update /
   patch / delete / history, custom (`$`) operations, negative state
   transitions, and a full create-read-update-read-delete-read(404) sequence.
+  Search obligations are scoped to the parameters the server's
+  CapabilityStatement declares; pass `--include-universal-search` to also cover
+  the default universal FHIR parameters (`_id`, `_count`, `_sort`, `_include`,
+  `_summary`, `_filter`) for every resource type even when the server does not
+  declare them.
 - **A single registry-driven data pipeline** — one core synthesises both the
   seed `Dataset` and every test payload from the registry as the source of
   truth, so test data and provisioned data cannot drift apart.
