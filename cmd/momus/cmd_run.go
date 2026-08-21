@@ -42,10 +42,18 @@ func newRunCmd(cfg *config) *cobra.Command {
 			// without re-provisioning them during execution.
 			preCreated := datasetResourceKeys(setupDataset)
 
+			// Resolve the write base URL up front so write-specific basic auth
+			// credentials are applied even when the user relies on the documented
+			// "defaults to --base-url" behavior (mirrors cmd_provision.go).
+			writeBase := cfg.writeBaseURL
+			if writeBase == "" {
+				writeBase = cfg.baseURL
+			}
+
 			fmt.Printf("Testing phase: executing %d test cases\n", testgeneration.RequirementCount(astPlan))
 			report, err := testrunner.Execute(cmd.Context(), astPlan.Root, testrunner.ExecuteOptions{
 				BaseURL:            cfg.baseURL,
-				WriteBaseURL:       cfg.writeBaseURL,
+				WriteBaseURL:       writeBase,
 				BearerToken:        cfg.apiBearerToken,
 				BasicUsername:      cfg.apiBasicUsername,
 				BasicPassword:      cfg.apiBasicPassword,

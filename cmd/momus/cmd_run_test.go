@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -184,5 +185,57 @@ func TestRunCmdFailOnUncoveredRequiresCoveragePlan(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--fail-on-uncovered requires --coverage-plan") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestRunCmdWriteBasicAuthDefaultsToBaseURL verifies that write-specific basic
+// auth credentials are applied to write requests even when --write-base-url is
+// not set. The run command must default the write base URL to --base-url (like
+// provision does); otherwise the runner silently drops the write credentials and
+// falls back to general auth.
+func TestRunCmdWriteBasicAuthDefaultsToBaseURL(t *testing.T) {
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			gotAuth = r.Header.Get("Authorization")
+		}
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"resourceType":"Observation","id":"momus-req-obs"}`))
+	}))
+	defer server.Close()
+
+	testPlan := &ast.Plan{Version: "v1", Root: &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{
+			Method:  "PUT",
+			URL:     server.URL + "/Observation/momus-req-obs",
+			Headers: map[string]string{"X-Momus-Requirement-ID": "req-obs", "Content-Type": "application/fhir+json"},
+			Body: map[string]any{
+				"resourceType": "Observation",
+				"id":           "momus-req-obs",
+				"status":       "final",
+			},
+		},
+		&ast.Assert{Description: "server accepts observation", RequirementID: "req-obs", Expression: "status in [200,201]"},
+	}}}
+	planPath := writeTestPlan(t, testPlan, &model.Dataset{})
+
+	outPath := filepath.Join(t.TempDir(), "results.json")
+	cfg := &config{}
+	cmd := newRunCmd(cfg)
+	cfg.baseURL = server.URL
+	// Deliberately do NOT set cfg.writeBaseURL: the write credentials must still
+	// be applied because the write base URL defaults to --base-url.
+	cfg.writeBasicUsername = "write-user"
+	cfg.writeBasicPassword = "write-pass"
+	cfg.outputPath = outPath
+	cmd.SetContext(context.Background())
+	if err := cmd.RunE(cmd, []string{planPath}); err != nil {
+		t.Fatalf("run command failed: %v", err)
+	}
+
+	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("write-user:write-pass"))
+	if gotAuth != want {
+		t.Fatalf("write request Authorization = %q, want %q (write basic auth should be applied when --write-base-url is unset)", gotAuth, want)
 	}
 }
