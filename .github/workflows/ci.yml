@@ -35,14 +35,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
       - name: Generate changelog
         id: git-cliff
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
           args: --verbose
+      - name: Build binaries
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          for target in "linux amd64" "linux arm64" "darwin amd64" "darwin arm64" "windows amd64"; do
+            set -- $target
+            os="$1"
+            arch="$2"
+            ext=""
+            if [ "$os" = "windows" ]; then ext=".exe"; fi
+            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build -trimpath \
+              -ldflags "-s -w -X main.version=$version" \
+              -o "dist/momus-${os}-${arch}${ext}" ./cmd/momus
+          done
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           body: ${{ steps.git-cliff.outputs.content }}
+          files: dist/*
           generate_release_notes: false
