@@ -139,13 +139,11 @@ func Execute(ctx context.Context, plan ast.Node, options ExecuteOptions) (*Repor
 		failuresBySig:      make(map[string]*FailureSignature),
 	}
 
-	if err := exec.runNode(plan); err != nil {
-		return nil, err
-	}
+	err := exec.runNode(plan)
 	exec.report.Total = len(exec.report.Cases)
 	exec.report.Diagnostics = exec.buildDiagnosticsSummary()
 	exec.report.Triage = buildTriageSummary(exec.report.Cases)
-	return exec.report, nil
+	return exec.report, err
 }
 
 type executor struct {
@@ -165,6 +163,7 @@ type executor struct {
 	hasResult          bool
 	lastErr            error
 	lastDebug          *CaseDebug
+	errorRecorded      bool
 	variables          map[string]any
 	created            map[string]struct{}
 	failuresBySig      map[string]*FailureSignature
@@ -198,6 +197,19 @@ func (e *executor) runNode(node ast.Node) error {
 		e.lastResult = res
 		e.hasResult = err == nil
 		e.lastErr = err
+		if err != nil {
+			// Record the failure immediately so a standalone/trailing request
+			// error is not silently swallowed. A following Assert observes the
+			// error via lastErr and attributes this case to itself instead of
+			// adding a duplicate.
+			e.report.Failed++
+			e.report.Cases = append(e.report.Cases, CaseResult{
+				Passed: false,
+				Error:  err.Error(),
+				Debug:  e.copyDebugIfEnabled(),
+			})
+			e.errorRecorded = true
+		}
 		return nil
 	case *ast.Capture:
 		e.capture(n)
@@ -243,7 +255,17 @@ func (e *executor) runParallel(steps []ast.Node) error {
 	for _, child := range children {
 		e.merge(child)
 	}
-	return firstErr
+	if firstErr != nil {
+		// Record a structural error as a failed case instead of aborting, so
+		// the results already merged from the other branches are preserved.
+		e.report.Failed++
+		e.report.Cases = append(e.report.Cases, CaseResult{
+			Passed:      false,
+			Description: "structural error",
+			Error:       firstErr.Error(),
+		})
+	}
+	return nil
 }
 
 // child returns an isolated execution context for a parallel branch: it shares
@@ -354,8 +376,9 @@ func (e *executor) executeRequest(reqNode *ast.Request) (assertions.Result, erro
 	}
 	e.applyRequestAuth(req, reqNode.Method)
 
+	var reqSeq int
 	if e.tracer != nil {
-		e.tracer.LogRequest(req, requestBodyBytes)
+		reqSeq = e.tracer.LogRequest(req, requestBodyBytes)
 	}
 
 	resp, err := e.client.Do(req)
@@ -370,7 +393,7 @@ func (e *executor) executeRequest(reqNode *ast.Request) (assertions.Result, erro
 	}
 
 	if e.tracer != nil {
-		e.tracer.LogResponse(req, resp.StatusCode, resp.Header, body)
+		e.tracer.LogResponse(req, reqSeq, resp.StatusCode, resp.Header, body)
 	}
 
 	if e.lastDebug != nil {
@@ -424,6 +447,21 @@ func (e *executor) evaluateAssert(assertNode *ast.Assert) {
 	}
 
 	if e.lastErr != nil {
+		if e.errorRecorded {
+			// The request error was already recorded as a failed case by the
+			// Request node. Attribute it to this assertion by filling in the
+			// assertion metadata, then clear the flag so a subsequent assertion
+			// records its own case.
+			if n := len(e.report.Cases); n > 0 {
+				last := &e.report.Cases[n-1]
+				last.RequirementID = assertNode.RequirementID
+				last.Description = assertNode.Description
+				last.Expression = assertNode.Expression
+				last.Trace = assertNode.Trace
+			}
+			e.errorRecorded = false
+			return
+		}
 		result.Passed = false
 		result.Error = e.lastErr.Error()
 		result.Debug = e.copyDebugIfEnabled()

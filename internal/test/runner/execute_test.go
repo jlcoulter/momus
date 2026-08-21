@@ -646,3 +646,49 @@ func findSignatureContaining(signatures []FailureSignature, needle string) *Fail
 	}
 	return nil
 }
+
+func TestExecuteReportsStandaloneRequestError(t *testing.T) {
+	// A standalone Request with a relative URL and no base URL fails during
+	// execution. With no following Assert to observe the error, it must be
+	// recorded as a failed case rather than silently swallowed.
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodGet, URL: "/Patient"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Total != 1 || report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("unexpected report summary: %+v", report)
+	}
+	if report.Cases[0].Passed || report.Cases[0].Error == "" {
+		t.Fatalf("expected failed case with error, got %+v", report.Cases[0])
+	}
+}
+
+func TestExecutePreservesReportOnParallelStructuralError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// One branch succeeds; the other is a structural error (nil node). The
+	// successful branch's result must be preserved in the report rather than
+	// discarded when the structural error is recorded as a failed case.
+	plan := &ast.Parallel{Steps: []ast.Node{
+		&ast.Sequence{Steps: []ast.Node{
+			&ast.Request{Method: http.MethodGet, URL: server.URL + "/A/1"},
+			&ast.Assert{Description: "a", RequirementID: "a", Expression: "status in [200]"},
+		}},
+		nil, // unsupported node -> structural error
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Total != 2 || report.Passed != 1 || report.Failed != 1 {
+		t.Fatalf("unexpected report summary: %+v", report)
+	}
+}
