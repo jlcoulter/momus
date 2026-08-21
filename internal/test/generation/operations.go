@@ -1,6 +1,7 @@
 package generation
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/jlcoulter/momus/internal/test/ast"
@@ -46,7 +47,8 @@ func buildOperationCase(req coverage.CoverageRequirement, options BuildOptions) 
 	case coverage.CoverageVariantOperationUpdate:
 		opBody = createBody
 	case coverage.CoverageVariantOperationPatch:
-		opBody = []any{map[string]any{"op": "add", "path": "/", "value": map[string]any{"status": "active"}}}
+		prop, value := patchProperty(req, options)
+		opBody = []any{map[string]any{"op": "add", "path": "/", "value": map[string]any{prop: value}}}
 		opContentType = "application/json-patch+json"
 	}
 	opHeaders := map[string]string{"Content-Type": opContentType, "X-Momus-Requirement-ID": req.ID}
@@ -138,7 +140,10 @@ func operationSpec(req coverage.CoverageRequirement, options BuildOptions) (meth
 	case coverage.CoverageVariantStateReadNonexistent:
 		return "GET", "/" + missing, "status in [404]", "reject"
 	case coverage.CoverageVariantStateDeleteNonexistent:
-		return "DELETE", "/" + missing, "status in [404]", "reject"
+		// A DELETE on a nonexistent resource is not a strict error: conformant
+		// servers may return an idempotent 200/204 instead of 404. Accept the
+		// portable set so the test is not flaky across servers.
+		return "DELETE", "/" + missing, "status in [200,204,404]", "accept"
 	default:
 		return "GET", "/" + target, "status in [200]", "accept"
 	}
@@ -153,6 +158,30 @@ func operationUpdateBody(req coverage.CoverageRequirement, options BuildOptions,
 	primaryProfile := firstProfileURL(profiles)
 	body, _ := buildBodyTemplate(req, id, profiles, primaryProfile, nil, options.Registry, true)
 	return body
+}
+
+// patchProperty derives a top-level property (and a valid value for it) to patch
+// from the resource's synthesized body, so a PATCH test does not hard-code a
+// `status` property that resources without one would reject. It falls back to
+// `status`/`active` only when no simple top-level property is available.
+func patchProperty(req coverage.CoverageRequirement, options BuildOptions) (string, any) {
+	id := requirementResourceID(req)
+	body := operationUpdateBody(req, options, id)
+	keys := make([]string, 0, len(body))
+	for k := range body {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if key == "resourceType" || key == "id" {
+			continue
+		}
+		switch v := body[key].(type) {
+		case string, bool, float64, int, int64:
+			return key, v
+		}
+	}
+	return "status", "active"
 }
 
 // crudResourceID returns the deterministic resource id used by a CRUD sequence.

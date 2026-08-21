@@ -266,7 +266,16 @@ func recordBodyReferences(ds *model.Dataset) {
 	}
 
 	seen := make(map[string]struct{})
+	// Iterate resources in deterministic LocalID order so the relationship list is
+	// stable regardless of map iteration order.
+	instances := make([]*model.ResourceInstance, 0, len(ds.Resources))
 	for _, inst := range ds.Resources {
+		instances = append(instances, inst)
+	}
+	sort.Slice(instances, func(i, j int) bool {
+		return instances[i].LocalID < instances[j].LocalID
+	})
+	for _, inst := range instances {
 		if inst == nil || inst.Resource == nil {
 			continue
 		}

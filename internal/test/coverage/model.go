@@ -94,8 +94,7 @@ func (v CoverageVariant) IsReject() bool {
 		CoverageVariantReferenceDangling,
 		CoverageVariantSearchInvalidValue,
 		CoverageVariantSearchInvalidModifier,
-		CoverageVariantStateReadNonexistent,
-		CoverageVariantStateDeleteNonexistent:
+		CoverageVariantStateReadNonexistent:
 		return true
 	default:
 		return false
