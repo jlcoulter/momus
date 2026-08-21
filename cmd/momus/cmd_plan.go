@@ -46,13 +46,14 @@ func newPlanCmd(cfg *config) *cobra.Command {
 			}
 
 			coveragePlan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
-				IncludeResourceTypes: cfg.includeResourceTypes,
-				IncludeProfileURLs:   cfg.includeProfileURLs,
-				ExcludePathPrefixes:  cfg.excludePathPrefixes,
-				MustSupportOnly:      cfg.mustSupportOnly,
-				IncludeOptional:      cfg.includeOptional,
-				IncludeLowValuePaths: cfg.includeLowValuePaths,
-				Strength:             cfg.interactionStrength,
+				IncludeResourceTypes:         cfg.includeResourceTypes,
+				IncludeProfileURLs:           cfg.includeProfileURLs,
+				ExcludePathPrefixes:          cfg.excludePathPrefixes,
+				MustSupportOnly:              cfg.mustSupportOnly,
+				IncludeOptional:              cfg.includeOptional,
+				IncludeLowValuePaths:         cfg.includeLowValuePaths,
+				Strength:                     cfg.interactionStrength,
+				IncludeUniversalSearchParams: cfg.includeUniversalSearch,
 			})
 			if err != nil {
 				return err
@@ -106,6 +107,7 @@ func newPlanCmd(cfg *config) *cobra.Command {
 	cmd.Flags().BoolVar(&cfg.mustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
 	cmd.Flags().BoolVar(&cfg.includeOptional, "include-optional", false, "include optional non-mustSupport elements")
 	cmd.Flags().BoolVar(&cfg.includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
+	cmd.Flags().BoolVar(&cfg.includeUniversalSearch, "include-universal-search", false, "include universal FHIR search parameters (_id, _count, _sort, _include, _summary, _filter) for every resource type even when the server's CapabilityStatement does not declare them")
 	cmd.Flags().IntVar(&cfg.interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
 	cmd.Flags().BoolVar(&cfg.exhaustive, "exhaustive", true, "populate optional elements to produce fuller, more realistic resources")
 	return cmd

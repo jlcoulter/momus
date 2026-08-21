@@ -18,13 +18,14 @@ type config struct {
 	htmlReport string
 
 	// Derivation scoping
-	includeResourceTypes []string
-	includeProfileURLs   []string
-	excludePathPrefixes  []string
-	mustSupportOnly      bool
-	includeOptional      bool
-	includeLowValuePaths bool
-	interactionStrength  int
+	includeResourceTypes   []string
+	includeProfileURLs     []string
+	excludePathPrefixes    []string
+	mustSupportOnly        bool
+	includeOptional        bool
+	includeLowValuePaths   bool
+	interactionStrength    int
+	includeUniversalSearch bool
 
 	// Target FHIR server / API
 	baseURL           string

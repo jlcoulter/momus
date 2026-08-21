@@ -147,7 +147,9 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 	// parameters (CapabilitySearchCodes), only those declared codes are included.
 	// Universal parameters like _content and _parameters are excluded unless the
 	// server explicitly declares them; with no capability scope (nil
-	// CapabilitySearchCodes) they are excluded for every type.
+	// CapabilitySearchCodes) they are excluded for every type. When
+	// IncludeUniversalSearchParams is set, universal parameters are included for
+	// every in-scope type regardless of capability declaration.
 	scopedTypes := sortedSetKeys(inScopeResourceTypes)
 	searchCodesByType := make(map[string][]string)
 	for _, c := range constraints {
@@ -156,13 +158,14 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 		}
 		if isUniversalSearchBase(c.ResourceType) {
 			// Universal parameters are only included when the server explicitly
-			// declares them; with no capability scope they are excluded for every
-			// type.
-			if options.CapabilitySearchCodes == nil {
+			// declares them or when IncludeUniversalSearchParams opts into full
+			// coverage of the default FHIR search parameters; with no capability
+			// scope they are excluded for every type.
+			if options.CapabilitySearchCodes == nil && !options.IncludeUniversalSearchParams {
 				continue
 			}
 			for _, rt := range scopedTypes {
-				if !isSearchCodeAllowed(rt, c.SearchCode, options.CapabilitySearchCodes) {
+				if !options.IncludeUniversalSearchParams && !isSearchCodeAllowed(rt, c.SearchCode, options.CapabilitySearchCodes) {
 					continue
 				}
 				appendSearchObligations(plan, seen, c, rt)

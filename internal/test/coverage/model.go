@@ -155,6 +155,14 @@ type DeriveOptions struct {
 	// of declared search codes. When a resource type is absent from the map, no
 	// search-parameter restriction applies for that type.
 	CapabilitySearchCodes map[string][]string
+	// IncludeUniversalSearchParams, when true, includes the universal FHIR
+	// search parameters (those defined against the abstract Resource base, e.g.
+	// _id, _count, _sort, _include, _summary, _filter) for every in-scope
+	// resource type even when the server's CapabilityStatement does not declare
+	// them. This opts into full coverage of the default FHIR search parameters
+	// that a conformant server is expected to support, overriding the
+	// capability-declaration restriction for universal codes.
+	IncludeUniversalSearchParams bool
 }
 
 // PruneReason describes why an element was excluded from derivation.

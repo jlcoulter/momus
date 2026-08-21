@@ -58,14 +58,15 @@ func newAstCmd(cfg *config) *cobra.Command {
 			}
 
 			coveragePlan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
-				IncludeResourceTypes:  coverageResourceTypes,
-				IncludeProfileURLs:    coverageProfileURLs,
-				ExcludePathPrefixes:   cfg.excludePathPrefixes,
-				MustSupportOnly:       cfg.mustSupportOnly,
-				IncludeOptional:       cfg.includeOptional,
-				IncludeLowValuePaths:  cfg.includeLowValuePaths,
-				Strength:              cfg.interactionStrength,
-				CapabilitySearchCodes: coverageSearchCodes,
+				IncludeResourceTypes:         coverageResourceTypes,
+				IncludeProfileURLs:           coverageProfileURLs,
+				ExcludePathPrefixes:          cfg.excludePathPrefixes,
+				MustSupportOnly:              cfg.mustSupportOnly,
+				IncludeOptional:              cfg.includeOptional,
+				IncludeLowValuePaths:         cfg.includeLowValuePaths,
+				Strength:                     cfg.interactionStrength,
+				CapabilitySearchCodes:        coverageSearchCodes,
+				IncludeUniversalSearchParams: cfg.includeUniversalSearch,
 			})
 			if err != nil {
 				return err
@@ -142,6 +143,7 @@ func newAstCmd(cfg *config) *cobra.Command {
 	cmd.Flags().BoolVar(&cfg.mustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
 	cmd.Flags().BoolVar(&cfg.includeOptional, "include-optional", false, "include optional non-mustSupport elements")
 	cmd.Flags().BoolVar(&cfg.includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
+	cmd.Flags().BoolVar(&cfg.includeUniversalSearch, "include-universal-search", false, "include universal FHIR search parameters (_id, _count, _sort, _include, _summary, _filter) for every resource type even when the server's CapabilityStatement does not declare them")
 	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target FHIR base URL for request nodes")
 	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate FHIR base URL for resource creation (write) request nodes; defaults to --base-url")
 	cmd.Flags().StringVar(&cfg.capabilityBaseURL, "capability-base-url", "", "optional alternate FHIR base URL to fetch CapabilityStatement metadata for scope/profile selection")
