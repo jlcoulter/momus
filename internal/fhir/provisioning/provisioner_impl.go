@@ -98,9 +98,29 @@ func (f Failure) Describe() string {
 	return fmt.Sprintf("%s/%s (%s): %s", f.ResourceType, f.ID, status, f.Reason)
 }
 
-// Complete reports whether every resource in the dataset was provisioned.
+// Complete reports whether every resource in the dataset was provisioned. It is
+// true whenever nothing failed, even when the dataset was empty (nothing to
+// provision), so an empty, successful run is not reported as incomplete.
 func (r *Result) Complete() bool {
-	return r != nil && r.Failed == 0 && r.Provisioned > 0
+	return r != nil && r.Failed == 0
+}
+
+// provisionOutcome records the result of provisioning a single resource.
+type provisionOutcome struct {
+	id       string
+	instance *model.ResourceInstance
+	err      error
+}
+
+// provisionLevel is a batch of resource ids to provision together. A level is
+// provisioned concurrently unless serial is set, in which case ids are
+// provisioned one at a time in order. Serial levels are used for cyclic
+// dependencies, where a resource may reference another in the same level and
+// servers enforcing referential integrity reject a resource whose target does
+// not yet exist.
+type provisionLevel struct {
+	ids    []string
+	serial bool
 }
 
 // ProvisionAll attempts to upload every resource in ds, in dependency order
@@ -116,26 +136,10 @@ func (p *ServerProvisioner) ProvisionAll(ctx context.Context, ds *model.Dataset)
 	// only on resources in earlier levels, so all of a level's PUTs can run
 	// concurrently, while later levels wait for their targets to exist. Failures
 	// within a level are reported in deterministic (level, sorted-id) order.
+	// Cyclic levels are provisioned serially so targets precede dependents even
+	// within the cycle.
 	for _, level := range provisionLevels(ds) {
-		type provisionOutcome struct {
-			id       string
-			instance *model.ResourceInstance
-			err      error
-		}
-		outcomes := make([]provisionOutcome, len(level))
-		var wg sync.WaitGroup
-		for i, id := range level {
-			instance := ds.Resources[id]
-			if instance == nil {
-				continue
-			}
-			wg.Add(1)
-			go func(i int, instance *model.ResourceInstance) {
-				defer wg.Done()
-				outcomes[i] = provisionOutcome{id: instance.LocalID, instance: instance, err: p.provisionInstance(ctx, instance)}
-			}(i, instance)
-		}
-		wg.Wait()
+		outcomes := p.provisionBatch(ctx, ds, level)
 		// Collect results in level order (level is already sorted) so failure
 		// reporting is deterministic despite concurrent execution.
 		for _, o := range outcomes {
@@ -149,6 +153,37 @@ func (p *ServerProvisioner) ProvisionAll(ctx context.Context, ds *model.Dataset)
 		}
 	}
 	return res
+}
+
+// provisionBatch uploads the resources with the given ids, either concurrently
+// (serial=false) or one at a time in order (serial=true, used for cyclic levels
+// so targets precede dependents). It returns one outcome per id, in id order.
+func (p *ServerProvisioner) provisionBatch(ctx context.Context, ds *model.Dataset, level provisionLevel) []provisionOutcome {
+	outcomes := make([]provisionOutcome, len(level.ids))
+	if level.serial {
+		for i, id := range level.ids {
+			instance := ds.Resources[id]
+			if instance == nil {
+				continue
+			}
+			outcomes[i] = provisionOutcome{id: instance.LocalID, instance: instance, err: p.provisionInstance(ctx, instance)}
+		}
+		return outcomes
+	}
+	var wg sync.WaitGroup
+	for i, id := range level.ids {
+		instance := ds.Resources[id]
+		if instance == nil {
+			continue
+		}
+		wg.Add(1)
+		go func(i int, instance *model.ResourceInstance) {
+			defer wg.Done()
+			outcomes[i] = provisionOutcome{id: instance.LocalID, instance: instance, err: p.provisionInstance(ctx, instance)}
+		}(i, instance)
+	}
+	wg.Wait()
+	return outcomes
 }
 
 func (p *ServerProvisioner) provisionInstance(ctx context.Context, instance *model.ResourceInstance) error {
@@ -167,8 +202,9 @@ func (p *ServerProvisioner) provisionInstance(ctx context.Context, instance *mod
 	}
 	p.applyAuth(req)
 
+	var reqSeq int
 	if p.options.Tracer != nil {
-		p.options.Tracer.LogRequest(req, body)
+		reqSeq = p.options.Tracer.LogRequest(req, body)
 	}
 
 	resp, err := p.options.HTTPClient.Do(req)
@@ -181,7 +217,7 @@ func (p *ServerProvisioner) provisionInstance(ctx context.Context, instance *mod
 		return fmt.Errorf("provision %s/%s: read response: %w", instance.ResourceType, instance.LocalID, err)
 	}
 	if p.options.Tracer != nil {
-		p.options.Tracer.LogResponse(req, resp.StatusCode, resp.Header, respBody)
+		p.options.Tracer.LogResponse(req, reqSeq, resp.StatusCode, resp.Header, respBody)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &provisionError{
@@ -326,9 +362,9 @@ func (p *ServerProvisioner) applyAuth(req *http.Request) {
 // every resource in a level depends only on resources in earlier levels, so each
 // level can be provisioned concurrently once the previous level completes.
 // Resources without relationships are ordered deterministically; ids not reached
-// by the dependency graph (e.g. cyclic relationships) form a final level in a
-// stable order.
-func provisionLevels(ds *model.Dataset) [][]string {
+// by the dependency graph (e.g. cyclic relationships) form a final, serial level
+// in an order that keeps targets ahead of dependents.
+func provisionLevels(ds *model.Dataset) []provisionLevel {
 	ids := make([]string, 0, len(ds.Resources))
 	for id := range ds.Resources {
 		ids = append(ids, id)
@@ -354,7 +390,7 @@ func provisionLevels(ds *model.Dataset) [][]string {
 		sort.Strings(dependents[target])
 	}
 
-	var levels [][]string
+	var levels []provisionLevel
 	remaining := len(depended)
 	for remaining > 0 {
 		ready := make([]string, 0)
@@ -364,22 +400,19 @@ func provisionLevels(ds *model.Dataset) [][]string {
 			}
 		}
 		if len(ready) == 0 {
-			// Cycle: emit the not-yet-emitted ids as a final level in a stable
-			// order rather than looping forever.
-			level := make([]string, 0)
-			for _, id := range ids {
-				if depended[id] > 0 {
-					level = append(level, id)
-					depended[id] = -1
-				}
-			}
+			// Cycle: emit the not-yet-emitted ids in a second topological pass so
+			// targets precede dependents even within the cycle, and mark the level
+			// serial so it is provisioned one resource at a time. This avoids
+			// PUTting a resource before its (same-cycle) target exists, which
+			// servers enforcing referential integrity would reject.
+			level := cycleOrder(ids, depended, dependents)
 			if len(level) > 0 {
-				levels = append(levels, level)
+				levels = append(levels, provisionLevel{ids: level, serial: true})
 			}
 			break
 		}
 		sort.Strings(ready)
-		levels = append(levels, ready)
+		levels = append(levels, provisionLevel{ids: ready})
 		for _, id := range ready {
 			depended[id] = -1 // emitted; must not be reconsidered as ready
 			remaining--
@@ -389,4 +422,107 @@ func provisionLevels(ds *model.Dataset) [][]string {
 		}
 	}
 	return levels
+}
+
+// cycleOrder orders the not-yet-emitted ids (those still depended upon) so that
+// targets precede dependents, breaking any remaining cycle by emitting the
+// smallest id that lies on a cycle. This lets a cyclic level be provisioned one
+// resource at a time with targets created before the resources that reference
+// them.
+func cycleOrder(ids []string, depended map[string]int, dependents map[string][]string) []string {
+	// remaining ids are those still depended upon (not yet emitted).
+	remaining := make(map[string]bool)
+	for _, id := range ids {
+		if depended[id] > 0 {
+			remaining[id] = true
+		}
+	}
+	// targets[id] lists the targets id depends on that are also remaining.
+	targets := make(map[string][]string)
+	for target, sources := range dependents {
+		for _, source := range sources {
+			if remaining[source] && remaining[target] {
+				targets[source] = append(targets[source], target)
+			}
+		}
+	}
+	for id := range targets {
+		sort.Strings(targets[id])
+	}
+	// indeg counts un-emitted targets within the remaining set.
+	indeg := make(map[string]int, len(remaining))
+	for id := range remaining {
+		indeg[id] = len(targets[id])
+	}
+
+	order := make([]string, 0, len(remaining))
+	for len(remaining) > 0 {
+		ready := make([]string, 0)
+		for id := range remaining {
+			if indeg[id] == 0 {
+				ready = append(ready, id)
+			}
+		}
+		if len(ready) == 0 {
+			// Cycle: emit the smallest id that is part of a cycle so targets
+			// precede dependents as much as possible.
+			ready = []string{smallestCycleMember(remaining, targets)}
+		}
+		sort.Strings(ready)
+		for _, id := range ready {
+			order = append(order, id)
+			delete(remaining, id)
+			for _, child := range dependents[id] {
+				if remaining[child] {
+					indeg[child]--
+				}
+			}
+		}
+	}
+	return order
+}
+
+// smallestCycleMember returns the smallest remaining id that lies on a cycle
+// (can reach itself through its targets). When no node in the remaining set is
+// ready, at least one such id exists.
+func smallestCycleMember(remaining map[string]bool, targets map[string][]string) string {
+	ids := make([]string, 0, len(remaining))
+	for id := range remaining {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if onCycle(id, remaining, targets) {
+			return id
+		}
+	}
+	return ids[0]
+}
+
+// onCycle reports whether id can reach itself by following targets within the
+// remaining set.
+func onCycle(id string, remaining map[string]bool, targets map[string][]string) bool {
+	visited := make(map[string]bool)
+	var dfs func(string) bool
+	dfs = func(cur string) bool {
+		if cur == id {
+			return true
+		}
+		if visited[cur] {
+			return false
+		}
+		visited[cur] = true
+		for _, t := range targets[cur] {
+			if remaining[t] && dfs(t) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, t := range targets[id] {
+		if remaining[t] && dfs(t) {
+			return true
+		}
+	}
+	return false
 }

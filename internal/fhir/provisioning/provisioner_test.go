@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 )
@@ -258,8 +260,12 @@ func TestProvisionAllReportsPartialSuccess(t *testing.T) {
 
 func TestProvisionRequiresBaseURL(t *testing.T) {
 	res := New("", nil).ProvisionAll(context.Background(), &model.Dataset{})
-	if res.Complete() {
-		t.Fatal("expected incomplete provisioning for empty base URL")
+	if res.Provisioned != 0 || res.Failed != 0 {
+		t.Fatalf("expected no provisioning for empty base URL, got %d provisioned, %d failed", res.Provisioned, res.Failed)
+	}
+	// Nothing failed, so the run is complete even though nothing was provisioned.
+	if !res.Complete() {
+		t.Fatal("Complete should be true when nothing failed")
 	}
 }
 
@@ -281,5 +287,121 @@ func TestProvisionSendsResourceBody(t *testing.T) {
 	}
 	if got["name"] != "x" {
 		t.Fatalf("got body %v, expected name=x", got)
+	}
+}
+
+func TestResultCompleteEmptyDataset(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	// An empty, successful dataset has nothing to provision; Complete must
+	// report success (nothing failed) rather than incomplete.
+	res := New(server.URL, &Options{HTTPClient: server.Client()}).ProvisionAll(context.Background(), &model.Dataset{})
+	if res.Provisioned != 0 || res.Failed != 0 {
+		t.Fatalf("got %d provisioned, %d failed; want 0/0", res.Provisioned, res.Failed)
+	}
+	if !res.Complete() {
+		t.Fatal("Complete should be true for an empty, successful dataset")
+	}
+}
+
+func TestProvisionLevelsOrdersCycleTargetsBeforeDependents(t *testing.T) {
+	// A cycle (b<->c) with dependents a->c and d->a. The cyclic level must be
+	// ordered so targets precede dependents (c before a, a before d) and marked
+	// serial so it is provisioned one resource at a time.
+	ds := &model.Dataset{
+		Resources: map[string]*model.ResourceInstance{
+			"a": {LocalID: "a", ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": "a"}},
+			"b": {LocalID: "b", ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": "b"}},
+			"c": {LocalID: "c", ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": "c"}},
+			"d": {LocalID: "d", ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": "d"}},
+		},
+		Relationships: []model.Reference{
+			{SourceID: "b", Path: "Patient.link", TargetID: "c"},
+			{SourceID: "c", Path: "Patient.link", TargetID: "b"},
+			{SourceID: "a", Path: "Patient.link", TargetID: "c"},
+			{SourceID: "d", Path: "Patient.link", TargetID: "a"},
+		},
+	}
+
+	levels := provisionLevels(ds)
+	if len(levels) != 1 {
+		t.Fatalf("got %d levels, want 1 (a single cyclic level): %v", len(levels), levels)
+	}
+	lvl := levels[0]
+	if !lvl.serial {
+		t.Fatal("cyclic level should be marked serial so it is provisioned one resource at a time")
+	}
+	want := []string{"b", "c", "a", "d"}
+	if !reflect.DeepEqual(lvl.ids, want) {
+		t.Fatalf("cycle level order = %v, want %v (targets before dependents)", lvl.ids, want)
+	}
+}
+
+func TestProvisionCycleLevelSerially(t *testing.T) {
+	// A self-referencing Patient "a" (a cycle) plus an Observation "c" that
+	// references it. The server allows self-references but enforces referential
+	// integrity for cross-resource references, so "c" must be created only after
+	// "a" exists. The cyclic level is provisioned serially (a then c); a
+	// concurrent provisioning would PUT c before a is created and be rejected.
+	var mu sync.Mutex
+	created := map[string]bool{}
+	cChecked := make(chan struct{})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ResourceType string `json:"resourceType"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+
+		if body.ResourceType == "Observation" {
+			mu.Lock()
+			ok := created["a"]
+			mu.Unlock()
+			if !ok {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+			} else {
+				w.WriteHeader(http.StatusCreated)
+			}
+			close(cChecked)
+			return
+		}
+
+		// Patient "a": wait until the dependent's request has been checked before
+		// creating it, so a concurrent provisioning of "c" observes "a" as not yet
+		// created and is rejected.
+		select {
+		case <-cChecked:
+		case <-time.After(100 * time.Millisecond):
+		}
+		mu.Lock()
+		created["a"] = true
+		mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	ds := &model.Dataset{
+		Resources: map[string]*model.ResourceInstance{
+			"a": {LocalID: "a", ResourceType: "Patient", Resource: map[string]any{
+				"resourceType": "Patient", "id": "a",
+				"link": []any{map[string]any{"other": map[string]any{"reference": "Patient/a"}}},
+			}},
+			"c": {LocalID: "c", ResourceType: "Observation", Resource: map[string]any{
+				"resourceType": "Observation", "id": "c",
+				"subject": map[string]any{"reference": "Patient/a"},
+			}},
+		},
+		Relationships: []model.Reference{
+			{SourceID: "a", Path: "Patient.link.other", TargetID: "a"},
+			{SourceID: "c", Path: "Observation.subject", TargetID: "a"},
+		},
+	}
+
+	res := New(server.URL, &Options{HTTPClient: server.Client()}).ProvisionAll(context.Background(), ds)
+	if !res.Complete() {
+		t.Fatalf("provisioning incomplete: %d provisioned, %d failed: %v", res.Provisioned, res.Failed, res.FailedIDs)
 	}
 }
