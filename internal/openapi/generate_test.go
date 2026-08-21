@@ -106,3 +106,37 @@ func TestGeneratePlanBuildsOperationCases(t *testing.T) {
 		t.Fatalf("post assert = %+v", postAssert)
 	}
 }
+
+func TestGeneratePlanAssertsCarryTrace(t *testing.T) {
+	doc, err := ParseJSON([]byte(testDoc))
+	if err != nil {
+		t.Fatalf("ParseJSON returned error: %v", err)
+	}
+	plan, err := GeneratePlan(doc, "http://localhost:8080", "")
+	if err != nil {
+		t.Fatalf("GeneratePlan returned error: %v", err)
+	}
+	root, ok := plan.Root.(*ast.Sequence)
+	if !ok || len(root.Steps) != 2 {
+		t.Fatalf("expected root Sequence with 2 steps, got %T", plan.Root)
+	}
+
+	// GET /patients/{id} -> resource type from the first path segment.
+	getAssert := root.Steps[0].(*ast.Sequence).Steps[1].(*ast.Assert)
+	if getAssert.Trace == nil {
+		t.Fatal("GET assert has no Trace")
+	}
+	if getAssert.Trace.Domain != "openapi" || getAssert.Trace.Variant != "GET" ||
+		getAssert.Trace.Expected != "accept" || getAssert.Trace.ResourceType != "patients" {
+		t.Fatalf("GET assert trace = %+v", getAssert.Trace)
+	}
+
+	// POST /patients/{id} -> variant reflects the method.
+	postAssert := root.Steps[1].(*ast.Sequence).Steps[1].(*ast.Assert)
+	if postAssert.Trace == nil {
+		t.Fatal("POST assert has no Trace")
+	}
+	if postAssert.Trace.Variant != "POST" || postAssert.Trace.ResourceType != "patients" {
+		t.Fatalf("POST assert trace = %+v", postAssert.Trace)
+	}
+}

@@ -80,6 +80,59 @@ func TestParseJSONBuildsOperations(t *testing.T) {
 	}
 }
 
+func TestFirstContentSchemaPicksSortedKeyWithoutJSON(t *testing.T) {
+	doc, err := ParseJSON([]byte(testDoc))
+	if err != nil {
+		t.Fatalf("ParseJSON returned error: %v", err)
+	}
+	content := map[string]rawMediaType{
+		"application/xml":   {Schema: &rawSchema{Type: "string"}},
+		"text/plain":        {Schema: &rawSchema{Type: "integer"}},
+		"application/octet": {Schema: &rawSchema{Type: "boolean"}},
+	}
+	// No application/json, so the sorted-first key (application/octet) wins.
+	s := firstContentSchema(content, doc)
+	if s == nil || s.Type != "boolean" {
+		t.Fatalf("firstContentSchema = %+v, want boolean (application/octet)", s)
+	}
+}
+
+func TestSchemaTypeResolvesRefParameter(t *testing.T) {
+	doc, err := ParseJSON([]byte(`{
+  "openapi": "3.0.3",
+  "info": {"title": "Example API", "version": "1.0.0"},
+  "paths": {
+    "/items/{id}": {
+      "get": {
+        "operationId": "getItem",
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"$ref": "#/components/schemas/ItemId"}}
+        ],
+        "responses": {"200": {"description": "ok"}}
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ItemId": {"type": "string"}
+    }
+  }
+}`))
+	if err != nil {
+		t.Fatalf("ParseJSON returned error: %v", err)
+	}
+	if len(doc.Paths) != 1 {
+		t.Fatalf("got %d operations, want 1", len(doc.Paths))
+	}
+	params := doc.Paths[0].Parameters
+	if len(params) != 1 {
+		t.Fatalf("got %d parameters, want 1", len(params))
+	}
+	if params[0].Type != "string" {
+		t.Fatalf("ref parameter type = %q, want string", params[0].Type)
+	}
+}
+
 func TestParseJSONRejectsNonOpenAPI(t *testing.T) {
 	if _, err := ParseJSON([]byte(`{"foo":"bar"}`)); err == nil {
 		t.Fatal("expected error for non-OpenAPI document")

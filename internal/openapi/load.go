@@ -98,7 +98,7 @@ func normalize(raw openAPIDocument) (*Document, error) {
 					Name:     p.Name,
 					In:       p.In,
 					Required: p.Required || p.In == "path",
-					Type:     schemaType(p.Schema),
+					Type:     schemaType(p.Schema, doc),
 				}
 				operation.Parameters = append(operation.Parameters, param)
 			}
@@ -134,15 +134,17 @@ func firstContentSchema(content map[string]rawMediaType, doc *Document) *Schema 
 	if len(content) == 0 {
 		return nil
 	}
-	// Deterministic: prefer application/json, else the first key.
+	// Deterministic: prefer application/json, else the first key in sorted order.
 	var mt rawMediaType
 	if jsonMT, ok := content["application/json"]; ok {
 		mt = jsonMT
 	} else {
-		for _, m := range content {
-			mt = m
-			break
+		keys := make([]string, 0, len(content))
+		for k := range content {
+			keys = append(keys, k)
 		}
+		sort.Strings(keys)
+		mt = content[keys[0]]
 	}
 	if mt.Schema == nil {
 		return nil
@@ -170,15 +172,16 @@ func schemaRefName(ref string) string {
 	return strings.TrimPrefix(ref, prefix)
 }
 
-// schemaType returns a parameter's type.
-func schemaType(s *rawSchema) string {
+// schemaType returns a parameter's type, dereferencing a component ref against
+// the document's schemas when the parameter schema is a $ref.
+func schemaType(s *rawSchema, doc *Document) string {
 	if s == nil {
 		return ""
 	}
 	if s.Type != "" {
 		return s.Type
 	}
-	return resolveSchema(*s).Type
+	return deref(*s, doc).Type
 }
 
 func sortedPaths(paths map[string]map[string]rawOperation) []string {

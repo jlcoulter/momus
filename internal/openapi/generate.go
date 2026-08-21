@@ -53,6 +53,12 @@ func operationCase(op *Operation, base, writeBase string) ast.Node {
 			Description:   op.Method + " " + op.Path,
 			RequirementID: operationID(op),
 			Expression:    successStatusExpression,
+			Trace: &ast.Trace{
+				Domain:       "openapi",
+				Variant:      op.Method,
+				Expected:     "accept",
+				ResourceType: resourceTypeFromPath(op.Path),
+			},
 		},
 	}}
 }
@@ -131,6 +137,16 @@ func sampleScalar(typ string) string {
 	default:
 		return "sample"
 	}
+}
+
+// resourceTypeFromPath returns the first path segment as the resource type,
+// e.g. "/patients/{id}" -> "patients".
+func resourceTypeFromPath(path string) string {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		return ""
+	}
+	return parts[0]
 }
 
 // operationID returns a stable requirement identifier for an operation.
