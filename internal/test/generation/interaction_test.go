@@ -235,3 +235,41 @@ func TestGenerateFromCoveragePlanStrengthTwoEndToEnd(t *testing.T) {
 		t.Fatalf("requirement cases = %d, plan total obligations = %d (base + %d interactions); run-summary warning would fire", got, expect, len(plan.Interactions))
 	}
 }
+
+// TestGenerateFromCoveragePlanStrengthTwoPayloadExercisesMultipleValues verifies
+// that a group candidate containing a multiple-values obligation builds its shared
+// payload from that obligation, so the payload actually holds multiple values and
+// the group does not claim coverage for content it does not exercise (task #24).
+func TestGenerateFromCoveragePlanStrengthTwoPayloadExercisesMultipleValues(t *testing.T) {
+	plan, err := GenerateFromCoveragePlan(interactionPlan(), BuildOptions{
+		BaseURL:    "http://localhost:8080/fhir",
+		Strength:   2,
+		Registry:   interactionRegistry(),
+		Exhaustive: true,
+	})
+	if err != nil {
+		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
+	}
+
+	root := plan.Root.(*ast.Sequence)
+	resourceSeq := root.Steps[0].(*ast.Sequence)
+	group := resourceSeq.Steps[0].(*ast.Sequence)
+	groupReq, ok := group.Steps[0].(*ast.Request)
+	if !ok {
+		t.Fatalf("group first step is %T, want *ast.Request", group.Steps[0])
+	}
+
+	// The payload is built from the multiple-values obligation, so Patient.name must
+	// be an array with more than one entry.
+	body, ok := groupReq.Body.(map[string]any)
+	if !ok {
+		t.Fatalf("group payload = %T, want map[string]any", groupReq.Body)
+	}
+	names, ok := body["name"].([]any)
+	if !ok {
+		t.Fatalf("group payload name = %T, want []any (multiple values)", body["name"])
+	}
+	if len(names) < 2 {
+		t.Fatalf("group payload has %d name values, want >= 2 to exercise multiple-values", len(names))
+	}
+}

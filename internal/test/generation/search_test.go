@@ -49,6 +49,37 @@ func TestBuildSearchModifierAndCombinationQueries(t *testing.T) {
 	}
 }
 
+// TestSearchCombinationUsesPerCodeValues verifies that a combination search
+// computes a value per search code rather than reusing one value for both
+// parameters (task #25). With mixed value types (a string `name` and a boolean
+// `active`) each parameter must get a type-appropriate value, so the query is
+// not `name=momus-search&active=momus-search` (which some servers reject).
+func TestSearchCombinationUsesPerCodeValues(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/patient",
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 0, Max: "*", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Patient.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+		},
+	})
+	reg.AddSearchParameter(&model.SearchParameter{Code: "name", Base: []string{"Patient"}, Type: "string", Expression: "Patient.name"})
+	reg.AddSearchParameter(&model.SearchParameter{Code: "active", Base: []string{"Patient"}, Type: "boolean", Expression: "Patient.active"})
+
+	req := coverage.CoverageRequirement{
+		ID: "combo-1", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch,
+		Variant: coverage.CoverageVariantSearchCombination, SearchCode: "name", SearchCodeB: "active",
+	}
+	options := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
+	query := searchQuery(req, options)
+	// name is a string -> "momus-search"; active is a boolean -> "true".
+	if query != "name=momus-search&active=true" {
+		t.Fatalf("combination query = %q, want per-code values name=momus-search&active=true", query)
+	}
+}
+
 func TestBuildSearchCasesEmitGETRequests(t *testing.T) {
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
 		Requirements: []coverage.CoverageRequirement{
@@ -126,7 +157,7 @@ func TestSearchInvalidValuePerType(t *testing.T) {
 	}
 	for _, tc := range tests {
 		req := coverage.CoverageRequirement{ID: "inv-" + tc.code, ResourceType: "Observation", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchInvalidValue, SearchCode: tc.code}
-		value, expectReject := searchInvalidValue(req, options)
+		value, expectReject := searchInvalidValue(req, tc.code, options)
 		if expectReject != tc.wantReject {
 			t.Errorf("%s: expectReject = %v, want %v", tc.code, expectReject, tc.wantReject)
 		}

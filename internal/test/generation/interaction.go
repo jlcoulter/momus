@@ -2,6 +2,7 @@ package generation
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/jlcoulter/momus/internal/test/ast"
 	"github.com/jlcoulter/momus/internal/test/coverage"
@@ -81,6 +82,75 @@ type candidateTest struct {
 	positives    []coverage.CoverageRequirement
 	interactions []coverage.CoverageRequirement
 	negative     *coverage.CoverageRequirement
+}
+
+// requiresDistinctContent reports whether an accept obligation can only be
+// exercised by content that differs from a single minimal valid payload (e.g. an
+// element holding multiple values). When a group candidate contains such an
+// obligation, the shared payload must be built from it so the group does not
+// claim coverage for content its payload does not exercise.
+func requiresDistinctContent(variant coverage.CoverageVariant) bool {
+	return variant == coverage.CoverageVariantMultipleValues
+}
+
+// ensureDistinctContent mutates body so an accept obligation that needs distinct
+// content (e.g. multiple-values) is actually exercised: the element it targets is
+// made to hold multiple values. This prevents a shared group payload from claiming
+// coverage for content it does not contain.
+func ensureDistinctContent(body map[string]any, req coverage.CoverageRequirement) {
+	if !requiresDistinctContent(req.Variant) {
+		return
+	}
+	prop := lastPathSegment(req.ElementPath)
+	if prop == "" {
+		return
+	}
+	raw, ok := body[prop]
+	if !ok {
+		return
+	}
+	switch v := raw.(type) {
+	case []any:
+		if len(v) >= 2 {
+			return
+		}
+		if len(v) == 1 {
+			body[prop] = []any{v[0], cloneValue(v[0])}
+		}
+	default:
+		body[prop] = []any{raw, cloneValue(raw)}
+	}
+}
+
+// cloneValue deep-copies a JSON-like value (map, slice, or scalar) so a repeated
+// element can be duplicated without aliasing the original.
+func cloneValue(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[k] = cloneValue(val)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, val := range t {
+			out[i] = cloneValue(val)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+// lastPathSegment returns the final dot-separated segment of a FHIR element path
+// (e.g. "Patient.name" -> "name"), or "" when there is no dot.
+func lastPathSegment(path string) string {
+	idx := strings.LastIndex(path, ".")
+	if idx < 0 {
+		return ""
+	}
+	return path[idx+1:]
 }
 
 // coversBase returns the base (non-interaction) requirement IDs a candidate
@@ -228,6 +298,16 @@ func buildCandidateCase(cand candidateTest, options BuildOptions, deps []string)
 	profiles := orderedProfilesForResource(seed.ResourceType, seed.ProfileURL, options.PreferredProfileURLsByResource)
 	primaryProfile := firstProfileURL(profiles)
 	body, applied := buildBodyTemplate(seed, requestID, profiles, primaryProfile, deps, options.Registry, options.Exhaustive)
+
+	// The shared payload must actually exercise every accept obligation the group
+	// claims to cover. Obligations that need distinct content (e.g. multiple-values)
+	// are ensured to hold multiple values so coverage is not claimed for content the
+	// payload does not exercise.
+	if cand.negative == nil {
+		for _, p := range cand.positives {
+			ensureDistinctContent(body, p)
+		}
+	}
 
 	request := &ast.Request{
 		Method: "PUT",

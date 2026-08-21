@@ -69,7 +69,13 @@ func buildSearchSeedInstances(req coverage.CoverageRequirement, count int, optio
 		params = append(params, sp)
 	}
 
-	value := searchQueryValue(req, options)
+	// Compute a value per search code so a combination with mixed value types
+	// (e.g. a string `name` and a boolean `active`) gets a type-appropriate value
+	// for each parameter instead of reusing one value for both.
+	values := make(map[string]string, len(codes))
+	for _, code := range codes {
+		values[code] = searchQueryValue(req, code, options)
+	}
 	resourceProfiles := uniqueProfileURLs(byResource[req.ResourceType])
 	setupProfileURL := ""
 	if len(resourceProfiles) > 0 {
@@ -82,14 +88,14 @@ func buildSearchSeedInstances(req coverage.CoverageRequirement, count int, optio
 	for i := 0; i < count; i++ {
 		// For an _id search the resource id itself must equal the search value
 		// (so the URL and body ids agree and _id=<value> matches).
-		localID := value
+		localID := values[codes[0]]
 		if !idSearch {
 			localID = searchSeedID(req, i)
 		}
 		body := buildSetupBody(req.ResourceType, localID, setupProfiles, setupPrimaryProfile, nil, options.Registry, options.Exhaustive)
 		matched := true
 		for _, sp := range params {
-			if !applySearchMatch(body, req.ResourceType, sp, value, options.Registry) {
+			if !applySearchMatch(body, req.ResourceType, sp, values[sp.Code], options.Registry) {
 				matched = false
 				break
 			}

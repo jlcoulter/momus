@@ -28,40 +28,40 @@ func buildSearchCase(req coverage.CoverageRequirement, options BuildOptions) ast
 // combinations (two parameters) and invalid modifiers.
 func searchQuery(req coverage.CoverageRequirement, options BuildOptions) string {
 	if req.Variant == coverage.CoverageVariantSearchCombination && req.SearchCodeB != "" {
-		return req.SearchCode + "=" + url.QueryEscape(searchQueryValue(req, options)) +
-			"&" + req.SearchCodeB + "=" + url.QueryEscape(searchQueryValue(req, options))
+		return req.SearchCode + "=" + url.QueryEscape(searchQueryValue(req, req.SearchCode, options)) +
+			"&" + req.SearchCodeB + "=" + url.QueryEscape(searchQueryValue(req, req.SearchCodeB, options))
 	}
 	code := req.SearchCode
 	if req.Variant == coverage.CoverageVariantSearchInvalidModifier {
 		code += ":zzz"
 	}
-	return code + "=" + url.QueryEscape(searchQueryValue(req, options))
+	return code + "=" + url.QueryEscape(searchQueryValue(req, req.SearchCode, options))
 }
 
 // searchQueryValue returns the query value to exercise for a search obligation.
 // For reject variants it uses the sentinel that cannot match; for accept
 // variants it returns a value that can actually match (and that validates on
 // the provisioned seed), e.g. a real code for a value-set-bound code element.
-func searchQueryValue(req coverage.CoverageRequirement, options BuildOptions) string {
+func searchQueryValue(req coverage.CoverageRequirement, code string, options BuildOptions) string {
 	switch req.Variant {
 	case coverage.CoverageVariantSearchInvalidValue:
-		value, _ := searchInvalidValue(req, options)
+		value, _ := searchInvalidValue(req, code, options)
 		return value
 	case coverage.CoverageVariantSearchNoResults:
 		return "momus-no-match-zzz"
 	default:
-		return searchAcceptValue(req, options)
+		return searchAcceptValue(req, code, options)
 	}
 }
 
 // searchParameterType resolves the FHIR search parameter type (number, date,
 // string, token, reference, composite, quantity, uri, special) for a search
 // code, lowercased, or "" when it cannot be resolved.
-func searchParameterType(req coverage.CoverageRequirement, options BuildOptions) string {
-	if options.Registry == nil || req.SearchCode == "" {
+func searchParameterType(req coverage.CoverageRequirement, code string, options BuildOptions) string {
+	if options.Registry == nil || code == "" {
 		return ""
 	}
-	if sp, ok := options.Registry.SearchParameter(req.ResourceType, req.SearchCode); ok {
+	if sp, ok := options.Registry.SearchParameter(req.ResourceType, code); ok {
 		return strings.ToLower(sp.Type)
 	}
 	return ""
@@ -75,8 +75,8 @@ func searchParameterType(req coverage.CoverageRequirement, options BuildOptions)
 // reference, quantity, composite, special, unknown) a conformant server accepts
 // the query and returns an empty 200 rather than a 4xx, so it returns a
 // type-valid, non-matching value and expectReject=false.
-func searchInvalidValue(req coverage.CoverageRequirement, options BuildOptions) (string, bool) {
-	paramType := searchParameterType(req, options)
+func searchInvalidValue(req coverage.CoverageRequirement, code string, options BuildOptions) (string, bool) {
+	paramType := searchParameterType(req, code, options)
 	switch paramType {
 	case "boolean":
 		return "notabool", true
@@ -118,11 +118,11 @@ func searchValidNonMatchValue(paramType string) string {
 // makes the query meaningful and validates when placed on a provisioned seed.
 // A `code` element bound to a value set uses a real code from that set; a
 // boolean uses "true"; everything else falls back to the "momus-search" sentinel.
-func searchAcceptValue(req coverage.CoverageRequirement, options BuildOptions) string {
-	if options.Registry == nil || req.SearchCode == "" || req.SearchCode == "_id" {
+func searchAcceptValue(req coverage.CoverageRequirement, code string, options BuildOptions) string {
+	if options.Registry == nil || code == "" || code == "_id" {
 		return "momus-search"
 	}
-	sp, ok := options.Registry.SearchParameter(req.ResourceType, req.SearchCode)
+	sp, ok := options.Registry.SearchParameter(req.ResourceType, code)
 	if !ok {
 		return "momus-search"
 	}
@@ -183,7 +183,7 @@ func searchAssert(req coverage.CoverageRequirement, options BuildOptions) *ast.A
 		}
 	}
 	if req.Variant == coverage.CoverageVariantSearchInvalidValue {
-		if _, expectReject := searchInvalidValue(req, options); !expectReject {
+		if _, expectReject := searchInvalidValue(req, req.SearchCode, options); !expectReject {
 			// For search parameter types where any value is type-valid (string,
 			// token, uri, reference, quantity, ...) a conformant server accepts the
 			// query and returns an empty 200 rather than a 4xx. Assert that instead
