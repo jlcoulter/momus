@@ -326,6 +326,52 @@ func TestResolveLocalPackageGraphResolvesCurrentVersionRemotely(t *testing.T) {
 	}
 }
 
+func TestIsFloatingVersion(t *testing.T) {
+	floating := []string{"latest", "current", "*", " LATEST ", " * "}
+	for _, v := range floating {
+		if !isFloatingVersion(v) {
+			t.Errorf("isFloatingVersion(%q) = false, want true", v)
+		}
+	}
+
+	// A version containing "x" or "*" as part of a concrete version string is
+	// not floating; only the exact tokens latest/current/* are.
+	notFloating := []string{"", "1.0.0", "2.0.0x", "1.0.x", "1.0.0-beta", "v1.0.0"}
+	for _, v := range notFloating {
+		if isFloatingVersion(v) {
+			t.Errorf("isFloatingVersion(%q) = true, want false", v)
+		}
+	}
+}
+
+func TestResolveRequestedVersionEmptyPrefersRootPreferred(t *testing.T) {
+	selected := map[string]string{"b.pkg": "1.0.0"}
+	rootPreferred := map[string]string{"b.pkg": "2.0.0"}
+
+	got, overridden, err := resolveRequestedVersion("b.pkg", "", selected, rootPreferred, ConflictPolicyRootWins)
+	if err != nil {
+		t.Fatalf("resolveRequestedVersion returned error: %v", err)
+	}
+	if got != "2.0.0" || !overridden {
+		t.Fatalf("got %q overridden=%v, want 2.0.0 overridden=true", got, overridden)
+	}
+}
+
+func TestFindDependencyArchivePrefersExactLocalVersion(t *testing.T) {
+	index := map[string]string{
+		"b.pkg@latest": "/path/b.pkg-latest.tgz",
+		"b.pkg@1.0.0":  "/path/b.pkg-1.0.0.tgz",
+	}
+
+	p, err := findDependencyArchive(index, Dependency{Name: "b.pkg", Version: "latest"})
+	if err != nil {
+		t.Fatalf("findDependencyArchive returned error: %v", err)
+	}
+	if p != "/path/b.pkg-latest.tgz" {
+		t.Fatalf("got %q, want exact local match /path/b.pkg-latest.tgz", p)
+	}
+}
+
 func writePackageArchive(t *testing.T, dir, name, version string, deps map[string]string) string {
 	t.Helper()
 	archivePath := filepath.Join(dir, name+"-"+version+".tgz")

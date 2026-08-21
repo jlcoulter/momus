@@ -224,11 +224,13 @@ func ResolveLocalPackageGraphWithOptions(rootArchivePath string, options Resolve
 
 func resolveRequestedVersion(packageName, requestedVersion string, selectedVersion map[string]string, rootPreferred map[string]string, policy ConflictPolicy) (string, bool, error) {
 	if requestedVersion == "" {
-		if selected, ok := selectedVersion[packageName]; ok {
-			return selected, false, nil
-		}
+		// An unspecified version defers to the root's pin first (root-wins), so a
+		// root-pinned version is never overridden by an already-selected one.
 		if preferred, ok := rootPreferred[packageName]; ok {
 			return preferred, true, nil
+		}
+		if selected, ok := selectedVersion[packageName]; ok {
+			return selected, false, nil
 		}
 		return "", false, nil
 	}
@@ -382,6 +384,16 @@ func findDependencyArchive(index map[string]string, dep Dependency) (string, err
 	}
 
 	prefix := dep.Name + "@"
+
+	// Prefer an exact local archive when a specific version was requested, even
+	// if other versions of the package are present locally, so we do not fall
+	// back to a remote re-download for an already-available version.
+	if dep.Version != "" {
+		if p, ok := index[packageKey(dep.Name, dep.Version)]; ok {
+			return p, nil
+		}
+	}
+
 	matches := make([]string, 0, 1)
 	for key, p := range index {
 		if strings.HasPrefix(key, prefix) {
@@ -626,7 +638,7 @@ func isFloatingVersion(version string) bool {
 		return false
 	}
 	v := strings.ToLower(strings.TrimSpace(version))
-	return v == "current" || v == "latest" || strings.Contains(v, "x") || strings.Contains(v, "*")
+	return v == "current" || v == "latest" || v == "*"
 }
 
 func floatingVersionTag(version string) string {

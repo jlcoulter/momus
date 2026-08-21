@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -341,6 +342,63 @@ func TestRegistryBuilderBuildFromPackagesScopedNilRootUnscoped(t *testing.T) {
 	}
 	if got := len(r.ScopedStructureDefinitions()); got != 2 {
 		t.Fatalf("nil root scoped subjects = %d, want 2 (unscoped)", got)
+	}
+}
+
+func TestReadPackageRejectsOversizedEntry(t *testing.T) {
+	// A small gzip that decompresses to more than the per-entry cap, simulating
+	// a decompression/memory bomb.
+	big := bytes.Repeat([]byte("a"), 64<<20+1)
+	archivePath := buildTestPackageArchiveWithRawFiles(t, map[string][]byte{
+		"package/package.json": mustMarshalJSON(t, map[string]any{
+			"name":    "big.pkg",
+			"version": "1.0.0",
+		}),
+		"package/ValueSet-big.json": big,
+	})
+
+	_, err := ReadPackage(archivePath)
+	if err == nil {
+		t.Fatal("expected oversized entry error, got nil")
+	}
+	if !strings.Contains(err.Error(), "exceeds maximum size") {
+		t.Fatalf("expected size-limit error, got %v", err)
+	}
+}
+
+func TestReadPackageDeDuplicatesDependencies(t *testing.T) {
+	archivePath := buildTestPackageArchive(t, map[string]any{
+		"package/package.json": map[string]any{
+			"name":    "dedupe.pkg",
+			"version": "1.0.0",
+			"dependencies": map[string]string{
+				"b.pkg": "1.0.0",
+				"c.pkg": "2.0.0",
+			},
+			"dependsOn": []map[string]any{
+				{"name": "b.pkg", "version": "1.0.0"},
+				{"name": "c.pkg", "version": "2.0.0"},
+				{"name": "d.pkg", "version": "3.0.0"},
+			},
+		},
+	})
+
+	pkg, err := ReadPackage(archivePath)
+	if err != nil {
+		t.Fatalf("ReadPackage returned error: %v", err)
+	}
+	if len(pkg.Dependencies) != 3 {
+		t.Fatalf("got %d dependencies, want 3 (de-duplicated)", len(pkg.Dependencies))
+	}
+
+	seen := make(map[string]int, len(pkg.Dependencies))
+	for _, dep := range pkg.Dependencies {
+		seen[dep.Name]++
+	}
+	for name, count := range seen {
+		if count != 1 {
+			t.Fatalf("dependency %s appears %d times, want 1", name, count)
+		}
 	}
 }
 

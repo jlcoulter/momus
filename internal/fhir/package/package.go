@@ -237,9 +237,18 @@ func ReadPackage(packagePath string) (*Package, error) {
 		}
 		jsonEntries++
 
-		contents, err := io.ReadAll(tr)
+		// maxArchiveEntrySize caps the decompressed size of a single archive entry.
+		// Each entry is fully buffered in memory (see ReadPackage), so this bound
+		// keeps the in-memory footprint of a package archive bounded and prevents a
+		// large or hostile .tgz from acting as a decompression/memory bomb.
+		const maxArchiveEntrySize = 64 << 20 // 64 MiB per entry
+
+		contents, err := io.ReadAll(io.LimitReader(tr, maxArchiveEntrySize+1))
 		if err != nil {
 			return nil, fmt.Errorf("read archive entry content: %w", err)
+		}
+		if len(contents) > maxArchiveEntrySize {
+			return nil, fmt.Errorf("archive entry %s exceeds maximum size of %d bytes", header.Name, maxArchiveEntrySize)
 		}
 		contents = normalizeJSON(contents)
 
@@ -288,19 +297,27 @@ func decodeManifest(data []byte, pkg *Package) error {
 	pkg.Name = m.Name
 	pkg.Version = m.Version
 
-	if len(m.Dependencies) > 0 {
-		for name, version := range m.Dependencies {
-			pkg.Dependencies = append(pkg.Dependencies, Dependency{Name: name, Version: version})
+	// A manifest may declare dependencies via both the "dependencies" map and
+	// the "dependsOn" array; de-dupe on decode so the same dependency is not
+	// recorded twice.
+	seen := make(map[string]struct{}, len(m.Dependencies)+len(m.DepsArray))
+	add := func(name, version string) {
+		if name == "" {
+			return
 		}
+		key := packageKey(name, version)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		pkg.Dependencies = append(pkg.Dependencies, Dependency{Name: name, Version: version})
 	}
 
-	if len(m.DepsArray) > 0 {
-		for _, dep := range m.DepsArray {
-			if dep.Name == "" {
-				continue
-			}
-			pkg.Dependencies = append(pkg.Dependencies, Dependency(dep))
-		}
+	for name, version := range m.Dependencies {
+		add(name, version)
+	}
+	for _, dep := range m.DepsArray {
+		add(dep.Name, dep.Version)
 	}
 
 	return nil
