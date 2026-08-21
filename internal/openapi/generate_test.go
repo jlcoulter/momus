@@ -140,3 +140,84 @@ func TestGeneratePlanAssertsCarryTrace(t *testing.T) {
 		t.Fatalf("POST assert trace = %+v", postAssert.Trace)
 	}
 }
+
+func TestSampleFromSchema(t *testing.T) {
+	if v := sampleFromSchema(nil); v != nil {
+		t.Fatalf("sampleFromSchema(nil) = %v, want nil", v)
+	}
+	// Object with properties recurses.
+	obj := sampleFromSchema(&Schema{Type: "object", Properties: map[string]*Schema{
+		"id":   {Type: "string"},
+		"name": {Type: "string"},
+	}})
+	m, ok := obj.(map[string]any)
+	if !ok || m["id"] != "sample" || m["name"] != "sample" {
+		t.Fatalf("sampleFromSchema(object) = %v", obj)
+	}
+	// Scalar types.
+	if v := sampleFromSchema(&Schema{Type: "string"}); v != "sample" {
+		t.Fatalf("string sample = %v", v)
+	}
+	if v := sampleFromSchema(&Schema{Type: "integer"}); v != 1 {
+		t.Fatalf("integer sample = %v", v)
+	}
+	if v := sampleFromSchema(&Schema{Type: "number"}); v != 1.0 {
+		t.Fatalf("number sample = %v", v)
+	}
+	if v := sampleFromSchema(&Schema{Type: "boolean"}); v != true {
+		t.Fatalf("boolean sample = %v", v)
+	}
+	if v := sampleFromSchema(&Schema{Type: "array"}); v == nil {
+		t.Fatal("array sample should be a non-nil empty slice")
+	}
+	// Unknown type -> nil.
+	if v := sampleFromSchema(&Schema{Type: "file"}); v != nil {
+		t.Fatalf("unknown type sample = %v, want nil", v)
+	}
+}
+
+func TestSampleScalar(t *testing.T) {
+	if v := sampleScalar("integer"); v != "1" {
+		t.Fatalf("integer scalar = %q", v)
+	}
+	if v := sampleScalar("number"); v != "1" {
+		t.Fatalf("number scalar = %q", v)
+	}
+	if v := sampleScalar("boolean"); v != "true" {
+		t.Fatalf("boolean scalar = %q", v)
+	}
+	if v := sampleScalar("string"); v != "sample" {
+		t.Fatalf("string scalar = %q", v)
+	}
+}
+
+func TestOperationIDAndResourceTypeFromPath(t *testing.T) {
+	if got := operationID(&Operation{OperationID: "getPatient", Method: "GET", Path: "/patients/{id}"}); got != "getPatient" {
+		t.Fatalf("operationID with explicit id = %q", got)
+	}
+	if got := operationID(&Operation{Method: "GET", Path: "/patients/{id}"}); got != "GET /patients/{id}" {
+		t.Fatalf("operationID fallback = %q", got)
+	}
+	if got := resourceTypeFromPath("/patients/{id}"); got != "patients" {
+		t.Fatalf("resourceTypeFromPath = %q", got)
+	}
+	if got := resourceTypeFromPath(""); got != "" {
+		t.Fatalf("resourceTypeFromPath(empty) = %q, want empty", got)
+	}
+}
+
+func TestOperationRequestBody(t *testing.T) {
+	// No request body -> nil.
+	if v := operationRequestBody(&Operation{}); v != nil {
+		t.Fatalf("operationRequestBody(no body) = %v, want nil", v)
+	}
+	// Request body with a schema -> sample.
+	op := &Operation{RequestBody: &Schema{Type: "object", Properties: map[string]*Schema{
+		"id": {Type: "string"},
+	}}}
+	body := operationRequestBody(op)
+	m, ok := body.(map[string]any)
+	if !ok || m["id"] != "sample" {
+		t.Fatalf("operationRequestBody = %v", body)
+	}
+}
