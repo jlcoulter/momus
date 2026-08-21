@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/jlcoulter/momus/compare/v1.0.0...v1.0.1) (2026-08-21)
+
+
+### Bug Fixes
+
+* resolve failed tests debugging ([07caa63](https://github.com/jlcoulter/momus/commit/07caa63b5b29dc6b0237cb42df602c756fe7bf35))
+
 ## 1.0.0 (2026-08-21)
 
 
