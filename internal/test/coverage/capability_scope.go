@@ -219,8 +219,9 @@ func FetchCapabilityStatement(ctx context.Context, baseURL string, options Capab
 	req.Header.Set("Accept", "application/fhir+json, application/json")
 	applyCapabilityRequestAuth(req, options)
 
+	var reqSeq int
 	if options.Tracer != nil {
-		options.Tracer.LogRequest(req, nil)
+		reqSeq = options.Tracer.LogRequest(req, nil)
 	}
 
 	resp, err := client.Do(req)
@@ -234,7 +235,7 @@ func FetchCapabilityStatement(ctx context.Context, baseURL string, options Capab
 		return nil, err
 	}
 	if options.Tracer != nil {
-		options.Tracer.LogResponse(req, resp.StatusCode, resp.Header, body)
+		options.Tracer.LogResponse(req, reqSeq, resp.StatusCode, resp.Header, body)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("fetch capability statement from %s: status %d: %s", req.URL.String(), resp.StatusCode, strings.TrimSpace(string(body)))

@@ -2,6 +2,7 @@ package tracing
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -19,8 +20,8 @@ func TestTracerLogsRequestAndResponse(t *testing.T) {
 	req.Header.Set("Content-Type", "application/fhir+json")
 	req.Header.Set("Authorization", "Bearer secret-token")
 
-	tr.LogRequest(req, []byte(`{"resourceType":"Patient"}`))
-	tr.LogResponse(req, http.StatusCreated, http.Header{"ETag": []string{`W/"1"`}}, []byte(`{"id":"1"}`))
+	seq := tr.LogRequest(req, []byte(`{"resourceType":"Patient"}`))
+	tr.LogResponse(req, seq, http.StatusCreated, http.Header{"ETag": []string{`W/"1"`}}, []byte(`{"id":"1"}`))
 
 	out := buf.String()
 	for _, want := range []string{
@@ -52,7 +53,7 @@ func TestTracerTruncatesLargeBodies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRequest: %v", err)
 	}
-	tr.LogResponse(req, http.StatusOK, nil, []byte("0123456789abcdef"))
+	tr.LogResponse(req, 1, http.StatusOK, nil, []byte("0123456789abcdef"))
 
 	out := buf.String()
 	if !strings.Contains(out, "01234567") {
@@ -74,8 +75,8 @@ func TestTracerIsConcurrencySafe(t *testing.T) {
 	for range 50 {
 		wg.Go(func() {
 			req, _ := http.NewRequest(http.MethodGet, "http://host/fhir/Patient", nil)
-			tr.LogRequest(req, nil)
-			tr.LogResponse(req, http.StatusOK, nil, nil)
+			seq := tr.LogRequest(req, nil)
+			tr.LogResponse(req, seq, http.StatusOK, nil, nil)
 		})
 	}
 	wg.Wait()
@@ -85,13 +86,51 @@ func TestTracerIsConcurrencySafe(t *testing.T) {
 	}
 }
 
+// TestTracerPairsResponseWithRequestSeq forces an interleaving where a second
+// request is logged between a first request and its response. The response must
+// be tagged with the sequence returned by its own LogRequest, not the current
+// tracer sequence (which would be the second request's number).
+func TestTracerPairsResponseWithRequestSeq(t *testing.T) {
+	var buf bytes.Buffer
+	tr := New(&buf)
+
+	reqA, _ := http.NewRequest(http.MethodGet, "http://host/a", nil)
+	reqB, _ := http.NewRequest(http.MethodGet, "http://host/b", nil)
+
+	aRequested := make(chan int)
+	aProceed := make(chan struct{})
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		seqA := tr.LogRequest(reqA, nil)
+		aRequested <- seqA
+		<-aProceed
+		tr.LogResponse(reqA, seqA, http.StatusOK, nil, nil)
+	}()
+
+	seqA := <-aRequested
+	seqB := tr.LogRequest(reqB, nil)
+	close(aProceed)
+	wg.Wait()
+
+	out := buf.String()
+	if !strings.Contains(out, fmt.Sprintf("<== RESPONSE #%d", seqA)) {
+		t.Errorf("expected response for request A tagged #%d:\n%s", seqA, out)
+	}
+	if strings.Contains(out, fmt.Sprintf("<== RESPONSE #%d", seqB)) {
+		t.Errorf("response for request A was tagged with request B's sequence #%d:\n%s", seqB, out)
+	}
+}
+
 func TestTracerColorOffByDefaultForNonTerminal(t *testing.T) {
 	var buf bytes.Buffer
 	tr := New(&buf) // bytes.Buffer is not a terminal, so colour stays off
 
 	req, _ := http.NewRequest(http.MethodGet, "http://host/fhir/Patient", nil)
-	tr.LogRequest(req, nil)
-	tr.LogResponse(req, http.StatusOK, nil, nil)
+	seq := tr.LogRequest(req, nil)
+	tr.LogResponse(req, seq, http.StatusOK, nil, nil)
 
 	if strings.Contains(buf.String(), "\x1b[") {
 		t.Errorf("expected no ANSI codes for a non-terminal writer:\n%q", buf.String())
@@ -104,8 +143,8 @@ func TestTracerColorWhenForced(t *testing.T) {
 	tr.color = true
 
 	req, _ := http.NewRequest(http.MethodGet, "http://host/fhir/Patient", nil)
-	tr.LogRequest(req, nil)
-	tr.LogResponse(req, http.StatusCreated, nil, nil)
+	seq := tr.LogRequest(req, nil)
+	tr.LogResponse(req, seq, http.StatusCreated, nil, nil)
 
 	out := buf.String()
 	if !strings.Contains(out, "\x1b[36m") {

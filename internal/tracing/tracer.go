@@ -48,10 +48,12 @@ func New(w io.Writer) *Tracer {
 }
 
 // LogRequest records an outgoing request. body is the request payload (may be
-// nil for requests without a body).
-func (t *Tracer) LogRequest(req *http.Request, body []byte) {
+// nil for requests without a body). It returns the sequence number assigned to
+// this request, which must be passed to LogResponse so the response is paired
+// with the correct request under concurrency.
+func (t *Tracer) LogRequest(req *http.Request, body []byte) int {
 	if t == nil || t.w == nil || req == nil {
-		return
+		return 0
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -61,16 +63,18 @@ func (t *Tracer) LogRequest(req *http.Request, body []byte) {
 	t.writeHeaders(req.Header)
 	t.writeBody(body)
 	t.writeBlank()
+	return t.seq
 }
 
-// LogResponse records the response to a request. headers and body may be nil/empty.
-func (t *Tracer) LogResponse(req *http.Request, status int, headers http.Header, body []byte) {
+// LogResponse records the response to a request. seq is the sequence number
+// returned by the matching LogRequest call. headers and body may be nil/empty.
+func (t *Tracer) LogResponse(req *http.Request, seq int, status int, headers http.Header, body []byte) {
 	if t == nil || t.w == nil || req == nil {
 		return
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.writeHeader(fmt.Sprintf("<== RESPONSE #%d", t.seq), statusColor(status))
+	t.writeHeader(fmt.Sprintf("<== RESPONSE #%d", seq), statusColor(status))
 	t.writeLine("%s %s -> %s", req.Method, req.URL.String(), t.paint(statusColor(status), fmt.Sprintf("%d %s", status, http.StatusText(status))))
 	t.writeHeaders(headers)
 	t.writeBody(body)
