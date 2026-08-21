@@ -408,6 +408,64 @@ func TestDerivePlanRequiredSliceStructureObligation(t *testing.T) {
 	}
 }
 
+// TestDerivePlanSliceDoesNotOverrideBaseCardinality verifies that a slice's
+// cardinality no longer clobbers the base element's cardinality in the derivable
+// map (task #11). Previously the map was keyed by path only, so a required
+// 1..1 slice overwrote an optional 0..* base and a spurious missing-required
+// obligation was derived for an element that is optional as a whole.
+func TestDerivePlanSliceDoesNotOverrideBaseCardinality(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/patient",
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.contact", Min: 0, Max: "*"},
+			{Path: "Patient.contact", Min: 1, Max: "1", SliceName: "primary"},
+		},
+	})
+
+	plan, err := DerivePlan(r, DeriveOptions{})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+
+	// The base element is optional, so no missing-required obligation may be
+	// derived for Patient.contact even though a required slice exists.
+	if hasVariant(plan, CoverageVariantMissingRequired) {
+		t.Fatal("missing-required derived for an optional base element; slice cardinality leaked into the base")
+	}
+	// The required slice still yields its own structure obligation.
+	if !hasVariant(plan, CoverageVariantStructureSlicePresent) {
+		t.Fatal("expected structure-slice-present obligation for the required slice")
+	}
+}
+
+// TestDerivePlanOptionalSliceDoesNotSuppressRequiredBase verifies the reverse
+// direction of task #11: an optional slice must not suppress the missing-required
+// obligation of a genuinely required base element.
+func TestDerivePlanOptionalSliceDoesNotSuppressRequiredBase(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/patient",
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.contact", Min: 1, Max: "*"},
+			{Path: "Patient.contact", Min: 0, Max: "1", SliceName: "optional"},
+		},
+	})
+
+	plan, err := DerivePlan(r, DeriveOptions{IncludeOptional: true})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+
+	if !hasVariant(plan, CoverageVariantMissingRequired) {
+		t.Fatal("missing-required suppressed for a required base element by an optional slice")
+	}
+}
+
 // TestDerivePlanScopedToRootPackage verifies that when a registry is scoped to
 // a root package, derivation produces obligations only for the root package's
 // StructureDefinitions, while dependency (parent) definitions remain indexed

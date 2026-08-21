@@ -100,7 +100,7 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 				trackPruned(plan, reason)
 				continue
 			}
-			key := elementKey(profile.URL, element.Path)
+			key := elementKey(profile.URL, element.Path, element.SliceName)
 			de := derivableElement{
 				element: element,
 				targets: collectDependencyTargets(r, element),
@@ -130,7 +130,7 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 		if !isElementConstraintKind(c.Kind) {
 			continue
 		}
-		de, ok := derivable[elementKey(c.ProfileURL, c.ElementPath)]
+		de, ok := derivable[elementKey(c.ProfileURL, c.ElementPath, "")]
 		if !ok {
 			continue
 		}
@@ -295,8 +295,8 @@ func newCoveragePlan() *CoveragePlan {
 	}
 }
 
-func elementKey(profileURL, elementPath string) string {
-	return profileURL + "\x00" + elementPath
+func elementKey(profileURL, elementPath, sliceName string) string {
+	return profileURL + "\x00" + elementPath + "\x00" + sliceName
 }
 
 type derivableElement struct {
