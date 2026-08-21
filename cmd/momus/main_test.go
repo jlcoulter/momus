@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -17,7 +18,7 @@ import (
 )
 
 func TestParsePerTypeCounts(t *testing.T) {
-	got := parsePerTypeCounts([]string{"Organization=10", "HealthcareService=25", "bad", "=3", "Patient="})
+	got := parsePerTypeCounts([]string{"Organization=10", "HealthcareService=25", "bad", "=3", "Patient=", "Encounter=-5"})
 	if got["Organization"] != 10 {
 		t.Fatalf("Organization = %d, want 10", got["Organization"])
 	}
@@ -29,6 +30,60 @@ func TestParsePerTypeCounts(t *testing.T) {
 	}
 	if _, ok := got["Patient"]; ok {
 		t.Fatalf("expected empty-count entry to be ignored")
+	}
+	if _, ok := got["Encounter"]; ok {
+		t.Fatalf("expected negative-count entry to be ignored, got %v", got)
+	}
+}
+
+func TestIntersectCaseInsensitive(t *testing.T) {
+	// Empty available: no restriction, returns requested unchanged.
+	got, err := intersectCaseInsensitive([]string{"Patient", "Observation"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %v, want 2 entries", got)
+	}
+
+	// Empty requested: returns available unchanged.
+	got, err = intersectCaseInsensitive(nil, []string{"Patient"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0] != "Patient" {
+		t.Fatalf("got %v, want [Patient]", got)
+	}
+
+	// Case-insensitive intersection preserves the requested spelling.
+	got, err = intersectCaseInsensitive([]string{"patient", "Observation"}, []string{"Patient", "Encounter"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0] != "patient" {
+		t.Fatalf("got %v, want [patient]", got)
+	}
+
+	// Non-empty request with zero intersection: error, not silent widening.
+	_, err = intersectCaseInsensitive([]string{"Patient"}, []string{"Encounter"})
+	if err == nil {
+		t.Fatal("expected error for zero intersection")
+	}
+	if !strings.Contains(err.Error(), "none of the requested resource types are supported") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestLoadOpenAPIDocumentErrorWrapping(t *testing.T) {
+	_, err := loadOpenAPIDocument(filepath.Join(t.TempDir(), "missing.json"))
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+	if !strings.Contains(err.Error(), "read openapi document") {
+		t.Fatalf("error lacks context: %v", err)
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("error does not wrap os.ErrNotExist: %v", err)
 	}
 }
 

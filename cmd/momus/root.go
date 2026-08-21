@@ -7,8 +7,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version is the Momus version. Bumped as part of releases.
-const version = "0.0.0"
+// version is the Momus version. Bumped as part of releases. It is a var so
+// release builds can inject the version at link time via
+// -ldflags "-X main.version=<version>".
+var version = "0.0.0"
 
 // abstractResourceTypes are FHIR types with kind "resource" that are abstract
 // base types and cannot be instantiated as concrete data.

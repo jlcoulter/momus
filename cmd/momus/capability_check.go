@@ -227,6 +227,9 @@ func packageCapabilityStatement(reg *registry.Registry) *model.CapabilityStateme
 
 // reportCapabilityEvidence prints the capability cross-check result.
 func reportCapabilityEvidence(ev capabilityEvidence, baseURL string) {
+	if ev.Error != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: failed to load CapabilityStatement (%v); falling back to package CapabilityStatement\n", ev.Error)
+	}
 	if !ev.Fetched {
 		fmt.Printf("Capability evidence: no CapabilityStatement available (live %s/metadata unreachable and package carries none); skipping type/profile verification\n", baseURL)
 		return

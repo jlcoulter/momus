@@ -63,6 +63,10 @@ func newBulkCmd(cfg *config) *cobra.Command {
 				sort.Strings(resourceTypes)
 			}
 
+			if cfg.bulkCount < 0 {
+				return fmt.Errorf("--count must be non-negative, got %d", cfg.bulkCount)
+			}
+
 			corpusGenerator := testbulk.NewCorpusGenerator(reg, cfg.exhaustive)
 			corpus, err := corpusGenerator.GenerateCorpus(cmd.Context(), resourceTypes, cfg.bulkCount, parsePerTypeCounts(cfg.bulkPerTypeCounts))
 			if err != nil {

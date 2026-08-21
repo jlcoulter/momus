@@ -161,7 +161,7 @@ func newApiRunCmd(cfg *config) *cobra.Command {
 func loadOpenAPIDocument(path string) (*openapi.Document, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read openapi document %s: %w", path, err)
 	}
 	return openapi.ParseJSON(data)
 }

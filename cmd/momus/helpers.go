@@ -83,12 +83,24 @@ func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer
 		capabilityProfilesByResource = testcoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, false)
 	}
 	if len(capabilityProfiles) > 0 {
-		return intersectCaseInsensitive(cfg.includeResourceTypes, capabilityTypes), intersectCaseInsensitive(cfg.includeProfileURLs, capabilityProfiles), capabilityProfilesByResource, capabilitySearchCodes, nil
+		types, err := intersectCaseInsensitive(cfg.includeResourceTypes, capabilityTypes)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		profiles, err := intersectCaseInsensitive(cfg.includeProfileURLs, capabilityProfiles)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		return types, profiles, capabilityProfilesByResource, capabilitySearchCodes, nil
 	}
 	if len(capabilityTypes) == 0 {
 		return cfg.includeResourceTypes, cfg.includeProfileURLs, capabilityProfilesByResource, capabilitySearchCodes, nil
 	}
-	return intersectCaseInsensitive(cfg.includeResourceTypes, capabilityTypes), cfg.includeProfileURLs, capabilityProfilesByResource, capabilitySearchCodes, nil
+	types, err := intersectCaseInsensitive(cfg.includeResourceTypes, capabilityTypes)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	return types, cfg.includeProfileURLs, capabilityProfilesByResource, capabilitySearchCodes, nil
 }
 
 // isServerUnavailable reports whether a fetch error means the target server
@@ -119,12 +131,12 @@ func isServerUnavailable(err error) bool {
 	return false
 }
 
-func intersectCaseInsensitive(requested, available []string) []string {
+func intersectCaseInsensitive(requested, available []string) ([]string, error) {
 	if len(available) == 0 {
-		return requested
+		return requested, nil
 	}
 	if len(requested) == 0 {
-		return available
+		return available, nil
 	}
 	requestedSet := make(map[string]string, len(requested))
 	for _, value := range requested {
@@ -141,7 +153,10 @@ func intersectCaseInsensitive(requested, available []string) []string {
 			intersected = append(intersected, original)
 		}
 	}
-	return intersected
+	if len(intersected) == 0 {
+		return nil, fmt.Errorf("none of the requested resource types are supported by the server")
+	}
+	return intersected, nil
 }
 
 func marshalCoverageRunOutput(report *testrunner.Report, evaluation testcoverage.EvaluationReport, includeCases bool) ([]byte, error) {
@@ -476,7 +491,7 @@ func parsePerTypeCounts(entries []string) map[string]int {
 		}
 		typ := strings.TrimSpace(entry[:idx])
 		count, err := strconv.Atoi(strings.TrimSpace(entry[idx+1:]))
-		if err != nil || typ == "" {
+		if err != nil || typ == "" || count < 0 {
 			continue
 		}
 		out[typ] = count
