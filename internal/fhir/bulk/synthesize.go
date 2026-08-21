@@ -51,9 +51,13 @@ func synthesizeResource(reg *registry.Registry, resourceType, profileURL, id str
 		// commonly reject resources that omit meta.profile.
 		body["meta"] = map[string]any{"profile": []any{profileURL}}
 		resolved, err := reg.ResolveProfile(profileURL)
-		if err == nil && resolved != nil && resolved.Root != nil {
-			populateChildren(body, resolved.Root, reg, refs, exhaustive, rng)
+		if err != nil {
+			return nil, fmt.Errorf("resolve profile %s: %w", profileURL, err)
 		}
+		if resolved == nil || resolved.Root == nil {
+			return nil, fmt.Errorf("profile %s has no element tree", profileURL)
+		}
+		populateChildren(body, resolved.Root, reg, refs, exhaustive, rng)
 	}
 	// Drop any Extension that carries neither a value[x] nor a nested sub-extension
 	// (violates ext-1); simple extensions are populated with a value above.
@@ -132,9 +136,19 @@ func populateChildren(body map[string]any, node *model.ElementNode, reg *registr
 		}
 		if child.Definition == nil {
 			// Intermediate or choice node without its own definition. Descend
-			// into it only in exhaustive mode so optional containers appear.
-			if !exhaustive || len(child.Children) == 0 {
+			// into it whenever a descendant is required (Min > 0) so required
+			// containers are never dropped; otherwise only in exhaustive mode,
+			// and then randomly so optional containers vary across instances.
+			if len(child.Children) == 0 {
 				continue
+			}
+			if !hasRequiredDescendant(child) {
+				if !exhaustive {
+					continue
+				}
+				if rng != nil && rng.Float64() > optionalInclusionProbability {
+					continue
+				}
 			}
 			if value := synthesizeNodeValue(child, reg, refs, rng); value != nil {
 				body[propName] = value
@@ -357,6 +371,34 @@ func hasRequiredSlices(node *model.ElementNode) bool {
 	for _, slice := range node.Slices {
 		if slice != nil && slice.Definition != nil && slice.Definition.Min > 0 {
 			return true
+		}
+	}
+	return false
+}
+
+// hasRequiredDescendant reports whether node or any of its descendants (including
+// slice members) is required (Min > 0). It is used to keep required complex
+// intermediates present even in non-exhaustive mode.
+func hasRequiredDescendant(node *model.ElementNode) bool {
+	if node == nil {
+		return false
+	}
+	if node.Definition != nil && node.Definition.Min > 0 {
+		return true
+	}
+	if hasRequiredSlices(node) {
+		return true
+	}
+	for _, child := range node.Children {
+		if hasRequiredDescendant(child) {
+			return true
+		}
+	}
+	for _, slice := range node.Slices {
+		for _, child := range slice.Children {
+			if hasRequiredDescendant(child) {
+				return true
+			}
 		}
 	}
 	return false

@@ -129,6 +129,89 @@ func TestGenerateCorpusRequiresTypes(t *testing.T) {
 	}
 }
 
+// TestGenerateCorpusDisambiguatesCollidingTypeIDs verifies that resource types
+// whose sanitized id segments collide (e.g. "A/B" and "A-B" both sanitize to
+// "A-B") still produce distinct local ids, so neither type's resources are
+// silently overwritten in the dataset.
+func TestGenerateCorpusDisambiguatesCollidingTypeIDs(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://example.org/StructureDefinition/ab", Type: "A/B",
+		Elements: []model.ElementDefinition{
+			{Path: "A/B", Min: 0, Max: "*"},
+			{Path: "A/B.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://example.org/StructureDefinition/ab2", Type: "A-B",
+		Elements: []model.ElementDefinition{
+			{Path: "A-B", Min: 0, Max: "*"},
+			{Path: "A-B.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	ds, err := gen.GenerateCorpus(context.Background(), []string{"A/B", "A-B"}, 2, nil)
+	if err != nil {
+		t.Fatalf("GenerateCorpus returned error: %v", err)
+	}
+	counts := map[string]int{}
+	for _, inst := range ds.Resources {
+		counts[inst.ResourceType]++
+	}
+	if counts["A/B"] != 2 || counts["A-B"] != 2 {
+		t.Fatalf("counts = %v, want A/B:2 A-B:2 (ids must not collide across types)", counts)
+	}
+}
+
+// TestGenerateCorpusSurfacesSynthesisFailures verifies that a resource type that
+// cannot be synthesized (its profile has no element tree) is surfaced as an error
+// rather than silently reported as having the requested number of resources.
+func TestGenerateCorpusSurfacesSynthesisFailures(t *testing.T) {
+	reg := registry.New()
+	// A profile with no elements resolves to a nil root, so the type cannot be
+	// synthesized.
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://example.org/StructureDefinition/broken", Type: "Broken",
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	if _, err := gen.GenerateCorpus(context.Background(), []string{"Broken"}, 3, nil); err == nil {
+		t.Fatal("expected error when a resource type cannot be synthesized")
+	}
+}
+
+// TestPopulateChildrenKeepsRequiredIntermediate verifies that a complex
+// intermediate node without its own definition is still emitted in non-exhaustive
+// mode when a descendant is required (Min > 0), so required containers are never
+// dropped from the resource.
+func TestPopulateChildrenKeepsRequiredIntermediate(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://example.org/StructureDefinition/obs", Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			// component is an intermediate with no Definition; its child code is required.
+			{Path: "Observation.component.code", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+		},
+	})
+	resolved, err := reg.ResolveProfile("http://example.org/StructureDefinition/obs")
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+
+	body := map[string]any{"resourceType": "Observation", "id": "obs-1"}
+	populateChildren(body, resolved.Root, reg, nil, false, newRNG("obs-1"))
+
+	comp, ok := body["component"].(map[string]any)
+	if !ok {
+		t.Fatalf("component = %#v, want map (required intermediate must be kept in non-exhaustive mode)", body["component"])
+	}
+	if comp["code"] == nil {
+		t.Fatalf("component.code missing: %#v", comp)
+	}
+}
+
 // TestSetReferencePathPreservesRepeatableReferenceArray verifies that wiring a
 // reference into a repeatable Reference field (e.g. Observation.performer as a
 // Reference[]) updates the existing array instead of replacing it with a single

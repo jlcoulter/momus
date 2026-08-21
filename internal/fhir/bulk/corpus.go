@@ -97,6 +97,7 @@ func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []st
 	type corpusResult struct {
 		index     int
 		instances []*model.ResourceInstance
+		err       error
 	}
 	resultCh := make(chan corpusResult, len(resourceTypes))
 	for idx, t := range resourceTypes {
@@ -106,19 +107,23 @@ func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []st
 				count = c
 			}
 			instances := make([]*model.ResourceInstance, 0, count)
+			var synthErr error
 			for i := 0; i < count; i++ {
-				id := fmt.Sprintf("momus-%s-%d", sanitizeID(t), i+1)
+				// Embed a hash of the raw resource type so types that sanitize to the
+				// same segment (e.g. "A/B" vs "A-B") never collide on local ids.
+				id := fmt.Sprintf("momus-%s-%x-%d", sanitizeID(t), hashCorpus(t), i+1)
 				body, err := synthesizeResource(g.reg, t, "", id, nil, g.exhaustive, newRNG(id))
 				if err != nil {
-					// A single unsynthesizable type must not abort the corpus.
+					synthErr = fmt.Errorf("synthesize %s: %w", t, err)
 					break
 				}
-				if body == nil || len(body) == 0 {
+				if len(body) == 0 {
+					synthErr = fmt.Errorf("synthesize %s: produced no resource body", t)
 					break
 				}
 				instances = append(instances, &model.ResourceInstance{LocalID: id, ResourceType: t, Profile: "", Resource: body})
 			}
-			resultCh <- corpusResult{index: idx, instances: instances}
+			resultCh <- corpusResult{index: idx, instances: instances, err: synthErr}
 		}(idx, t)
 	}
 
@@ -129,11 +134,21 @@ func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []st
 		r := <-resultCh
 		results[r.index] = r
 	}
+	var synthErrs []string
 	for _, res := range results {
+		if res.err != nil {
+			synthErrs = append(synthErrs, res.err.Error())
+		}
 		for _, inst := range res.instances {
+			if _, exists := ds.Resources[inst.LocalID]; exists {
+				return nil, fmt.Errorf("bulk: duplicate generated id %q", inst.LocalID)
+			}
 			ds.Resources[inst.LocalID] = inst
 			pools[inst.ResourceType] = append(pools[inst.ResourceType], inst.LocalID)
 		}
+	}
+	if len(synthErrs) > 0 {
+		return nil, fmt.Errorf("bulk: failed to synthesize some resource types: %s", strings.Join(synthErrs, "; "))
 	}
 
 	// Pass 2: wire each resource's reference fields to a distributed target.

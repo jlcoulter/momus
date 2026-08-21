@@ -10,15 +10,19 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 )
 
 // Writer serialises a collection of generated resources as NDJSON bulk data.
 // It is safe to write instances from multiple datasets; a single Writer
-// produces a single concatenated NDJSON stream.
+// produces a single concatenated NDJSON stream. A Writer is safe for
+// concurrent use: writes are serialised by an internal mutex.
 type Writer struct {
-	w *bufio.Writer
+	mu     sync.Mutex
+	w      *bufio.Writer
+	closed bool
 }
 
 // NewWriter returns a Writer that writes NDJSON lines to w. The caller must
@@ -36,6 +40,8 @@ func (wr *Writer) WriteInstance(inst *model.ResourceInstance) error {
 	if err != nil {
 		return fmt.Errorf("bulk: marshal resource %s/%s: %w", inst.ResourceType, inst.LocalID, err)
 	}
+	wr.mu.Lock()
+	defer wr.mu.Unlock()
 	if _, err := wr.w.Write(line); err != nil {
 		return err
 	}
@@ -53,7 +59,14 @@ func (wr *Writer) WriteInstances(instances []*model.ResourceInstance) error {
 	return nil
 }
 
-// Close flushes pending output to the underlying writer.
+// Close flushes pending output to the underlying writer. It is safe to call
+// multiple times; subsequent calls are no-ops.
 func (wr *Writer) Close() error {
+	wr.mu.Lock()
+	defer wr.mu.Unlock()
+	if wr.closed {
+		return nil
+	}
+	wr.closed = true
 	return wr.w.Flush()
 }
