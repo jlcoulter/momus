@@ -3,6 +3,7 @@ package assertions
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -23,6 +24,22 @@ func TestParseExpressionStatusInEvaluatesPassAndFail(t *testing.T) {
 func TestParseExpressionRejectsUnsupportedFormat(t *testing.T) {
 	if _, err := ParseExpression("status == 200"); err == nil {
 		t.Fatal("expected unsupported format error")
+	}
+}
+
+func TestParseBodyEqualityRejectsMixedNumericString(t *testing.T) {
+	for _, expr := range []string{`body.total == "3"`, `body.total != "3"`} {
+		a, err := ParseExpression(expr)
+		if err != nil {
+			t.Fatalf("ParseExpression(%q) returned error: %v", expr, err)
+		}
+		err = a.Evaluate(context.Background(), Result{Body: []byte(`{"total":3}`)})
+		if err == nil {
+			t.Fatalf("expected %q to error on mixed numeric/string operands, got pass", expr)
+		}
+		if !strings.Contains(err.Error(), "cannot compare") {
+			t.Fatalf("expected comparison error for %q, got: %v", expr, err)
+		}
 	}
 }
 

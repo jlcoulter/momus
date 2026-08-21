@@ -265,23 +265,27 @@ func extractValue(sel selector, result Result) (any, error) {
 // compared numerically; everything else by string equality (ordering on
 // non-numeric values is an error).
 func compareValues(actual any, op string, expected any) (bool, error) {
-	if af, ok := toFloat(actual); ok {
-		if ef, ok := toFloat(expected); ok {
-			switch op {
-			case "==":
-				return af == ef, nil
-			case "!=":
-				return af != ef, nil
-			case "<":
-				return af < ef, nil
-			case "<=":
-				return af <= ef, nil
-			case ">":
-				return af > ef, nil
-			case ">=":
-				return af >= ef, nil
-			}
+	af, aNum := toFloat(actual)
+	ef, eNum := toFloat(expected)
+	switch {
+	case aNum && eNum:
+		switch op {
+		case "==":
+			return af == ef, nil
+		case "!=":
+			return af != ef, nil
+		case "<":
+			return af < ef, nil
+		case "<=":
+			return af <= ef, nil
+		case ">":
+			return af > ef, nil
+		case ">=":
+			return af >= ef, nil
 		}
+	case aNum != eNum:
+		// Mixed numeric/non-numeric operands cannot be compared.
+		return false, fmt.Errorf("cannot compare %v with %v: mixed numeric and non-numeric operands", actual, expected)
 	}
 	as, es := fmt.Sprint(actual), fmt.Sprint(expected)
 	switch op {
