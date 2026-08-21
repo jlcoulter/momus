@@ -1,119 +1,84 @@
 # Momus
 
-Momus is a testing framework/tool for API and FHIR conformance testing.
+Momus is a testing framework for **API and FHIR conformance testing**. It
+derives contractual coverage obligations from FHIR packages and OpenAPI
+documents, generates executable test plans, provisions seed data, runs the
+tests against a live server, and reports which obligations were satisfied and
+which remain uncovered.
 
-This repository is a fresh, production-oriented implementation of Momus.
-The current state is an **early MVP**: key end-to-end vertical slices are
-implemented for package loading, dependency resolution, the constraint
-model, coverage derivation, AST generation, and minimal test
-execution/reporting.
+The core principle: *completeness is defined as contractual coverage
+obligations satisfied, not exhaustive value permutation.*
 
 ## Status
 
-The following capabilities are planned but **not yet fully implemented**:
+Momus implements the full v1 pipeline end to end. The constraint model,
+coverage derivation across all domains, test generation (positive, negative,
+boundary, interaction), the dependency-ordered provisioner, the concurrent
+runner, coverage reporting, and OpenAPI contract support are all implemented
+and exercised by tests. See [`docs/features.md`](docs/features.md) for the
+per-feature status and [`docs/architecture.md`](docs/architecture.md) for the
+layering and design decisions.
 
-- Full profile-resolution pipeline (inheritance, slicing, differential/snapshot merge)
-- Profile resolution and inheritance, element trees, cardinality, slicing,
-  and extensions
-- Terminology expansion and validation against required bindings
-- Rich DataRequirement planning, dataset generation, and resource generation
-- Robust dataset provisioning lifecycle (seed, isolation, teardown)
-- OpenAPI-based API testing
-- Advanced test planning, execution (true parallelism), and assertion engines
+What is implemented:
 
-What exists today implements the first executable slices of this architecture.
-See
-[`docs/architecture.md`](docs/architecture.md) for the layering and design
-decisions.
-
-Currently implemented:
-
-- Local FHIR package `.tgz` loading via CLI
-- Recursive package dependency resolution via CLI
-- Local-first dependency resolution with remote package download fallback
-- Download cache for resolved dependency archives
-- Floating dependency version resolution such as `current` -> concrete package version
-- Package manifest parsing (`name`, `version`, `dependencies`)
-- Normalisation of core FHIR resources into internal model types:
-  `StructureDefinition`, `ValueSet`, `CodeSystem`, `CapabilityStatement`,
-  and `SearchParameter`
-- Constraint model (`internal/fhir/constraint`): normalised, `Kind`-typed
-  contractual rules derived from the registry, with stable identifiers
-  (`cardinality`, `datatype`, `terminology`, `invariant`, `reference`,
-  `fixed`, `pattern`, `search`, `interaction`)
-- Constraint-driven coverage derivation across the cardinality, datatype,
-  terminology, invariant, and reference domains (plus required-slice
-  structure obligations), each requirement traceable to its source
-  constraint
-- AST generation for positive, negative, and boundary cases: negative
-  variants mutate a valid payload against exactly one constraint and assert
-  rejection; boundary helpers emit edge values for string length, numeric,
-  and cardinality ranges
-- End-to-end requirement traceability: each generated assertion and each
-  executed test result carries the source constraint (id, profile, path,
-  domain, variant, expected outcome), and coverage reports list both the
-  covered and uncovered requirements
-- Failure triage in run reports: failed cases are rolled up by
-  accept-rejected / reject-accepted / server-error outcome and obligation
-  variant, with example requirement IDs and a plain-language hint, so a large
-  run can be navigated to tell broken generated tests apart from server
-  defects
-- Coverage reporting surfaces: JSON report (`--output`), console summary, and
-  an HTML report with drill-down navigation (`--html`) showing overall
-  coverage, per-domain percentages, and per-domain / per-resource / per-variant
-  lists where every executed item shows pass/fail and expands to its assertion,
-  request URL/body, and response body
-- Interaction (pairwise) coverage: the plan carries an interaction `Strength`
-  (1 = individual, 2 = pairwise); at strength 2 pairwise obligations between
-  accept requirements on the same profile are derived as an `interaction`
-  domain and generation selects a near-minimal set by greedy set-cover,
-  grouping compatible accepts into shared valid payloads (`--strength` on
-  derive/ast/run)
-- Search parameter coverage: the built-in FHIR `_parameters` (`_id`,
-  `_lastUpdated`, `_profile`, `_tag`, `_security`, `_source`, `_content`,
-  `_text`, `_filter`, `_query`) and resource-specific search parameters are
-  derived as `search`-domain obligations for every scoped resource type and
-  exercised as GET search requests (valid / no-results / invalid-value /
-  multiple-results via `body.total` / invalid modifier; pairwise combinations
-  at `--strength 2`)
-- Operation, state, and CRUD coverage: read / update / patch / delete / history,
-  custom (`$`) operations from CapabilityStatements, negative state transitions
-  (GET / DELETE a nonexistent resource), and a full
-  create-read-update-read-delete-read(404) sequence are derived per resource
-  type and exercised as the corresponding HTTP requests
-- A single registry-driven data generation pipeline: one core (`synthesizeBody`)
-  generates both the seed `Dataset` and every test payload from the registry as
-  the source of truth, so test data and provisioned data cannot drift apart
-- A dependency-ordered server `Provisioner` (`coverage provision`) uploads the
-  seed dataset ahead of execution
-- Bulk NDJSON data generation (`coverage bulk`): a realistic corpus of
-  resources across resource types with exhaustive, realistic values and
-  references wired into a distributed, coherent web (dependents spread over
-  shared targets rather than all pointing at one instance)
-- Generic dependency DAG planning for resource execution ordering
-- Unified test plan generation (`coverage plan` and `coverage ast` produce the
-  same artifact): emits the seed dataset plus a test-only AST; provisioning
-  (`coverage provision`) and execution (`coverage run`) both consume the test
-  plan, not the package
-- Assertion expression engine: `status in [..]` plus `body.<path>`, `header.<name>`,
-  and `variable.<name>` comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`) so
-  assertions can inspect response bodies, headers, and captured variables
-- OpenAPI contract support: `internal/openapi` loads OpenAPI 3.x documents into
-  operation contracts, parameters, and request/response schemas, and derives
-  API constraints through the shared constraint model (`momus api constraints`)
-- Minimal runner that executes AST requests/assertions and emits JSON test reports;
-  `Parallel` branches run concurrently with per-branch variable scoping and
-  deterministic result aggregation
+- **FHIR package loading and resolution** — local `.tgz` loading, recursive
+  dependency resolution, local-first resolution with remote download
+  fallback, a download cache, floating-version resolution (`current` →
+  concrete), and manifest parsing.
+- **Normalised FHIR model** — `StructureDefinition`, `ValueSet`, `CodeSystem`,
+  `CapabilityStatement`, and `SearchParameter` normalised into internal model
+  types.
+- **Constraint model** (`internal/fhir/constraint`) — a flat, `Kind`-typed set
+  of contractual rules derived from the registry with stable identifiers
+  (`cardinality`, `datatype`, `terminology`, `invariant`, `reference`, `fixed`,
+  `pattern`, `search`, `interaction`, `api-operation`, `api-parameter`).
+- **Coverage derivation** (`internal/test/coverage`) — constraint-driven
+  obligations across the cardinality, datatype, terminology, invariant,
+  reference, and required-slice structure domains, plus search, operation,
+  state/CRUD, and (opt-in) pairwise interaction coverage. Every requirement is
+  traceable to its source constraint.
+- **Test generation** (`internal/test/generation`) — positive, negative, and
+  boundary cases. Negative variants mutate a valid payload against exactly one
+  constraint and assert rejection; boundary helpers emit edge values for string
+  length, numeric, and cardinality ranges.
+- **Interaction (pairwise) coverage** — at `--strength 2`, pairwise obligations
+  between accept requirements on the same profile are derived and generation
+  selects a near-minimal set by greedy set-cover, grouping compatible accepts
+  into shared valid payloads.
+- **Search, operation, and CRUD coverage** — valid / no-results /
+  invalid-value / multiple-results / invalid-modifier searches, read / update /
+  patch / delete / history, custom (`$`) operations, negative state
+  transitions, and a full create-read-update-read-delete-read(404) sequence.
+- **A single registry-driven data pipeline** — one core synthesises both the
+  seed `Dataset` and every test payload from the registry as the source of
+  truth, so test data and provisioned data cannot drift apart.
+- **Dependency-ordered provisioning** (`coverage provision`) — uploads the seed
+  dataset ahead of execution, targets before dependents, with cyclic resources
+  provisioned serially.
+- **Bulk NDJSON generation** (`coverage bulk`) — a realistic corpus across
+  resource types with references wired into a distributed, coherent web.
+- **Concurrent runner** — executes AST requests/assertions with `Parallel`
+  branches running concurrently, per-branch variable scoping, and
+  deterministic result aggregation.
+- **Coverage reporting** — JSON report (`--output`), console summary, and an
+  HTML report with drill-down navigation (`--html`).
+- **Assertion expression engine** — `status in [...]` plus `body.<path>`,
+  `header.<name>`, and `variable.<name>` comparisons (`==`, `!=`, `<`, `<=`,
+  `>`, `>=`).
+- **OpenAPI contract support** — loads OpenAPI 3.x documents into operation
+  contracts, parameters, and schemas, and derives API constraints through the
+  shared constraint model (`momus api`).
 
 ## Layout
 
 ```
-cmd/momus/          CLI entry point (minimal; --help / --version)
+cmd/momus/          CLI entry point
 internal/fhir/      FHIR model, constraint model, package loading, registry,
                     terminology, resource generation, planner, provisioning
-internal/test/      test AST, assertions, generation (positive/negative/boundary), runner
+internal/test/      test AST, assertions, generation, runner, coverage
 internal/openapi/   OpenAPI document loading and API constraint derivation
-docs/               architecture documentation
+internal/tracing/   concurrency-safe HTTP request/response tracer
+docs/               architecture and feature documentation
 pkg/                reserved public API (intentionally empty)
 ```
 
@@ -127,7 +92,7 @@ go vet ./...
 go test ./...
 ```
 
-Run the CLI entry point:
+Run the CLI:
 
 ```sh
 go run ./cmd/momus --help
@@ -135,24 +100,15 @@ go run ./cmd/momus --help
 
 ## CLI
 
-Momus uses a Cobra-based CLI.
+Momus uses a Cobra-based CLI with three command groups: `package`, `coverage`,
+and `api`.
 
-Show top-level help:
-
-```sh
-go run ./cmd/momus --help
-```
+### `package` — FHIR package operations
 
 Load a local FHIR package archive (`.tgz`):
 
 ```sh
 go run ./cmd/momus package load package.tgz
-```
-
-Example output:
-
-```text
-Loaded package au.gov.digitalhealth.fhir.hcpd@26.0.0 with 7 dependencies and 55 resources
 ```
 
 Resolve a package and its transitive dependencies:
@@ -161,85 +117,41 @@ Resolve a package and its transitive dependencies:
 go run ./cmd/momus package resolve package.tgz
 ```
 
-Example output:
-
-```text
-Resolved 10 packages from . using download dir .momus/packages with 9067 total resources
-- hl7.fhir.r4.core@4.0.1 (deps=0, resources=4441)
-- hl7.terminology.r4@7.3.0 (deps=2, resources=3470)
-- hl7.fhir.uv.extensions.r4@5.3.0 (deps=2, resources=884)
-- hl7.fhir.au.base@6.0.0 (deps=3, resources=151)
-- hl7.fhir.uv.smart-app-launch@2.0.0 (deps=1, resources=0)
-- hl7.fhir.uv.ipa@1.1.0 (deps=4, resources=14)
-- hl7.fhir.au.core@2.0.0 (deps=6, resources=30)
-- hl7.fhir.au.pd@2.0.1 (deps=1, resources=14)
-- hl7.fhir.uv.bulkdata@3.0.0 (deps=3, resources=8)
-- au.gov.digitalhealth.fhir.hcpd@26.0.0 (deps=7, resources=55)
-```
-
 Resolver behaviour:
 
 - Searches the local dependency directory first
 - Downloads missing package archives from FHIR package registries
 - Stores downloaded archives in `.momus/packages` by default
 - Resolves floating dependency versions such as `current` using registry metadata
-- Uses `root-wins` as the default conflict policy for version conflicts
+- Uses `root-wins` as the default conflict policy (`--conflict-policy strict`
+  is available for auditing)
 
-Override dependency search and download directories:
+Override the search/download directories:
 
 ```sh
 go run ./cmd/momus package resolve package.tgz --deps-dir . --download-dir ./.momus/packages
 ```
 
-Enable debug logging:
+### `coverage` — coverage planning operations
+
+Derive the constraint model (the normalised set of contractual rules):
 
 ```sh
-go run ./cmd/momus --debug package resolve package.tgz
+go run ./cmd/momus coverage constraints package.tgz --output ./constraints.json
 ```
 
-Advanced resolver option:
-
-```sh
-go run ./cmd/momus package resolve package.tgz --conflict-policy strict
-```
-
-`strict` is primarily useful for auditing package graph consistency. The default
-`root-wins` mode is the normal operational mode.
-
-Derive an MVP coverage plan from resolved package constraints:
-
-```sh
-go run ./cmd/momus coverage derive package.tgz
-```
-
-Derivation is constraint-driven and now spans multiple domains: cardinality,
-datatype, terminology, invariant, reference, and required-slice structure.
-Each obligation is traceable to its source constraint via `constraintId`.
-
-Derivation defaults are intentionally practical:
-
-- Includes required elements (`min > 0`)
-- Includes `mustSupport` elements
-- Excludes optional non-`mustSupport` elements unless `--include-optional` is set
-- Excludes low-value infrastructure paths (such as `meta`, `text`, `language`) unless `--include-low-value-paths` is set
-
-Example output:
-
-```text
-Derived 3 coverage requirements from 10 resolved packages
-- cardinality: 3
-Resource types: 1, variants: 3
-Pruned elements:
-- optional-filtered: 42
-```
-
-The command also prints the JSON coverage plan to stdout by default.
-
-Write the plan to a file:
+Derive a coverage plan from resolved package constraints:
 
 ```sh
 go run ./cmd/momus coverage derive package.tgz --output ./coverage-plan.json
 ```
+
+Derivation defaults are intentionally practical:
+
+- Includes required elements (`min > 0`) and `mustSupport` elements
+- Excludes optional non-`mustSupport` elements unless `--include-optional` is set
+- Excludes low-value infrastructure paths (such as `meta`, `text`, `language`)
+  unless `--include-low-value-paths` is set
 
 Scope derivation to specific contracts:
 
@@ -250,85 +162,27 @@ go run ./cmd/momus coverage derive package.tgz \
   --exclude-path-prefix Observation.meta
 ```
 
-Derive the constraint model (the normalised set of contractual rules
-underlying coverage):
-
-```sh
-go run ./cmd/momus coverage constraints package.tgz
-```
-
-This walks every StructureDefinition, SearchParameter, and
-CapabilityStatement in the resolved graph and emits cardinality, datatype,
-terminology, invariant, reference, fixed, pattern, search, and interaction
-constraints as JSON, each with a stable identifier.
-
-Write the constraints to a file:
-
-```sh
-go run ./cmd/momus coverage constraints package.tgz --output ./constraints.json
-```
-
-Derive the constraint model from an OpenAPI contract (feature 13):
-
-```sh
-go run ./cmd/momus api constraints ./openapi.json --output ./api-constraints.json
-```
-
-This loads an OpenAPI 3.x document and normalises its operation contracts,
-parameters, and request/response schemas into `api-operation` and
-`api-parameter` constraints in the shared constraint model.
-
-Generate and execute a test against a live API from an OpenAPI document:
-
-```sh
-go run ./cmd/momus api run ./openapi.json --base-url http://localhost:8080
-```
-
-Or just generate the test AST without executing it:
-
-```sh
-go run ./cmd/momus api ast ./openapi.json --base-url http://localhost:8080 --output ./api-ast.json
-```
-
-Generate a test plan from derived coverage requirements. The test plan carries
-the seed dataset (stage J) plus the test AST (stage L): the AST contains only
-test cases (searches, operations, CRUD sequences, positive/negative payloads),
-while seed `momus-setup-*` resources are provisioned separately by `coverage
-provision`. Test PUTs that are themselves the test stay in the AST:
-
-```sh
-go run ./cmd/momus coverage ast package.tgz --output ./test-plan.json
-```
-
-Optionally include a base URL for request nodes:
+Generate a test plan (seed dataset + test AST). `coverage ast` and
+`coverage plan` produce the same artifact; provisioning and execution both
+consume the test plan, not the package:
 
 ```sh
 go run ./cmd/momus coverage ast package.tgz \
   --base-url http://localhost:8080/fhir \
-  --include-resource Observation \
   --output ./test-plan.json
 ```
 
 Provision the seed dataset up front (stage J). `coverage provision` consumes
-the test plan (not the package) and uploads the seed resources it carries to
-the target server before any tests run, so searches and other reads execute
-against data that already exists:
+the test plan and uploads the seed resources it carries to the target server
+before any tests run:
 
 ```sh
 go run ./cmd/momus coverage provision ./test-plan.json --base-url http://localhost:8080/fhir
 ```
 
-Example output:
-
-```text
-Provisioning phase: uploading 42 seed resources to http://localhost:8080/fhir
-Provisioning complete: 42 resources uploaded
-```
-
 Execute a generated test plan and output a JSON result report. `coverage run`
-consumes the test plan (not a package): its single role is execution (M),
-coverage evaluation (N), and reporting (O). Pass `--coverage-plan` to evaluate
-contractual coverage against the plan produced by `coverage derive`:
+consumes the test plan; pass `--coverage-plan` to evaluate contractual
+coverage against the plan produced by `coverage derive`:
 
 ```sh
 go run ./cmd/momus coverage run ./test-plan.json \
@@ -338,24 +192,32 @@ go run ./cmd/momus coverage run ./test-plan.json \
   --html ./coverage.html
 ```
 
-Example summary output:
+The `--html` flag writes an HTML coverage report with drill-down navigation:
+overall contractual coverage, per-domain percentages, and per-domain /
+per-resource / per-variant lists where every executed item shows a pass/fail
+badge and expands to its assertion, request URL/body, and response body.
 
-```text
-Executed 42 cases: 40 passed, 2 failed
-Test report written to ./test-results.json
-HTML report written to ./coverage.html
+Generate realistic bulk data as NDJSON (the FHIR Bulk Data `$export` format):
+
+```sh
+go run ./cmd/momus coverage bulk package.tgz --output ./data.ndjson
 ```
 
-The `--html` flag writes an HTML coverage report with drill-down navigation:
-overall contractual coverage, per-domain percentages always visible, and
-per-domain / per-resource / per-variant lists where every executed item shows a
-pass/fail badge and expands to its assertion, request URL, request body, and
-response body.
+Key options:
+
+- `--count N` — resources to generate per type (default `25`)
+- `--per-type Type=Count` — per-type counts, overriding `--count` (repeatable)
+- `--include-resource Type` — only generate these types (repeatable); referenced
+  target types are pulled in automatically so all references resolve
+- `--exhaustive` — populate optional elements with realistic values (default `true`)
+- `--output path` — write NDJSON to a file
+
+#### Write endpoints and credentials
 
 If resource creation (write) requests must target a different endpoint than
 read/search requests, pass `--write-base-url` (defaults to `--base-url`). This
-is set at AST generation (`coverage ast`) and provisioning (`coverage provision`)
-time; `coverage run` inherits the baked-in URLs:
+is set at AST generation and provisioning time; `coverage run` inherits the
+baked-in URLs:
 
 ```sh
 go run ./cmd/momus coverage ast package.tgz \
@@ -374,9 +236,9 @@ read/search requests go to `--base-url`. The same flag is available on
 `coverage ast`, `coverage provision`, `coverage plan`, `api ast`, and `api run`.
 
 If the write endpoint requires different credentials than the read endpoint,
-pass `--write-basic-username` and `--write-basic-password` to `coverage provision`
-(and `coverage run`). These apply to write requests targeting `--write-base-url`
-(including dataset seeding) and default to `--api-basic-username` /
+pass `--write-basic-username` and `--write-basic-password` to `coverage
+provision` (and `coverage run`). These apply to write requests targeting
+`--write-base-url` and default to `--api-basic-username` /
 `--api-basic-password` when unset:
 
 ```sh
@@ -387,94 +249,51 @@ go run ./cmd/momus coverage provision ./test-plan.json \
   --write-basic-username write-user --write-basic-password write-pass
 ```
 
-When the server rejects a seeded resource (for example, HAPI validation
-failure), `coverage provision` prints each rejected resource with the server's
-reason parsed from the OperationOutcome response:
+When the server rejects a seeded resource, `coverage provision` prints each
+rejected resource with the server's reason parsed from the OperationOutcome
+response. Run with `--debug` to also write the rejected payloads and full
+server responses to `.momus/output/provision-failures.json` for inspection.
 
-```
-WARNING: dataset seeding incomplete — 41 of 42 resources uploaded. Data seeding is essential to achieve full coverage success. Fix the failing resources and re-run.
-  - Location/momus-setup-location (HTTP 422): error: Location.physicalType: minimum required = 1, but only found 0 (Location.physicalType, Line[1])
-```
+### `api` — OpenAPI contract operations
 
-Run with `--debug` to also write the rejected payloads and full server
-responses to `.momus/output/provision-failures.json` for inspection or replay.
-
-Generate realistic bulk data as NDJSON (newline-delimited JSON, the FHIR Bulk
-Data `$export` format):
+Derive the constraint model from an OpenAPI contract:
 
 ```sh
-go run ./cmd/momus coverage bulk package.tgz --output ./data.ndjson
+go run ./cmd/momus api constraints ./openapi.json --output ./api-constraints.json
 ```
 
-The generator produces a configurable number of instances per resource type
-with exhaustive, realistic values (terminology bindings resolved to real codes,
-realistic names/dates/identifiers) and wires references into a distributed,
-coherent web: dependents are spread across the available targets so several
-resources share a common target (e.g. many `HealthcareService`s reference a
-handful of `Organization`s) rather than everything pointing at one instance.
-
-Example output:
-
-```text
-Generated NDJSON bulk data: 3675 resources across 146 resource types
-```
-
-Key options:
-
-- `--count N` — resources to generate per type (default `25`)
-- `--per-type Type=Count` — per-type counts, overriding `--count` (repeatable)
-- `--include-resource Type` — only generate these types (repeatable);
-  referenced target types are pulled in automatically so all references resolve
-- `--exhaustive` — populate optional elements with realistic values (default `true`)
-- `--output path` — write NDJSON to a file (parent directories are created)
-
-Generate a targeted, realistic subset, e.g. 10 organizations supporting 25
-healthcare services:
+Generate a test AST from an OpenAPI document:
 
 ```sh
-go run ./cmd/momus coverage bulk package.tgz --output ./data.ndjson \
-  --include-resource Organization --include-resource HealthcareService \
-  --per-type Organization=10 --per-type HealthcareService=25
+go run ./cmd/momus api ast ./openapi.json --base-url http://localhost:8080 --output ./api-ast.json
 ```
 
-Generate a `TestPlan` from derived data requirements (feature 8): the planner
-generates a `Dataset` via the feature-6 `Generator`, lays out an executable AST
-that provisions the dataset in dependency order (`Parallel` per level, levels in
-`Sequence`, targets before dependents), and attaches the `Dataset` to the plan:
+Generate and execute tests against a live API:
 
 ```sh
-go run ./cmd/momus coverage plan package.tgz --base-url http://localhost:8080/fhir --output ./test-plan.json
+go run ./cmd/momus api run ./openapi.json --base-url http://localhost:8080
 ```
 
-Example output:
+## Coverage pipeline
 
-```text
-Planned 23 resources from 17 data requirements across 2 dependency levels
-Test plan written to ./test-plan.json
-```
+The executable pipeline, with each command owning one stage:
 
-### Coverage Pipeline (MVP)
-
-The current executable MVP pipeline is, with each command owning one stage:
-
-1. Resolve package graph (`package resolve`)
+1. Resolve the package graph (`package resolve`)
 2. Derive scoped coverage requirements (`coverage derive`)
-3. Build resource dependency DAG (internal planner)
-4. Generate a test plan: seed dataset + test AST (`coverage ast`)
+3. Build the resource dependency DAG (internal planner)
+4. Generate a test plan: seed dataset + test AST (`coverage ast` / `coverage plan`)
 5. Provision the seed dataset from the test plan (`coverage provision`)
 6. Execute the test plan, evaluate coverage, and emit a report (`coverage run`)
 
 The constraint model (`coverage constraints`) is the normalised intermediate
 representation between the registry and coverage: contractual rules are
-derived once and can later anchor per-domain coverage obligations and test
-traceability.
+derived once and anchor per-domain coverage obligations and test traceability.
 
-Dependency-chain behavior in the current AST/runner implementation:
+Dependency-chain behaviour in the AST/runner:
 
 - Resources are ordered by DAG levels (topological order)
-- The seed dataset is a transitive closure: every type a test references (even
-  one that is not itself a coverage obligation) is seeded and provisioned before
-  its dependents, so references resolve
+- The seed dataset is a transitive closure: every type a test references is
+  seeded and provisioned before its dependents, so references resolve
 - Search-accept obligations carry the data they need to return results: a
   matching resource (two for multiple-results) is added to the seed dataset
   whenever the search parameter can be matched with a valid value
@@ -483,9 +302,26 @@ Dependency-chain behavior in the current AST/runner implementation:
 - Test cases reference seed resources by their deterministic setup id
   (`momus-setup-<Type>`); `coverage run` marks the plan's seed resources as
   already provisioned
-- Capture nodes extract resource IDs from responses
-- Later request payloads can reference captured IDs via templates such as
-  `Patient/{{Patient.id}}`
+- Capture nodes extract resource IDs from responses; later request payloads
+  can reference captured IDs via templates such as `Patient/{{Patient.id}}`
+
+## Release process
+
+Releases are automated with [release-please](https://github.com/googleapis/release-please)
+and [git-cliff](https://git-cliff.org):
+
+- On every push to `master`, **release-please** analyses conventional commits,
+  bumps the version (`feat` → minor, `fix` → patch, `BREAKING CHANGE` → major),
+  and opens a release PR.
+- When the release PR is merged, release-please creates the version tag and a
+  GitHub Release.
+- A tag-triggered CI job then generates the changelog with **git-cliff**,
+  builds the `momus` binary for Linux, macOS, and Windows (amd64/arm64,
+  injecting the version via `-ldflags`), and attaches the binaries and changelog
+  to the release.
+
+To release, merge the release PR that release-please opens — the tag, changelog,
+and binaries are produced automatically.
 
 ## License
 
