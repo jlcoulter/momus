@@ -1,8 +1,8 @@
 # Momus Architecture
 
 Momus is a testing framework for API and FHIR conformance testing. This
-document describes the production architecture that the implementation is
-growing into.
+document describes the production architecture that the implementation
+follows.
 
 The central architectural principle is:
 
@@ -225,7 +225,7 @@ reference, fixed, pattern, search, and interaction constraints.
 Coverage is not a side effect of running tests. It is a first-class
 architectural subsystem.
 
-Suggested package structure:
+Package structure:
 
 ```text
 internal/
@@ -236,18 +236,24 @@ internal/
                                                 planner.go
                                                 evaluator.go
                                                 report.go
+                                                html.go
+                                                capability_scope.go
 
                                 generation/
                                                 positive.go
                                                 negative.go
                                                 boundary.go
                                                 interaction.go
+                                                search.go
+                                                operations.go
+                                                dependencies.go
 ```
 
 The responsibilities are distinct:
 
 - Coverage derivation determines what must be tested.
-- Coverage planning turns those obligations into a strategy.
+- Coverage planning (the dependency DAG planner in `coverage/planner.go`)
+        orders resource execution.
 - Test generation creates concrete tests that can satisfy that strategy.
 - Coverage evaluation determines whether the generated and executed tests
         actually satisfied it.
@@ -274,29 +280,41 @@ CoverageResult
                 Percentages by domain and overall
 ```
 
-One possible model shape is:
+The implemented model is:
 
 ```go
 type CoverageRequirement struct {
-                Subject ConstraintID
-                Domain  CoverageDomain
-                Value   CoverageValue
+                ID                string
+                ConstraintID      string
+                ProfileURL        string
+                ResourceType      string
+                ElementPath       string
+                DependencyTargets []string
+                Domain            CoverageDomain
+                Variant           CoverageVariant
+                Min               int
+                Max               string
 }
 
 type CoveragePlan struct {
                 Requirements []CoverageRequirement
+                Interactions []InteractionRequirement
                 Strength     int
+                Summary      CoverageSummary
 }
 
-type CoverageResult struct {
-                Covered   []CoverageRequirement
-                Uncovered []CoverageRequirement
+type CoverageSummary struct {
+                TotalRequirements int
+                ByDomain          map[CoverageDomain]int
+                ByResourceType    map[string]int
+                ByVariant         map[CoverageVariant]int
 }
 ```
 
-The exact type names may evolve, but the design requirement does not: Momus
-must be able to enumerate the obligations it believes are required and prove
-whether each one was covered.
+Every requirement carries a stable `ID` and its source `ConstraintID`, giving
+end-to-end traceability. The evaluator reports both the covered and uncovered
+requirement lists, so Momus can enumerate the obligations it believes are
+required and prove whether each one was covered.
 
 ## Constraint to coverage obligations
 
@@ -495,7 +513,7 @@ Negative transition examples include:
 - DELETE nonexistent
 - DELETE already deleted
 
-The planner and AST express these workflows; the coverage subsystem defines
+The generation and AST express these workflows; the coverage subsystem defines
 which state transitions must be exercised.
 
 ## Coverage traceability
@@ -584,11 +602,14 @@ insufficient.
 ## DataRequirement vs Dataset
 
 `DataRequirement` is declarative: it describes what data a generated test
-needs, not the data itself. It remains the bridge between coverage-aware test
-generation and concrete resource generation.
+needs, not the data itself. In the implementation this is realised by each
+`CoverageRequirement`'s `DependencyTargets` (the resource types a test
+references) rather than a separate `DataRequirement` type.
 
 `Dataset` is generated state: concrete resources and references between them.
-A generator consumes one or more data requirements and produces a dataset.
+`BuildSetupDataset` in `internal/test/generation` produces the seed `Dataset`
+from the data each obligation needs, including search-matching seeds and
+transitively-referenced types.
 
 Coverage derivation does not belong in `Dataset`. Dataset exists to satisfy
 test needs, not to define coverage obligations.
@@ -613,10 +634,12 @@ The sequence is:
 1. Coverage derivation identifies what must be tested.
 2. Test generation produces candidate tests that can satisfy those
          obligations.
-3. Candidate tests produce `DataRequirement`s.
-4. Resource generation turns those requirements into a `Dataset`.
-5. The planner turns those requirements and datasets into a `TestPlan`.
-6. `TestPlan` is represented as an executable AST.
+3. Generation derives the seed `Dataset` each test needs (`BuildSetupDataset`)
+         and lays out the executable test AST.
+4. The dependency DAG planner (`coverage/planner.go`) orders resource
+         execution into topological levels.
+5. The test plan carries the seed `Dataset` plus the test AST; provisioning
+         and execution both consume it.
 
 This preserves the existing architectural boundaries:
 
@@ -625,9 +648,7 @@ This preserves the existing architectural boundaries:
 - Coverage derivation converts constraints into obligations.
 - Coverage plan defines what must be tested.
 - Test generation creates tests capable of satisfying that plan.
-- `DataRequirement` describes needed data.
 - `Dataset` contains generated data.
-- `TestPlan` describes execution workflow.
 - Test AST represents executable steps.
 - Runner executes the AST.
 - Coverage evaluator determines whether required behaviours were covered.
@@ -640,11 +661,11 @@ semantic execution guarantee:
 - Sequence: later steps depend on earlier ones.
 - Parallel: steps are independent and may execute concurrently.
 
-Making them first-class AST nodes lets the planner express intent and lets
+Making them first-class AST nodes lets generation express intent and lets
 the runner make safe concurrency decisions.
 
 Coverage is orthogonal to this. The coverage plan may require stateful or
-interaction scenarios, and the planner may choose `Sequence` or `Parallel`
+interaction scenarios, and generation may choose `Sequence` or `Parallel`
 nodes to execute them, but the AST does not itself decide what must be
 covered.
 
@@ -662,26 +683,24 @@ covered.
         `$export`; distinct from the coverage-driven data pipeline).
 - `internal/fhir/provisioning` — `Provisioner` (`ServerProvisioner` PUTs a
         `Dataset` to the server, dependency-ordered).
-- `internal/test/coverage` — coverage requirements, derivation, evaluation,
-        and reporting.
+- `internal/test/coverage` — coverage requirements, derivation, the dependency
+        DAG planner, evaluation, and reporting (JSON/console/HTML).
 - `internal/test/generation` — the single registry-driven data pipeline. Its
         core, `synthesizeBody`, generates every body (provisioned seed resources
         and test-case payloads) from the registry as the source of truth;
         negative variants mutate an otherwise-valid payload against exactly one
         constraint and assert rejection. `BuildSetupDataset` produces the seed
         `Dataset` from the data each obligation needs, including search-matching
-        seeds and transitively-referenced types. `internal/test/ast` holds only
-        node definitions and encoding.
-- `internal/test/ast` — executable test AST.
+        seeds and transitively-referenced types.
+- `internal/test/ast` — executable test AST (node definitions and encoding).
 - `internal/test/runner` — test execution.
 - `internal/test/assertions` — assertion interface and evaluation.
+- `internal/tracing` — concurrency-safe HTTP request/response tracer.
 - `internal/openapi` — OpenAPI loading and API contract support.
 
 ## Implementation staging
 
-This document defines the architecture, not the full implementation.
-
-Recommended implementation stages are:
+The architecture is implemented. The stages below were completed in order:
 
 1. Constraint model
 2. Coverage requirement derivation
@@ -691,10 +710,8 @@ Recommended implementation stages are:
 6. API/FHIR execution flow integration
 7. Coverage reporting
 
-The architecture is intentionally explicit now so later implementation can
-preserve the boundaries already established around the registry,
-`ResolvedProfile`, `DataRequirement`, `Dataset`, `TestPlan`, `Sequence`,
-`Parallel`, runner, and assertions.
+The boundaries established around the registry, `ResolvedProfile`, `Dataset`,
+`TestPlan`, `Sequence`, `Parallel`, runner, and assertions are preserved.
 
 ## Design notes
 

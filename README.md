@@ -15,9 +15,8 @@ Momus implements the full v1 pipeline end to end. The constraint model,
 coverage derivation across all domains, test generation (positive, negative,
 boundary, interaction), the dependency-ordered provisioner, the concurrent
 runner, coverage reporting, and OpenAPI contract support are all implemented
-and exercised by tests. See [`docs/features.md`](docs/features.md) for the
-per-feature status and [`docs/architecture.md`](docs/architecture.md) for the
-layering and design decisions.
+and exercised by tests. See [`docs/architecture.md`](docs/architecture.md) for
+the layering and design decisions.
 
 What is implemented:
 
