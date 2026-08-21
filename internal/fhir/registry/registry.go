@@ -30,12 +30,18 @@ type Registry struct {
 
 	profilesByResource map[string][]*model.StructureDefinition
 
+	// scoped reports whether a scope has been set. It is tracked separately
+	// from scopedStructureDefinitions so that an empty-but-set scope (e.g.
+	// SetScope([]string{""})) is a genuine empty selection rather than being
+	// indistinguishable from "no scope".
+	scoped bool
+
 	// scopedStructureDefinitions is the set of canonical URLs whose
 	// StructureDefinitions belong to the selected package scope. Only these
 	// are subjects of test generation; the full index remains available for
 	// dependency resolution (referenced profiles, base definitions, value
-	// sets, and so on). When empty, every indexed StructureDefinition is
-	// considered in scope.
+	// sets, and so on). When no scope has been set, every indexed
+	// StructureDefinition is considered in scope.
 	scopedStructureDefinitions map[string]struct{}
 }
 
@@ -139,6 +145,7 @@ func (r *Registry) SetScope(scope []string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(scope) == 0 {
+		r.scoped = false
 		r.scopedStructureDefinitions = nil
 		return
 	}
@@ -148,6 +155,7 @@ func (r *Registry) SetScope(scope []string) {
 			set[url] = struct{}{}
 		}
 	}
+	r.scoped = true
 	r.scopedStructureDefinitions = set
 }
 
@@ -157,7 +165,7 @@ func (r *Registry) SetScope(scope []string) {
 func (r *Registry) ScopedStructureDefinitions() []*model.StructureDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if len(r.scopedStructureDefinitions) == 0 {
+	if !r.scoped {
 		return r.structureDefinitionsSnapshot()
 	}
 	out := make([]*model.StructureDefinition, 0, len(r.scopedStructureDefinitions))

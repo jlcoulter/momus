@@ -176,6 +176,28 @@ func TestRegistryScopeIgnoresUnknownURLs(t *testing.T) {
 	}
 }
 
+// TestRegistryEmptyButSetScopeReturnsNoDefinitions (task #31) verifies that an
+// empty-but-set scope (e.g. SetScope([]string{""})) is a genuine empty selection
+// and returns no definitions, rather than being treated as "no scope" and
+// returning every indexed definition. Before the fix, SetScope built an empty
+// non-nil map and ScopedStructureDefinitions treated len==0 as "no scope".
+func TestRegistryEmptyButSetScopeReturnsNoDefinitions(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/root-a", Type: "Patient"})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/root-b", Type: "Observation"})
+
+	r.SetScope([]string{""})
+	if got := len(r.ScopedStructureDefinitions()); got != 0 {
+		t.Fatalf("empty-but-set scope returned %d definitions, want 0", got)
+	}
+
+	// Clearing the scope restores all definitions as subjects.
+	r.SetScope(nil)
+	if got := len(r.ScopedStructureDefinitions()); got != 2 {
+		t.Fatalf("cleared scope returned %d definitions, want 2", got)
+	}
+}
+
 // TestResolveElementsKeepsIDBasedSliceChildrenDistinct (task #30) verifies that a
 // slice child whose slice context lives only in its ID does not override its base
 // element during the parent-chain merge. Before the fix, elementKey ignored the ID
