@@ -144,9 +144,10 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 
 	// Search constraints produce search coverage obligations for every in-scope
 	// resource type. When the server's CapabilityStatement declares search
-	// parameters (CapabilitySearchCodes), only those declared codes are included;
-	// universal parameters like _content and _parameters are excluded unless the
-	// server explicitly declares them.
+	// parameters (CapabilitySearchCodes), only those declared codes are included.
+	// Universal parameters like _content and _parameters are excluded unless the
+	// server explicitly declares them; with no capability scope (nil
+	// CapabilitySearchCodes) they are excluded for every type.
 	scopedTypes := sortedSetKeys(inScopeResourceTypes)
 	searchCodesByType := make(map[string][]string)
 	for _, c := range constraints {
@@ -154,6 +155,12 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 			continue
 		}
 		if isUniversalSearchBase(c.ResourceType) {
+			// Universal parameters are only included when the server explicitly
+			// declares them; with no capability scope they are excluded for every
+			// type.
+			if options.CapabilitySearchCodes == nil {
+				continue
+			}
 			for _, rt := range scopedTypes {
 				if !isSearchCodeAllowed(rt, c.SearchCode, options.CapabilitySearchCodes) {
 					continue

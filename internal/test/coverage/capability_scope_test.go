@@ -130,6 +130,108 @@ func TestFetchCapabilityStatementAppliesBasicAuth(t *testing.T) {
 	}
 }
 
+func TestResourceTypesFromCapabilityStatementWithoutCreateRequirement(t *testing.T) {
+	cs := &model.CapabilityStatement{
+		Rest: []model.CapabilityStatementRest{
+			{
+				Mode: "server",
+				Resource: []model.CapabilityStatementRestResource{
+					{Type: "Patient", Interaction: []model.CapabilityStatementInteraction{{Code: "create"}}},
+					{Type: "Observation", Interaction: []model.CapabilityStatementInteraction{{Code: "read"}}},
+					{Type: "  ", Interaction: []model.CapabilityStatementInteraction{{Code: "read"}}},
+				},
+			},
+			{
+				Mode: "client",
+				Resource: []model.CapabilityStatementRestResource{
+					{Type: "Encounter", Interaction: []model.CapabilityStatementInteraction{{Code: "read"}}},
+				},
+			},
+		},
+	}
+
+	// Without the create requirement, every server-mode type is included even if
+	// it lacks a create interaction; client-mode entries are ignored.
+	got := ResourceTypesFromCapabilityStatement(cs, false)
+	want := []string{"Observation", "Patient"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+
+	// With the create requirement, only types advertising create are included.
+	gotCreate := ResourceTypesFromCapabilityStatement(cs, true)
+	wantCreate := []string{"Patient"}
+	if !reflect.DeepEqual(gotCreate, wantCreate) {
+		t.Fatalf("got %v, want %v", gotCreate, wantCreate)
+	}
+}
+
+func TestResourceTypesFromCapabilityStatementNil(t *testing.T) {
+	if got := ResourceTypesFromCapabilityStatement(nil, false); got != nil {
+		t.Fatalf("got %v, want nil", got)
+	}
+}
+
+func TestSearchCodesFromCapabilityStatement(t *testing.T) {
+	cs := &model.CapabilityStatement{
+		Rest: []model.CapabilityStatementRest{
+			{
+				Mode: "server",
+				Resource: []model.CapabilityStatementRestResource{
+					{Type: "Patient", SearchParam: []model.CapabilityStatementSearchParam{{Name: "name"}, {Name: "_id"}}},
+					{Type: "Observation", SearchParam: []model.CapabilityStatementSearchParam{{Name: "status"}}},
+				},
+			},
+			{
+				Mode: "client",
+				Resource: []model.CapabilityStatementRestResource{
+					{Type: "Encounter", SearchParam: []model.CapabilityStatementSearchParam{{Name: "identifier"}}},
+				},
+			},
+		},
+	}
+
+	got := SearchCodesFromCapabilityStatement(cs)
+	want := map[string][]string{
+		"Patient":     {"_id", "name"},
+		"Observation": {"status"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestSearchCodesFromCapabilityStatementNil(t *testing.T) {
+	if got := SearchCodesFromCapabilityStatement(nil); got != nil {
+		t.Fatalf("got %v, want nil", got)
+	}
+}
+
+func TestFetchCapabilityStatementAppliesBearerToken(t *testing.T) {
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/metadata" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(`{"resourceType":"CapabilityStatement","rest":[{"mode":"server","resource":[{"type":"Patient","interaction":[{"code":"create"}]}]}]}`))
+	}))
+	defer server.Close()
+
+	_, err := FetchCapabilityStatement(context.Background(), server.URL, CapabilityFetchOptions{
+		HTTPClient:  server.Client(),
+		BearerToken: "secret-token",
+	})
+	if err != nil {
+		t.Fatalf("FetchCapabilityStatement returned error: %v", err)
+	}
+	if gotAuth != "Bearer secret-token" {
+		t.Fatalf("got Authorization %q, want %q", gotAuth, "Bearer secret-token")
+	}
+}
+
 func TestSearchCodesFromCapabilityStatementEmptySearchParam(t *testing.T) {
 	cs := &model.CapabilityStatement{
 		Rest: []model.CapabilityStatementRest{{
