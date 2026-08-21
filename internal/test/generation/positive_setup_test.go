@@ -361,8 +361,10 @@ func TestApplySliceConstractionsNormalisesCodingDisplay(t *testing.T) {
 	if coding["code"] != "XX" {
 		t.Fatalf("got code %v, want XX", coding["code"])
 	}
-	if coding["display"] != "Organization identifier" {
-		t.Fatalf("got display %v, want Organization identifier", coding["display"])
+	// The slice pattern fixes only system+code; a display is not permitted on a
+	// fixed coding (HAPI rejects it), so it must be absent.
+	if _, hasDisplay := coding["display"]; hasDisplay {
+		t.Fatalf("fixed coding must not carry a display, got %v", coding["display"])
 	}
 }
 
@@ -471,7 +473,173 @@ func TestApplySliceConstraintsRecursesIntoNestedCoding(t *testing.T) {
 	if coding["system"] != "http://example.org/CodeSystem/responsible-party-type" {
 		t.Fatalf("got system %v, want responsible-party-type", coding["system"])
 	}
-	if coding["display"] != "Organisation initiated" {
-		t.Fatalf("got display %v, want canonical Organisation initiated", coding["display"])
+	// A fixed coding may carry only system+code: the display HAPI would otherwise
+	// reject must be absent.
+	if _, hasDisplay := coding["display"]; hasDisplay {
+		t.Fatalf("fixed coding must not carry a display, got %v", coding["display"])
+	}
+}
+
+// TestSynthesizeBodyGivesSimpleExtensionAValue verifies that a simple extension
+// slice (e.g. the HCPD active-period extension, whose Extension.extension is
+// Max 0) is emitted with a value[x], not as an empty {"url": ...} which would
+// violate ext-1 and be rejected by HAPI.
+func TestSynthesizeBodyGivesSimpleExtensionAValue(t *testing.T) {
+	r := registry.New()
+	activePeriodURL := "http://digitalhealth.gov.au/fhir/cc/StructureDefinition/active-period"
+	r.AddStructureDefinition(&model.StructureDefinition{URL: activePeriodURL, Type: "Extension", Kind: "complex-type", Elements: []model.ElementDefinition{
+		{Path: "Extension", Min: 0, Max: "*"},
+		{Path: "Extension.extension", Min: 0, Max: "0", Types: []model.ElementType{{Code: "Extension"}}},
+		{Path: "Extension.url", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}, Fixed: activePeriodURL},
+		{Path: "Extension.value[x]", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Period"}}},
+	}})
+	orgURL := "http://example.org/StructureDefinition/org"
+	r.AddStructureDefinition(&model.StructureDefinition{URL: orgURL, Type: "Organization", Elements: []model.ElementDefinition{
+		{Path: "Organization", Min: 0, Max: "*"},
+		{Path: "Organization.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		{Path: "Organization.extension", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Extension"}}},
+		{Path: "Organization.extension", Min: 1, Max: "1", SliceName: "active-period", Types: []model.ElementType{{Code: "Extension", Profile: []string{activePeriodURL}}}},
+	}})
+
+	body := synthesizeBody("Organization", "momus-test", []string{orgURL}, orgURL, nil, r, true)
+	rawExt, ok := body["extension"].([]any)
+	if !ok || len(rawExt) == 0 {
+		t.Fatalf("expected extension array, got %#v", body["extension"])
+	}
+	ext := rawExt[0].(map[string]any)
+	if _, hasValue := ext["valuePeriod"]; !hasValue {
+		t.Fatalf("simple extension must carry a valuePeriod, got %#v", ext)
+	}
+	if _, hasEmpty := ext["extension"]; hasEmpty {
+		t.Fatalf("simple extension must not carry sub-extensions, got %#v", ext)
+	}
+}
+
+// TestSynthesizeBodyFixedCodingCarriesOnlySystemAndCode verifies that a sliced
+// extension whose coding is fixed to {system, code} is emitted without display or
+// text (HAPI rejects extra elements on a fixed value), and that the display/text
+// normalisation passes do not re-add them and the internal marker is stripped.
+func TestSynthesizeBodyFixedCodingCarriesOnlySystemAndCode(t *testing.T) {
+	r := registry.New()
+	r.AddCodeSystem(&model.CodeSystem{URL: "http://digitalhealth.gov.au/fhir/cc/CodeSystem/responsible-party-type", Concepts: []model.CodeSystemConcept{
+		{Code: "organisation-initiated", Display: "Organisation initiated"},
+	}})
+
+	fixedCoding := map[string]any{
+		"system": "http://digitalhealth.gov.au/fhir/cc/CodeSystem/responsible-party-type",
+		"code":   "organisation-initiated",
+	}
+	slice := &model.SliceNode{
+		Name:       "suppressedBy",
+		Definition: &model.ElementDefinition{Path: "Organization.extension.extension", SliceName: "suppressedBy", Min: 1, Max: "1"},
+		Children: map[string]*model.ElementNode{
+			"value[x]": {
+				Name: "value[x]", Path: "Organization.extension.extension.value[x]",
+				Definition: &model.ElementDefinition{Path: "Organization.extension.extension.value[x]", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}},
+				Children: map[string]*model.ElementNode{
+					"coding": {
+						Name: "coding", Path: "Organization.extension.extension.value[x].coding",
+						Definition: &model.ElementDefinition{Path: "Organization.extension.extension.value[x].coding", Min: 1, Max: "1", Fixed: fixedCoding, Types: []model.ElementType{{Code: "Coding"}}},
+					},
+				},
+			},
+		},
+	}
+
+	value := map[string]any{
+		"url": "suppressedBy",
+		"valueCodeableConcept": map[string]any{
+			"coding": []any{map[string]any{"system": "http://example.org", "code": "value-x"}},
+			"text":   "Value[x]",
+		},
+	}
+	applySliceConstractions(value, slice, r)
+	// Run the full display/text normalisation passes that synthesizeBody applies
+	// after generation, then strip markers, to prove nothing re-adds display/text.
+	normalizeGeneratedPayload(value)
+	normalisePayloadCodingDisplays(value, r)
+	stripFixedCodingMarkers(value)
+
+	cc := value["valueCodeableConcept"].(map[string]any)
+	codings := cc["coding"].([]any)
+	coding := codings[0].(map[string]any)
+	if coding["code"] != "organisation-initiated" {
+		t.Fatalf("got code %v, want organisation-initiated", coding["code"])
+	}
+	if _, hasDisplay := coding["display"]; hasDisplay {
+		t.Fatalf("fixed coding must not carry a display, got %v", coding["display"])
+	}
+	if _, hasText := cc["text"]; hasText {
+		t.Fatalf("fixed CodeableConcept must not carry a text, got %v", cc["text"])
+	}
+	// The internal marker must never leak.
+	if _, has := coding[fixedCodingKey]; has {
+		t.Fatalf("fixed coding marker leaked into payload: %q", fixedCodingKey)
+	}
+}
+
+// TestGenerateAHPRAProducesValidRegistrationNumber verifies the Ahpra registration
+// number satisfies the au-ahpraregistrationnumber inv-ahpra-0 invariant: three
+// uppercase letters followed by ten digits.
+func TestGenerateAHPRAProducesValidRegistrationNumber(t *testing.T) {
+	v := generateAHPRA()
+	if len(v) != 13 {
+		t.Fatalf("generateAHPRA()=%q length %d, want 13", v, len(v))
+	}
+	for i, r := range v {
+		switch {
+		case i < 3 && (r < 'A' || r > 'Z'):
+			t.Fatalf("generateAHPRA()=%q: char %d must be uppercase letter", v, i)
+		case i >= 3 && (r < '0' || r > '9'):
+			t.Fatalf("generateAHPRA()=%q: char %d must be digit", v, i)
+		}
+	}
+}
+
+// TestNormalizeGeneratedIdentifierFixesAhpraValue verifies that an identifier with
+// the Ahpra registration-number system gets a valid value via normalisation.
+func TestNormalizeGeneratedIdentifierFixesAhpraValue(t *testing.T) {
+	identifier := map[string]any{
+		"system": "http://hl7.org.au/id/ahpra-registration-number",
+		"value":  "123456",
+	}
+	normalizeGeneratedIdentifier(identifier)
+	v, _ := identifier["value"].(string)
+	if len(v) != 13 {
+		t.Fatalf("got value %q, want 13-char Ahpra number", v)
+	}
+}
+
+// TestStripEmptyExtensionsDropsInvalidExtensions verifies that an extension with
+// neither a value[x] nor nested sub-extensions (which violates ext-1) is removed,
+// while extensions with a value or sub-extensions are preserved.
+func TestStripEmptyExtensionsDropsInvalidExtensions(t *testing.T) {
+	body := map[string]any{
+		"extension": []any{
+			map[string]any{"url": "http://example.org/empty"},
+			map[string]any{"url": "http://example.org/with-value", "valueString": "x"},
+			map[string]any{"url": "http://example.org/with-sub", "extension": []any{map[string]any{"url": "sub", "valueBoolean": true}}},
+		},
+	}
+	stripEmptyExtensions(body)
+	ext := body["extension"].([]any)
+	if len(ext) != 2 {
+		t.Fatalf("expected 2 extensions after cleanup, got %d: %#v", len(ext), ext)
+	}
+	for _, raw := range ext {
+		url, _ := raw.(map[string]any)["url"].(string)
+		if url == "http://example.org/empty" {
+			t.Fatalf("empty extension not dropped")
+		}
+	}
+}
+
+// TestStripEmptyExtensionsDropsWholeArray verifies that when every extension in an
+// array is empty the whole extension array is removed.
+func TestStripEmptyExtensionsDropsWholeArray(t *testing.T) {
+	body := map[string]any{"extension": []any{map[string]any{"url": "http://example.org/only-empty"}}}
+	stripEmptyExtensions(body)
+	if _, has := body["extension"]; has {
+		t.Fatalf("expected extension array removed when all members empty, got %#v", body["extension"])
 	}
 }

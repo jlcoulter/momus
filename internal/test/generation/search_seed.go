@@ -151,8 +151,12 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 		// for a Coding it is the object's `code` member, and for a CodeableConcept
 		// it is the first coding's `code`. Set the appropriate member without
 		// ever adding an illegal property (e.g. `coding` on a Coding) and without
-		// collapsing a repeatable element's array to an object.
-		setSearchCodeValue(body, elementPath, value, typeCode, repeatable)
+		// collapsing a repeatable element's array to an object. When the element
+		// is bound to a value set, keep the coding's system aligned with the code
+		// so a required binding is satisfied rather than shipping a system-less
+		// coding the server rejects.
+		system := boundCodingSystem(resourceType, elementPath, reg)
+		setSearchCodeValue(body, elementPath, value, typeCode, repeatable, system)
 		return true
 	case "HumanName":
 		// A string search on HumanName matches the text/family tokens; ensure the
@@ -319,12 +323,31 @@ func setAddressLeaf(body map[string]any, path string, value string) {
 	setFieldLeaf(body, path, "text", value)
 }
 
+// boundCodingSystem returns the code-system URL for a token-search element that
+// is bound to a value set, or "" when it cannot be resolved. It lets the search
+// seed place a coding whose system matches the search value's code so a required
+// binding validates.
+func boundCodingSystem(resourceType, elementPath string, reg *registry.Registry) string {
+	if reg == nil {
+		return ""
+	}
+	def, ok := searchElementDefinition(resourceType, elementPath, reg)
+	if !ok || def == nil {
+		return ""
+	}
+	if bound, ok := resolveBoundCoding(def, reg); ok {
+		return bound.System
+	}
+	return ""
+}
+
 // setSearchCodeValue places a code value that a token search can match on the
 // target element, handling a primitive code (scalar), a Coding (its `code`
 // member), and a CodeableConcept (its first coding's `code`). It never adds an
 // illegal property such as `coding` on a Coding, and it keeps repeatable
-// elements as arrays.
-func setSearchCodeValue(body map[string]any, path string, value string, typeCode string, repeatable bool) {
+// elements as arrays. system (when non-empty) is applied to the coding so a
+// required-bound element keeps a valid system/code pair.
+func setSearchCodeValue(body map[string]any, path string, value string, typeCode string, repeatable bool, system string) {
 	cur, field := containerForPath(body, path)
 	if typeCode == "code" {
 		// A primitive code holds scalar strings. A repeatable code is an array of
@@ -354,14 +377,14 @@ func setSearchCodeValue(body map[string]any, path string, value string, typeCode
 	if !ok {
 		switch typeCode {
 		case "CodeableConcept":
-			single := map[string]any{"coding": []any{map[string]any{"code": value}}}
+			single := map[string]any{"coding": []any{codingForSearchValue(value, system)}}
 			if repeatable {
 				cur[field] = []any{single}
 			} else {
 				cur[field] = single
 			}
 		case "Coding":
-			cur[field] = map[string]any{"code": value}
+			cur[field] = codingForSearchValue(value, system)
 		default:
 			// A primitive code: set the scalar.
 			cur[field] = value
@@ -371,18 +394,18 @@ func setSearchCodeValue(body map[string]any, path string, value string, typeCode
 	switch v := raw.(type) {
 	case map[string]any:
 		if _, hasCode := v["code"]; hasCode {
-			resetCodingForSearchValue(v, nil, value)
+			resetCodingForSearchValue(v, nil, value, system)
 			return
 		}
 		if coding, ok := v["coding"].([]any); ok && len(coding) > 0 {
 			if first, ok := coding[0].(map[string]any); ok {
-				resetCodingForSearchValue(first, v, value)
+				resetCodingForSearchValue(first, v, value, system)
 				return
 			}
-			coding[0] = map[string]any{"code": value}
+			coding[0] = codingForSearchValue(value, system)
 			return
 		}
-		resetCodingForSearchValue(v, nil, value)
+		resetCodingForSearchValue(v, nil, value, system)
 	case []any:
 		if len(v) == 0 {
 			cur[field] = []any{map[string]any{"code": value}}
@@ -394,18 +417,18 @@ func setSearchCodeValue(body map[string]any, path string, value string, typeCode
 			return
 		}
 		if _, hasCode := first["code"]; hasCode {
-			resetCodingForSearchValue(first, nil, value)
+			resetCodingForSearchValue(first, nil, value, system)
 			return
 		}
 		if coding, ok := first["coding"].([]any); ok && len(coding) > 0 {
 			if c, ok := coding[0].(map[string]any); ok {
-				resetCodingForSearchValue(c, first, value)
+				resetCodingForSearchValue(c, first, value, system)
 				return
 			}
-			coding[0] = map[string]any{"code": value}
+			coding[0] = codingForSearchValue(value, system)
 			return
 		}
-		resetCodingForSearchValue(first, nil, value)
+		resetCodingForSearchValue(first, nil, value, system)
 	case string:
 		cur[field] = value
 	default:
@@ -413,17 +436,32 @@ func setSearchCodeValue(body map[string]any, path string, value string, typeCode
 	}
 }
 
-// resetCodingForSearchValue overwrites a coding's code with the search value
-// and drops any system/display (and the enclosing CodeableConcept text) that
-// belonged to the previously-generated concept. Without this, a search value
-// overwrites only the code, leaving a stale system+display from a different
-// concept (e.g. connectionType "dicom-wado-rs" with the smd-interfaces
-// system), which servers reject as an unknown code. owner is the enclosing
-// CodeableConcept (whose text referred to the old coding) or nil.
-func resetCodingForSearchValue(coding map[string]any, owner map[string]any, value string) {
+// codingForSearchValue builds a coding map for a token search value, carrying the
+// resolved system (when known) so a required-bound element stays valid.
+func codingForSearchValue(value, system string) map[string]any {
+	coding := map[string]any{"code": value}
+	if system != "" {
+		coding["system"] = system
+	}
+	return coding
+}
+
+// resetCodingForSearchValue overwrites a coding's code with the search value and
+// aligns its system with the value's resolved code system (when known), dropping
+// a stale display (and the enclosing CodeableConcept text) that belonged to the
+// previously-generated concept. Keeping a system-less coding was replaced by
+// aligning the system so a required value-set binding validates: e.g. a search
+// value overwriting only the code once left a stale system+display from a
+// different concept (connectionType "dicom-wado-rs" with the smd-interfaces
+// system), which servers reject as an unknown code.
+func resetCodingForSearchValue(coding map[string]any, owner map[string]any, value string, system string) {
 	coding["code"] = value
-	delete(coding, "system")
 	delete(coding, "display")
+	if system != "" {
+		coding["system"] = system
+	} else {
+		delete(coding, "system")
+	}
 	if owner != nil {
 		delete(owner, "text")
 	}

@@ -55,6 +55,9 @@ func synthesizeResource(reg *registry.Registry, resourceType, profileURL, id str
 			populateChildren(body, resolved.Root, reg, refs, exhaustive, rng)
 		}
 	}
+	// Drop any Extension that carries neither a value[x] nor a nested sub-extension
+	// (violates ext-1); simple extensions are populated with a value above.
+	stripEmptyExtensions(body)
 	return body, nil
 }
 
@@ -215,6 +218,7 @@ func synthesizeSliceValue(slice *model.SliceNode, reg *registry.Registry, refs m
 	}
 	if m, ok := value.(map[string]any); ok {
 		applySliceConstraints(m, slice, reg)
+		ensureSimpleExtensionValue(m, slice, reg)
 	}
 	return value
 }
@@ -356,6 +360,131 @@ func hasRequiredSlices(node *model.ElementNode) bool {
 		}
 	}
 	return false
+}
+
+// ensureSimpleExtensionValue gives a simple Extension slice a value[x] when the
+// generic generator emitted only {"url": ...}. A simple extension (Extension.extension
+// Max 0) must carry a value[x] to satisfy ext-1; complex extensions (e.g. suppressed)
+// already carry sub-extensions and are left alone.
+func ensureSimpleExtensionValue(value map[string]any, slice *model.SliceNode, reg *registry.Registry) {
+	if value == nil || slice == nil || reg == nil {
+		return
+	}
+	if _, hasURL := value["url"]; !hasURL {
+		return
+	}
+	if _, hasExt := value["extension"]; hasExt {
+		return
+	}
+	if hasAnyValue(value) {
+		return
+	}
+	valueChild, ok := findSliceValueX(slice, reg)
+	if !ok || valueChild == nil || valueChild.Definition == nil {
+		return
+	}
+	if v := synthesizeNodeValue(valueChild, reg, nil, nil); v != nil {
+		value[nodePropertyName(valueChild)] = v
+	}
+}
+
+// findSliceValueX locates the value[x] element of an extension slice, first from
+// the slice's own children and then by resolving the extension profile. It only
+// returns a value[x] when the extension genuinely permits one (not a complex
+// extension whose value[x] is Max 0).
+func findSliceValueX(slice *model.SliceNode, reg *registry.Registry) (*model.ElementNode, bool) {
+	root := sliceExtensionRoot(slice, reg)
+	if root == nil {
+		return nil, false
+	}
+	if extChild, ok := root.Children["extension"]; ok && extChild != nil && extChild.Definition != nil && extChild.Definition.Max != "0" {
+		return nil, false
+	}
+	vx, ok := root.Children["value[x]"]
+	if !ok || vx == nil || vx.Definition == nil || vx.Definition.Max == "0" {
+		return nil, false
+	}
+	return vx, true
+}
+
+// sliceExtensionRoot resolves the extension StructureDefinition a slice references,
+// preferring the slice's own children when present.
+func sliceExtensionRoot(slice *model.SliceNode, reg *registry.Registry) *model.ElementNode {
+	if slice == nil || slice.Definition == nil || reg == nil {
+		return nil
+	}
+	if c, ok := slice.Children["value[x]"]; ok && c != nil && c.Definition != nil {
+		return &model.ElementNode{Name: slice.Definition.Name, Path: slice.Definition.Path, Definition: slice.Definition, Children: slice.Children}
+	}
+	for _, et := range slice.Definition.Types {
+		for _, p := range et.Profile {
+			resolved, err := reg.ResolveProfile(normalizeCanonical(p))
+			if err != nil || resolved == nil || resolved.Root == nil {
+				continue
+			}
+			return resolved.Root
+		}
+	}
+	return nil
+}
+
+// hasAnyValue reports whether a map carries a FHIR value[x] property (valueString,
+// valuePeriod, ...).
+func hasAnyValue(m map[string]any) bool {
+	for k := range m {
+		if strings.HasPrefix(k, "value") {
+			return true
+		}
+	}
+	return false
+}
+
+// stripEmptyExtensions recursively removes any Extension object that has neither a
+// value[x] nor nested sub-extensions, which violates ext-1.
+func stripEmptyExtensions(v any) {
+	switch t := v.(type) {
+	case map[string]any:
+		if arr, ok := t["extension"].([]any); ok {
+			filtered := make([]any, 0, len(arr))
+			for _, raw := range arr {
+				ext, isExt := raw.(map[string]any)
+				if isExt && isEmptyExtension(ext) {
+					continue
+				}
+				filtered = append(filtered, raw)
+			}
+			if len(filtered) == 0 {
+				delete(t, "extension")
+			} else {
+				t["extension"] = filtered
+			}
+		}
+		for _, val := range t {
+			stripEmptyExtensions(val)
+		}
+	case []any:
+		for _, el := range t {
+			stripEmptyExtensions(el)
+		}
+	}
+}
+
+// isEmptyExtension reports whether an Extension object carries neither a value[x]
+// nor nested sub-extensions, making it invalid under ext-1.
+func isEmptyExtension(m map[string]any) bool {
+	if m == nil {
+		return false
+	}
+	if _, hasURL := m["url"]; !hasURL {
+		return false
+	}
+	if hasAnyValue(m) {
+		return false
+	}
+	if sub, ok := m["extension"].([]any); ok && len(sub) > 0 {
+		return false
+	}
+	return true
 }
 
 // synthesizedCoding is a resolved code value with its system and display.

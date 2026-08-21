@@ -329,7 +329,7 @@ func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
 			"display": "Sealed Immediate Message Delivery",
 		},
 	}
-	setSearchCodeValue(body, "connectionType", "dicom-wado-rs", "Coding", false)
+	setSearchCodeValue(body, "connectionType", "dicom-wado-rs", "Coding", false, "")
 	ct, ok := body["connectionType"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected connectionType map, got %T", body["connectionType"])
@@ -351,7 +351,7 @@ func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
 			"text":   "Old",
 		},
 	}
-	setSearchCodeValue(concept, "type", "new", "CodeableConcept", false)
+	setSearchCodeValue(concept, "type", "new", "CodeableConcept", false, "")
 	typ, ok := concept["type"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected type map, got %T", concept["type"])
@@ -375,5 +375,40 @@ func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
 	}
 	if _, ok := coding["display"]; ok {
 		t.Fatalf("stale coding display not cleared: %v", coding["display"])
+	}
+}
+
+// TestSetSearchCodeValueKeepsResolvedSystem verifies that when a bound element's
+// code system is known it is applied to the coding, so a required value-set
+// binding (e.g. HealthcareService.serviceProvisionCode) is not shipped with a
+// system-less coding the server rejects.
+func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
+	body := map[string]any{}
+	// New CodeableConcept: system applied alongside the search code.
+	setSearchCodeValue(body, "serviceProvisionCode", "free", "CodeableConcept", true, "http://digitalhealth.gov.au/fhir/hcpd/CodeSystem/service-provision-cs")
+	arr := body["serviceProvisionCode"].([]any)
+	cc := arr[0].(map[string]any)
+	coding := cc["coding"].([]any)[0].(map[string]any)
+	if coding["code"] != "free" {
+		t.Fatalf("got code %v, want free", coding["code"])
+	}
+	if coding["system"] != "http://digitalhealth.gov.au/fhir/hcpd/CodeSystem/service-provision-cs" {
+		t.Fatalf("got system %v, want service-provision-cs", coding["system"])
+	}
+
+	// Existing Coding: system realigned to the resolved system, stale display dropped.
+	existing := map[string]any{
+		"connectionType": map[string]any{"system": "http://hl7.org.au/fhir/CodeSystem/smd-interfaces", "code": "old", "display": "Old"},
+	}
+	setSearchCodeValue(existing, "connectionType", "dicom-wado-rs", "Coding", false, "http://hl7.org/fhir/ValueSet/endpoint-connection-type")
+	ct := existing["connectionType"].(map[string]any)
+	if ct["code"] != "dicom-wado-rs" {
+		t.Fatalf("got code %v, want dicom-wado-rs", ct["code"])
+	}
+	if ct["system"] != "http://hl7.org/fhir/ValueSet/endpoint-connection-type" {
+		t.Fatalf("got system %v, want endpoint-connection-type", ct["system"])
+	}
+	if _, has := ct["display"]; has {
+		t.Fatalf("stale display should be cleared, got %v", ct["display"])
 	}
 }

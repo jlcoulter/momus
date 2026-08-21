@@ -431,6 +431,14 @@ func synthesizeBody(resourceType, id string, profileURLs []string, primaryProfil
 	// constraints, so e.g. an identifier type coding with code "XX" gets the
 	// canonical "Organization identifier" display instead of echoing "XX".
 	normalisePayloadCodingDisplays(body, reg)
+	// Remove the internal fixed-coding markers so they never reach the payload
+	// that is serialised and uploaded.
+	stripFixedCodingMarkers(body)
+	// Drop any Extension that ended up with neither a value[x] nor a nested
+	// sub-extension: such an extension violates ext-1 and is rejected by HAPI.
+	// Simple extensions are populated with a value earlier; complex ones whose
+	// optional sub-slices were not generated are simply omitted.
+	stripEmptyExtensions(body)
 	return body
 }
 
@@ -855,14 +863,149 @@ func generateSliceValue(slice *model.SliceNode, reg *registry.Registry) (any, bo
 			populateRequiredChildren(valueMap, synthetic, reg)
 			applySimpleConstraints(valueMap, synthetic, reg)
 			applySliceConstractions(valueMap, slice, reg)
+			ensureSimpleExtensionValue(valueMap, slice, reg)
 		}
 		return value, true
 	}
 	value, ok := generateSingleValue(synthetic, reg)
 	if valueMap, ok := value.(map[string]any); ok {
 		applySliceConstractions(valueMap, slice, reg)
+		ensureSimpleExtensionValue(valueMap, slice, reg)
 	}
 	return value, ok
+}
+
+// ensureSimpleExtensionValue gives a simple Extension slice a value[x] when the
+// generic generator emitted only {"url": ...}. A simple extension (Extension.extension
+// Max 0) must carry a value[x] to satisfy ext-1 ("Must have either extensions or
+// value[x], not both"); emitting it with neither is rejected by HAPI. Complex
+// extensions (e.g. suppressed) already carry sub-extensions and are left alone.
+func ensureSimpleExtensionValue(value map[string]any, slice *model.SliceNode, reg *registry.Registry) {
+	if value == nil || slice == nil || reg == nil {
+		return
+	}
+	if _, hasURL := value["url"]; !hasURL {
+		return
+	}
+	if _, hasExt := value["extension"]; hasExt {
+		return
+	}
+	if hasAnyValue(value) {
+		return
+	}
+	valueChild, ok := findSliceValueX(slice, reg)
+	if !ok || valueChild == nil || valueChild.Definition == nil {
+		return
+	}
+	if v, ok := generateSingleValue(valueChild, reg); ok {
+		value[propertyNameForNode(valueChild)] = v
+	}
+}
+
+// findSliceValueX locates the value[x] element of an extension slice, first from
+// the slice's own children and then by resolving the extension profile the slice
+// references. Extension slices sometimes carry no resolved children (the registry
+// leaves them empty), so the profile lookup is the reliable path. It only returns
+// the value[x] when the extension genuinely permits a value (not a complex
+// extension whose value[x] is Max 0).
+func findSliceValueX(slice *model.SliceNode, reg *registry.Registry) (*model.ElementNode, bool) {
+	root := sliceExtensionRoot(slice, reg)
+	if root == nil {
+		return nil, false
+	}
+	// A complex extension carries sub-extension content and must not receive a
+	// value[x] (its value[x] is Max 0). Only genuinely simple extensions get one.
+	if extChild, ok := root.Children["extension"]; ok && extChild != nil && extChild.Definition != nil && extChild.Definition.Max != "0" {
+		return nil, false
+	}
+	vx, ok := root.Children["value[x]"]
+	if !ok || vx == nil || vx.Definition == nil || vx.Definition.Max == "0" {
+		return nil, false
+	}
+	return vx, true
+}
+
+// sliceExtensionRoot resolves the extension StructureDefinition that a slice
+// references, preferring the slice's own children when present.
+func sliceExtensionRoot(slice *model.SliceNode, reg *registry.Registry) *model.ElementNode {
+	if slice == nil || slice.Definition == nil || reg == nil {
+		return nil
+	}
+	if c, ok := slice.Children["value[x]"]; ok && c != nil && c.Definition != nil {
+		// Use a synthetic root if the slice already carries its value[x] child.
+		return &model.ElementNode{Name: slice.Definition.Name, Path: slice.Definition.Path, Definition: slice.Definition, Children: slice.Children}
+	}
+	for _, et := range slice.Definition.Types {
+		for _, p := range et.Profile {
+			resolved, err := reg.ResolveProfile(normalizeCanonical(p))
+			if err != nil || resolved == nil || resolved.Root == nil {
+				continue
+			}
+			return resolved.Root
+		}
+	}
+	return nil
+}
+
+// hasAnyValue reports whether a map carries a FHIR value[x] property (valueString,
+// valuePeriod, ...).
+func hasAnyValue(m map[string]any) bool {
+	for k := range m {
+		if strings.HasPrefix(k, "value") {
+			return true
+		}
+	}
+	return false
+}
+
+// stripEmptyExtensions recursively removes any Extension object that has neither
+// a value[x] nor nested sub-extensions. FHIR's ext-1 constraint requires an
+// extension to carry either extensions or a value[x] (not both, not neither), so
+// an empty extension is always invalid and safely dropped.
+func stripEmptyExtensions(v any) {
+	switch t := v.(type) {
+	case map[string]any:
+		if arr, ok := t["extension"].([]any); ok {
+			filtered := make([]any, 0, len(arr))
+			for _, raw := range arr {
+				ext, isExt := raw.(map[string]any)
+				if isExt && isEmptyExtension(ext) {
+					continue
+				}
+				filtered = append(filtered, raw)
+			}
+			if len(filtered) == 0 {
+				delete(t, "extension")
+			} else {
+				t["extension"] = filtered
+			}
+		}
+		for _, val := range t {
+			stripEmptyExtensions(val)
+		}
+	case []any:
+		for _, el := range t {
+			stripEmptyExtensions(el)
+		}
+	}
+}
+
+// isEmptyExtension reports whether an Extension object carries neither a value[x]
+// nor nested sub-extensions, making it invalid under ext-1.
+func isEmptyExtension(m map[string]any) bool {
+	if m == nil {
+		return false
+	}
+	if _, hasURL := m["url"]; !hasURL {
+		return false
+	}
+	if hasAnyValue(m) {
+		return false
+	}
+	if sub, ok := m["extension"].([]any); ok && len(sub) > 0 {
+		return false
+	}
+	return true
 }
 
 // applySliceConstractions overlays a slice's Fixed/Pattern child values onto a
@@ -905,7 +1048,10 @@ func applySliceChildConstraints(value map[string]any, child *model.ElementNode, 
 	}
 	if def.Fixed != nil {
 		value[prop] = wrapFixedSlice(value[prop], def, def.Fixed)
-		normaliseCodingDisplay(value[prop], reg)
+		// A fixed coding may carry only system+code: HAPI rejects a display/text on
+		// a fixed value that defines only system+code. Mark it so the later
+		// display/text normalisation passes leave it alone.
+		markFixedCoding(value[prop])
 		// A slice that fixes a CodeableConcept's coding fully determines the
 		// concept; a `text` synthesized by the generic fallback (e.g. "Value[x]")
 		// is stale and misleading, so drop it. If the slice itself fixes text it
@@ -918,7 +1064,7 @@ func applySliceChildConstraints(value map[string]any, child *model.ElementNode, 
 	if def.Pattern != nil {
 		if patternMap, ok := def.Pattern.(map[string]any); ok {
 			mergeSlicePattern(value, prop, patternMap)
-			normaliseCodingDisplay(value[prop], reg)
+			markFixedCoding(value[prop])
 			if prop == "coding" {
 				delete(value, "text")
 			}
@@ -1469,6 +1615,62 @@ func codingToMap(coding generatedCoding) map[string]any {
 	return out
 }
 
+// fixedCodingKey marks a coding map that was materialised from a profile's
+// Fixed/Pattern value. HCPD profiles fix codings with only system+code, so HAPI
+// rejects any extra display/text on such a coding. The marker lets the
+// display/text normalisation passes skip these codings; it is stripped before a
+// payload is serialised (see stripFixedCodingMarkers). The key is prefixed so it
+// cannot collide with a real FHIR element name.
+const fixedCodingKey = "__momus_fixed_coding"
+
+// markFixedCoding marks v (a Coding map, a CodeableConcept map, or an array of
+// either) as derived from a Fixed/Pattern value and strips display/text from it,
+// since a fixed coding may carry only system+code.
+func markFixedCoding(v any) {
+	switch t := v.(type) {
+	case map[string]any:
+		delete(t, "display")
+		delete(t, "text")
+		if codings, ok := t["coding"].([]any); ok {
+			for _, c := range codings {
+				markFixedCoding(c)
+			}
+		} else {
+			t[fixedCodingKey] = true
+		}
+	case []any:
+		for _, el := range t {
+			markFixedCoding(el)
+		}
+	}
+}
+
+// isFixedCoding reports whether a coding map was materialised from a
+// Fixed/Pattern value and therefore must not gain a display/text.
+func isFixedCoding(m map[string]any) bool {
+	if m == nil {
+		return false
+	}
+	marked, _ := m[fixedCodingKey].(bool)
+	return marked
+}
+
+// stripFixedCodingMarkers recursively removes fixedCodingKey markers from a
+// generated payload so they never reach the serialised output.
+func stripFixedCodingMarkers(v any) {
+	switch t := v.(type) {
+	case map[string]any:
+		delete(t, fixedCodingKey)
+		for _, val := range t {
+			stripFixedCodingMarkers(val)
+		}
+	case []any:
+		for _, el := range t {
+			stripFixedCodingMarkers(el)
+		}
+	}
+}
+
 // normaliseCodingDisplay resolves a coding's display to the canonical CodeSystem
 // display so a pattern/fixed that only carries system+code does not echo the
 // code as the display (e.g. "XX" instead of "Organization identifier"). It
@@ -1522,6 +1724,12 @@ func normaliseCoding(c any, reg *registry.Registry) {
 	system, _ := m["system"].(string)
 	code, _ := m["code"].(string)
 	if system == "" || code == "" {
+		return
+	}
+	if isFixedCoding(m) {
+		// A coding fixed by the profile may carry only system+code; HAPI rejects a
+		// display on a fixed value that defines only system+code.
+		delete(m, "display")
 		return
 	}
 	current, _ := m["display"].(string)
@@ -1723,6 +1931,10 @@ func normalizeGeneratedIdentifier(identifier map[string]any) {
 	}
 	if system == "http://hl7.org.au/id/acn" {
 		identifier["value"] = generateACN()
+		return
+	}
+	if system == "http://hl7.org.au/id/ahpra-registration-number" {
+		identifier["value"] = generateAHPRA()
 	}
 }
 
@@ -1773,11 +1985,19 @@ func normalizeCodeableConceptMap(value map[string]any) {
 		return
 	}
 	firstLabel := ""
+	allFixed := true
 	for _, raw := range codings {
 		coding, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
+		if isFixedCoding(coding) {
+			// A fixed coding may carry only system+code; never add a display/text
+			// to it, and never add a text to the concept derived from it.
+			delete(coding, "display")
+			continue
+		}
+		allFixed = false
 		code, _ := coding["code"].(string)
 		display, _ := coding["display"].(string)
 		if strings.TrimSpace(display) == "" && strings.TrimSpace(code) != "" {
@@ -1791,6 +2011,10 @@ func normalizeCodeableConceptMap(value map[string]any) {
 				firstLabel = sampleStringValue(code)
 			}
 		}
+	}
+	if allFixed {
+		delete(value, "text")
+		return
 	}
 	if _, hasText := value["text"]; !hasText && firstLabel != "" {
 		value["text"] = firstLabel
@@ -1844,6 +2068,14 @@ func generateABN() string {
 		}
 	}
 	return "51824753556"
+}
+
+// generateAHPRA returns a syntactically valid Ahpra registration number: three
+// uppercase letters followed by ten digits (per the au-ahpraregistrationnumber
+// inv-ahpra-0 invariant).
+func generateAHPRA() string {
+	digits := stableChecksum("ahpra") % 10000000000
+	return "MED" + fmt.Sprintf("%010d", digits)
 }
 
 // generateACN returns a valid 9-digit Australian Company Number (mod-89 check
