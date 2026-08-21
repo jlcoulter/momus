@@ -402,6 +402,79 @@ func TestReadPackageDeDuplicatesDependencies(t *testing.T) {
 	}
 }
 
+func TestReadPackageKeepsInstanceResources(t *testing.T) {
+	archivePath := buildTestPackageArchive(t, map[string]any{
+		"package/package.json": map[string]any{
+			"name":    "example.fhir.pkg",
+			"version": "1.2.3",
+		},
+		"package/Patient-example.json": map[string]any{
+			"resourceType": "Patient",
+			"id":           "example",
+			"meta": map[string]any{
+				"profile": []any{"http://example.org/StructureDefinition/patient"},
+			},
+			"communication": []any{
+				map[string]any{
+					"coding": []any{map[string]any{"system": "urn:ietf:bcp:47", "code": "it"}},
+				},
+			},
+		},
+		"package/openapi/not-fhir.json": map[string]any{
+			"openapi": "3.0.0",
+			"info":    map[string]any{"title": "Not FHIR"},
+		},
+	})
+
+	pkg, err := ReadPackage(archivePath)
+	if err != nil {
+		t.Fatalf("ReadPackage returned error: %v", err)
+	}
+
+	// The example Patient instance must be retained as a model.Resource, and
+	// the non-FHIR JSON (no resourceType) must be skipped.
+	var instance *model.Resource
+	for _, res := range pkg.Resources {
+		if r, ok := res.(*model.Resource); ok {
+			instance = r
+		}
+	}
+	if instance == nil {
+		t.Fatal("expected an instance Resource to be retained")
+	}
+	if instance.ResourceType != "Patient" {
+		t.Fatalf("instance resource type = %q, want Patient", instance.ResourceType)
+	}
+	if len(instance.ProfileURLs) != 1 || instance.ProfileURLs[0] != "http://example.org/StructureDefinition/patient" {
+		t.Fatalf("instance profile URLs = %v, want the meta.profile URL", instance.ProfileURLs)
+	}
+	if instance.Raw == nil {
+		t.Fatal("instance Raw content must be preserved")
+	}
+}
+
+func TestReadPackageSkipsNonFHIRJSONWithoutResourceType(t *testing.T) {
+	archivePath := buildTestPackageArchive(t, map[string]any{
+		"package/package.json": map[string]any{
+			"name":    "example.fhir.pkg",
+			"version": "1.2.3",
+		},
+		"package/README.json": map[string]any{
+			"not": "a fhir resource",
+		},
+	})
+
+	pkg, err := ReadPackage(archivePath)
+	if err != nil {
+		t.Fatalf("ReadPackage returned error: %v", err)
+	}
+	for _, res := range pkg.Resources {
+		if r, ok := res.(*model.Resource); ok && r.ResourceType == "" {
+			t.Fatalf("a resource without a resourceType was retained: %+v", r)
+		}
+	}
+}
+
 func buildTestPackageArchive(t *testing.T, files map[string]any) string {
 	t.Helper()
 	rawFiles := make(map[string][]byte, len(files))

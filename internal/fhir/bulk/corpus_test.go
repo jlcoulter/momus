@@ -100,6 +100,85 @@ func TestGenerateCorpusHonoursPerTypeCounts(t *testing.T) {
 	}
 }
 
+func TestExampleReferenceTargetsFromInstances(t *testing.T) {
+	reg := registry.New()
+	// A HealthcareService example referencing Organization, Location, Endpoint,
+	// and a coverageArea Location.
+	reg.AddResource(&model.Resource{
+		ResourceType: "HealthcareService",
+		Raw: map[string]any{
+			"resourceType": "HealthcareService",
+			"providedBy":   map[string]any{"reference": "Organization/org-1"},
+			"location":     []any{map[string]any{"reference": "Location/loc-1"}},
+			"endpoint":     []any{map[string]any{"reference": "Endpoint/ep-1"}},
+			"coverageArea": []any{map[string]any{"reference": "Location/loc-2"}},
+		},
+	})
+	// A second example with a different providedBy target to ensure first-wins.
+	reg.AddResource(&model.Resource{
+		ResourceType: "HealthcareService",
+		Raw: map[string]any{
+			"resourceType": "HealthcareService",
+			"providedBy":   map[string]any{"reference": "Organization/org-2"},
+		},
+	})
+
+	refs := exampleReferenceTargets(reg, "HealthcareService")
+	expected := map[string]string{
+		"HealthcareService.providedBy":   "Organization",
+		"HealthcareService.location":     "Location",
+		"HealthcareService.endpoint":     "Endpoint",
+		"HealthcareService.coverageArea": "Location",
+	}
+	for path, want := range expected {
+		if got, ok := refs[path]; !ok || got != want {
+			t.Fatalf("exampleReferenceTargets[%q] = %q, want %q (full refs: %v)", path, got, want, refs)
+		}
+	}
+}
+
+func TestExampleReferenceTargetsSkippedForOtherTypes(t *testing.T) {
+	reg := registry.New()
+	reg.AddResource(&model.Resource{ResourceType: "PractitionerRole", Raw: map[string]any{
+		"resourceType":      "PractitionerRole",
+		"practitioner":      map[string]any{"reference": "Practitioner/p-1"},
+		"organization":      map[string]any{"reference": "Organization/o-1"},
+		"location":          []any{map[string]any{"reference": "Location/l-1"}},
+		"healthcareService": []any{map[string]any{"reference": "HealthcareService/hs-1"}},
+	}})
+	refs := exampleReferenceTargets(reg, "PractitionerRole")
+	if refs["PractitionerRole.practitioner"] != "Practitioner" {
+		t.Fatalf("practitioner target = %q, want Practitioner", refs["PractitionerRole.practitioner"])
+	}
+	if refs["PractitionerRole.healthcareService"] != "HealthcareService" {
+		t.Fatalf("healthcareService target = %q, want HealthcareService", refs["PractitionerRole.healthcareService"])
+	}
+	// A type with no examples yields no targets.
+	if got := exampleReferenceTargets(reg, "Observation"); len(got) != 0 {
+		t.Fatalf("exampleReferenceTargets(Observation) = %v, want empty", got)
+	}
+}
+
+func TestResourceTypeOfProfileStripsVersion(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://hl7.org/fhir/StructureDefinition/Organization", Type: "Organization", Kind: "resource",
+		Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: "1"}},
+	})
+	// A versioned target-profile canonical must resolve to the resource type by
+	// stripping the "|4.0.1" suffix. Before the fix this returned "" and the
+	// reference target was lost (masked by the removed static table).
+	if got := resourceTypeOfProfile(reg, "http://hl7.org/fhir/StructureDefinition/Organization|4.0.1"); got != "Organization" {
+		t.Fatalf("resourceTypeOfProfile(versioned) = %q, want Organization", got)
+	}
+	if got := resourceTypeOfProfile(reg, "http://hl7.org/fhir/StructureDefinition/Organization"); got != "Organization" {
+		t.Fatalf("resourceTypeOfProfile(plain) = %q, want Organization", got)
+	}
+	if got := resourceTypeOfProfile(reg, "http://example.org/missing"); got != "" {
+		t.Fatalf("resourceTypeOfProfile(missing) = %q, want empty", got)
+	}
+}
+
 func TestGenerateCorpusExpandsReferenceTargets(t *testing.T) {
 	reg := testRegistry(t)
 	gen := NewCorpusGenerator(reg, true)

@@ -12,6 +12,124 @@ import (
 	"github.com/jlcoulter/momus/internal/test/coverage"
 )
 
+// TestResolveBoundCodingFallsBackToExample verifies that when the bound
+// ValueSet is not present in the registry, generation falls back to a real
+// coding from the package's example instance data — preferring an instance
+// whose meta.profile matches the node's profile.
+func TestResolveBoundCodingFallsBackToExample(t *testing.T) {
+	reg := registry.New()
+	reg.AddResource(&model.Resource{
+		ResourceType: "Patient",
+		ProfileURLs:  []string{"http://digitalhealth.gov.au/fhir/hcpd/StructureDefinition/hcpd-practitioner"},
+		Raw: map[string]any{
+			"resourceType": "Patient",
+			"communication": []any{
+				map[string]any{
+					"coding": []any{map[string]any{"system": "urn:ietf:bcp:47", "code": "it", "display": "Italian"}},
+				},
+			},
+		},
+	})
+	// A second Patient example with a different profile and a different code.
+	reg.AddResource(&model.Resource{
+		ResourceType: "Patient",
+		ProfileURLs:  []string{"http://example.org/StructureDefinition/other"},
+		Raw: map[string]any{
+			"communication": []any{
+				map[string]any{
+					"coding": []any{map[string]any{"system": "urn:ietf:bcp:47", "code": "en"}},
+				},
+			},
+		},
+	})
+
+	// No bound ValueSet, so resolveBoundCoding fails and the example fallback
+	// must pick the profile-matched instance's code ("it").
+	node := &model.ElementNode{
+		Path:       "Patient.communication",
+		ProfileURL: "http://digitalhealth.gov.au/fhir/hcpd/StructureDefinition/hcpd-practitioner",
+	}
+	c, ok := resolveBoundCodingForNode(node, reg)
+	if !ok || c.Code != "it" {
+		t.Fatalf("resolveBoundCodingForNode=%+v ok=%v, want the profile-matched code \"it\"", c, ok)
+	}
+
+	// A node with no matching profile falls back to the first example of the
+	// resource type.
+	node2 := &model.ElementNode{Path: "Patient.communication", ProfileURL: "http://example.org/StructureDefinition/none"}
+	c2, ok2 := resolveBoundCodingForNode(node2, reg)
+	if !ok2 || c2.Code == "" {
+		t.Fatalf("resolveBoundCodingForNode(no profile match)=%+v ok=%v, want any example code", c2, ok2)
+	}
+}
+
+// TestResolveBoundCodingFromCodingChild verifies that a CodeableConcept node
+// whose own binding is nil but whose "coding" child carries a required binding
+// resolves a real code (common for nested extension value[x].coding).
+func TestResolveBoundCodingFromCodingChild(t *testing.T) {
+	reg := registry.New()
+	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/responsible-party", ComposeIncludes: []model.ValueSetInclude{{
+		System: "http://example.org/CodeSystem/responsible-party",
+		Concepts: []model.ConceptReference{
+			{Code: "practitioner-initiated", Display: "Practitioner initiated"},
+		},
+	}}})
+	reg.AddCodeSystem(&model.CodeSystem{URL: "http://example.org/CodeSystem/responsible-party", Concepts: []model.CodeSystemConcept{{Code: "practitioner-initiated", Display: "Practitioner initiated"}}})
+
+	// The node is a CodeableConcept with no binding of its own; the binding is
+	// on its "coding" child.
+	node := &model.ElementNode{
+		Path:       "Extension.extension.value[x]",
+		ProfileURL: "http://example.org/StructureDefinition/suppressed",
+		Children: map[string]*model.ElementNode{
+			"coding": {
+				Path: "Extension.extension.value[x].coding",
+				Definition: &model.ElementDefinition{
+					Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/responsible-party"},
+				},
+			},
+		},
+	}
+	c, ok := resolveBoundCodingForNode(node, reg)
+	if !ok || c.Code != "practitioner-initiated" {
+		t.Fatalf("resolveBoundCodingForNode=%+v ok=%v, want the coding-child bound code", c, ok)
+	}
+}
+
+// TestResolveBoundCodingFromExtensionValue verifies that an extension value[x]
+// node resolves a real coding from example instance data by matching the
+// extension URL, even when the bound ValueSet is not in the registry.
+func TestResolveBoundCodingFromExtensionValue(t *testing.T) {
+	reg := registry.New()
+	reg.AddResource(&model.Resource{
+		ResourceType: "HealthcareService",
+		Raw: map[string]any{
+			"resourceType": "HealthcareService",
+			"extension": []any{
+				map[string]any{
+					"url": "http://digitalhealth.gov.au/fhir/cc/StructureDefinition/new-patient-availability",
+					"valueCodeableConcept": map[string]any{
+						"coding": []any{map[string]any{
+							"system":  "https://www.healthterminologies.gov.au/integration/R4/fhir/CodeSystem/new-patient-availability-1",
+							"code":    "accepting",
+							"display": "Accepting new patients",
+						}},
+					},
+				},
+			},
+		},
+	})
+
+	node := &model.ElementNode{
+		Path:       "Extension.value[x]",
+		ProfileURL: "http://digitalhealth.gov.au/fhir/cc/StructureDefinition/new-patient-availability",
+	}
+	c, ok := resolveBoundCodingForNode(node, reg)
+	if !ok || c.Code != "accepting" {
+		t.Fatalf("resolveBoundCodingForNode=%+v ok=%v, want the extension code \"accepting\"", c, ok)
+	}
+}
+
 // TestResolveBoundCodingSkipsPlaceholders verifies that binding resolution skips
 // placeholder/null codes (e.g. v2-0203 "XX") and returns a meaningful code from
 // the package, so generated CodeableConcepts don't carry a null placeholder.
@@ -1165,6 +1283,73 @@ func sliceURLs(arr []any) []string {
 		}
 	}
 	return out
+}
+
+// TestSliceFallbackAppliesSliceConstraints verifies that a value generated into a
+// sliced repeatable element honors the slice's Fixed/Pattern constraints, both when
+// the slice is required (generated via the slice loop) and when it is optional and
+// reached through the sliced fallback path. Without this, a bare value (e.g. a phone
+// lacking the use the personalPhoneNumber slice requires) matches no slice and a
+// conformant server rejects the resource.
+func TestSliceFallbackAppliesSliceConstraints(t *testing.T) {
+	makeSlice := func(min int) map[string]*model.SliceNode {
+		return map[string]*model.SliceNode{
+			"personalPhoneNumber": {
+				Name: "personalPhoneNumber",
+				Definition: &model.ElementDefinition{
+					Path:      "Practitioner.telecom",
+					SliceName: "personalPhoneNumber",
+					Min:       min,
+					Max:       "1",
+					Types:     []model.ElementType{{Code: "ContactPoint"}},
+				},
+				Children: map[string]*model.ElementNode{
+					"system": {Name: "system", Path: "Practitioner.telecom.system", Definition: &model.ElementDefinition{Path: "Practitioner.telecom.system", Min: 0, Max: "1", Fixed: "phone"}},
+					"use":    {Name: "use", Path: "Practitioner.telecom.use", Definition: &model.ElementDefinition{Path: "Practitioner.telecom.use", Min: 0, Max: "1", Fixed: "home"}},
+				},
+			},
+		}
+	}
+	reg := registry.New()
+	assertPhone := func(t *testing.T, arr any) {
+		t.Helper()
+		cp, ok := arr.([]any)[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected a ContactPoint map, got %T", arr)
+		}
+		if cp["use"] != "home" {
+			t.Fatalf("slice constraint use=home not applied, got %+v", cp)
+		}
+		if cp["system"] != "phone" {
+			t.Fatalf("slice constraint system=phone not applied, got %+v", cp)
+		}
+	}
+
+	// Required slice: generated through the slice loop.
+	required := &model.ElementNode{
+		Name:       "telecom",
+		Path:       "Practitioner.telecom",
+		Definition: &model.ElementDefinition{Path: "Practitioner.telecom", Min: 0, Max: "*"},
+		Slices:     makeSlice(1),
+	}
+	val, ok := generateRepeatedValue(required, reg, nil)
+	if !ok {
+		t.Fatal("generateRepeatedValue returned false for required slice")
+	}
+	assertPhone(t, val)
+
+	// Optional slice with nil RNG: reached through the sliced fallback path.
+	optional := &model.ElementNode{
+		Name:       "telecom",
+		Path:       "Practitioner.telecom",
+		Definition: &model.ElementDefinition{Path: "Practitioner.telecom", Min: 0, Max: "*"},
+		Slices:     makeSlice(0),
+	}
+	val, ok = generateRepeatedValue(optional, reg, nil)
+	if !ok {
+		t.Fatal("generateRepeatedValue returned false for optional slice")
+	}
+	assertPhone(t, val)
 }
 
 func contains(haystack []string, needle string) bool {

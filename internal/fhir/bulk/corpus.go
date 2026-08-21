@@ -11,41 +11,6 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
 
-// commonReferenceTargets supplies a sensible target resource type for reference
-// fields whose profile element does not carry a target profile, keyed by
-// resource type then element leaf name. This covers the most common FHIR
-// relationships so a generated corpus links sensibly even when the registry's
-// structure definitions are sparse.
-var commonReferenceTargets = map[string]map[string]string{
-	"Patient":              {"generalPractitioner": "Practitioner", "managingOrganization": "Organization"},
-	"Observation":          {"subject": "Patient", "performer": "Practitioner", "encounter": "Encounter", "specimen": "Specimen", "device": "Device", "basedOn": "ServiceRequest"},
-	"HealthcareService":    {"providedBy": "Organization", "location": "Location"},
-	"PractitionerRole":     {"practitioner": "Practitioner", "organization": "Organization", "location": "Location"},
-	"Practitioner":         {"organization": "Organization"},
-	"Organization":         {"partOf": "Organization"},
-	"Encounter":            {"subject": "Patient", "participant": "Practitioner", "serviceProvider": "Organization"},
-	"Condition":            {"subject": "Patient", "encounter": "Encounter", "asserter": "Practitioner"},
-	"Procedure":            {"subject": "Patient", "performer": "Practitioner", "encounter": "Encounter"},
-	"MedicationRequest":    {"subject": "Patient", "medication": "Medication", "encounter": "Encounter"},
-	"MedicationStatement":  {"subject": "Patient", "medication": "Medication"},
-	"MedicationDispense":   {"subject": "Patient", "medication": "Medication"},
-	"Immunization":         {"patient": "Patient", "performer": "Practitioner", "location": "Location"},
-	"AllergyIntolerance":   {"patient": "Patient", "asserter": "Practitioner"},
-	"DiagnosticReport":     {"subject": "Patient", "performer": "Practitioner", "encounter": "Encounter"},
-	"ServiceRequest":       {"subject": "Patient", "performer": "Practitioner", "encounter": "Encounter"},
-	"Composition":          {"subject": "Patient", "author": "Practitioner", "encounter": "Encounter"},
-	"CarePlan":             {"subject": "Patient", "author": "Practitioner"},
-	"Appointment":          {"participant": "Patient"},
-	"Endpoint":             {"managingOrganization": "Organization"},
-	"Location":             {"managingOrganization": "Organization", "partOf": "Location"},
-	"Specimen":             {"subject": "Patient", "collection": "Practitioner"},
-	"Device":               {"owner": "Organization"},
-	"Medication":           {"manufacturer": "Organization"},
-	"ResearchStudy":        {"principalInvestigator": "Practitioner"},
-	"Claim":                {"patient": "Patient", "provider": "Practitioner"},
-	"ExplanationOfBenefit": {"patient": "Patient", "provider": "Practitioner"},
-}
-
 // CorpusGenerator produces a realistic corpus of random resources for bulk
 // `$export` data. It is a distinct bulk-export generator: unlike the
 // coverage-driven data pipeline (internal/test/generation), it synthesises
@@ -198,7 +163,7 @@ func (g *CorpusGenerator) hasResourceType(resourceType string) bool {
 
 // referenceFields derives the reference element paths of a resource type and
 // their target resource types, from the type's resolved profile, falling back
-// to commonReferenceTargets for fields without a target profile.
+// to example-instance data for fields without a target profile.
 func (g *CorpusGenerator) referenceFields(resourceType string) map[string]string {
 	out := make(map[string]string)
 	if profileURL := defaultProfile(g.reg, resourceType); profileURL != "" {
@@ -206,15 +171,81 @@ func (g *CorpusGenerator) referenceFields(resourceType string) map[string]string
 			collectReferenceFields(resolved.Root, g.reg, out)
 		}
 	}
-	if fallback, ok := commonReferenceTargets[resourceType]; ok {
-		for leaf, target := range fallback {
-			path := resourceType + "." + leaf
-			if _, exists := out[path]; !exists {
-				out[path] = target
-			}
+	// Derive reference targets from the package's own example instance data.
+	// This is authoritative and self-maintaining — it reflects the real
+	// reference relationships of the IG. Only add targets for fields the
+	// profile itself did not resolve.
+	for path, target := range exampleReferenceTargets(g.reg, resourceType) {
+		if _, exists := out[path]; !exists {
+			out[path] = target
 		}
 	}
 	return out
+}
+
+// exampleReferenceTargets derives reference element paths and their target
+// resource types for a resource type by scanning the package's own example
+// instance data. Every Reference object in an example of the type contributes
+// `resourceType.<leaf> -> targetType`. This keeps the corpus's reference wiring
+// aligned with the actual IG rather than a static table.
+func exampleReferenceTargets(reg *registry.Registry, resourceType string) map[string]string {
+	if reg == nil {
+		return nil
+	}
+	out := make(map[string]string)
+	for _, inst := range reg.ResourcesForType(resourceType) {
+		if inst == nil || inst.Raw == nil {
+			continue
+		}
+		collectExampleReferenceTargets(inst.Raw, resourceType, out)
+	}
+	return out
+}
+
+// collectExampleReferenceTargets walks a raw example resource, recording every
+// Reference object as `resourceType.<leafElement> -> targetType`. The leaf
+// element is the final path segment (e.g. "subject", "performer",
+// "generalPractitioner"), matching how reference fields are keyed elsewhere.
+func collectExampleReferenceTargets(raw map[string]any, resourceType string, out map[string]string) {
+	if raw == nil {
+		return
+	}
+	var walk func(v any, leaf string)
+	walk = func(v any, leaf string) {
+		switch typed := v.(type) {
+		case map[string]any:
+			// A Reference object.
+			if ref, ok := typed["reference"].(string); ok {
+				if target, id := splitReference(ref); target != "" && id != "" {
+					key := resourceType + "." + leaf
+					if _, exists := out[key]; !exists {
+						out[key] = target
+					}
+					// Don't recurse into the reference internals.
+					return
+				}
+			}
+			for k, val := range typed {
+				walk(val, k)
+			}
+		case []any:
+			for _, item := range typed {
+				walk(item, leaf)
+			}
+		}
+	}
+	walk(raw, "")
+}
+
+// splitReference splits a FHIR reference string into its resource type and id
+// (e.g. "Patient/abc" -> ("Patient", "abc")). Returns empty strings for
+// non-Type/id references.
+func splitReference(ref string) (string, string) {
+	parts := strings.SplitN(ref, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", ""
+	}
+	return parts[0], parts[1]
 }
 
 // collectReferenceFields walks an element tree and records Reference elements
@@ -260,11 +291,24 @@ func resourceTypeOfProfile(reg *registry.Registry, profileURL string) string {
 	if reg == nil || strings.TrimSpace(profileURL) == "" {
 		return ""
 	}
-	resolved, err := reg.ResolveProfile(strings.TrimSpace(profileURL))
+	// A target profile canonical may carry a version suffix (e.g.
+	// "…/Organization|4.0.1"); the registry keys profiles by their versionless
+	// URL, so strip the suffix before resolving.
+	canonical := stripVersion(profileURL)
+	resolved, err := reg.ResolveProfile(canonical)
 	if err != nil || resolved == nil {
 		return ""
 	}
 	return resolved.ResourceType
+}
+
+// stripVersion removes a FHIR canonical version suffix ("|…") from a canonical
+// URL.
+func stripVersion(canonical string) string {
+	if i := strings.Index(canonical, "|"); i >= 0 {
+		return canonical[:i]
+	}
+	return canonical
 }
 
 // sanitizeID reduces an arbitrary string to a FHIR-compatible id segment.

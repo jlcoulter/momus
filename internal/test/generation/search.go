@@ -48,7 +48,12 @@ func searchQueryValue(req coverage.CoverageRequirement, code string, options Bui
 		value, _ := searchInvalidValue(req, code, options)
 		return value
 	case coverage.CoverageVariantSearchNoResults:
-		return "momus-no-match-zzz"
+		// For date/time, number, boolean and other grammar-constrained parameter
+		// types a literal sentinel like "momus-no-match-zzz" is not lexically
+		// valid, so a conformant server would reject it with a 4xx instead of
+		// returning an empty 200. Use a value that is type-valid but cannot
+		// match any provisioned resource.
+		return searchValidNonMatchValue(searchParameterType(req, code, options))
 	default:
 		return searchAcceptValue(req, code, options)
 	}

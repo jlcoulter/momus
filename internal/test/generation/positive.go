@@ -844,6 +844,29 @@ func generateRepeatedValue(node *model.ElementNode, reg *registry.Registry, rng 
 		}
 	}
 	for len(values) < max(node.Definition.Min, 1) {
+		// A fallback value generated into a sliced collection must still conform to a
+		// slice, or a server flags it as matching no slice (e.g. a bare phone without
+		// the use=home the Practitioner.telecom:personalPhoneNumber slice requires).
+		// Prefer the slice whose discriminator agrees with the generic value (e.g. the
+		// phone slice for a phone ContactPoint) so the generated value stays internally
+		// consistent, and fall back to the first slice otherwise. Only when no slice can
+		// produce a value use the generic generator.
+		if len(node.Slices) > 0 {
+			if generic, ok := generateSingleValue(node, reg); ok {
+				if slice := matchingSlice(node, generic); slice != nil {
+					if value, ok := generateSliceValue(slice, reg); ok {
+						values = append(values, value)
+						continue
+					}
+				}
+			}
+			if first := firstSliceNode(node); first != nil {
+				if value, ok := generateSliceValue(first, reg); ok {
+					values = append(values, value)
+					continue
+				}
+			}
+		}
 		if value, ok := generateSingleValue(node, reg); ok {
 			values = append(values, value)
 		} else {
@@ -864,6 +887,7 @@ func generateSliceValue(slice *model.SliceNode, reg *registry.Registry) (any, bo
 		Name:       slice.Definition.Name,
 		Path:       slice.Definition.Path,
 		Definition: slice.Definition,
+		ProfileURL: slice.ProfileURL,
 		Children:   slice.Children,
 		Slices:     make(map[string]*model.SliceNode),
 	}
@@ -1017,11 +1041,13 @@ func isEmptyExtension(m map[string]any) bool {
 	return true
 }
 
-// applySliceConstractions overlays a slice's Fixed/Pattern child values onto a
-// generated value so the element satisfies the slice's discriminator. For
-// example, an Organization.address:physical slice constrains `type` to the
-// pattern "physical", so the generated address gets type="physical". Without
-// this, a required slice is not matched and servers reject the resource.
+// applySliceConstractions overlays a slice's Fixed/Pattern onto a generated value
+// so the element satisfies the slice's discriminator. This covers both the slice
+// element's own Fixed/Pattern (e.g. Practitioner.telecom:personalPhoneNumber has
+// pattern {"system":"phone","use":"home"}) and the Fixed/Pattern of its children
+// (e.g. an Organization.address:physical slice constrains `type` to the pattern
+// "physical"). Without applying these, a required slice is not matched and servers
+// reject the resource.
 //
 // Codings materialised from a slice pattern are normalised so their display
 // resolves to the canonical CodeSystem display rather than echoing the code
@@ -1030,12 +1056,47 @@ func applySliceConstractions(value map[string]any, slice *model.SliceNode, reg *
 	if value == nil || slice == nil {
 		return
 	}
+	applySliceElementConstraint(value, slice)
 	for _, name := range sortedSliceChildren(slice) {
 		child := slice.Children[name]
 		if child == nil || child.Definition == nil {
 			continue
 		}
 		applySliceChildConstraints(value, child, reg)
+	}
+}
+
+// applySliceElementConstraint overlays the slice element's own Fixed/Pattern onto
+// a generated value. FHIR slices commonly carry their discriminating values as a
+// pattern/fixed on the slice element itself rather than as per-child constraints,
+// so without applying it a generated value does not match the slice.
+func applySliceElementConstraint(value map[string]any, slice *model.SliceNode) {
+	if value == nil || slice == nil || slice.Definition == nil {
+		return
+	}
+	def := slice.Definition
+	if def.Fixed != nil {
+		if fixedMap, ok := def.Fixed.(map[string]any); ok {
+			for k, v := range fixedMap {
+				if subMap, ok := v.(map[string]any); ok {
+					mergeSlicePattern(value, k, subMap)
+				} else {
+					value[k] = v
+				}
+			}
+		}
+		return
+	}
+	if def.Pattern != nil {
+		if patternMap, ok := def.Pattern.(map[string]any); ok {
+			for k, v := range patternMap {
+				if subMap, ok := v.(map[string]any); ok {
+					mergeSlicePattern(value, k, subMap)
+				} else {
+					value[k] = v
+				}
+			}
+		}
 	}
 }
 
@@ -1215,7 +1276,7 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 	if node.Definition.Fixed != nil {
 		return node.Definition.Fixed, true
 	}
-	boundCoding, hasBoundCoding := resolveBoundCoding(node.Definition, reg)
+	boundCoding, hasBoundCoding := resolveBoundCodingForNode(node, reg)
 	if node.Definition.Pattern != nil {
 		if merged, ok := mergePatternWithBinding(node.Definition.Pattern, typeCode, boundCoding, hasBoundCoding); ok {
 			return merged, true
@@ -1509,6 +1570,54 @@ func sortedSliceNames(slices map[string]*model.SliceNode) []string {
 	return names
 }
 
+// firstSliceNode returns the first slice (deterministically sorted by name) of a
+// node, or nil when the node has no slices. It lets a sliced element's fallback
+// value be generated through a slice so the slice's Fixed/Pattern constraints apply.
+func firstSliceNode(node *model.ElementNode) *model.SliceNode {
+	if node == nil || len(node.Slices) == 0 {
+		return nil
+	}
+	names := sortedSliceNames(node.Slices)
+	slice := node.Slices[names[0]]
+	if slice == nil || slice.Definition == nil {
+		return nil
+	}
+	return slice
+}
+
+// matchingSlice returns the first slice whose discriminator agrees with an already
+// generated generic value, or nil. It compares each slice child's Fixed value to the
+// corresponding field of the generic value, so a phone ContactPoint matches the
+// phone slice (system=phone) rather than the email slice. This keeps a sliced
+// element's fallback value both conformant and internally consistent (e.g. a phone
+// number under system=phone rather than under system=email).
+func matchingSlice(node *model.ElementNode, generic any) *model.SliceNode {
+	gm, ok := generic.(map[string]any)
+	if !ok || node == nil {
+		return nil
+	}
+	for _, name := range sortedSliceNames(node.Slices) {
+		slice := node.Slices[name]
+		if slice == nil || slice.Definition == nil {
+			continue
+		}
+		for _, childName := range sortedSliceChildren(slice) {
+			child := slice.Children[childName]
+			if child == nil || child.Definition == nil || child.Definition.Fixed == nil {
+				continue
+			}
+			fixed, ok := child.Definition.Fixed.(string)
+			if !ok {
+				continue
+			}
+			if genericValue, ok := gm[childName].(string); ok && genericValue == fixed {
+				return slice
+			}
+		}
+	}
+	return nil
+}
+
 func synthesizeRegexExample(regex string) (string, bool) {
 	switch regex {
 	case "^([0-9]{11})$":
@@ -1557,6 +1666,290 @@ func resolveBoundCoding(def *model.ElementDefinition, reg *registry.Registry) (g
 		}
 	}
 	return generatedCoding{}, false
+}
+
+// resolveBoundCodingForNode resolves a bound coding for an element node, falling
+// back to the package's own example instance data when the bound ValueSet or
+// CodeSystem is not present in the registry (or carries no meaningful code).
+//
+// The registry represents the package and its dependencies in full, so example
+// instances are a first-class source of conformant values. The example-driven
+// fallback prefers an instance whose meta.profile matches the node's profile,
+// and otherwise uses the first example of the resource type, so generation only
+// emits the synthetic example.org fallback in genuinely exceptional cases.
+func resolveBoundCodingForNode(node *model.ElementNode, reg *registry.Registry) (generatedCoding, bool) {
+	if node == nil || node.Path == "" {
+		return generatedCoding{}, false
+	}
+	if node.Definition != nil {
+		if coding, ok := resolveBoundCoding(node.Definition, reg); ok {
+			return coding, true
+		}
+	}
+	// A CodeableConcept node may carry its required binding on its child
+	// "coding" element rather than on itself (common for nested extension
+	// value[x].coding, e.g. suppressedBy's responsible-party-type binding).
+	if coding, ok := resolveBoundCodingFromCodingChild(node, reg); ok {
+		return coding, true
+	}
+	return resolveBoundCodingFromExample(node, reg)
+}
+
+// resolveBoundCodingFromCodingChild resolves a bound coding from the node's
+// "coding" child element when the node itself has no binding but its coding
+// child does. This covers elements whose binding lives one level down, e.g.
+// Extension.extension.value[x] whose CodeableConcept has a nil binding but
+// whose value[x].coding carries the required value set.
+func resolveBoundCodingFromCodingChild(node *model.ElementNode, reg *registry.Registry) (generatedCoding, bool) {
+	if node == nil || reg == nil {
+		return generatedCoding{}, false
+	}
+	coding, ok := node.Children["coding"]
+	if !ok || coding == nil || coding.Definition == nil || coding.Definition.Binding == nil {
+		return generatedCoding{}, false
+	}
+	return resolveBoundCoding(coding.Definition, reg)
+}
+
+// resolveBoundCodingFromExample looks for a real coding at the node's element
+// path within the package's example instance resources. It prefers an instance
+// whose meta.profile matches the node's profile URL, then falls back to the
+// first example of the resource type (derived from the leading path segment).
+//
+// For an extension value[x] node (path "Extension.value[x]" whose profile is the
+// extension's StructureDefinition URL), it matches by extension URL across every
+// example instance — extension URLs are globally unique, so the coding is found
+// wherever the extension appears (e.g. the "new-patient-availability" extension
+// on a HealthcareService example).
+func resolveBoundCodingFromExample(node *model.ElementNode, reg *registry.Registry) (generatedCoding, bool) {
+	if node == nil || node.Path == "" || reg == nil {
+		return generatedCoding{}, false
+	}
+	// Extension value[x] resolution by extension URL.
+	if strings.HasPrefix(node.Path, "Extension.") && node.ProfileURL != "" {
+		return resolveBoundCodingFromExtensionValue(node.ProfileURL, reg)
+	}
+	resourceType, path := splitResourcePath(node.Path)
+	if resourceType == "" || path == "" {
+		return generatedCoding{}, false
+	}
+	instances := reg.ResourcesForType(resourceType)
+	if len(instances) == 0 {
+		return generatedCoding{}, false
+	}
+
+	// First pass: prefer instances whose meta.profile matches the node's profile.
+	profileURL := normalizeCanonical(node.ProfileURL)
+	for _, inst := range instances {
+		if !hasProfile(inst.ProfileURLs, profileURL) {
+			continue
+		}
+		if coding, ok := codingAtPath(inst.Raw, path); ok {
+			return coding, true
+		}
+	}
+	// Second pass: any example of the resource type.
+	for _, inst := range instances {
+		if coding, ok := codingAtPath(inst.Raw, path); ok {
+			return coding, true
+		}
+	}
+	return generatedCoding{}, false
+}
+
+// resolveBoundCodingFromExtensionValue searches every example instance for an
+// extension whose url equals extensionURL, and returns the first meaningful
+// coding from its valueCodeableConcept (or valueCoding). The extension URL is
+// globally unique, so this resolves wherever the extension appears in the
+// package's examples.
+func resolveBoundCodingFromExtensionValue(extensionURL string, reg *registry.Registry) (generatedCoding, bool) {
+	if extensionURL == "" || reg == nil {
+		return generatedCoding{}, false
+	}
+	extensionURL = normalizeCanonical(extensionURL)
+	for _, inst := range reg.AllResources() {
+		if inst == nil || inst.Raw == nil {
+			continue
+		}
+		if coding, ok := findExtensionValueCoding(inst.Raw, extensionURL); ok {
+			return coding, true
+		}
+	}
+	return generatedCoding{}, false
+}
+
+// findExtensionValueCoding walks a resource instance's extension array (and
+// nested extension arrays) looking for an extension whose url equals
+// extensionURL, then extracts the first meaningful coding from its
+// valueCodeableConcept or valueCoding.
+func findExtensionValueCoding(raw map[string]any, extensionURL string) (generatedCoding, bool) {
+	if raw == nil || extensionURL == "" {
+		return generatedCoding{}, false
+	}
+	// The top-level "extension" array, plus recurse into any nested resource
+	// values (e.g. contained resources or nested extensions) defensively.
+	if coding, ok := findExtensionValueCodingInAny(raw, extensionURL); ok {
+		return coding, true
+	}
+	return generatedCoding{}, false
+}
+
+func findExtensionValueCodingInAny(v any, extensionURL string) (generatedCoding, bool) {
+	switch typed := v.(type) {
+	case []any:
+		for _, item := range typed {
+			if coding, ok := findExtensionValueCodingInAny(item, extensionURL); ok {
+				return coding, true
+			}
+		}
+		return generatedCoding{}, false
+	case map[string]any:
+		// If this is an extension with the matching url, extract its value.
+		if u, ok := typed["url"].(string); ok && normalizeCanonical(u) == extensionURL {
+			if coding, ok := extensionValueCoding(typed); ok {
+				return coding, true
+			}
+		}
+		// Recurse into all sub-values, including nested extension arrays.
+		for _, val := range typed {
+			if coding, ok := findExtensionValueCodingInAny(val, extensionURL); ok {
+				return coding, true
+			}
+		}
+		return generatedCoding{}, false
+	default:
+		return generatedCoding{}, false
+	}
+}
+
+// extensionValueCoding extracts the first meaningful coding from an extension's
+// valueCodeableConcept or valueCoding.
+func extensionValueCoding(ext map[string]any) (generatedCoding, bool) {
+	if ext == nil {
+		return generatedCoding{}, false
+	}
+	if vcc, ok := ext["valueCodeableConcept"]; ok {
+		if coding, ok := firstCodingInValue(vcc); ok {
+			return coding, true
+		}
+	}
+	if vc, ok := ext["valueCoding"]; ok {
+		if coding, ok := firstCodingInValue(vc); ok {
+			return coding, true
+		}
+	}
+	return generatedCoding{}, false
+}
+
+// splitResourcePath splits a canonical element path into its leading resource
+// type and the remainder. E.g. "PractitionerRole.code" -> ("PractitionerRole",
+// "code"); "Patient.communication" -> ("Patient", "communication").
+func splitResourcePath(path string) (resourceType, elementPath string) {
+	idx := strings.Index(path, ".")
+	if idx <= 0 {
+		return "", ""
+	}
+	return path[:idx], path[idx+1:]
+}
+
+// hasProfile reports whether profileURL (possibly versionless) matches any of
+// the resource's declared profile URLs.
+func hasProfile(profiles []string, profileURL string) bool {
+	if profileURL == "" {
+		return false
+	}
+	for _, p := range profiles {
+		if normalizeCanonical(p) == profileURL {
+			return true
+		}
+	}
+	return false
+}
+
+// codingAtPath walks a raw resource instance to the named element path and
+// returns the first meaningful coding found there. It handles both a single
+// element and a repeatable element (an array of objects). path is the
+// dot-separated path below the resource root, e.g. "communication" or
+// "code.coding". The final element is expected to carry a "coding" array.
+func codingAtPath(raw map[string]any, path string) (generatedCoding, bool) {
+	if raw == nil || path == "" {
+		return generatedCoding{}, false
+	}
+	segments := strings.Split(path, ".")
+	// Descend into the element structure, handling arrays of objects at each
+	// repeatable level (e.g. communication[0].coding[0]).
+	var cur any = raw
+	for _, seg := range segments {
+		switch typed := cur.(type) {
+		case map[string]any:
+			next, ok := typed[seg]
+			if !ok {
+				return generatedCoding{}, false
+			}
+			cur = next
+		case []any:
+			// Recurse into the first element of the array that has the segment.
+			found := false
+			for _, item := range typed {
+				if itemMap, ok := item.(map[string]any); ok {
+					if next, ok := itemMap[seg]; ok {
+						cur = next
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
+				return generatedCoding{}, false
+			}
+		default:
+			return generatedCoding{}, false
+		}
+	}
+	return firstCodingInValue(cur)
+}
+
+// firstCodingInValue extracts the first meaningful coding from a value that is
+// either a CodeableConcept (map with "coding"), a Coding (map with system+code),
+// or an array of those.
+func firstCodingInValue(v any) (generatedCoding, bool) {
+	switch typed := v.(type) {
+	case []any:
+		for _, item := range typed {
+			if coding, ok := firstCodingInValue(item); ok {
+				return coding, true
+			}
+		}
+		return generatedCoding{}, false
+	case map[string]any:
+		// CodeableConcept: look at coding array.
+		if codings, ok := typed["coding"].([]any); ok {
+			for _, c := range codings {
+				if cm, ok := c.(map[string]any); ok {
+					if coding, ok := codingFromMap(cm); ok {
+						return coding, true
+					}
+				}
+			}
+			return generatedCoding{}, false
+		}
+		// Bare Coding.
+		return codingFromMap(typed)
+	default:
+		return generatedCoding{}, false
+	}
+}
+
+// codingFromMap converts a raw coding map into a generatedCoding, returning
+// false when the code is empty or not meaningful.
+func codingFromMap(m map[string]any) (generatedCoding, bool) {
+	code, _ := m["code"].(string)
+	if !isMeaningfulCoding(code, "") {
+		return generatedCoding{}, false
+	}
+	system, _ := m["system"].(string)
+	display, _ := m["display"].(string)
+	return generatedCoding{System: system, Code: code, Display: display}, true
 }
 
 // meaningfulCodingCodes are codes that represent null/placeholder values (not a
