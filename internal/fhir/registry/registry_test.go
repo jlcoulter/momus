@@ -160,6 +160,131 @@ func TestRegistryIndexesProfilesByResourceType(t *testing.T) {
 	}
 }
 
+func TestRegistryIndexesValueSetAndCodeSystem(t *testing.T) {
+	r := New()
+	vs := &model.ValueSet{URL: "http://example.org/ValueSet/vs", Name: "VS"}
+	cs := &model.CodeSystem{URL: "http://example.org/CodeSystem/cs", Name: "CS"}
+	r.AddValueSet(vs)
+	r.AddCodeSystem(cs)
+	// Nil and empty-URL entries are ignored.
+	r.AddValueSet(nil)
+	r.AddValueSet(&model.ValueSet{})
+	r.AddCodeSystem(nil)
+	r.AddCodeSystem(&model.CodeSystem{})
+
+	if got, ok := r.ValueSet("http://example.org/ValueSet/vs"); !ok || got != vs {
+		t.Fatalf("ValueSet = %v, %v; want the indexed value set", got, ok)
+	}
+	if got, ok := r.CodeSystem("http://example.org/CodeSystem/cs"); !ok || got != cs {
+		t.Fatalf("CodeSystem = %v, %v; want the indexed code system", got, ok)
+	}
+	if _, ok := r.ValueSet("http://example.org/missing"); ok {
+		t.Fatal("did not expect a value set for an unknown URL")
+	}
+	if _, ok := r.CodeSystem("http://example.org/missing"); ok {
+		t.Fatal("did not expect a code system for an unknown URL")
+	}
+}
+
+func TestRegistryStructureDefinitionsAndCapabilityStatements(t *testing.T) {
+	r := New()
+	sd1 := &model.StructureDefinition{URL: "http://example.org/StructureDefinition/a", Type: "Patient"}
+	sd2 := &model.StructureDefinition{URL: "http://example.org/StructureDefinition/b", Type: "Observation"}
+	r.AddStructureDefinition(sd1)
+	r.AddStructureDefinition(sd2)
+	cs := &model.CapabilityStatement{URL: "http://example.org/CapabilityStatement/server"}
+	r.AddCapabilityStatement(cs)
+
+	defs := r.StructureDefinitions()
+	if len(defs) != 2 {
+		t.Fatalf("StructureDefinitions() = %d, want 2", len(defs))
+	}
+	seen := map[string]bool{}
+	for _, sd := range defs {
+		seen[sd.URL] = true
+	}
+	if !seen[sd1.URL] || !seen[sd2.URL] {
+		t.Fatalf("StructureDefinitions() missing entries: %v", seen)
+	}
+
+	stmts := r.CapabilityStatements()
+	if len(stmts) != 1 || stmts[0] != cs {
+		t.Fatalf("CapabilityStatements() = %v, want the indexed statement", stmts)
+	}
+}
+
+func TestRegistrySearchParametersDeduplicates(t *testing.T) {
+	r := New()
+	sp := &model.SearchParameter{Code: "name", Base: []string{"Patient", "Practitioner"}, Name: "name"}
+	r.AddSearchParameter(sp)
+	// Nil and empty-code entries are ignored.
+	r.AddSearchParameter(nil)
+	r.AddSearchParameter(&model.SearchParameter{})
+
+	if got, ok := r.SearchParameter("Patient", "name"); !ok || got != sp {
+		t.Fatalf("SearchParameter(Patient,name) = %v, %v; want the indexed parameter", got, ok)
+	}
+	if got, ok := r.SearchParameter("Practitioner", "name"); !ok || got != sp {
+		t.Fatalf("SearchParameter(Practitioner,name) = %v, %v; want the indexed parameter", got, ok)
+	}
+	if _, ok := r.SearchParameter("Patient", "other"); ok {
+		t.Fatal("did not expect a search parameter for an unknown code")
+	}
+	// The same parameter indexed under two resource types is returned once.
+	if got := r.SearchParameters(); len(got) != 1 {
+		t.Fatalf("SearchParameters() = %d, want 1 (deduplicated)", len(got))
+	}
+}
+
+func TestRegistrySetScopeToResourceTypesAndProfiles(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/pat", Type: "Patient"})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/obs", Type: "Observation"})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Patient", Type: "Patient"})
+
+	// Narrow to Patient only.
+	r.SetScopeToResourceTypesAndProfiles([]string{"Patient"}, nil)
+	scoped := r.ScopedStructureDefinitions()
+	if len(scoped) != 2 {
+		t.Fatalf("scoped defs = %d, want 2 (both Patient profiles)", len(scoped))
+	}
+	for _, sd := range scoped {
+		if sd.Type != "Patient" {
+			t.Fatalf("unexpected scoped type %q, want Patient", sd.Type)
+		}
+	}
+
+	// Narrow further to a specific profile URL.
+	r.SetScopeToResourceTypesAndProfiles([]string{"Patient"}, []string{"http://example.org/StructureDefinition/pat"})
+	scoped = r.ScopedStructureDefinitions()
+	if len(scoped) != 1 || scoped[0].URL != "http://example.org/StructureDefinition/pat" {
+		t.Fatalf("scoped defs = %+v, want only the example Patient profile", scoped)
+	}
+
+	// Empty types + empty profiles on a fresh registry keeps everything in scope.
+	fresh := New()
+	fresh.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/pat", Type: "Patient"})
+	fresh.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/obs", Type: "Observation"})
+	fresh.SetScopeToResourceTypesAndProfiles(nil, nil)
+	if got := len(fresh.ScopedStructureDefinitions()); got != 2 {
+		t.Fatalf("scoped defs = %d, want 2 (no narrowing)", got)
+	}
+}
+
+func TestRegistrySetScopeToResourceTypesAndProfilesIntersectsExistingScope(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/pat", Type: "Patient"})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/obs", Type: "Observation"})
+	r.SetScope([]string{"http://example.org/StructureDefinition/pat", "http://example.org/StructureDefinition/obs"})
+
+	// Overlay a type filter on top of the existing scope.
+	r.SetScopeToResourceTypesAndProfiles([]string{"Observation"}, nil)
+	scoped := r.ScopedStructureDefinitions()
+	if len(scoped) != 1 || scoped[0].URL != "http://example.org/StructureDefinition/obs" {
+		t.Fatalf("scoped defs = %+v, want only the Observation profile", scoped)
+	}
+}
+
 func TestRegistryIndexesSearchParameterByResourceAndCode(t *testing.T) {
 	r := New()
 	sp := &model.SearchParameter{Code: "code", Base: []string{"Observation"}, Name: "code"}
