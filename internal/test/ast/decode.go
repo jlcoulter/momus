@@ -1,6 +1,11 @@
 package ast
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+	"math"
+	"strconv"
+)
 
 // DecodeNode is the inverse of EncodeNode. It switches on the "type" tag and
 // reconstructs the concrete node. Unknown or missing types produce an error.
@@ -90,7 +95,7 @@ func decodeRequest(raw map[string]any) (Node, error) {
 
 	var body any
 	if b, ok := raw["body"]; ok {
-		body = b
+		body = normalizeJSONValue(b)
 	}
 
 	return &Request{
@@ -142,6 +147,47 @@ func decodeTrace(raw map[string]any) (*Trace, error) {
 		Variant:      getString(raw, "variant"),
 		Expected:     getString(raw, "expected"),
 	}, nil
+}
+
+// normalizeJSONValue recursively converts numeric values in v to json.Number so
+// that integers survive a JSON round-trip without being mangled through
+// float64. Whole-number float64 values and integer types are preserved as
+// json.Number; all other values are returned unchanged.
+func normalizeJSONValue(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, e := range val {
+			out[k] = normalizeJSONValue(e)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, e := range val {
+			out[i] = normalizeJSONValue(e)
+		}
+		return out
+	case float64:
+		if isWholeNumber(val) {
+			return json.Number(strconv.FormatFloat(val, 'f', -1, 64))
+		}
+		return val
+	case int:
+		return json.Number(strconv.Itoa(val))
+	case int64:
+		return json.Number(strconv.FormatInt(val, 10))
+	case int32:
+		return json.Number(strconv.FormatInt(int64(val), 10))
+	case json.Number:
+		return val
+	default:
+		return v
+	}
+}
+
+// isWholeNumber reports whether f is an integer value (no fractional part).
+func isWholeNumber(f float64) bool {
+	return f == math.Trunc(f)
 }
 
 // getString reads a string field from a map, returning "" for missing or

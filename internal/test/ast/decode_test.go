@@ -1,6 +1,8 @@
 package ast
 
 import (
+	"bytes"
+	"encoding/json"
 	"reflect"
 	"testing"
 )
@@ -125,6 +127,88 @@ func TestDecodeRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(*asrt.Trace, *wantAsrt.Trace) {
 		t.Errorf("trace: got %#v want %#v", *asrt.Trace, *wantAsrt.Trace)
+	}
+}
+
+func TestRequestBodyLargeIntegerRoundTrip(t *testing.T) {
+	original := &Plan{
+		Version: "1",
+		Root: &Sequence{Steps: []Node{
+			&Request{
+				Method: "POST",
+				URL:    "https://example.com/Patient",
+				Body:   map[string]any{"id": int64(9223372036854775807)},
+			},
+		}},
+	}
+
+	encoded, err := EncodePlan(original)
+	if err != nil {
+		t.Fatalf("EncodePlan: %v", err)
+	}
+
+	// Marshal to JSON and unmarshal with UseNumber so integer values are
+	// preserved as json.Number rather than being mangled through float64.
+	data, err := json.Marshal(encoded)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var roundTripped map[string]any
+	if err := dec.Decode(&roundTripped); err != nil {
+		t.Fatalf("json.Decode: %v", err)
+	}
+
+	decoded, err := decodePlanRoot(t, roundTripped)
+	if err != nil {
+		t.Fatalf("decodePlanRoot: %v", err)
+	}
+
+	seq, ok := decoded.Root.(*Sequence)
+	if !ok {
+		t.Fatalf("root: want *Sequence, got %T", decoded.Root)
+	}
+	req, ok := seq.Steps[0].(*Request)
+	if !ok {
+		t.Fatalf("step 0: want *Request, got %T", seq.Steps[0])
+	}
+	body, ok := req.Body.(map[string]any)
+	if !ok {
+		t.Fatalf("body: want map[string]any, got %T", req.Body)
+	}
+	id, ok := body["id"].(json.Number)
+	if !ok {
+		t.Fatalf("body[\"id\"]: want json.Number, got %T", body["id"])
+	}
+	if id.String() != "9223372036854775807" {
+		t.Errorf("body[\"id\"]: got %s want 9223372036854775807", id.String())
+	}
+}
+
+func TestDecodeRequestBodyNormalizesWholeNumberFloat(t *testing.T) {
+	// A body decoded from JSON without UseNumber arrives with numbers as
+	// float64. Whole-number float64 values must be normalized back to
+	// json.Number so integer fidelity is preserved.
+	req, err := DecodeNode(map[string]any{
+		"type":   "request",
+		"method": "POST",
+		"url":    "https://example.com/Patient",
+		"body":   map[string]any{"id": float64(42), "nested": []any{float64(7)}},
+	})
+	if err != nil {
+		t.Fatalf("DecodeNode: %v", err)
+	}
+	body := req.(*Request).Body.(map[string]any)
+	if id, ok := body["id"].(json.Number); !ok || id.String() != "42" {
+		t.Errorf("body[\"id\"]: got %#v want json.Number(42)", body["id"])
+	}
+	nested, ok := body["nested"].([]any)
+	if !ok {
+		t.Fatalf("body[\"nested\"]: want []any, got %T", body["nested"])
+	}
+	if n, ok := nested[0].(json.Number); !ok || n.String() != "7" {
+		t.Errorf("nested[0]: got %#v want json.Number(7)", nested[0])
 	}
 }
 

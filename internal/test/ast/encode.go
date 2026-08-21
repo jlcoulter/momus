@@ -38,7 +38,7 @@ func EncodeNode(node Node) (map[string]any, error) {
 			"method":  n.Method,
 			"url":     n.URL,
 			"headers": n.Headers,
-			"body":    n.Body,
+			"body":    normalizeJSONValue(n.Body),
 		}, nil
 	case *Capture:
 		return map[string]any{
