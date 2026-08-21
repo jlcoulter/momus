@@ -265,3 +265,43 @@ func TestElementSliceKeyPreservesIDSliceContext(t *testing.T) {
 		}
 	}
 }
+
+// TestStampProfileStampsSlicesAndChildren verifies that NewResolvedProfile
+// stamps the profile URL onto every node in the tree, including slice nodes and
+// their children, so generation can locate profile-matched example data.
+func TestStampProfileStampsSlicesAndChildren(t *testing.T) {
+	canonical := "http://example.org/StructureDefinition/org"
+	profile := NewResolvedProfile(canonical, "Organization", []ElementDefinition{
+		{Path: "Organization", Name: "Organization"},
+		{Path: "Organization.extension", Name: "extension", Min: 0, Max: "*"},
+		{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 0, Max: "1"},
+		{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: "1"},
+	})
+	if profile == nil || profile.Root == nil {
+		t.Fatal("expected a resolved profile with a root")
+	}
+	if profile.Root.ProfileURL != canonical {
+		t.Fatalf("root ProfileURL = %q, want %q", profile.Root.ProfileURL, canonical)
+	}
+	ext := profile.Root.Children["extension"]
+	if ext == nil {
+		t.Fatal("expected extension child node")
+	}
+	if ext.ProfileURL != canonical {
+		t.Fatalf("extension child ProfileURL = %q, want %q", ext.ProfileURL, canonical)
+	}
+	suppressed := ext.Slices["suppressed"]
+	if suppressed == nil {
+		t.Fatal("expected suppressed slice")
+	}
+	if suppressed.ProfileURL != canonical {
+		t.Fatalf("slice ProfileURL = %q, want %q", suppressed.ProfileURL, canonical)
+	}
+	urlNode := suppressed.Children["url"]
+	if urlNode == nil {
+		t.Fatal("expected suppressed slice url child")
+	}
+	if urlNode.ProfileURL != canonical {
+		t.Fatalf("slice child ProfileURL = %q, want %q", urlNode.ProfileURL, canonical)
+	}
+}

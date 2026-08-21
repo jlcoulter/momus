@@ -156,6 +156,86 @@ func TestPlanDependenciesCycleBreakerPreservesDownstreamOrder(t *testing.T) {
 	}
 }
 
+func TestPlanLevelsBuildsTopologicalLevels(t *testing.T) {
+	plan, err := PlanLevels([]string{"Patient", "Observation", "DiagnosticReport"}, map[string][]string{
+		"Observation":      {"Patient"},
+		"DiagnosticReport": {"Observation", "Patient"},
+	})
+	if err != nil {
+		t.Fatalf("PlanLevels returned error: %v", err)
+	}
+	if len(plan.Levels) != 3 {
+		t.Fatalf("got %d levels, want 3: %+v", len(plan.Levels), plan.Levels)
+	}
+	if plan.Levels[0][0] != "Patient" || plan.Levels[1][0] != "Observation" || plan.Levels[2][0] != "DiagnosticReport" {
+		t.Fatalf("unexpected level order: %+v", plan.Levels)
+	}
+	if len(plan.Dependencies["Observation"]) != 1 || plan.Dependencies["Observation"][0] != "Patient" {
+		t.Fatalf("dependencies = %+v", plan.Dependencies)
+	}
+}
+
+func TestPlanLevelsFiltersOutOfScopeDependencies(t *testing.T) {
+	// "Encounter" is a dependency but not in the resource set; it must be
+	// dropped rather than scheduled.
+	plan, err := PlanLevels([]string{"Patient", "Observation"}, map[string][]string{
+		"Observation": {"Patient", "Encounter"},
+	})
+	if err != nil {
+		t.Fatalf("PlanLevels returned error: %v", err)
+	}
+	if len(plan.Levels) != 2 {
+		t.Fatalf("got %d levels, want 2: %+v", len(plan.Levels), plan.Levels)
+	}
+	if len(plan.Dependencies["Observation"]) != 1 || plan.Dependencies["Observation"][0] != "Patient" {
+		t.Fatalf("dependencies = %+v, want only Patient (Encounter filtered)", plan.Dependencies)
+	}
+}
+
+func TestPlanLevelsIgnoresSelfDependency(t *testing.T) {
+	plan, err := PlanLevels([]string{"Patient"}, map[string][]string{
+		"Patient": {"Patient"},
+	})
+	if err != nil {
+		t.Fatalf("PlanLevels returned error: %v", err)
+	}
+	if len(plan.Levels) != 1 || len(plan.Levels[0]) != 1 || plan.Levels[0][0] != "Patient" {
+		t.Fatalf("unexpected levels for self-dependency: %+v", plan.Levels)
+	}
+}
+
+func TestPlanLevelsEmptyInput(t *testing.T) {
+	plan, err := PlanLevels(nil, nil)
+	if err != nil {
+		t.Fatalf("PlanLevels returned error: %v", err)
+	}
+	if plan.Levels != nil || plan.Dependencies == nil {
+		t.Fatalf("expected empty plan, got %+v", plan)
+	}
+}
+
+func TestPlanLevelsBreaksCycle(t *testing.T) {
+	plan, err := PlanLevels([]string{"A", "B"}, map[string][]string{
+		"A": {"B"},
+		"B": {"A"},
+	})
+	if err != nil {
+		t.Fatalf("PlanLevels returned error: %v", err)
+	}
+	if len(plan.Levels) != 2 {
+		t.Fatalf("got %d levels, want 2 (cycle broken): %+v", len(plan.Levels), plan.Levels)
+	}
+	seen := map[string]bool{}
+	for _, level := range plan.Levels {
+		for _, rt := range level {
+			seen[rt] = true
+		}
+	}
+	if !seen["A"] || !seen["B"] {
+		t.Fatalf("cycle break must emit each node once, got %+v", plan.Levels)
+	}
+}
+
 func TestPlanDependenciesNormalizesProfileLikeDependencyTargets(t *testing.T) {
 	reqs := []CoverageRequirement{
 		{ID: "org-1", ResourceType: "Organization", ElementPath: "Organization.name"},

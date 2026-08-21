@@ -510,3 +510,267 @@ func TestDefaultProfilePrefersScopedProfile(t *testing.T) {
 		t.Fatalf("defaultProfile unscoped = %q, want first (base) profile", got)
 	}
 }
+
+func TestResolveBoundCodingFromExpansionAndCompose(t *testing.T) {
+	reg := registry.New()
+	// Expansion contains a nested code.
+	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/expanded", ExpansionContains: []model.ValueSetExpansionContains{
+		{System: "http://example.org/cs", Code: "parent", Contains: []model.ValueSetExpansionContains{
+			{System: "http://example.org/cs", Code: "child", Display: "Child"},
+		}},
+	}})
+	// Compose include with concepts.
+	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/composed", ComposeIncludes: []model.ValueSetInclude{
+		{System: "http://example.org/cs2", Concepts: []model.ConceptReference{{Code: "c1", Display: "C1"}}},
+	}})
+	// Compose include referencing a code system.
+	reg.AddCodeSystem(&model.CodeSystem{URL: "http://example.org/cs3", Concepts: []model.CodeSystemConcept{{Code: "k1", Display: "K1"}}})
+	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/csref", ComposeIncludes: []model.ValueSetInclude{
+		{System: "http://example.org/cs3"},
+	}})
+
+	def := func(vs string) *model.ElementDefinition {
+		return &model.ElementDefinition{Binding: &model.Binding{Strength: "required", ValueSet: vs}}
+	}
+
+	if c, ok := resolveBoundCoding(def("http://example.org/ValueSet/expanded"), reg); !ok || c.Code != "parent" {
+		t.Fatalf("expansion coding = %+v ok=%v, want parent (first non-empty code)", c, ok)
+	}
+	if c, ok := resolveBoundCoding(def("http://example.org/ValueSet/composed"), reg); !ok || c.Code != "c1" {
+		t.Fatalf("compose coding = %+v ok=%v, want c1", c, ok)
+	}
+	if c, ok := resolveBoundCoding(def("http://example.org/ValueSet/csref"), reg); !ok || c.Code != "k1" {
+		t.Fatalf("code-system coding = %+v ok=%v, want k1", c, ok)
+	}
+	// No binding / unknown value set / nil registry -> not found.
+	if _, ok := resolveBoundCoding(&model.ElementDefinition{}, reg); ok {
+		t.Fatal("expected no coding for element without binding")
+	}
+	if _, ok := resolveBoundCoding(def("http://example.org/ValueSet/missing"), reg); ok {
+		t.Fatal("expected no coding for unknown value set")
+	}
+	if _, ok := resolveBoundCoding(def("http://example.org/ValueSet/expanded"), nil); ok {
+		t.Fatal("expected no coding for nil registry")
+	}
+}
+
+func TestCodingToMapOmitsEmptyFields(t *testing.T) {
+	m := codingToMap(synthesizedCoding{System: "http://example.org/cs", Code: "c", Display: "D"})
+	if m["system"] != "http://example.org/cs" || m["code"] != "c" || m["display"] != "D" {
+		t.Fatalf("codingToMap = %v", m)
+	}
+	empty := codingToMap(synthesizedCoding{})
+	if len(empty) != 0 {
+		t.Fatalf("codingToMap(empty) = %v, want empty map", empty)
+	}
+}
+
+func TestMergeBulkSlicePattern(t *testing.T) {
+	// No existing value: the pattern is cloned in.
+	value := map[string]any{}
+	mergeBulkSlicePattern(value, "coding", map[string]any{"system": "http://example.org/cs", "code": "c"})
+	coding, ok := value["coding"].(map[string]any)
+	if !ok || coding["code"] != "c" {
+		t.Fatalf("merged coding = %v", value["coding"])
+	}
+
+	// Existing nested object: recurse and merge, preserving existing keys.
+	value2 := map[string]any{"coding": map[string]any{"system": "http://old"}}
+	mergeBulkSlicePattern(value2, "coding", map[string]any{"code": "new", "display": "New"})
+	c2 := value2["coding"].(map[string]any)
+	if c2["system"] != "http://old" || c2["code"] != "new" {
+		t.Fatalf("merged existing coding = %v", c2)
+	}
+}
+
+func TestStripEmptyExtensionsRemovesInvalidExtensions(t *testing.T) {
+	body := map[string]any{
+		"extension": []any{
+			// Empty extension (no value, no sub-extension) -> removed.
+			map[string]any{"url": "http://example.org/empty"},
+			// Valid simple extension with a value -> kept.
+			map[string]any{"url": "http://example.org/valued", "valueString": "x"},
+			// Valid complex extension with a sub-extension -> kept.
+			map[string]any{"url": "http://example.org/complex", "extension": []any{map[string]any{"url": "sub", "valueBoolean": true}}},
+		},
+	}
+	stripEmptyExtensions(body)
+	arr := body["extension"].([]any)
+	if len(arr) != 2 {
+		t.Fatalf("extension array = %d entries, want 2 (empty removed)", len(arr))
+	}
+	for _, raw := range arr {
+		m := raw.(map[string]any)
+		if m["url"] == "http://example.org/empty" {
+			t.Fatal("empty extension was not stripped")
+		}
+	}
+
+	// A map with no extension key is left alone; nested arrays are recursed.
+	nested := map[string]any{"a": []any{map[string]any{"extension": []any{map[string]any{"url": "http://example.org/empty"}}}}}
+	stripEmptyExtensions(nested)
+	inner := nested["a"].([]any)[0].(map[string]any)
+	if _, ok := inner["extension"]; ok {
+		t.Fatal("nested empty extension was not stripped")
+	}
+}
+
+func TestIsEmptyExtension(t *testing.T) {
+	if !isEmptyExtension(map[string]any{"url": "http://example.org/x"}) {
+		t.Fatal("extension with only a url should be empty")
+	}
+	if isEmptyExtension(map[string]any{"url": "http://example.org/x", "valueString": "v"}) {
+		t.Fatal("extension with a value should not be empty")
+	}
+	if isEmptyExtension(map[string]any{"url": "http://example.org/x", "extension": []any{map[string]any{"url": "sub"}}}) {
+		t.Fatal("extension with a sub-extension should not be empty")
+	}
+	if isEmptyExtension(nil) {
+		t.Fatal("nil map should not be considered empty")
+	}
+	if isEmptyExtension(map[string]any{"valueString": "v"}) {
+		t.Fatal("extension without a url should not be considered empty")
+	}
+}
+
+func TestSynthesizeNodeValuePrimitiveTypes(t *testing.T) {
+	reg := registry.New()
+	rng := newRNG("seed")
+
+	cases := []struct {
+		code string
+		path string
+	}{
+		{"string", "Observation.note"},
+		{"id", "Observation.id"},
+		{"uri", "Observation.url"},
+		{"code", "Observation.status"},
+		{"boolean", "Observation.active"},
+		{"integer", "Observation.value"},
+		{"decimal", "Observation.value"},
+		{"date", "Observation.date"},
+		{"dateTime", "Observation.issued"},
+		{"time", "Observation.time"},
+	}
+	for _, c := range cases {
+		node := &model.ElementNode{Path: c.path, Definition: &model.ElementDefinition{Path: c.path, Types: []model.ElementType{{Code: c.code}}}}
+		if v := synthesizeNodeValue(node, reg, nil, rng); v == nil {
+			t.Fatalf("synthesizeNodeValue(%s) = nil", c.code)
+		}
+	}
+	// Fixed value short-circuits.
+	fixed := &model.ElementNode{Path: "Observation.status", Definition: &model.ElementDefinition{Path: "Observation.status", Types: []model.ElementType{{Code: "code"}}, Fixed: "final"}}
+	if v := synthesizeNodeValue(fixed, reg, nil, rng); v != "final" {
+		t.Fatalf("fixed value = %v, want final", v)
+	}
+	// Nil node returns nil.
+	if v := synthesizeNodeValue(nil, reg, nil, rng); v != nil {
+		t.Fatalf("nil node = %v, want nil", v)
+	}
+}
+
+func TestSynthesizeNodeValueComplexTypes(t *testing.T) {
+	reg := registry.New()
+	rng := newRNG("seed")
+	cases := []string{"Identifier", "HumanName", "Address", "ContactPoint", "Quantity", "Period", "CodeableConcept", "Coding", "Reference"}
+	for _, code := range cases {
+		node := &model.ElementNode{Path: "Observation." + code, Definition: &model.ElementDefinition{Path: "Observation." + code, Types: []model.ElementType{{Code: code}}}}
+		if v := synthesizeNodeValue(node, reg, nil, rng); v == nil {
+			t.Fatalf("synthesizeNodeValue(%s) = nil", code)
+		}
+	}
+	// A Reference with a wired target uses the target.
+	refs := map[string]refTarget{"Observation.subject": {resourceType: "Patient", localID: "p-1"}}
+	refNode := &model.ElementNode{Path: "Observation.subject", Definition: &model.ElementDefinition{Path: "Observation.subject", Types: []model.ElementType{{Code: "Reference"}}}}
+	ref := synthesizeNodeValue(refNode, reg, refs, rng).(map[string]any)
+	if ref["reference"] != "Patient/p-1" {
+		t.Fatalf("wired reference = %v, want Patient/p-1", ref["reference"])
+	}
+}
+
+func TestSynthesizeNodeValueBoundCoding(t *testing.T) {
+	reg := registry.New()
+	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/status", ComposeIncludes: []model.ValueSetInclude{
+		{System: "http://example.org/cs", Concepts: []model.ConceptReference{{Code: "active", Display: "Active"}}},
+	}})
+	rng := newRNG("seed")
+
+	// A bound `code` element returns the bound code.
+	codeNode := &model.ElementNode{Path: "Observation.status", Definition: &model.ElementDefinition{Path: "Observation.status", Types: []model.ElementType{{Code: "code"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/status"}}}
+	if v := synthesizeNodeValue(codeNode, reg, nil, rng); v != "active" {
+		t.Fatalf("bound code = %v, want active", v)
+	}
+
+	// A bound CodeableConcept returns a coding with the bound code.
+	ccNode := &model.ElementNode{Path: "Observation.code", Definition: &model.ElementDefinition{Path: "Observation.code", Types: []model.ElementType{{Code: "CodeableConcept"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/status"}}}
+	cc := synthesizeNodeValue(ccNode, reg, nil, rng).(map[string]any)
+	codings := cc["coding"].([]any)
+	if codings[0].(map[string]any)["code"] != "active" {
+		t.Fatalf("bound CodeableConcept coding = %v, want active", codings[0])
+	}
+}
+
+func TestMergePatternWithBinding(t *testing.T) {
+	binding := synthesizedCoding{System: "http://example.org/cs", Code: "c", Display: "D"}
+	pattern := map[string]any{"system": "http://old", "code": "old"}
+	// No binding -> not merged.
+	if _, ok := mergePatternWithBinding(pattern, "CodeableConcept", synthesizedCoding{}, false); ok {
+		t.Fatal("expected no merge without a binding")
+	}
+	// Non-map pattern -> not merged.
+	if _, ok := mergePatternWithBinding("not-a-map", "CodeableConcept", binding, true); ok {
+		t.Fatal("expected no merge for a non-map pattern")
+	}
+	// CodeableConcept merges system/code/display.
+	merged, ok := mergePatternWithBinding(pattern, "CodeableConcept", binding, true)
+	if !ok {
+		t.Fatal("expected a merged CodeableConcept")
+	}
+	m := merged.(map[string]any)
+	if m["system"] != "http://example.org/cs" || m["code"] != "c" || m["display"] != "D" {
+		t.Fatalf("merged CodeableConcept = %v", m)
+	}
+	// Coding merges too.
+	if _, ok := mergePatternWithBinding(pattern, "Coding", binding, true); !ok {
+		t.Fatal("expected a merged Coding")
+	}
+	// Unsupported type -> not merged.
+	if _, ok := mergePatternWithBinding(pattern, "string", binding, true); ok {
+		t.Fatal("expected no merge for a non-coding type")
+	}
+}
+
+func TestFindSliceValueXAndSliceExtensionRoot(t *testing.T) {
+	reg := registry.New()
+	// A simple extension profile with a value[x].
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://example.org/StructureDefinition/simple-ext", Type: "Extension",
+		Elements: []model.ElementDefinition{
+			{Path: "Extension", Min: 0, Max: "1"},
+			{Path: "Extension.url", Min: 1, Max: "1"},
+			{Path: "Extension.value[x]", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+	slice := &model.SliceNode{
+		Name: "simple",
+		Definition: &model.ElementDefinition{
+			Path:  "Organization.extension",
+			Types: []model.ElementType{{Code: "Extension", Profile: []string{"http://example.org/StructureDefinition/simple-ext"}}},
+		},
+	}
+	vx, ok := findSliceValueX(slice, reg)
+	if !ok || vx == nil || vx.Definition == nil {
+		t.Fatalf("findSliceValueX = %v, %v; want the value[x] node", vx, ok)
+	}
+	root := sliceExtensionRoot(slice, reg)
+	if root == nil {
+		t.Fatal("sliceExtensionRoot = nil, want the resolved extension root")
+	}
+	// Nil slice / nil registry -> not found.
+	if _, ok := findSliceValueX(nil, reg); ok {
+		t.Fatal("expected not-found for nil slice")
+	}
+	if root := sliceExtensionRoot(slice, nil); root != nil {
+		t.Fatal("expected nil root for nil registry")
+	}
+}

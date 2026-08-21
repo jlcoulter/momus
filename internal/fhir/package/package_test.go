@@ -475,6 +475,207 @@ func TestReadPackageSkipsNonFHIRJSONWithoutResourceType(t *testing.T) {
 	}
 }
 
+func TestReadPackageDecodesConstraintsAndCodeSystemConcepts(t *testing.T) {
+	archivePath := buildTestPackageArchive(t, map[string]any{
+		"package/package.json": map[string]any{
+			"name":    "example.fhir.pkg",
+			"version": "1.2.3",
+		},
+		"package/StructureDefinition-test.json": map[string]any{
+			"resourceType": "StructureDefinition",
+			"url":          "http://example.org/StructureDefinition/test",
+			"type":         "Observation",
+			"snapshot": map[string]any{
+				"element": []map[string]any{
+					{
+						"id": "Observation", "path": "Observation", "min": 0, "max": "*",
+						"constraint": []map[string]any{
+							{"key": "obs-1", "severity": "error", "human": "status required", "expression": "status.exists()", "source": "http://example.org"},
+						},
+					},
+				},
+			},
+		},
+		"package/CodeSystem-test.json": map[string]any{
+			"resourceType": "CodeSystem",
+			"url":          "http://example.org/CodeSystem/test",
+			"concept": []map[string]any{
+				{"code": "A", "display": "Alpha", "concept": []map[string]any{
+					{"code": "A1", "display": "Alpha One", "concept": []map[string]any{
+						{"code": "A1a", "display": "Alpha One A"},
+					}},
+				}},
+			},
+		},
+	})
+
+	pkg, err := ReadPackage(archivePath)
+	if err != nil {
+		t.Fatalf("ReadPackage returned error: %v", err)
+	}
+
+	var sd *model.StructureDefinition
+	var cs *model.CodeSystem
+	for _, res := range pkg.Resources {
+		switch r := res.(type) {
+		case *model.StructureDefinition:
+			sd = r
+		case *model.CodeSystem:
+			cs = r
+		}
+	}
+	if sd == nil {
+		t.Fatal("expected a StructureDefinition resource")
+	}
+	if len(sd.Elements) != 1 || len(sd.Elements[0].Constraints) != 1 {
+		t.Fatalf("expected one element with one constraint, got %+v", sd.Elements)
+	}
+	c := sd.Elements[0].Constraints[0]
+	if c.Key != "obs-1" || c.Severity != "error" || c.Expression != "status.exists()" || c.Source != "http://example.org" {
+		t.Fatalf("unexpected constraint: %+v", c)
+	}
+
+	if cs == nil {
+		t.Fatal("expected a CodeSystem resource")
+	}
+	if len(cs.Concepts) != 1 || cs.Concepts[0].Code != "A" {
+		t.Fatalf("unexpected code system concepts: %+v", cs.Concepts)
+	}
+	if len(cs.Concepts[0].Concepts) != 1 || cs.Concepts[0].Concepts[0].Code != "A1" {
+		t.Fatalf("unexpected nested concept: %+v", cs.Concepts[0].Concepts)
+	}
+	if len(cs.Concepts[0].Concepts[0].Concepts) != 1 || cs.Concepts[0].Concepts[0].Concepts[0].Code != "A1a" {
+		t.Fatalf("unexpected grandchild concept: %+v", cs.Concepts[0].Concepts[0].Concepts)
+	}
+}
+
+func TestReadPackageDecodesValueSetExpansion(t *testing.T) {
+	archivePath := buildTestPackageArchive(t, map[string]any{
+		"package/package.json": map[string]any{
+			"name":    "example.fhir.pkg",
+			"version": "1.2.3",
+		},
+		"package/ValueSet-test.json": map[string]any{
+			"resourceType": "ValueSet",
+			"url":          "http://example.org/ValueSet/test",
+			"expansion": map[string]any{
+				"contains": []map[string]any{
+					{"system": "http://example.org/cs", "code": "A", "display": "Alpha", "contains": []map[string]any{
+						{"system": "http://example.org/cs", "code": "A1", "display": "Alpha One", "contains": []map[string]any{
+							{"system": "http://example.org/cs", "code": "A1a", "display": "Alpha One A"},
+						}},
+					}},
+				},
+			},
+		},
+	})
+
+	pkg, err := ReadPackage(archivePath)
+	if err != nil {
+		t.Fatalf("ReadPackage returned error: %v", err)
+	}
+	var vs *model.ValueSet
+	for _, res := range pkg.Resources {
+		if v, ok := res.(*model.ValueSet); ok {
+			vs = v
+		}
+	}
+	if vs == nil {
+		t.Fatal("expected a ValueSet resource")
+	}
+	if len(vs.ExpansionContains) != 1 || vs.ExpansionContains[0].Code != "A" {
+		t.Fatalf("unexpected expansion: %+v", vs.ExpansionContains)
+	}
+	if len(vs.ExpansionContains[0].Contains) != 1 || vs.ExpansionContains[0].Contains[0].Code != "A1" {
+		t.Fatalf("unexpected nested expansion: %+v", vs.ExpansionContains[0].Contains)
+	}
+	if len(vs.ExpansionContains[0].Contains[0].Contains) != 1 || vs.ExpansionContains[0].Contains[0].Contains[0].Code != "A1a" {
+		t.Fatalf("unexpected grandchild expansion: %+v", vs.ExpansionContains[0].Contains[0].Contains)
+	}
+}
+
+func TestReadPackageDecodesStringSliceAndIntFields(t *testing.T) {
+	archivePath := buildTestPackageArchive(t, map[string]any{
+		"package/package.json": map[string]any{
+			"name":    "example.fhir.pkg",
+			"version": "1.2.3",
+		},
+		"package/StructureDefinition-test.json": map[string]any{
+			"resourceType": "StructureDefinition",
+			"url":          "http://example.org/StructureDefinition/test",
+			"type":         "Observation",
+			"snapshot": map[string]any{
+				"element": []map[string]any{
+					{
+						"id": "Observation", "path": "Observation", "min": 0, "max": "*",
+						"type": []map[string]any{
+							{"code": "Reference", "targetProfile": []any{"http://example.org/StructureDefinition/patient", "http://example.org/StructureDefinition/practitioner"}},
+						},
+					},
+				},
+			},
+		},
+	})
+
+	pkg, err := ReadPackage(archivePath)
+	if err != nil {
+		t.Fatalf("ReadPackage returned error: %v", err)
+	}
+	var sd *model.StructureDefinition
+	for _, res := range pkg.Resources {
+		if s, ok := res.(*model.StructureDefinition); ok {
+			sd = s
+		}
+	}
+	if sd == nil {
+		t.Fatal("expected a StructureDefinition resource")
+	}
+	if len(sd.Elements) != 1 || len(sd.Elements[0].Types) != 1 {
+		t.Fatalf("unexpected elements: %+v", sd.Elements)
+	}
+	tp := sd.Elements[0].Types[0]
+	if len(tp.TargetProfile) != 2 || tp.TargetProfile[0] != "http://example.org/StructureDefinition/patient" {
+		t.Fatalf("unexpected target profiles: %+v", tp.TargetProfile)
+	}
+}
+
+func TestReadPackageDecodesElementIntField(t *testing.T) {
+	archivePath := buildTestPackageArchive(t, map[string]any{
+		"package/package.json": map[string]any{
+			"name":    "example.fhir.pkg",
+			"version": "1.2.3",
+		},
+		"package/StructureDefinition-test.json": map[string]any{
+			"resourceType": "StructureDefinition",
+			"url":          "http://example.org/StructureDefinition/test",
+			"type":         "Observation",
+			"snapshot": map[string]any{
+				"element": []map[string]any{
+					{"id": "Observation", "path": "Observation", "min": 0, "max": "*"},
+					{"id": "Observation.status", "path": "Observation.status", "min": 1, "max": "1"},
+				},
+			},
+		},
+	})
+
+	pkg, err := ReadPackage(archivePath)
+	if err != nil {
+		t.Fatalf("ReadPackage returned error: %v", err)
+	}
+	var sd *model.StructureDefinition
+	for _, res := range pkg.Resources {
+		if s, ok := res.(*model.StructureDefinition); ok {
+			sd = s
+		}
+	}
+	if sd == nil {
+		t.Fatal("expected a StructureDefinition resource")
+	}
+	if len(sd.Elements) != 2 || sd.Elements[1].Min != 1 {
+		t.Fatalf("expected element min=1, got %+v", sd.Elements)
+	}
+}
+
 func buildTestPackageArchive(t *testing.T, files map[string]any) string {
 	t.Helper()
 	rawFiles := make(map[string][]byte, len(files))

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/test/assertions"
 	"github.com/jlcoulter/momus/internal/test/ast"
 )
 
@@ -145,5 +146,109 @@ func TestDeriveExpected(t *testing.T) {
 		if got := deriveExpected(tc.expression); got != tc.want {
 			t.Fatalf("deriveExpected(%q) = %q, want %q", tc.expression, got, tc.want)
 		}
+	}
+}
+
+func TestClassifyFailureSignature(t *testing.T) {
+	failed := map[string]struct{}{"patient/momus-setup-patient": {}}
+	cases := []struct {
+		name       string
+		sig        FailureSignature
+		likelyAuth bool
+		wantCat    string
+		wantConf   string
+		wantRole   string
+	}{
+		{"auth by flag", FailureSignature{StatusCode: 400, Signature: "diag=denied"}, true, "authentication", "high", "root"},
+		{"auth by 401", FailureSignature{StatusCode: 401}, false, "authentication", "high", "root"},
+		{"auth by 403", FailureSignature{StatusCode: 403}, false, "authentication", "high", "root"},
+		{"unresolved setup ref", FailureSignature{StatusCode: 400, Signature: "unresolved setup reference"}, false, "setup-dependency-ordering", "high", "root"},
+		{"missing dependent resource", FailureSignature{StatusCode: 400, Diagnostics: "Resource Patient/momus-setup-patient not found"}, false, "missing-dependent-resource", "high", "dependent"},
+		{"missing root resource", FailureSignature{StatusCode: 400, Diagnostics: "Resource Organization/org-1 not found"}, false, "missing-dependent-resource", "medium", "root"},
+		{"profile validation", FailureSignature{StatusCode: 412, Signature: "constraint failed"}, false, "profile-validation", "high", "root"},
+		{"server capability", FailureSignature{StatusCode: 405}, false, "server-capability", "high", "root"},
+		{"server error", FailureSignature{StatusCode: 500}, false, "server-error", "medium", "root"},
+		{"unknown", FailureSignature{StatusCode: 400, Signature: "something else"}, false, "unknown", "low", "unknown"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cat, conf, role := classifyFailureSignature(tc.sig, failed, tc.likelyAuth)
+			if cat != tc.wantCat || conf != tc.wantConf || role != tc.wantRole {
+				t.Fatalf("classifyFailureSignature(%+v) = %q/%q/%q, want %q/%q/%q", tc.sig, cat, conf, role, tc.wantCat, tc.wantConf, tc.wantRole)
+			}
+		})
+	}
+}
+
+func TestExtractMissingResourceKey(t *testing.T) {
+	if key, ok := extractMissingResourceKey("HAPI-1094: Resource Patient/momus-setup-patient not found"); !ok || key != "patient/momus-setup-patient" {
+		t.Fatalf("extractMissingResourceKey = %q, %v", key, ok)
+	}
+	if _, ok := extractMissingResourceKey("no resource here"); ok {
+		t.Fatal("expected no match for text without a resource reference")
+	}
+}
+
+func TestMergeFoldsParallelBranchResults(t *testing.T) {
+	parent := &executor{
+		report:        &Report{},
+		variables:     map[string]any{},
+		created:       map[string]struct{}{},
+		failuresBySig: map[string]*FailureSignature{},
+	}
+	child := &executor{
+		report:    &Report{Cases: []CaseResult{{RequirementID: "c1", Passed: true}}, Passed: 1},
+		variables: map[string]any{"Patient.id": "p-1"},
+		created:   map[string]struct{}{"Patient/p-1": {}},
+		failuresBySig: map[string]*FailureSignature{
+			"sig-1": {Signature: "sig-1", Count: 2, ExampleRequirementID: "c1"},
+		},
+		ooFailures: 3,
+		lastResult: assertions.Result{StatusCode: 201},
+		hasResult:  true,
+	}
+	parent.merge(child)
+
+	if parent.report.Passed != 1 || len(parent.report.Cases) != 1 {
+		t.Fatalf("report not folded: %+v", parent.report)
+	}
+	if parent.variables["Patient.id"] != "p-1" {
+		t.Fatalf("variables not merged: %+v", parent.variables)
+	}
+	if _, ok := parent.created["Patient/p-1"]; !ok {
+		t.Fatalf("created resources not merged: %+v", parent.created)
+	}
+	if parent.failuresBySig["sig-1"].Count != 2 {
+		t.Fatalf("failure signatures not merged: %+v", parent.failuresBySig)
+	}
+	if parent.ooFailures != 3 {
+		t.Fatalf("ooFailures = %d, want 3", parent.ooFailures)
+	}
+	if !parent.hasResult || parent.lastResult.StatusCode != 201 {
+		t.Fatalf("request state not merged: %+v", parent.lastResult)
+	}
+}
+
+func TestMergeAccumulatesDuplicateFailureSignatures(t *testing.T) {
+	parent := &executor{
+		report:        &Report{},
+		variables:     map[string]any{},
+		created:       map[string]struct{}{},
+		failuresBySig: map[string]*FailureSignature{"sig-1": {Signature: "sig-1", Count: 1, ExampleRequirementID: "first"}},
+	}
+	child := &executor{
+		report:        &Report{},
+		variables:     map[string]any{},
+		created:       map[string]struct{}{},
+		failuresBySig: map[string]*FailureSignature{"sig-1": {Signature: "sig-1", Count: 3, ExampleRequirementID: "second"}},
+	}
+	parent.merge(child)
+	sig := parent.failuresBySig["sig-1"]
+	if sig.Count != 4 {
+		t.Fatalf("signature count = %d, want 4 (accumulated)", sig.Count)
+	}
+	// The first example requirement id is preserved.
+	if sig.ExampleRequirementID != "first" {
+		t.Fatalf("example requirement id = %q, want first", sig.ExampleRequirementID)
 	}
 }
