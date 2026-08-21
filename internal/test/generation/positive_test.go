@@ -63,6 +63,39 @@ func TestResolveBoundCodingFallsBackToExample(t *testing.T) {
 	}
 }
 
+// TestResolveBoundCodingFromCodingChild verifies that a CodeableConcept node
+// whose own binding is nil but whose "coding" child carries a required binding
+// resolves a real code (common for nested extension value[x].coding).
+func TestResolveBoundCodingFromCodingChild(t *testing.T) {
+	reg := registry.New()
+	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/responsible-party", ComposeIncludes: []model.ValueSetInclude{{
+		System: "http://example.org/CodeSystem/responsible-party",
+		Concepts: []model.ConceptReference{
+			{Code: "practitioner-initiated", Display: "Practitioner initiated"},
+		},
+	}}})
+	reg.AddCodeSystem(&model.CodeSystem{URL: "http://example.org/CodeSystem/responsible-party", Concepts: []model.CodeSystemConcept{{Code: "practitioner-initiated", Display: "Practitioner initiated"}}})
+
+	// The node is a CodeableConcept with no binding of its own; the binding is
+	// on its "coding" child.
+	node := &model.ElementNode{
+		Path:       "Extension.extension.value[x]",
+		ProfileURL: "http://example.org/StructureDefinition/suppressed",
+		Children: map[string]*model.ElementNode{
+			"coding": {
+				Path: "Extension.extension.value[x].coding",
+				Definition: &model.ElementDefinition{
+					Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/responsible-party"},
+				},
+			},
+		},
+	}
+	c, ok := resolveBoundCodingForNode(node, reg)
+	if !ok || c.Code != "practitioner-initiated" {
+		t.Fatalf("resolveBoundCodingForNode=%+v ok=%v, want the coding-child bound code", c, ok)
+	}
+}
+
 // TestResolveBoundCodingFromExtensionValue verifies that an extension value[x]
 // node resolves a real coding from example instance data by matching the
 // extension URL, even when the bound ValueSet is not in the registry.

@@ -1686,7 +1686,29 @@ func resolveBoundCodingForNode(node *model.ElementNode, reg *registry.Registry) 
 			return coding, true
 		}
 	}
+	// A CodeableConcept node may carry its required binding on its child
+	// "coding" element rather than on itself (common for nested extension
+	// value[x].coding, e.g. suppressedBy's responsible-party-type binding).
+	if coding, ok := resolveBoundCodingFromCodingChild(node, reg); ok {
+		return coding, true
+	}
 	return resolveBoundCodingFromExample(node, reg)
+}
+
+// resolveBoundCodingFromCodingChild resolves a bound coding from the node's
+// "coding" child element when the node itself has no binding but its coding
+// child does. This covers elements whose binding lives one level down, e.g.
+// Extension.extension.value[x] whose CodeableConcept has a nil binding but
+// whose value[x].coding carries the required value set.
+func resolveBoundCodingFromCodingChild(node *model.ElementNode, reg *registry.Registry) (generatedCoding, bool) {
+	if node == nil || reg == nil {
+		return generatedCoding{}, false
+	}
+	coding, ok := node.Children["coding"]
+	if !ok || coding == nil || coding.Definition == nil || coding.Definition.Binding == nil {
+		return generatedCoding{}, false
+	}
+	return resolveBoundCoding(coding.Definition, reg)
 }
 
 // resolveBoundCodingFromExample looks for a real coding at the node's element
