@@ -111,3 +111,31 @@ func TestParseRejectsBareSelector(t *testing.T) {
 		t.Fatal("expected unsupported format for bare selector")
 	}
 }
+
+func TestParseRejectsNonFiniteNumericValues(t *testing.T) {
+	for _, expr := range []string{"body.x == NaN", "body.x == Inf", "body.x == Infinity", "body.x == 1e999"} {
+		if _, err := ParseExpression(expr); err == nil {
+			t.Fatalf("expected ParseExpression(%q) to reject non-finite value", expr)
+		}
+	}
+}
+
+func TestParseBodyMissingKeyTreatsAsNil(t *testing.T) {
+	// An absent body key resolves to nil, so `!=` against a value passes and
+	// `==` fails, rather than failing on a lookup error.
+	ne, err := ParseExpression(`body.x != "y"`)
+	if err != nil {
+		t.Fatalf("ParseExpression returned error: %v", err)
+	}
+	if err := ne.Evaluate(context.Background(), Result{Body: []byte(`{}`)}); err != nil {
+		t.Fatalf("expected body.x != \"y\" to pass for absent x, got %v", err)
+	}
+
+	eq, err := ParseExpression(`body.x == "y"`)
+	if err != nil {
+		t.Fatalf("ParseExpression returned error: %v", err)
+	}
+	if err := eq.Evaluate(context.Background(), Result{Body: []byte(`{}`)}); err == nil {
+		t.Fatal("expected body.x == \"y\" to fail for absent x")
+	}
+}

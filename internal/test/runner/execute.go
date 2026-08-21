@@ -369,7 +369,7 @@ func (e *executor) executeRequest(reqNode *ast.Request) (assertions.Result, erro
 
 	req, err := http.NewRequestWithContext(e.ctx, reqNode.Method, url, bodyReader)
 	if err != nil {
-		return assertions.Result{}, err
+		return assertions.Result{}, fmt.Errorf("%s %s: create request: %w", reqNode.Method, url, err)
 	}
 	for k, v := range reqNode.Headers {
 		req.Header.Set(k, v)
@@ -383,13 +383,13 @@ func (e *executor) executeRequest(reqNode *ast.Request) (assertions.Result, erro
 
 	resp, err := e.client.Do(req)
 	if err != nil {
-		return assertions.Result{}, err
+		return assertions.Result{}, fmt.Errorf("%s %s: %w", reqNode.Method, url, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return assertions.Result{}, err
+		return assertions.Result{StatusCode: resp.StatusCode, Headers: resp.Header}, fmt.Errorf("%s %s: read response body: %w", reqNode.Method, url, err)
 	}
 
 	if e.tracer != nil {
@@ -458,11 +458,13 @@ func (e *executor) evaluateAssert(assertNode *ast.Assert) {
 				last.Description = assertNode.Description
 				last.Expression = assertNode.Expression
 				last.Trace = assertNode.Trace
+				last.StatusCode = e.lastResult.StatusCode
 			}
 			e.errorRecorded = false
 			return
 		}
 		result.Passed = false
+		result.StatusCode = e.lastResult.StatusCode
 		result.Error = e.lastErr.Error()
 		result.Debug = e.copyDebugIfEnabled()
 		e.report.Failed++
@@ -663,8 +665,18 @@ func validateSetupReference(reference string, created map[string]struct{}) error
 	return fmt.Errorf("unresolved setup reference %q: %s has not been created yet; enforce setup dependency ordering", reference, key)
 }
 
+// successStatusExpression is the assertion expression emitted for a successful
+// 2xx response by the OpenAPI generator. warningOnlySuccess recognizes it (and
+// the legacy two-code form) so a warning-only 412 is treated as a pass.
+const successStatusExpression = "status in [200,201,202,203,204]"
+
+// legacySuccessStatusExpression is the two-code success expression used by the
+// coverage-driven generators.
+const legacySuccessStatusExpression = "status in [200,201]"
+
 func warningOnlySuccess(expression string, result assertions.Result) bool {
-	if strings.TrimSpace(expression) != "status in [200,201]" {
+	expr := strings.TrimSpace(expression)
+	if expr != successStatusExpression && expr != legacySuccessStatusExpression {
 		return false
 	}
 	if result.StatusCode != http.StatusPreconditionFailed {

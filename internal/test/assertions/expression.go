@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -184,6 +185,9 @@ func parseValue(raw string) (any, error) {
 		return nil, nil
 	}
 	if f, err := strconv.ParseFloat(raw, 64); err == nil {
+		if math.IsInf(f, 0) || math.IsNaN(f) {
+			return nil, fmt.Errorf("invalid value %q: non-finite number", raw)
+		}
 		return f, nil
 	}
 	return nil, fmt.Errorf("invalid value %q", raw)
@@ -230,7 +234,9 @@ func extractValue(sel selector, result Result) (any, error) {
 				}
 				cur, ok = m[step.key]
 				if !ok {
-					return nil, fmt.Errorf("path %q not found in body", step.key)
+					// An absent key resolves to nil so that e.g. `body.x != "y"`
+					// passes (nil != "y") instead of failing on a lookup error.
+					return nil, nil
 				}
 			case step.index >= 0:
 				arr, ok := cur.([]any)

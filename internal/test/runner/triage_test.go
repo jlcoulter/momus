@@ -107,3 +107,43 @@ func TestBuildTriageSummaryRejectAcceptedHint(t *testing.T) {
 		t.Fatal("expected a reject-accepted hint")
 	}
 }
+
+func TestBuildTriageSummaryDerivesExpectationWhenTraceNil(t *testing.T) {
+	// OpenAPI-generated cases carry no coverage trace; the expectation must be
+	// derived from the expression so they still participate in triage.
+	cases := []CaseResult{
+		{RequirementID: "op-1", Passed: false, StatusCode: http.StatusUnprocessableEntity, Expression: "status in [200,201,202,203,204]"},
+		{RequirementID: "op-2", Passed: false, StatusCode: http.StatusOK, Expression: "status in [400,412,422]"},
+		// No expression -> no derivable expectation -> skipped.
+		{RequirementID: "setup:Patient", Passed: false, StatusCode: http.StatusInternalServerError},
+	}
+	summary := buildTriageSummary(cases)
+	if summary == nil {
+		t.Fatal("expected non-nil summary")
+	}
+	if summary.AcceptRejected != 1 || summary.RejectAccepted != 1 || summary.ServerError != 0 || summary.Ambiguous != 0 {
+		t.Fatalf("unexpected counts: accept-rejected=%d reject-accepted=%d server-error=%d ambiguous=%d",
+			summary.AcceptRejected, summary.RejectAccepted, summary.ServerError, summary.Ambiguous)
+	}
+}
+
+func TestDeriveExpected(t *testing.T) {
+	cases := []struct {
+		expression string
+		want       string
+	}{
+		{"status in [200,201]", "accept"},
+		{"status in [200,201,202,203,204]", "accept"},
+		{"status in [200,204]", "accept"},
+		{"status in [400,412,422]", "reject"},
+		{"status in [200,400]", ""},
+		{"status in [300]", ""},
+		{"body.total >= 2", ""},
+		{"", ""},
+	}
+	for _, tc := range cases {
+		if got := deriveExpected(tc.expression); got != tc.want {
+			t.Fatalf("deriveExpected(%q) = %q, want %q", tc.expression, got, tc.want)
+		}
+	}
+}

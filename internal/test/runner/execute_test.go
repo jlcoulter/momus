@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -689,6 +690,82 @@ func TestExecutePreservesReportOnParallelStructuralError(t *testing.T) {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 	if report.Total != 2 || report.Passed != 1 || report.Failed != 1 {
+		t.Fatalf("unexpected report summary: %+v", report)
+	}
+}
+
+// failingRoundTripper always fails the request, simulating a transport-level
+// error (e.g. connection refused) so request errors can be exercised.
+type failingRoundTripper struct{}
+
+func (failingRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("connection refused")
+}
+
+func TestExecuteWrapsRequestErrorsWithMethodAndURL(t *testing.T) {
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodGet, URL: "http://example.test/Patient"},
+		&ast.Assert{Description: "get", RequirementID: "req-1", Expression: "status in [200]"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{
+		HTTPClient: &http.Client{Transport: failingRoundTripper{}},
+	})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Failed != 1 {
+		t.Fatalf("expected 1 failure, got %+v", report)
+	}
+	if !strings.Contains(report.Cases[0].Error, "GET http://example.test/Patient") {
+		t.Fatalf("expected error to carry method and URL, got %q", report.Cases[0].Error)
+	}
+}
+
+func TestExecutePopulatesStatusCodeForParseError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","total":1}`))
+	}))
+	defer server.Close()
+
+	// The request succeeds (200) but the assertion expression fails to parse;
+	// the failed case must still carry the last response's status so triage is
+	// not misclassified as ambiguous.
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodGet, URL: server.URL + "/Patient"},
+		&ast.Assert{Description: "get", RequirementID: "req-1", Expression: "body.total >= abc"},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Failed != 1 {
+		t.Fatalf("expected 1 failure, got %+v", report)
+	}
+	if report.Cases[0].StatusCode != http.StatusOK {
+		t.Fatalf("expected status %d populated from last response, got %d", http.StatusOK, report.Cases[0].StatusCode)
+	}
+}
+
+func TestExecuteTreatsWarningOnly412AsPositivePassForOpenAPIExpression(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPreconditionFailed)
+		_, _ = w.Write([]byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"warning","code":"processing","diagnostics":"validation warning"}]}`))
+	}))
+	defer server.Close()
+
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: http.MethodPut, URL: "/Patient/warn-openapi", Body: map[string]any{"resourceType": "Patient", "id": "warn-openapi"}},
+		&ast.Assert{Description: "create patient", RequirementID: "req-warning-openapi", Expression: successStatusExpression},
+	}}
+
+	report, err := Execute(context.Background(), plan, ExecuteOptions{BaseURL: server.URL, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if report.Total != 1 || report.Passed != 1 || report.Failed != 0 {
 		t.Fatalf("unexpected report summary: %+v", report)
 	}
 }

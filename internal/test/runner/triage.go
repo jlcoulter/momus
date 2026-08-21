@@ -2,6 +2,7 @@ package runner
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -97,27 +98,43 @@ func buildTriageSummary(cases []CaseResult) *TriageSummary {
 	groups := map[groupKey]*TriageGroup{}
 
 	for _, c := range cases {
-		if c.Passed || c.Trace == nil {
+		if c.Passed {
 			continue
 		}
-		outcome := classifyTriage(c.Trace.Expected, c.Passed, c.StatusCode)
+		expected := ""
+		domain, variant := "", ""
+		if c.Trace != nil {
+			expected = c.Trace.Expected
+			domain = c.Trace.Domain
+			variant = c.Trace.Variant
+		} else {
+			// OpenAPI-generated cases carry no coverage trace; derive the
+			// expectation from the assertion expression so they still triage.
+			expected = deriveExpected(c.Expression)
+		}
+		if expected == "" {
+			continue
+		}
+		outcome := classifyTriage(expected, c.Passed, c.StatusCode)
 		if outcome == "" {
 			continue
 		}
 		counts[outcome]++
-		key := groupKey{outcome, c.Trace.Domain, c.Trace.Variant}
+		key := groupKey{outcome, domain, variant}
 		g := groups[key]
 		if g == nil {
 			g = &TriageGroup{
 				Outcome:              outcome,
-				Domain:               c.Trace.Domain,
-				Variant:              c.Trace.Variant,
-				Expected:             c.Trace.Expected,
+				Domain:               domain,
+				Variant:              variant,
+				Expected:             expected,
 				ExampleRequirementID: c.RequirementID,
 				ExampleDescription:   c.Description,
-				ExampleElementPath:   c.Trace.ElementPath,
 				ExampleStatus:        c.StatusCode,
 				Hint:                 hintForOutcome(outcome),
+			}
+			if c.Trace != nil {
+				g.ExampleElementPath = c.Trace.ElementPath
 			}
 			groups[key] = g
 		}
@@ -151,6 +168,40 @@ func buildTriageSummary(cases []CaseResult) *TriageSummary {
 		return nil
 	}
 	return summary
+}
+
+// deriveExpected infers the expected outcome ("accept" or "reject") from an
+// assertion expression when no coverage trace is attached (e.g. OpenAPI-generated
+// cases). It returns "" when the expression does not encode a clear polarity.
+func deriveExpected(expression string) string {
+	expr := strings.TrimSpace(expression)
+	prefix := "status in ["
+	if !strings.HasPrefix(expr, prefix) || !strings.HasSuffix(expr, "]") {
+		return ""
+	}
+	list := strings.TrimSuffix(strings.TrimPrefix(expr, prefix), "]")
+	accept, reject := false, false
+	for _, token := range strings.Split(list, ",") {
+		code, err := strconv.Atoi(strings.TrimSpace(token))
+		if err != nil {
+			return ""
+		}
+		switch {
+		case code >= 200 && code < 300:
+			accept = true
+		case code >= 400 && code < 500:
+			reject = true
+		default:
+			return ""
+		}
+	}
+	if accept && !reject {
+		return "accept"
+	}
+	if reject && !accept {
+		return "reject"
+	}
+	return ""
 }
 
 func hintForOutcome(outcome TriageOutcome) string {
