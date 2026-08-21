@@ -144,9 +144,10 @@ func SupportedProfileURLsByResourceFromCapabilityStatement(cs *model.CapabilityS
 }
 
 // SearchCodesFromCapabilityStatement returns the set of search parameter codes
-// declared by the server's CapabilityStatement, grouped by resource type. When
-// a resource entry declares no searchParam, that resource type is absent from
-// the map, meaning no search-parameter restriction applies for that type.
+// declared by the server's CapabilityStatement, grouped by resource type. A
+// resource entry that declares no searchParam maps to an empty slice, so a
+// present-but-empty entry is distinguishable from an absent one: the former
+// restricts the type to no allowed codes, the latter applies no restriction.
 func SearchCodesFromCapabilityStatement(cs *model.CapabilityStatement) map[string][]string {
 	if cs == nil {
 		return nil
@@ -162,13 +163,17 @@ func SearchCodesFromCapabilityStatement(cs *model.CapabilityStatement) map[strin
 			if resourceType == "" {
 				continue
 			}
+			// Record the resource type even when it declares no searchParam so a
+			// present-but-empty entry is distinguishable from an absent one: the
+			// former restricts the type to no allowed codes, the latter applies no
+			// restriction.
+			if _, ok := grouped[resourceType]; !ok {
+				grouped[resourceType] = make(map[string]struct{})
+			}
 			for _, sp := range resource.SearchParam {
 				name := strings.TrimSpace(sp.Name)
 				if name == "" {
 					continue
-				}
-				if _, ok := grouped[resourceType]; !ok {
-					grouped[resourceType] = make(map[string]struct{})
 				}
 				grouped[resourceType][name] = struct{}{}
 			}
@@ -190,6 +195,10 @@ func SearchCodesFromCapabilityStatement(cs *model.CapabilityStatement) map[strin
 	}
 	return out
 }
+
+// maxCapabilityBodyBytes bounds the size of a CapabilityStatement /metadata
+// response to protect against unbounded memory use.
+const maxCapabilityBodyBytes = 1 << 20 // 1 MiB
 
 // FetchCapabilityStatement loads the live server CapabilityStatement from /metadata.
 func FetchCapabilityStatement(ctx context.Context, baseURL string, options CapabilityFetchOptions) (*model.CapabilityStatement, error) {
@@ -220,7 +229,7 @@ func FetchCapabilityStatement(ctx context.Context, baseURL string, options Capab
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxCapabilityBodyBytes))
 	if err != nil {
 		return nil, err
 	}

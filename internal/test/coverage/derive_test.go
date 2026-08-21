@@ -53,7 +53,10 @@ func TestDeriveMVPPlanPatientNameOptionalSingle(t *testing.T) {
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
 			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 0, Max: "1"},
+			// A required element survives pruning so the plan is still produced,
+			// while the optional name element is pruned and recorded as such.
+			{Path: "Patient.identifier", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Identifier"}}},
+			{Path: "Patient.name", Min: 0, Max: "1", Types: []model.ElementType{{Code: "HumanName"}}},
 		},
 	})
 
@@ -61,8 +64,8 @@ func TestDeriveMVPPlanPatientNameOptionalSingle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
-	if len(plan.Requirements) != 8 {
-		t.Fatalf("got %d requirements, want 8", len(plan.Requirements))
+	if len(plan.Requirements) != 14 {
+		t.Fatalf("got %d requirements, want 14", len(plan.Requirements))
 	}
 	if plan.Summary.PrunedByReason[PruneReasonOptionalFiltered] == 0 {
 		t.Fatal("expected optional-filtered prune reason")
@@ -567,5 +570,61 @@ func TestDerivePlanInheritsParentElementsThroughRegistry(t *testing.T) {
 	}
 	if !inheritedFound {
 		t.Fatal("expected a requirement for the inherited Patient.name element")
+	}
+}
+
+func TestDerivePlanChoiceElementEmitsPerDatatypeObligations(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/observation",
+		Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation.value", Min: 1, Max: "1", Types: []model.ElementType{
+				{Code: "string"},
+				{Code: "integer"},
+				{Code: "dateTime"},
+			}},
+		},
+	})
+
+	plan, err := DerivePlan(r, DeriveOptions{})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+
+	// Each declared datatype must yield its own datatype-valid obligation; the
+	// obligation ID must carry the datatype discriminator so the seen-dedup map
+	// does not collapse the choice element to its first datatype only.
+	for _, dt := range []string{"string", "integer", "dateTime"} {
+		wantID := "http://example.org/StructureDefinition/observation|Observation.value|" + dt + "|datatype-valid"
+		var found bool
+		for _, req := range plan.Requirements {
+			if req.ID == wantID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("missing datatype-valid obligation for datatype %q (want ID %q)", dt, wantID)
+		}
+	}
+}
+
+func TestDerivePlanErrorsWhenAllElementsPruned(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/patient-profile",
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 1, Max: "1", MustSupport: false},
+		},
+	})
+
+	// MustSupportOnly prunes every element, so DerivePlan must error rather than
+	// return a plan with zero element coverage.
+	if _, err := DerivePlan(r, DeriveOptions{MustSupportOnly: true}); err == nil {
+		t.Fatal("expected error when all elements are pruned by MustSupportOnly")
 	}
 }

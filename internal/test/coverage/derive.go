@@ -92,13 +92,18 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 			continue
 		}
 		for _, element := range elements {
-			if strings.Contains(element.Path, ".") {
-				foundDerivableElements = true
-			}
 			ok, reason := isDerivableElement(element, options)
 			if !ok {
 				trackPruned(plan, reason)
 				continue
+			}
+			// Only elements that survive pruning count as derivable. Setting this
+			// before pruning would let a plan that prunes every element (e.g.
+			// MustSupportOnly with no must-support elements) pass the guard below
+			// and return only operation/state/search obligations with zero element
+			// coverage.
+			if strings.Contains(element.Path, ".") {
+				foundDerivableElements = true
 			}
 			key := elementKey(profile.URL, element.Path, element.SliceName)
 			de := derivableElement{
@@ -472,8 +477,16 @@ func appendObligations(plan *CoveragePlan, seen map[string]struct{}, c constrain
 }
 
 func addRequirement(plan *CoveragePlan, seen map[string]struct{}, c constraint.Constraint, de derivableElement, domain CoverageDomain, variant CoverageVariant) {
+	// Include the datatype in the obligation ID when present so that choice
+	// elements (e.g. value[x] declared string|integer|dateTime) yield distinct
+	// obligations per datatype instead of collapsing to the first one via the
+	// seen-dedup map.
+	id := fmt.Sprintf("%s|%s|%s", c.ProfileURL, c.ElementPath, variant)
+	if c.Datatype != "" {
+		id = fmt.Sprintf("%s|%s|%s|%s", c.ProfileURL, c.ElementPath, c.Datatype, variant)
+	}
 	appendRequirement(plan, seen, CoverageRequirement{
-		ID:                fmt.Sprintf("%s|%s|%s", c.ProfileURL, c.ElementPath, variant),
+		ID:                id,
 		ConstraintID:      c.ID,
 		ProfileURL:        c.ProfileURL,
 		ResourceType:      c.ResourceType,
@@ -623,7 +636,8 @@ func isLowValuePath(path string) bool {
 // parameters. When CapabilitySearchCodes is nil (no capability scope), all
 // codes are allowed. When the resource type is absent from the map, all codes
 // are allowed for that type (the server did not restrict search for it).
-// When the resource type is present, only codes in its declared set are allowed.
+// When the resource type is present, only codes in its declared set are allowed;
+// a present-but-empty set (declared searchParam: []) allows no codes.
 func isSearchCodeAllowed(resourceType, code string, capabilityCodes map[string][]string) bool {
 	if capabilityCodes == nil {
 		return true

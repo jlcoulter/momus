@@ -28,6 +28,11 @@ func EvaluateCoverage(plan *CoveragePlan, executed []ExecutedRequirementResult) 
 		requirementIDs = append(requirementIDs, req.ID)
 	}
 	sort.Strings(requirementIDs)
+	if len(requirementIDs) == 0 {
+		// A plan with no valid requirement IDs proves nothing: report zero
+		// coverage rather than claiming 100% of an undefined obligation set.
+		return report
+	}
 	report.TotalRequirements = len(requirementIDs)
 
 	passedByID := make(map[string]bool, len(executed))

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -126,5 +127,48 @@ func TestFetchCapabilityStatementAppliesBasicAuth(t *testing.T) {
 	}
 	if gotUsername != "admin" || gotPassword != "admin123" {
 		t.Fatalf("got basic auth %q/%q, want admin/admin123", gotUsername, gotPassword)
+	}
+}
+
+func TestSearchCodesFromCapabilityStatementEmptySearchParam(t *testing.T) {
+	cs := &model.CapabilityStatement{
+		Rest: []model.CapabilityStatementRest{{
+			Mode: "server",
+			Resource: []model.CapabilityStatementRestResource{
+				{Type: "Patient", SearchParam: nil},
+				{Type: "Observation", SearchParam: []model.CapabilityStatementSearchParam{{Name: "status"}}},
+			},
+		}},
+	}
+
+	codes := SearchCodesFromCapabilityStatement(cs)
+	// Patient is present but declares no searchParam: it must map to an empty
+	// slice so it gets no allowed codes, rather than being absent (which would
+	// allow every code).
+	patient, ok := codes["Patient"]
+	if !ok {
+		t.Fatal("expected Patient present in capability search codes")
+	}
+	if len(patient) != 0 {
+		t.Fatalf("got Patient codes %v, want empty", patient)
+	}
+	if isSearchCodeAllowed("Patient", "_id", codes) {
+		t.Fatal("expected no search codes allowed for Patient with empty searchParam")
+	}
+	if !isSearchCodeAllowed("Observation", "status", codes) {
+		t.Fatal("expected status allowed for Observation")
+	}
+}
+
+func TestFetchCapabilityStatementLimitsResponseBody(t *testing.T) {
+	padding := strings.Repeat("x", 2<<20) // 2 MiB, exceeds the 1 MiB limit
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(`{"resourceType":"CapabilityStatement","rest":[],"padding":"` + padding + `"}`))
+	}))
+	defer server.Close()
+
+	if _, err := FetchCapabilityStatement(context.Background(), server.URL, CapabilityFetchOptions{HTTPClient: server.Client()}); err == nil {
+		t.Fatal("expected error when /metadata body exceeds size limit")
 	}
 }

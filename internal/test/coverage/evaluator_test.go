@@ -77,3 +77,19 @@ func TestEvaluateCoverageEmptyPlan(t *testing.T) {
 		t.Fatalf("got coverage percent %.2f, want 0", report.CoveragePercent)
 	}
 }
+
+func TestEvaluateCoveragePlanWithEmptyRequirementIDs(t *testing.T) {
+	// A non-nil plan with non-empty requirements but all-empty ID fields has no
+	// valid obligation set and must report zero coverage, not 100%.
+	plan := &CoveragePlan{Requirements: []CoverageRequirement{
+		{Domain: CoverageDomainCardinality, ResourceType: "Patient", ElementPath: "Patient.name", Variant: CoverageVariantValidMin},
+		{Domain: CoverageDomainCardinality, ResourceType: "Patient", ElementPath: "Patient.name", Variant: CoverageVariantMissingRequired},
+	}}
+	report := EvaluateCoverage(plan, nil)
+	if report.TotalRequirements != 0 {
+		t.Fatalf("got total %d, want 0", report.TotalRequirements)
+	}
+	if report.CoveragePercent != 0 {
+		t.Fatalf("got coverage percent %.2f, want 0", report.CoveragePercent)
+	}
+}
