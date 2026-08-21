@@ -1,6 +1,7 @@
 # Build artifacts
 /momus
 /cmd/momus/momus
+/dist/
 *.exe
 *.test
 *.out
@@ -17,3 +18,7 @@ vendor/
 
 # OS
 .DS_Store
+
+# FHIR
+package.tgz
+.momus/

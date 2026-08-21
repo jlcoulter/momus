@@ -4,6 +4,7 @@ package registry
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -25,22 +26,34 @@ type Registry struct {
 	codeSystems          map[string]*model.CodeSystem
 	capabilityStatements map[string]*model.CapabilityStatement
 
-	searchParameters            map[string]*model.SearchParameter
-	searchParametersForResource map[string][]*model.SearchParameter
+	searchParameters map[string]*model.SearchParameter
 
 	profilesByResource map[string][]*model.StructureDefinition
+
+	// scoped reports whether a scope has been set. It is tracked separately
+	// from scopedStructureDefinitions so that an empty-but-set scope (e.g.
+	// SetScope([]string{""})) is a genuine empty selection rather than being
+	// indistinguishable from "no scope".
+	scoped bool
+
+	// scopedStructureDefinitions is the set of canonical URLs whose
+	// StructureDefinitions belong to the selected package scope. Only these
+	// are subjects of test generation; the full index remains available for
+	// dependency resolution (referenced profiles, base definitions, value
+	// sets, and so on). When no scope has been set, every indexed
+	// StructureDefinition is considered in scope.
+	scopedStructureDefinitions map[string]struct{}
 }
 
 // New returns an empty Registry.
 func New() *Registry {
 	return &Registry{
-		structureDefinitions:        make(map[string]*model.StructureDefinition),
-		valueSets:                   make(map[string]*model.ValueSet),
-		codeSystems:                 make(map[string]*model.CodeSystem),
-		capabilityStatements:        make(map[string]*model.CapabilityStatement),
-		searchParameters:            make(map[string]*model.SearchParameter),
-		searchParametersForResource: make(map[string][]*model.SearchParameter),
-		profilesByResource:          make(map[string][]*model.StructureDefinition),
+		structureDefinitions: make(map[string]*model.StructureDefinition),
+		valueSets:            make(map[string]*model.ValueSet),
+		codeSystems:          make(map[string]*model.CodeSystem),
+		capabilityStatements: make(map[string]*model.CapabilityStatement),
+		searchParameters:     make(map[string]*model.SearchParameter),
+		profilesByResource:   make(map[string][]*model.StructureDefinition),
 	}
 }
 
@@ -95,7 +108,6 @@ func (r *Registry) AddSearchParameter(sp *model.SearchParameter) {
 	}
 	for _, base := range sp.Base {
 		r.searchParameters[searchParameterKey(base, sp.Code)] = sp
-		r.searchParametersForResource[base] = append(r.searchParametersForResource[base], sp)
 	}
 }
 
@@ -109,6 +121,68 @@ func (r *Registry) StructureDefinition(url string) (*model.StructureDefinition, 
 	defer r.mu.RUnlock()
 	sd, ok := r.structureDefinitions[url]
 	return sd, ok
+}
+
+// StructureDefinitions returns every indexed StructureDefinition.
+func (r *Registry) StructureDefinitions() []*model.StructureDefinition {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*model.StructureDefinition, 0, len(r.structureDefinitions))
+	for _, sd := range r.structureDefinitions {
+		out = append(out, sd)
+	}
+	return out
+}
+
+// SetScope restricts the set of StructureDefinitions that are subjects of
+// test generation to those whose canonical URL is in scope. Structure
+// Definitions outside the scope remain indexed and resolvable so they can
+// satisfy dependencies (referenced profiles, base definitions, value sets),
+// but they are not returned by ScopedStructureDefinitions. Passing an empty
+// scope clears the restriction and treats every indexed StructureDefinition
+// as in scope.
+func (r *Registry) SetScope(scope []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(scope) == 0 {
+		r.scoped = false
+		r.scopedStructureDefinitions = nil
+		return
+	}
+	set := make(map[string]struct{}, len(scope))
+	for _, url := range scope {
+		if url != "" {
+			set[url] = struct{}{}
+		}
+	}
+	r.scoped = true
+	r.scopedStructureDefinitions = set
+}
+
+// ScopedStructureDefinitions returns the StructureDefinitions that are
+// subjects of test generation: those in the selected package scope, or every
+// indexed StructureDefinition when no scope has been set.
+func (r *Registry) ScopedStructureDefinitions() []*model.StructureDefinition {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if !r.scoped {
+		return r.structureDefinitionsSnapshot()
+	}
+	out := make([]*model.StructureDefinition, 0, len(r.scopedStructureDefinitions))
+	for url := range r.scopedStructureDefinitions {
+		if sd, ok := r.structureDefinitions[url]; ok {
+			out = append(out, sd)
+		}
+	}
+	return out
+}
+
+func (r *Registry) structureDefinitionsSnapshot() []*model.StructureDefinition {
+	out := make([]*model.StructureDefinition, 0, len(r.structureDefinitions))
+	for _, sd := range r.structureDefinitions {
+		out = append(out, sd)
+	}
+	return out
 }
 
 // ValueSet returns the ValueSet for a canonical URL.
@@ -127,12 +201,15 @@ func (r *Registry) CodeSystem(url string) (*model.CodeSystem, bool) {
 	return cs, ok
 }
 
-// CapabilityStatement returns the CapabilityStatement for a canonical URL.
-func (r *Registry) CapabilityStatement(url string) (*model.CapabilityStatement, bool) {
+// CapabilityStatements returns every indexed CapabilityStatement.
+func (r *Registry) CapabilityStatements() []*model.CapabilityStatement {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	cs, ok := r.capabilityStatements[url]
-	return cs, ok
+	out := make([]*model.CapabilityStatement, 0, len(r.capabilityStatements))
+	for _, cs := range r.capabilityStatements {
+		out = append(out, cs)
+	}
+	return out
 }
 
 // SearchParameter returns the SearchParameter for a resource type and code.
@@ -143,14 +220,19 @@ func (r *Registry) SearchParameter(resourceType, code string) (*model.SearchPara
 	return sp, ok
 }
 
-// SearchParametersForResource returns all SearchParameters for a resource
-// type.
-func (r *Registry) SearchParametersForResource(resourceType string) []*model.SearchParameter {
+// SearchParameters returns every distinct indexed SearchParameter.
+func (r *Registry) SearchParameters() []*model.SearchParameter {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	params := r.searchParametersForResource[resourceType]
-	out := make([]*model.SearchParameter, len(params))
-	copy(out, params)
+	seen := make(map[*model.SearchParameter]struct{}, len(r.searchParameters))
+	out := make([]*model.SearchParameter, 0, len(r.searchParameters))
+	for _, sp := range r.searchParameters {
+		if _, ok := seen[sp]; ok {
+			continue
+		}
+		seen[sp] = struct{}{}
+		out = append(out, sp)
+	}
 	return out
 }
 
@@ -173,7 +255,69 @@ func (r *Registry) ProfilesForResource(resourceType string) []*model.StructureDe
 func (r *Registry) ResolveProfile(url string) (*model.ResolvedProfile, error) {
 	sd, ok := r.StructureDefinition(url)
 	if !ok {
-		return nil, ErrNotFound
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, url)
 	}
-	return model.NewResolvedProfile(sd.URL, sd.Type, sd.Elements), nil
+	elements := r.resolveElements(sd, make(map[string]bool))
+	return model.NewResolvedProfile(sd.URL, sd.Type, elements), nil
+}
+
+// ResolveElements returns the flat, parent-merged ElementDefinition list for
+// the StructureDefinition at url. Parent elements (walked via BaseDefinition)
+// are merged first; child elements override parent elements with the same
+// elementKey (path, or path:sliceName when sliced) and append new paths. The
+// returned slice preserves slice definitions and slice-child elements, which
+// the ResolvedProfile.Elements map intentionally drops.
+//
+// Returns ErrNotFound when url is not indexed.
+func (r *Registry) ResolveElements(url string) ([]model.ElementDefinition, error) {
+	sd, ok := r.StructureDefinition(url)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, url)
+	}
+	return r.resolveElements(sd, make(map[string]bool)), nil
+}
+
+// resolveElements returns the full element set for sd by resolving its parent
+// (baseDefinition) dependency chain and merging: child elements override parent
+// elements with the same path, preserving order. This ensures inherited elements
+// and constraints (e.g. a profile's base Identifier structure) are available to
+// generation even when a profile is a differential.
+func (r *Registry) resolveElements(sd *model.StructureDefinition, seen map[string]bool) []model.ElementDefinition {
+	if sd == nil || seen[sd.URL] {
+		return nil
+	}
+	seen[sd.URL] = true
+	parentSD, _ := r.StructureDefinition(sd.BaseDefinition)
+	parent := r.resolveElements(parentSD, seen)
+	merged := make([]model.ElementDefinition, 0, len(parent)+len(sd.Elements))
+	index := make(map[string]int, len(parent)+len(sd.Elements))
+	for _, el := range parent {
+		index[elementKey(el)] = len(merged)
+		merged = append(merged, el)
+	}
+	for _, el := range sd.Elements {
+		if idx, ok := index[elementKey(el)]; ok {
+			merged[idx] = el
+		} else {
+			index[elementKey(el)] = len(merged)
+			merged = append(merged, el)
+		}
+	}
+	return merged
+}
+
+// elementKey returns a unique merge key for an element: its path plus slice
+// name when sliced (slices share a path), otherwise its path. For slice children
+// whose slice context lives only in their ID (e.g. an ID of
+// "Organization.extension:suppressed.url" with a plain path), the ID's slice
+// segment is preserved so the slice member keys distinct from its base element
+// (task #30); otherwise a SliceName is used when present.
+func elementKey(el model.ElementDefinition) string {
+	if key := model.ElementSliceKey(el.ID, el.Path); key != el.Path {
+		return key
+	}
+	if el.SliceName != "" {
+		return el.Path + ":" + el.SliceName
+	}
+	return el.Path
 }

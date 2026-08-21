@@ -27,14 +27,25 @@ type ElementDefinition struct {
 	Name          string
 	Min           int
 	Max           string
+	BaseMax       string
 	Types         []ElementType
 	MustSupport   bool
 	Fixed         any
 	Pattern       any
+	Examples      []any
+	Constraints   []ElementConstraint
 	Binding       *Binding
 	Profile       []string
 	TargetProfile []string
 	SliceName     string
+}
+
+type ElementConstraint struct {
+	Key        string
+	Severity   string
+	Human      string
+	Expression string
+	Source     string
 }
 
 // ElementType is a possible type for an element.

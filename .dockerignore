@@ -1,0 +1,14 @@
+# Keep the build context lean and avoid baking local artifacts/secrets.
+.git
+dist
+.momus
+coverage.*
+*.prof
+*.test
+*.out
+package.tgz
+data.ndjson
+test-plan.json
+provision-failures.json
+test-results.json
+*.json.tmp

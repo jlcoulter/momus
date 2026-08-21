@@ -1,10 +1,53 @@
 package registry
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 )
+
+// TestResolveProfileResolvesParentChain verifies that ResolveProfile merges the
+// parent (baseDefinition) dependency chain, so a differential profile inherits
+// its base's elements and constraints, and child elements override the parent's.
+func TestResolveProfileResolvesParentChain(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://hl7.org/fhir/StructureDefinition/Identifier",
+		Type: "Identifier",
+		Elements: []model.ElementDefinition{
+			{Path: "Identifier", Min: 0, Max: "*"},
+			{Path: "Identifier.system", Min: 0, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
+			{Path: "Identifier.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:            "http://example.org/StructureDefinition/abn",
+		Type:           "Identifier",
+		BaseDefinition: "http://hl7.org/fhir/StructureDefinition/Identifier",
+		Elements: []model.ElementDefinition{
+			{Path: "Identifier", Min: 0, Max: "*"},
+			{Path: "Identifier.system", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://hl7.org.au/id/abn"},
+			{Path: "Identifier.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}, Constraints: []model.ElementConstraint{{Key: "inv-abn-0", Severity: "error", Expression: "value.matches('^([0-9]{11})$')"}}},
+		},
+	})
+
+	res, err := r.ResolveProfile("http://example.org/StructureDefinition/abn")
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	system := res.Elements["Identifier.system"]
+	if system == nil || system.Definition == nil {
+		t.Fatal("Identifier.system missing after parent-chain resolution")
+	}
+	if system.Definition.Fixed != "http://hl7.org.au/id/abn" {
+		t.Fatalf("system fixed = %v, want the child's override", system.Definition.Fixed)
+	}
+	value := res.Elements["Identifier.value"]
+	if value == nil || value.Definition == nil || len(value.Definition.Constraints) == 0 {
+		t.Fatal("Identifier.value must inherit the child's invariant constraint")
+	}
+}
 
 func TestRegistryIndexesStructureDefinitionByURL(t *testing.T) {
 	r := New()
@@ -85,7 +128,122 @@ func TestRegistryResolveProfileBuildsElementTree(t *testing.T) {
 		t.Fatal("expected path lookup to succeed")
 	}
 
-	if _, err := r.ResolveProfile("http://example.org/missing"); err != ErrNotFound {
+	if _, err := r.ResolveProfile("http://example.org/missing"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("got error %v, want ErrNotFound", err)
+	}
+}
+
+func TestRegistryScopeRestrictsScopedStructureDefinitions(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/root-a", Type: "Patient"})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/root-b", Type: "Observation"})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Patient", Type: "Patient"})
+
+	// Without a scope, every indexed definition is a subject.
+	if got := len(r.ScopedStructureDefinitions()); got != 3 {
+		t.Fatalf("unscoped ScopedStructureDefinitions returned %d, want 3", got)
+	}
+
+	r.SetScope([]string{"http://example.org/StructureDefinition/root-a", "http://example.org/StructureDefinition/root-b"})
+	scoped := r.ScopedStructureDefinitions()
+	if len(scoped) != 2 {
+		t.Fatalf("scoped ScopedStructureDefinitions returned %d, want 2", len(scoped))
+	}
+	for _, sd := range scoped {
+		if sd.URL == "http://hl7.org/fhir/StructureDefinition/Patient" {
+			t.Fatalf("out-of-scope definition %q returned as a subject", sd.URL)
+		}
+	}
+
+	// Out-of-scope definitions remain resolvable for dependency resolution.
+	if _, ok := r.StructureDefinition("http://hl7.org/fhir/StructureDefinition/Patient"); !ok {
+		t.Fatal("out-of-scope definition should remain indexed for dependency resolution")
+	}
+
+	// Clearing the scope restores all definitions as subjects.
+	r.SetScope(nil)
+	if got := len(r.ScopedStructureDefinitions()); got != 3 {
+		t.Fatalf("cleared scope returned %d, want 3", got)
+	}
+}
+
+func TestRegistryScopeIgnoresUnknownURLs(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/root", Type: "Patient"})
+	r.SetScope([]string{"http://example.org/StructureDefinition/root", "http://example.org/StructureDefinition/missing"})
+	if got := len(r.ScopedStructureDefinitions()); got != 1 {
+		t.Fatalf("scoped ScopedStructureDefinitions returned %d, want 1", got)
+	}
+}
+
+// TestRegistryEmptyButSetScopeReturnsNoDefinitions (task #31) verifies that an
+// empty-but-set scope (e.g. SetScope([]string{""})) is a genuine empty selection
+// and returns no definitions, rather than being treated as "no scope" and
+// returning every indexed definition. Before the fix, SetScope built an empty
+// non-nil map and ScopedStructureDefinitions treated len==0 as "no scope".
+func TestRegistryEmptyButSetScopeReturnsNoDefinitions(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/root-a", Type: "Patient"})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/root-b", Type: "Observation"})
+
+	r.SetScope([]string{""})
+	if got := len(r.ScopedStructureDefinitions()); got != 0 {
+		t.Fatalf("empty-but-set scope returned %d definitions, want 0", got)
+	}
+
+	// Clearing the scope restores all definitions as subjects.
+	r.SetScope(nil)
+	if got := len(r.ScopedStructureDefinitions()); got != 2 {
+		t.Fatalf("cleared scope returned %d definitions, want 2", got)
+	}
+}
+
+// TestResolveElementsKeepsIDBasedSliceChildrenDistinct (task #30) verifies that a
+// slice child whose slice context lives only in its ID does not override its base
+// element during the parent-chain merge. Before the fix, elementKey ignored the ID
+// slice segment, so the base extension.url and the suppressed slice's extension.url
+// collided and one clobbered the other.
+func TestResolveElementsKeepsIDBasedSliceChildrenDistinct(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/base-org",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "1"},
+			{Path: "Organization.extension", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Extension"}}},
+			// The base element that the child's ID-based slice child shares a path with.
+			{Path: "Organization.extension.url", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
+		},
+	})
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:            "http://example.org/StructureDefinition/org",
+		Type:           "Organization",
+		BaseDefinition: "http://example.org/StructureDefinition/base-org",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization.extension", Min: 0, Max: "*"},
+			{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 0, Max: "1"},
+			// A slice child whose slice context lives only in its ID (no SliceName).
+			{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: "1", Fixed: "http://example.org/suppressed"},
+		},
+	})
+
+	els, err := r.ResolveElements("http://example.org/StructureDefinition/org")
+	if err != nil {
+		t.Fatalf("ResolveElements: %v", err)
+	}
+	var hasBaseURL, hasSliceURL bool
+	for _, el := range els {
+		if el.Path == "Organization.extension.url" && el.ID == "" && el.Fixed == nil {
+			hasBaseURL = true
+		}
+		if el.ID == "Organization.extension:suppressed.url" && el.Fixed == "http://example.org/suppressed" {
+			hasSliceURL = true
+		}
+	}
+	if !hasBaseURL {
+		t.Fatal("base Organization.extension.url element was clobbered by the ID-based slice child")
+	}
+	if !hasSliceURL {
+		t.Fatal("ID-based slice child Organization.extension:suppressed.url missing after merge")
 	}
 }
