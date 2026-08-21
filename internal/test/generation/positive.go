@@ -1693,9 +1693,19 @@ func resolveBoundCodingForNode(node *model.ElementNode, reg *registry.Registry) 
 // path within the package's example instance resources. It prefers an instance
 // whose meta.profile matches the node's profile URL, then falls back to the
 // first example of the resource type (derived from the leading path segment).
+//
+// For an extension value[x] node (path "Extension.value[x]" whose profile is the
+// extension's StructureDefinition URL), it matches by extension URL across every
+// example instance — extension URLs are globally unique, so the coding is found
+// wherever the extension appears (e.g. the "new-patient-availability" extension
+// on a HealthcareService example).
 func resolveBoundCodingFromExample(node *model.ElementNode, reg *registry.Registry) (generatedCoding, bool) {
 	if node == nil || node.Path == "" || reg == nil {
 		return generatedCoding{}, false
+	}
+	// Extension value[x] resolution by extension URL.
+	if strings.HasPrefix(node.Path, "Extension.") && node.ProfileURL != "" {
+		return resolveBoundCodingFromExtensionValue(node.ProfileURL, reg)
 	}
 	resourceType, path := splitResourcePath(node.Path)
 	if resourceType == "" || path == "" {
@@ -1719,6 +1729,90 @@ func resolveBoundCodingFromExample(node *model.ElementNode, reg *registry.Regist
 	// Second pass: any example of the resource type.
 	for _, inst := range instances {
 		if coding, ok := codingAtPath(inst.Raw, path); ok {
+			return coding, true
+		}
+	}
+	return generatedCoding{}, false
+}
+
+// resolveBoundCodingFromExtensionValue searches every example instance for an
+// extension whose url equals extensionURL, and returns the first meaningful
+// coding from its valueCodeableConcept (or valueCoding). The extension URL is
+// globally unique, so this resolves wherever the extension appears in the
+// package's examples.
+func resolveBoundCodingFromExtensionValue(extensionURL string, reg *registry.Registry) (generatedCoding, bool) {
+	if extensionURL == "" || reg == nil {
+		return generatedCoding{}, false
+	}
+	extensionURL = normalizeCanonical(extensionURL)
+	for _, inst := range reg.AllResources() {
+		if inst == nil || inst.Raw == nil {
+			continue
+		}
+		if coding, ok := findExtensionValueCoding(inst.Raw, extensionURL); ok {
+			return coding, true
+		}
+	}
+	return generatedCoding{}, false
+}
+
+// findExtensionValueCoding walks a resource instance's extension array (and
+// nested extension arrays) looking for an extension whose url equals
+// extensionURL, then extracts the first meaningful coding from its
+// valueCodeableConcept or valueCoding.
+func findExtensionValueCoding(raw map[string]any, extensionURL string) (generatedCoding, bool) {
+	if raw == nil || extensionURL == "" {
+		return generatedCoding{}, false
+	}
+	// The top-level "extension" array, plus recurse into any nested resource
+	// values (e.g. contained resources or nested extensions) defensively.
+	if coding, ok := findExtensionValueCodingInAny(raw, extensionURL); ok {
+		return coding, true
+	}
+	return generatedCoding{}, false
+}
+
+func findExtensionValueCodingInAny(v any, extensionURL string) (generatedCoding, bool) {
+	switch typed := v.(type) {
+	case []any:
+		for _, item := range typed {
+			if coding, ok := findExtensionValueCodingInAny(item, extensionURL); ok {
+				return coding, true
+			}
+		}
+		return generatedCoding{}, false
+	case map[string]any:
+		// If this is an extension with the matching url, extract its value.
+		if u, ok := typed["url"].(string); ok && normalizeCanonical(u) == extensionURL {
+			if coding, ok := extensionValueCoding(typed); ok {
+				return coding, true
+			}
+		}
+		// Recurse into all sub-values, including nested extension arrays.
+		for _, val := range typed {
+			if coding, ok := findExtensionValueCodingInAny(val, extensionURL); ok {
+				return coding, true
+			}
+		}
+		return generatedCoding{}, false
+	default:
+		return generatedCoding{}, false
+	}
+}
+
+// extensionValueCoding extracts the first meaningful coding from an extension's
+// valueCodeableConcept or valueCoding.
+func extensionValueCoding(ext map[string]any) (generatedCoding, bool) {
+	if ext == nil {
+		return generatedCoding{}, false
+	}
+	if vcc, ok := ext["valueCodeableConcept"]; ok {
+		if coding, ok := firstCodingInValue(vcc); ok {
+			return coding, true
+		}
+	}
+	if vc, ok := ext["valueCoding"]; ok {
+		if coding, ok := firstCodingInValue(vc); ok {
 			return coding, true
 		}
 	}

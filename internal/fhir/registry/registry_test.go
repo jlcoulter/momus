@@ -29,6 +29,9 @@ func TestRegistryIndexesResourcesByType(t *testing.T) {
 	if got := len(r.ResourcesForType("Observation")); got != 0 {
 		t.Fatalf("got %d Observation resources, want 0", got)
 	}
+	if got := len(r.AllResources()); got != 3 {
+		t.Fatalf("got %d total resources, want 3", got)
+	}
 }
 
 func TestRegistryOverlayCapabilityScope(t *testing.T) {

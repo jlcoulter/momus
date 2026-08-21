@@ -63,6 +63,40 @@ func TestResolveBoundCodingFallsBackToExample(t *testing.T) {
 	}
 }
 
+// TestResolveBoundCodingFromExtensionValue verifies that an extension value[x]
+// node resolves a real coding from example instance data by matching the
+// extension URL, even when the bound ValueSet is not in the registry.
+func TestResolveBoundCodingFromExtensionValue(t *testing.T) {
+	reg := registry.New()
+	reg.AddResource(&model.Resource{
+		ResourceType: "HealthcareService",
+		Raw: map[string]any{
+			"resourceType": "HealthcareService",
+			"extension": []any{
+				map[string]any{
+					"url": "http://digitalhealth.gov.au/fhir/cc/StructureDefinition/new-patient-availability",
+					"valueCodeableConcept": map[string]any{
+						"coding": []any{map[string]any{
+							"system":  "https://www.healthterminologies.gov.au/integration/R4/fhir/CodeSystem/new-patient-availability-1",
+							"code":    "accepting",
+							"display": "Accepting new patients",
+						}},
+					},
+				},
+			},
+		},
+	})
+
+	node := &model.ElementNode{
+		Path:       "Extension.value[x]",
+		ProfileURL: "http://digitalhealth.gov.au/fhir/cc/StructureDefinition/new-patient-availability",
+	}
+	c, ok := resolveBoundCodingForNode(node, reg)
+	if !ok || c.Code != "accepting" {
+		t.Fatalf("resolveBoundCodingForNode=%+v ok=%v, want the extension code \"accepting\"", c, ok)
+	}
+}
+
 // TestResolveBoundCodingSkipsPlaceholders verifies that binding resolution skips
 // placeholder/null codes (e.g. v2-0203 "XX") and returns a meaningful code from
 // the package, so generated CodeableConcepts don't carry a null placeholder.

@@ -151,6 +151,22 @@ func (r *Registry) ResourcesForType(resourceType string) []*model.Resource {
 	return out
 }
 
+// AllResources returns every indexed instance/example resource across all
+// resource types.
+func (r *Registry) AllResources() []*model.Resource {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var total int
+	for _, list := range r.resourcesByType {
+		total += len(list)
+	}
+	out := make([]*model.Resource, 0, total)
+	for _, list := range r.resourcesByType {
+		out = append(out, list...)
+	}
+	return out
+}
+
 // StructureDefinition returns the StructureDefinition for a canonical URL.
 func (r *Registry) StructureDefinition(url string) (*model.StructureDefinition, bool) {
 	r.mu.RLock()
