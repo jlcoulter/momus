@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/jlcoulter/momus/internal/fhir/golden"
 	"github.com/spf13/cobra"
@@ -34,7 +35,7 @@ func newConformanceSelfTestCmd(cfg *config) *cobra.Command {
 			var fixtures []string
 			for _, e := range entries {
 				name := e.Name()
-				if filepath.Ext(name) == ".json" && !filepath.HasPrefix(name, ".") && !hasPlanSuffix(name) {
+				if filepath.Ext(name) == ".json" && !strings.HasPrefix(name, ".") && !hasPlanSuffix(name) {
 					fixtures = append(fixtures, filepath.Base(name[:len(name)-5]))
 				}
 			}
@@ -93,5 +94,5 @@ func findGoldenDir() string {
 // hasPlanSuffix reports whether a fixture basename is a generated .plan.json
 // snapshot (which should not be treated as a source fixture).
 func hasPlanSuffix(name string) bool {
-	return len(name) > len(".plan.json") && name[len(name)-len(".plan.json"):] == ".plan.json"
+	return strings.HasSuffix(name, ".plan.json")
 }
