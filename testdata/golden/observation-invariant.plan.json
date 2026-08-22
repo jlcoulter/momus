@@ -145,6 +145,15 @@
                 },
                 "Body": {
                   "id": "momus-observation-operation-delete-142198",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"
@@ -204,6 +213,15 @@
                 },
                 "Body": {
                   "id": "momus-observation-operation-history-846697",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"
@@ -263,6 +281,15 @@
                 },
                 "Body": {
                   "id": "momus-observation-operation-patch-588189",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"
@@ -330,6 +357,15 @@
                 },
                 "Body": {
                   "id": "momus-observation-operation-read-339873",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"
@@ -389,6 +425,15 @@
                 },
                 "Body": {
                   "id": "momus-observation-operation-update-754324",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"
@@ -421,6 +466,15 @@
                 },
                 "Body": {
                   "id": "momus-observation-operation-update-754324",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"
@@ -457,6 +511,15 @@
                 },
                 "Body": {
                   "id": "momus-crud-observation",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"
@@ -512,6 +575,15 @@
                 },
                 "Body": {
                   "id": "momus-crud-observation",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"
@@ -664,6 +736,333 @@
             "Steps": [
               {
                 "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Observation/momus-observation-datatype-invalid-lexical-933601",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/observation|Observation.identifier|Identifier|datatype-invalid-lexical"
+                },
+                "Body": {
+                  "id": "momus-observation-datatype-invalid-lexical-933601",
+                  "identifier": "not-a-Identifier",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/observation"
+                    ]
+                  },
+                  "resourceType": "Observation",
+                  "status": "status"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/observation|Observation.identifier|Identifier|datatype-invalid-lexical",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/observation|Observation.identifier|datatype|Identifier",
+                  "ProfileURL": "http://example.org/StructureDefinition/observation",
+                  "ResourceType": "Observation",
+                  "ElementPath": "Observation.identifier",
+                  "Domain": "datatype",
+                  "Variant": "datatype-invalid-lexical",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Observation/momus-observation-datatype-null-611348",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/observation|Observation.identifier|Identifier|datatype-null"
+                },
+                "Body": {
+                  "id": "momus-observation-datatype-null-611348",
+                  "identifier": null,
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/observation"
+                    ]
+                  },
+                  "resourceType": "Observation",
+                  "status": "status"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/observation|Observation.identifier|Identifier|datatype-null",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/observation|Observation.identifier|datatype|Identifier",
+                  "ProfileURL": "http://example.org/StructureDefinition/observation",
+                  "ResourceType": "Observation",
+                  "ElementPath": "Observation.identifier",
+                  "Domain": "datatype",
+                  "Variant": "datatype-null",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Observation/momus-observation-datatype-valid-744143",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/observation|Observation.identifier|Identifier|datatype-valid"
+                },
+                "Body": {
+                  "id": "momus-observation-datatype-valid-744143",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/observation"
+                    ]
+                  },
+                  "resourceType": "Observation",
+                  "status": "status"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/observation|Observation.identifier|Identifier|datatype-valid",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/observation|Observation.identifier|datatype|Identifier",
+                  "ProfileURL": "http://example.org/StructureDefinition/observation",
+                  "ResourceType": "Observation",
+                  "ElementPath": "Observation.identifier",
+                  "Domain": "datatype",
+                  "Variant": "datatype-valid",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Observation/momus-observation-datatype-wrong-json-type-929714",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/observation|Observation.identifier|Identifier|datatype-wrong-json-type"
+                },
+                "Body": {
+                  "id": "momus-observation-datatype-wrong-json-type-929714",
+                  "identifier": true,
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/observation"
+                    ]
+                  },
+                  "resourceType": "Observation",
+                  "status": "status"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/observation|Observation.identifier|Identifier|datatype-wrong-json-type",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/observation|Observation.identifier|datatype|Identifier",
+                  "ProfileURL": "http://example.org/StructureDefinition/observation",
+                  "ResourceType": "Observation",
+                  "ElementPath": "Observation.identifier",
+                  "Domain": "datatype",
+                  "Variant": "datatype-wrong-json-type",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Observation/momus-observation-invariant-satisfies-852637",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/observation|Observation.identifier|invariant-satisfies"
+                },
+                "Body": {
+                  "id": "momus-observation-invariant-satisfies-852637",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/observation"
+                    ]
+                  },
+                  "resourceType": "Observation",
+                  "status": "status"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/observation|Observation.identifier|invariant-satisfies",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/observation|Observation.identifier|invariant|obs-id-0",
+                  "ProfileURL": "http://example.org/StructureDefinition/observation",
+                  "ResourceType": "Observation",
+                  "ElementPath": "Observation.identifier",
+                  "Domain": "invariant",
+                  "Variant": "invariant-satisfies",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Observation/momus-observation-missing-required-636701",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/observation|Observation.identifier|missing-required"
+                },
+                "Body": {
+                  "id": "momus-observation-missing-required-636701",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/observation"
+                    ]
+                  },
+                  "resourceType": "Observation",
+                  "status": "status"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/observation|Observation.identifier|missing-required",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/observation|Observation.identifier|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/observation",
+                  "ResourceType": "Observation",
+                  "ElementPath": "Observation.identifier",
+                  "Domain": "cardinality",
+                  "Variant": "missing-required",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Observation/momus-observation-multiple-values-637096",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/observation|Observation.identifier|multiple-values"
+                },
+                "Body": {
+                  "id": "momus-observation-multiple-values-637096",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/observation"
+                    ]
+                  },
+                  "resourceType": "Observation",
+                  "status": "status"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/observation|Observation.identifier|multiple-values",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/observation|Observation.identifier|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/observation",
+                  "ResourceType": "Observation",
+                  "ElementPath": "Observation.identifier",
+                  "Domain": "cardinality",
+                  "Variant": "multiple-values",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Observation/momus-observation-valid-min-77866",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/observation|Observation.identifier|valid-min"
+                },
+                "Body": {
+                  "id": "momus-observation-valid-min-77866",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/observation"
+                    ]
+                  },
+                  "resourceType": "Observation",
+                  "status": "status"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/observation|Observation.identifier|valid-min",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/observation|Observation.identifier|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/observation",
+                  "ResourceType": "Observation",
+                  "ElementPath": "Observation.identifier",
+                  "Domain": "cardinality",
+                  "Variant": "valid-min",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
                 "URL": "http://momus-golden.invalid/fhir/Observation/momus-observation-datatype-invalid-lexical-36102",
                 "Headers": {
                   "Content-Type": "application/fhir+json",
@@ -671,6 +1070,15 @@
                 },
                 "Body": {
                   "id": "momus-observation-datatype-invalid-lexical-36102",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"
@@ -707,6 +1115,15 @@
                 },
                 "Body": {
                   "id": "momus-observation-datatype-null-635919",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"
@@ -743,6 +1160,15 @@
                 },
                 "Body": {
                   "id": "momus-observation-datatype-valid-505844",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"
@@ -779,6 +1205,15 @@
                 },
                 "Body": {
                   "id": "momus-observation-datatype-wrong-json-type-32215",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"
@@ -815,6 +1250,15 @@
                 },
                 "Body": {
                   "id": "momus-observation-missing-required-870068",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"
@@ -850,6 +1294,15 @@
                 },
                 "Body": {
                   "id": "momus-observation-valid-min-296563",
+                  "identifier": [
+                    {
+                      "system": "http://example.org/fhir/identifier/observation.identifier",
+                      "type": {
+                        "text": "Type"
+                      },
+                      "value": "12345678901"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/observation"

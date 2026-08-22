@@ -143,6 +143,38 @@ func SupportedProfileURLsByResourceFromCapabilityStatement(cs *model.CapabilityS
 	return out
 }
 
+// SearchCodesFromCapabilityStatementUnion returns the union of search
+// parameter codes declared across multiple server-mode CapabilityStatements,
+// grouped by resource type. When no statement declares a given resource type,
+// the type is absent from the map (no search-parameter restriction).
+func SearchCodesFromCapabilityStatementUnion(statements []*model.CapabilityStatement) map[string][]string {
+	grouped := make(map[string]map[string]struct{})
+	for _, cs := range statements {
+		perType := SearchCodesFromCapabilityStatement(cs)
+		for resourceType, codes := range perType {
+			if _, ok := grouped[resourceType]; !ok {
+				grouped[resourceType] = make(map[string]struct{})
+			}
+			for _, code := range codes {
+				grouped[resourceType][code] = struct{}{}
+			}
+		}
+	}
+	if len(grouped) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(grouped))
+	for resourceType, codes := range grouped {
+		values := make([]string, 0, len(codes))
+		for code := range codes {
+			values = append(values, code)
+		}
+		sort.Strings(values)
+		out[resourceType] = values
+	}
+	return out
+}
+
 // SearchCodesFromCapabilityStatement returns the set of search parameter codes
 // declared by the server's CapabilityStatement, grouped by resource type. A
 // resource entry that declares no searchParam maps to an empty slice, so a

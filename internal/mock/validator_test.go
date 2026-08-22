@@ -58,8 +58,8 @@ func TestSemanticValidationAcceptsConformantPUT(t *testing.T) {
 		t.Fatalf("PUT: %v", err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT status = %d, want 200", resp.StatusCode)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("PUT status = %d, want 201", resp.StatusCode)
 	}
 }
 
@@ -72,7 +72,7 @@ func TestSemanticValidationWithoutProfileSkipped(t *testing.T) {
 	defer s.Close()
 
 	base := "http://" + addr
-	// No meta.profile -> validation is skipped, payload stored (200).
+	// No meta.profile -> validation is skipped, payload stored (201).
 	body := `{"resourceType":"Patient","id":"p1"}`
 	req, _ := http.NewRequest(http.MethodPut, base+"/Patient/p1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/fhir+json")
@@ -81,7 +81,7 @@ func TestSemanticValidationWithoutProfileSkipped(t *testing.T) {
 		t.Fatalf("PUT: %v", err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT status = %d, want 200", resp.StatusCode)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("PUT status = %d, want 201", resp.StatusCode)
 	}
 }

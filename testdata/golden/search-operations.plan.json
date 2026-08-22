@@ -8,6 +8,136 @@
             "Steps": [
               {
                 "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Practitioner?_id:zzz=momus-search",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Practitioner|_id|search-invalid-modifier"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "search|Practitioner|_id|search-invalid-modifier",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "search|Resource|_id",
+                  "ProfileURL": "",
+                  "ResourceType": "Practitioner",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-invalid-modifier",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Practitioner?_id=momus-invalid-zzz",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Practitioner|_id|search-invalid-value"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts a type-valid, non-matching search value",
+                "RequirementID": "search|Practitioner|_id|search-invalid-value",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "search|Resource|_id",
+                  "ProfileURL": "",
+                  "ResourceType": "Practitioner",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-invalid-value",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Practitioner?_id=momus-search",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Practitioner|_id|search-multiple-results"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server returns multiple search results",
+                "RequirementID": "search|Practitioner|_id|search-multiple-results",
+                "Expression": "body.total \u003e= 2",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "",
+                  "ResourceType": "Practitioner",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-multiple-results",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Practitioner?_id=momus-invalid-zzz",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Practitioner|_id|search-no-results"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "search|Practitioner|_id|search-no-results",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "search|Resource|_id",
+                  "ProfileURL": "",
+                  "ResourceType": "Practitioner",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-no-results",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Practitioner?_id=momus-search",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Practitioner|_id|search-valid"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "search|Practitioner|_id|search-valid",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "search|Resource|_id",
+                  "ProfileURL": "",
+                  "ResourceType": "Practitioner",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-valid",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
                 "URL": "http://momus-golden.invalid/fhir/Practitioner?active:zzz=true",
                 "Headers": {
                   "X-Momus-Requirement-ID": "search|Practitioner|active|search-invalid-modifier"
@@ -695,7 +825,7 @@
               {
                 "Description": "exercise operation-update",
                 "RequirementID": "operation|Practitioner|operation-update",
-                "Expression": "status in [200]",
+                "Expression": "status in [200,201]",
                 "Trace": {
                   "ConstraintID": "",
                   "ProfileURL": "http://example.org/StructureDefinition/practitioner",
@@ -830,7 +960,7 @@
               {
                 "Description": "exercise state-crud-sequence",
                 "RequirementID": "state|Practitioner|state-crud-sequence",
-                "Expression": "status in [200]",
+                "Expression": "status in [200,201]",
                 "Trace": {
                   "ConstraintID": "",
                   "ProfileURL": "http://example.org/StructureDefinition/practitioner",

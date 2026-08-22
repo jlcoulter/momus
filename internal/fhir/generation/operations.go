@@ -92,7 +92,7 @@ func buildCRUDCase(req coverage.CoverageRequirement, options coregen.BuildOption
 		&ast.Request{Method: "GET", URL: crudURL("GET"), Headers: headers},
 		operationAssert(req, "status in [200]", "accept"),
 		&ast.Request{Method: "PUT", URL: crudURL("PUT"), Headers: headers, Body: body},
-		operationAssert(req, "status in [200]", "accept"),
+		operationAssert(req, "status in [200,201]", "accept"),
 		&ast.Request{Method: "GET", URL: crudURL("GET"), Headers: headers},
 		operationAssert(req, "status in [200]", "accept"),
 		&ast.Request{Method: "DELETE", URL: crudURL("DELETE"), Headers: headers},
@@ -128,7 +128,7 @@ func operationSpec(req coverage.CoverageRequirement, options coregen.BuildOption
 	case coverage.CoverageVariantOperationRead:
 		return "GET", "/" + target, "status in [200]", "accept"
 	case coverage.CoverageVariantOperationUpdate:
-		return "PUT", "/" + target, "status in [200]", "accept"
+		return "PUT", "/" + target, "status in [200,201]", "accept"
 	case coverage.CoverageVariantOperationPatch:
 		return "PATCH", "/" + target, "status in [200]", "accept"
 	case coverage.CoverageVariantOperationDelete:

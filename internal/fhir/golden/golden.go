@@ -44,8 +44,15 @@ func Run(ctx context.Context, name string, fx *Fixture) (*Result, error) {
 		return nil, fmt.Errorf("golden %s: build registry: %w", name, err)
 	}
 
-	// 1. Derive the coverage plan.
-	coveragePlan, err := fhircoverage.DerivePlan(reg, coverage.DeriveOptions{})
+	// 1. Derive the coverage plan. When the fixture declares a server-mode
+	// CapabilityStatement, its search-parameter codes scope the search
+	// obligations (including the universal _parameters parameter when
+	// declared) exactly as the CLI scopes to a live server's capability
+	// statement.
+	capabilitySearchCodes := fhircoverage.SearchCodesFromCapabilityStatementUnion(fx.CapabilityStatements)
+	coveragePlan, err := fhircoverage.DerivePlan(reg, coverage.DeriveOptions{
+		CapabilitySearchCodes: capabilitySearchCodes,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("golden %s: derive: %w", name, err)
 	}
@@ -80,17 +87,24 @@ func Run(ctx context.Context, name string, fx *Fixture) (*Result, error) {
 	}
 	defer ms.Close()
 
+	// 5. Validate the fixture's sample resources (T21): every sample is a
+	// conformant example for its claimed profile, so the oracle must report no
+	// issues. A failing sample proves the validator and the fixture disagree.
+	if err := validateSamples(ctx, validator, fx); err != nil {
+		return nil, fmt.Errorf("golden %s: %w", name, err)
+	}
+
 	mockBase := "http://" + addr + "/fhir"
 	rewriteBase(plan.Root, placeholderBase, mockBase)
 	ms.SetPlan(plan.Root)
 
-	// 5. Provision the seed dataset (search seeds + referenced resources) so
+	// 6. Provision the seed dataset (search seeds + referenced resources) so
 	// searches return matches and CRUD/operations have data. Without this, a
 	// search-multiple-results case has nothing to match and fails vacuously.
 	if err := provisionSeed(ctx, opts, coveragePlan, mockBase); err != nil {
 		return nil, fmt.Errorf("golden %s: provision seed: %w", name, err)
 	}
-	// 6. Execute and assert 100% pass.
+	// 7. Execute and assert 100% pass.
 	report, err := runner.Execute(ctx, plan.Root, runner.ExecuteOptions{BaseURL: mockBase})
 	if err != nil {
 		return nil, fmt.Errorf("golden %s: execute: %w", name, err)

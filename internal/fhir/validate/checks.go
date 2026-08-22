@@ -2,6 +2,7 @@ package validate
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/jlcoulter/momus/internal/fhir/fhirpath"
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -33,6 +34,7 @@ func (v *ProfileValidator) checkProfile(ctx context.Context, profile *model.Reso
 func (v *ProfileValidator) checkElement(ctx context.Context, node *model.ElementNode, def *model.ElementDefinition, resource map[string]any) []Issue {
 	var issues []Issue
 	issues = append(issues, v.checkCardinality(node, def, resource)...)
+	issues = append(issues, v.checkMaxCardinality(node, def, resource)...)
 	issues = append(issues, v.checkDatatype(node, def, resource)...)
 	issues = append(issues, v.checkTerminology(node, def, resource)...)
 	issues = append(issues, v.checkFixedPattern(node, def, resource)...)
@@ -118,7 +120,43 @@ func (v *ProfileValidator) checkCardinality(node *model.ElementNode, def *model.
 	return nil
 }
 
-// ancestorsPresent reports whether every element on the path chain up to (but
+// checkMaxCardinality (T2b) enforces upper-bound cardinality: an element with a
+// numeric Max > 1 (or a bounded value such as "1") must not contain more members
+// than allowed. "0" means prohibited, "*" is unbounded. Like required-presence,
+// the bound is only enforced when the element is actually present.
+func (v *ProfileValidator) checkMaxCardinality(node *model.ElementNode, def *model.ElementDefinition, resource map[string]any) []Issue {
+	max, bounded := parseMax(def.Max)
+	if !bounded {
+		return nil
+	}
+	values, present := resolvePath(resource, node.Path)
+	if !present {
+		return nil
+	}
+	if len(values) > max {
+		return []Issue{{
+			Path:    node.Path,
+			Kind:    "cardinality",
+			Message: "element " + node.Path + " exceeds maximum cardinality of " + def.Max,
+		}}
+	}
+	return nil
+}
+
+// parseMax interprets an ElementDefinition.Max cardinality string. It returns
+// the integer upper bound and whether that bound is finite. "*" is unbounded;
+// a non-numeric value is treated as unbounded (best-effort, never over-reject).
+func parseMax(max string) (int, bool) {
+	if max == "" || max == "*" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(max)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
+}
+
 // excluding) the leaf is present in the resource. For "Observation.component.
 // code", it checks that "Observation.component" resolves.
 func ancestorsPresent(resource map[string]any, path string) bool {

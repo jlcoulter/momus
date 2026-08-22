@@ -276,7 +276,14 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 			}
 			store.Put(resourceType, id, body)
 			w.Header().Set("Content-Type", "application/fhir+json")
-			w.WriteHeader(http.StatusOK)
+			// With a semantic validator active, a conformant (or unprofiled)
+			// store is a create/update and FHIR returns 201 (T13). Without a
+			// validator the historical 200 is preserved.
+			status := http.StatusOK
+			if s.validator != nil {
+				status = http.StatusCreated
+			}
+			w.WriteHeader(status)
 			_, _ = w.Write(body)
 			return
 		case http.MethodDelete:

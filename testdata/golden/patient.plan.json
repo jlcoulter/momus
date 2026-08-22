@@ -481,7 +481,7 @@
               {
                 "Description": "exercise operation-update",
                 "RequirementID": "operation|Patient|operation-update",
-                "Expression": "status in [200]",
+                "Expression": "status in [200,201]",
                 "Trace": {
                   "ConstraintID": "",
                   "ProfileURL": "http://example.org/StructureDefinition/patient",
@@ -588,7 +588,7 @@
               {
                 "Description": "exercise state-crud-sequence",
                 "RequirementID": "state|Patient|state-crud-sequence",
-                "Expression": "status in [200]",
+                "Expression": "status in [200,201]",
                 "Trace": {
                   "ConstraintID": "",
                   "ProfileURL": "http://example.org/StructureDefinition/patient",

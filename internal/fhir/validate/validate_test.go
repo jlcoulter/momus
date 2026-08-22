@@ -169,3 +169,66 @@ func TestValidateFixedMatch(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateMaxCardinalityExceeded(t *testing.T) {
+	r := buildPatientRegistry()
+	// birthDate is Max "1"; providing two values exceeds the bound.
+	v := New(r)
+	res := map[string]any{
+		"name":      []any{map[string]any{"family": "Smith"}},
+		"birthDate": []any{"2024-01-01", "2024-02-02"},
+	}
+	issues, err := v.Validate(context.Background(), patientProfile, res)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	var found bool
+	for _, iss := range issues {
+		if iss.Kind == "cardinality" && iss.Path == "Patient.birthDate" && iss.Message != "" && iss.Message != "required element Patient.birthDate is missing" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected max-cardinality issue for Patient.birthDate, got %+v", issues)
+	}
+}
+
+func TestValidateMaxCardinalityWithinBound(t *testing.T) {
+	r := buildPatientRegistry()
+	v := New(r)
+	res := map[string]any{
+		"name":      []any{map[string]any{"family": "Smith"}},
+		"birthDate": "2024-01-01",
+	}
+	issues, err := v.Validate(context.Background(), patientProfile, res)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	for _, iss := range issues {
+		if iss.Kind == "cardinality" && iss.Path == "Patient.birthDate" {
+			t.Fatalf("unexpected cardinality issue: %+v", iss)
+		}
+	}
+}
+
+func TestParseMax(t *testing.T) {
+	cases := []struct {
+		max     string
+		bounded bool
+		want    int
+	}{
+		{"1", true, 1},
+		{"0", true, 0},
+		{"5", true, 5},
+		{"*", false, 0},
+		{"", false, 0},
+		{"abc", false, 0},
+		{"-1", false, 0},
+	}
+	for _, c := range cases {
+		got, bounded := parseMax(c.max)
+		if bounded != c.bounded || (bounded && got != c.want) {
+			t.Errorf("parseMax(%q) = (%d, %v), want (%d, %v)", c.max, got, bounded, c.want, c.bounded)
+		}
+	}
+}

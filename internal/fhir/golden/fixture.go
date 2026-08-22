@@ -7,12 +7,15 @@
 package golden
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+	"github.com/jlcoulter/momus/internal/fhir/validate"
 )
 
 // Fixture is a reference IG expressed as data (no .tgz required).
@@ -66,4 +69,33 @@ func BuildRegistry(fx *Fixture) (*registry.Registry, error) {
 		r.AddCapabilityStatement(cap)
 	}
 	return r, nil
+}
+
+// validateSamples validates every sample resource in the fixture against its
+// claimed profile, failing on any issue. Samples are the fixture's declaration
+// that a conformant example for the profile exists, so the oracle must accept
+// them.
+func validateSamples(ctx context.Context, validator interface {
+	Validate(ctx context.Context, profileURL string, resource map[string]any) ([]validate.Issue, error)
+}, fx *Fixture) error {
+	for i, sample := range fx.Resources {
+		if sample.ProfileURL == "" {
+			return fmt.Errorf("sample resource %d has no profileUrl", i)
+		}
+		if sample.Resource == nil {
+			return fmt.Errorf("sample resource %d has no resource", i)
+		}
+		issues, err := validator.Validate(ctx, sample.ProfileURL, sample.Resource)
+		if err != nil {
+			return fmt.Errorf("validate sample %d against %s: %w", i, sample.ProfileURL, err)
+		}
+		if len(issues) > 0 {
+			var msgs []string
+			for _, iss := range issues {
+				msgs = append(msgs, fmt.Sprintf("%s (%s: %s)", iss.Path, iss.Kind, iss.Message))
+			}
+			return fmt.Errorf("sample resource %d does not conform to %s: %s", i, sample.ProfileURL, strings.Join(msgs, "; "))
+		}
+	}
+	return nil
 }

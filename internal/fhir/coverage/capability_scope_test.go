@@ -262,6 +262,40 @@ func TestSearchCodesFromCapabilityStatementEmptySearchParam(t *testing.T) {
 	}
 }
 
+func TestSearchCodesFromCapabilityStatementUnion(t *testing.T) {
+	csA := &model.CapabilityStatement{
+		Rest: []model.CapabilityStatementRest{{
+			Mode: "server",
+			Resource: []model.CapabilityStatementRestResource{
+				{Type: "Practitioner", SearchParam: []model.CapabilityStatementSearchParam{{Name: "name"}, {Name: "_parameters"}}},
+			},
+		}},
+	}
+	csB := &model.CapabilityStatement{
+		Rest: []model.CapabilityStatementRest{{
+			Mode: "server",
+			Resource: []model.CapabilityStatementRestResource{
+				{Type: "Practitioner", SearchParam: []model.CapabilityStatementSearchParam{{Name: "active"}}},
+			},
+		}},
+	}
+
+	got := SearchCodesFromCapabilityStatementUnion([]*model.CapabilityStatement{csA, csB})
+	want := map[string][]string{
+		"Practitioner": {"_parameters", "active", "name"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+
+	if got := SearchCodesFromCapabilityStatementUnion(nil); got != nil {
+		t.Fatalf("got %v, want nil for empty input", got)
+	}
+	if got := SearchCodesFromCapabilityStatementUnion([]*model.CapabilityStatement{nil}); got != nil {
+		t.Fatalf("got %v, want nil for nil statements", got)
+	}
+}
+
 func TestFetchCapabilityStatementLimitsResponseBody(t *testing.T) {
 	padding := strings.Repeat("x", 2<<20) // 2 MiB, exceeds the 1 MiB limit
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

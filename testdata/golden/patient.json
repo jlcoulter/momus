@@ -21,5 +21,15 @@
       ]
     }
   ],
-  "resources": []
+  "resources": [
+    {
+      "profileUrl": "http://example.org/StructureDefinition/patient",
+      "resource": {
+        "resourceType": "Patient",
+        "id": "patient-sample-1",
+        "name": [{ "family": "Doe", "given": ["Jane"] }],
+        "gender": "female"
+      }
+    }
+  ]
 }
