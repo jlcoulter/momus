@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/jlcoulter/momus/compare/v1.3.0...v1.4.0) (2026-08-22)
+
+
+### Features
+
+* make mock server plan-aware and stateful ([#17](https://github.com/jlcoulter/momus/issues/17)) ([1e91217](https://github.com/jlcoulter/momus/commit/1e91217087549130a89fdcc8f9b8c4686a0aee9c))
+
 ## [1.3.0](https://github.com/jlcoulter/momus/compare/v1.2.0...v1.3.0) (2026-08-22)
 
 
