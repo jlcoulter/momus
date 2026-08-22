@@ -6,9 +6,13 @@ package mock
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 // Server is a minimal mock HTTP server that responds to every request with a
@@ -33,18 +37,34 @@ func (s *Server) Start() (string, error) {
 		return "", fmt.Errorf("mock listen: %w", err)
 	}
 	s.ln = ln
+
+	r := chi.NewRouter()
+	// Basic middleware boilerplate: a request id, real client IP, request
+	// logging, and panic recovery.
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	r.Handle("/*", http.HandlerFunc(s.handle))
+
 	s.server = &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(s.status)
-			if s.body != "" {
-				_, _ = w.Write([]byte(s.body))
-			}
-		}),
+		Handler: r,
 	}
 	go func() {
-		_ = s.server.Serve(ln)
+		if err := s.server.Serve(ln); err != nil && err != http.ErrServerClosed {
+			log.Printf("mock server: %v", err)
+		}
 	}()
 	return ln.Addr().String(), nil
+}
+
+// handle writes the fixed status and body for any request.
+func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(s.status)
+	if s.body != "" {
+		_, _ = w.Write([]byte(s.body))
+	}
 }
 
 // Close shuts the server down, waiting up to a short grace period for in-flight
