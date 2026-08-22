@@ -52,4 +52,11 @@ type config struct {
 	exhaustive        bool
 	bulkCount         int
 	bulkPerTypeCounts []string
+
+	// Validate
+	profileURLs []string
+	packagePath string
+
+	// Conformance self-test
+	goldenDir string
 }

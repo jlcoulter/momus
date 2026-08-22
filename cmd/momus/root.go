@@ -61,6 +61,16 @@ func newRootCmd(cfg *config) *cobra.Command {
 		newExplainCmd(cfg),
 	)
 
-	rootCmd.AddCommand(packageCmd, coverageCmd, newApiCmd(cfg), newMockCmd(cfg), newTestCmd(cfg))
+	rootCmd.AddCommand(packageCmd, coverageCmd, newApiCmd(cfg), newMockCmd(cfg), newTestCmd(cfg), newValidateCmd(cfg), newConformanceCmd(cfg))
 	return rootCmd
+}
+
+// newConformanceCmd returns the "conformance" command group.
+func newConformanceCmd(cfg *config) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "conformance",
+		Short: "Self-conformance operations",
+	}
+	cmd.AddCommand(newConformanceSelfTestCmd(cfg))
+	return cmd
 }
