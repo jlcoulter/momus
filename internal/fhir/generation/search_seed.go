@@ -302,6 +302,9 @@ func splitUnion(expr string) []string {
 // plainSearchPath reduces a single candidate to a plain dotted element path,
 // returning "" when it contains a function call, filter, or other non-path
 // construct.
+// plainSearchPath reduces a single candidate to a plain dotted element path,
+// returning "" when it contains a function call, filter, or other non-path
+// construct. A trailing FHIRPath type cast such as "x as dateTime" is stripped.
 func plainSearchPath(candidate, resourceType string) string {
 	expr := strings.TrimSpace(candidate)
 	if expr == "" {
@@ -310,6 +313,10 @@ func plainSearchPath(candidate, resourceType string) string {
 	// Drop any leading "(".
 	expr = strings.TrimPrefix(expr, "(")
 	expr = strings.TrimSpace(expr)
+	// Strip a trailing type cast "... as Type".
+	if i := strings.Index(expr, " as "); i >= 0 {
+		expr = strings.TrimSpace(expr[:i])
+	}
 	// Truncate at a function call. A trailing ".name(" (e.g. ".where(",
 	// ".exists(") is a method call, not a field, so drop the incomplete segment.
 	if i := strings.IndexByte(expr, '('); i >= 0 {
@@ -470,18 +477,16 @@ func setNameLeaf(body map[string]any, path string, value string) {
 		arr[0] = map[string]any{"family": value, "text": value}
 		return
 	}
-	if _, hasFamily := first["family"]; !hasFamily {
-		first["family"] = value
-	}
-	if _, hasText := first["text"]; !hasText {
-		first["text"] = value
-	}
+	// Force the search value so the seed always matches the query, even when the
+	// generated payload already carried a name.
+	first["family"] = value
+	first["text"] = value
 }
 
 // setAddressLeaf places the search value on an Address's text so string search
-// can match it.
+// can match it. The value is forced so the seed always matches the query.
 func setAddressLeaf(body map[string]any, path string, value string) {
-	setFieldLeaf(body, path, "text", value)
+	setFieldLeafForce(body, path, "text", value)
 }
 
 // boundCodingSystem returns the code-system URL for a token-search element that
