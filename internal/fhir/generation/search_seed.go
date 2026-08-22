@@ -489,20 +489,32 @@ func setPathLeaf(body map[string]any, path string, value string) {
 	cur[segs[len(segs)-1]] = value
 }
 
-// setDateLeaf places a date search value on a date element, resolving a choice
-// element (e.g. Provenance.occurred[x]) to its concrete choice key
-// (occurredDateTime) so the value lands on the serialised member.
+// setDateLeaf places a date search value on a date element. A Period element
+// (e.g. PractitionerRole.period) receives its date on the `start` member; a
+// choice element (e.g. Provenance.occurred[x]) receives it on the concrete
+// dateTime choice member so the value lands on the serialised member.
 func setDateLeaf(body map[string]any, path, value string, reg *registry.Registry, resourceType string) {
 	segments := strings.Split(path, ".")
 	leaf := segments[len(segments)-1]
 	// If the leaf is a choice element (e.g. "occurred" typed Period|dateTime),
 	// prefer the dateTime choice member so the primitive date value is valid.
 	if def, ok := searchElementDefinition(resourceType, path, reg); ok && def != nil {
+		hasPeriod := false
 		for _, et := range def.Types {
 			if et.Code == "dateTime" || et.Code == "date" || et.Code == "instant" || et.Code == "time" {
 				leaf = leaf + upperCamelTypeName(et.Code)
+				hasPeriod = false
 				break
 			}
+			if et.Code == "Period" {
+				hasPeriod = true
+			}
+		}
+		// A pure Period element (no dateTime choice) is a map; set its `start`
+		// so the seed carries the date value rather than a bare scalar.
+		if hasPeriod {
+			segments = append(segments, "start")
+			leaf = "start"
 		}
 	}
 	segments[len(segments)-1] = leaf
