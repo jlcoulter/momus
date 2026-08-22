@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/jlcoulter/momus/compare/v1.4.0...v1.5.0) (2026-08-22)
+
+
+### Features
+
+* add CLI progress bar and stage status updates ([#19](https://github.com/jlcoulter/momus/issues/19)) ([76c4ea4](https://github.com/jlcoulter/momus/commit/76c4ea423aec85483a589ca3a29b0035a1f99446))
+
 ## [1.4.0](https://github.com/jlcoulter/momus/compare/v1.3.0...v1.4.0) (2026-08-22)
 
 
