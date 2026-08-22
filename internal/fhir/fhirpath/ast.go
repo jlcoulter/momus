@@ -109,6 +109,20 @@ func (e *binExpr) eval(ctx context.Context, contextValue any) (Result, error) {
 	return evalBinary(e.op, l, r), nil
 }
 
+// unaryExpr is a prefix operation such as 'not'.
+type unaryExpr struct {
+	op      string // "not"
+	operand expr
+}
+
+func (e *unaryExpr) eval(ctx context.Context, contextValue any) (Result, error) {
+	r, err := e.operand.eval(ctx, contextValue)
+	if err != nil {
+		return Result{}, err
+	}
+	return evalUnary(e.op, r), nil
+}
+
 // filterExpr is a path followed by a filter such as [where(...)], [all(...)],
 // [first()], or [index].
 type filterExpr struct {

@@ -178,7 +178,7 @@ func (p *parser) parseUnary() (expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &binExpr{op: "not", lhs: &literalExpr{value: true}, rhs: operand}, nil
+		return &unaryExpr{op: "not", operand: operand}, nil
 	}
 	return p.parsePostfix()
 }

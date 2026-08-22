@@ -150,6 +150,20 @@ func evalFilter(ctx context.Context, filter string, base Result, arg expr, conte
 	}
 }
 
+// evalUnary evaluates a prefix operator such as 'not'.
+func evalUnary(op string, r Result) Result {
+	switch op {
+	case "not":
+		if isUnknown(r) {
+			return unknownResult()
+		}
+		b, _ := resTruthy(r)
+		return asResult(!b)
+	default:
+		return unknownResult()
+	}
+}
+
 // evalBinary evaluates a binary operator.
 func evalBinary(op string, l, r Result) Result {
 	if isUnknown(l) || isUnknown(r) {
@@ -182,9 +196,6 @@ func evalBinary(op string, l, r Result) Result {
 			return unknownResult()
 		}
 		return asResult(false)
-	case "not":
-		b, _ := resTruthy(r)
-		return asResult(!b)
 	case "=":
 		return asResult(equalValues(l.value, r.value))
 	case "!=":

@@ -115,6 +115,16 @@ func TestEvalSubtraction(t *testing.T) {
 	}
 }
 
+func TestEvalNotUnaryOperator(t *testing.T) {
+	res, err := evalStr(t, "not (active.exists())", map[string]any{"active": true})
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if resTruthyBool(res) {
+		t.Fatalf("not(true) should be false, got %+v", res.value)
+	}
+}
+
 func TestLexerSeparatesNumberAndMinus(t *testing.T) {
 	l := &lexer{input: []rune("3-2")}
 	tok, err := l.next()
