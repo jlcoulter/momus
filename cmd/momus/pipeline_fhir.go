@@ -7,13 +7,15 @@ import (
 	"os"
 	"path/filepath"
 
+	testast "github.com/jlcoulter/momus/internal/core/ast"
+	testcoverage "github.com/jlcoulter/momus/internal/core/coverage"
+	coregeneration "github.com/jlcoulter/momus/internal/core/generation"
+	fhircoverage "github.com/jlcoulter/momus/internal/fhir/coverage"
+	fhirgeneration "github.com/jlcoulter/momus/internal/fhir/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	provisioning "github.com/jlcoulter/momus/internal/fhir/provisioning"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
-	testast "github.com/jlcoulter/momus/internal/test/ast"
-	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
-	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 )
 
 // This file holds the FHIR-specific stage functions of the test pipeline. They
@@ -58,7 +60,7 @@ func resolvePackageGraph(cfg *config, rootPath string) (*fhirpackage.ResolvedGra
 // deriveCoveragePlan derives the coverage plan from the registry, scoped to the
 // given resource types, profiles, and search codes.
 func deriveCoveragePlan(cfg *config, reg *registry.Registry, resourceTypes, profileURLs []string, searchCodes map[string][]string) (*testcoverage.CoveragePlan, error) {
-	return testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
+	return fhircoverage.DerivePlan(reg, testcoverage.DeriveOptions{
 		IncludeResourceTypes:         resourceTypes,
 		IncludeProfileURLs:           profileURLs,
 		ExcludePathPrefixes:          cfg.excludePathPrefixes,
@@ -73,12 +75,14 @@ func deriveCoveragePlan(cfg *config, reg *registry.Registry, resourceTypes, prof
 
 // buildTestPlan builds the test plan (seed dataset + test AST) from a coverage
 // plan, restricting the seed dataset to the given capability resource types and
-// profiles when non-empty.
-func buildTestPlan(cfg *config, reg *registry.Registry, coveragePlan *testcoverage.CoveragePlan, preferredProfilesByResource map[string][]string, capabilityResourceTypes, capabilityProfiles []string) (*testast.Plan, *model.Dataset, error) {
+// profiles when non-empty. The seed dataset is embedded in the returned AST
+// plan, so the plan is the single artifact that drives provisioning and
+// execution.
+func buildTestPlan(cfg *config, reg *registry.Registry, coveragePlan *testcoverage.CoveragePlan, preferredProfilesByResource map[string][]string, capabilityResourceTypes, capabilityProfiles []string) (*testast.Plan, error) {
 	// Render a live progress bar to stderr during generation (only when stderr
 	// is a terminal). It is cleared before the next stage prints.
 	bar := newProgressBar(40)
-	buildOpts := testgeneration.BuildOptions{
+	fhirOpts := fhirgeneration.BuildOptions{
 		BaseURL:                        cfg.baseURL,
 		WriteBaseURL:                   cfg.writeBaseURL,
 		Registry:                       reg,
@@ -88,28 +92,41 @@ func buildTestPlan(cfg *config, reg *registry.Registry, coveragePlan *testcovera
 		Progress:                       bar.render,
 	}
 	if len(capabilityResourceTypes) > 0 {
-		buildOpts.CapabilityResourceTypes = make(map[string]struct{}, len(capabilityResourceTypes))
+		fhirOpts.CapabilityResourceTypes = make(map[string]struct{}, len(capabilityResourceTypes))
 		for _, t := range capabilityResourceTypes {
-			buildOpts.CapabilityResourceTypes[t] = struct{}{}
+			fhirOpts.CapabilityResourceTypes[t] = struct{}{}
 		}
 	}
 	if len(capabilityProfiles) > 0 {
-		buildOpts.CapabilityProfiles = make(map[string]struct{}, len(capabilityProfiles))
+		fhirOpts.CapabilityProfiles = make(map[string]struct{}, len(capabilityProfiles))
 		for _, p := range capabilityProfiles {
-			buildOpts.CapabilityProfiles[p] = struct{}{}
+			fhirOpts.CapabilityProfiles[p] = struct{}{}
 		}
 	}
 
-	astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, buildOpts)
+	coreOpts := coregeneration.BuildOptions{
+		BaseURL:                        cfg.baseURL,
+		WriteBaseURL:                   cfg.writeBaseURL,
+		Builder:                        fhirgeneration.NewBuilder(reg, cfg.exhaustive),
+		PreferredProfileURLsByResource: preferredProfilesByResource,
+		Strength:                       cfg.interactionStrength,
+		Exhaustive:                     cfg.exhaustive,
+		CapabilityResourceTypes:        fhirOpts.CapabilityResourceTypes,
+		CapabilityProfiles:             fhirOpts.CapabilityProfiles,
+		Progress:                       bar.render,
+	}
+
+	astPlan, err := coregeneration.GenerateFromCoveragePlan(coveragePlan, coreOpts)
 	bar.finish()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	setupDataset, err := testgeneration.BuildSetupDataset(coveragePlan, buildOpts)
+	setupDataset, err := fhirgeneration.BuildSetupDataset(coveragePlan, fhirOpts)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return astPlan, setupDataset, nil
+	astPlan.Dataset = fhirgeneration.ToCoreDataset(setupDataset)
+	return astPlan, nil
 }
 
 // provisionDataset uploads the seed dataset to the target server. It is a

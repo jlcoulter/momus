@@ -3,7 +3,7 @@ package openapi
 import (
 	"fmt"
 
-	"github.com/jlcoulter/momus/internal/fhir/constraint"
+	"github.com/jlcoulter/momus/internal/core/constraint"
 )
 
 // DeriveConstraints normalises an OpenAPI document into constraint-model

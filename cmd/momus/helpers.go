@@ -12,14 +12,16 @@ import (
 	"strings"
 	"syscall"
 
+	testast "github.com/jlcoulter/momus/internal/core/ast"
+	testcoverage "github.com/jlcoulter/momus/internal/core/coverage"
+	testrunner "github.com/jlcoulter/momus/internal/core/runner"
+	"github.com/jlcoulter/momus/internal/core/tracing"
 	testbulk "github.com/jlcoulter/momus/internal/fhir/bulk"
+	fhircoverage "github.com/jlcoulter/momus/internal/fhir/coverage"
+	testgeneration "github.com/jlcoulter/momus/internal/fhir/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	provisioning "github.com/jlcoulter/momus/internal/fhir/provisioning"
-	testast "github.com/jlcoulter/momus/internal/test/ast"
-	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
-	testrunner "github.com/jlcoulter/momus/internal/test/runner"
-	"github.com/jlcoulter/momus/internal/tracing"
 	"github.com/spf13/cobra"
 )
 
@@ -46,7 +48,7 @@ func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer
 		}
 		capabilityStatement = loaded
 	} else if metadataBaseURL != "" {
-		capabilityStatement, fetchErr = testcoverage.FetchCapabilityStatement(cmd.Context(), metadataBaseURL, testcoverage.CapabilityFetchOptions{
+		capabilityStatement, fetchErr = fhircoverage.FetchCapabilityStatement(cmd.Context(), metadataBaseURL, fhircoverage.CapabilityFetchOptions{
 			BearerToken:   cfg.apiBearerToken,
 			BasicUsername: cfg.apiBasicUsername,
 			BasicPassword: cfg.apiBasicPassword,
@@ -71,16 +73,16 @@ func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer
 
 	// The CapabilityStatement always defines the test plan: extract resource
 	// types, profiles, and search codes from what the server declares.
-	capabilityTypes := testcoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, true)
-	capabilityProfiles := testcoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, true)
-	capabilityProfilesByResource := testcoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, true)
-	capabilitySearchCodes := testcoverage.SearchCodesFromCapabilityStatement(capabilityStatement)
+	capabilityTypes := fhircoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, true)
+	capabilityProfiles := fhircoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, true)
+	capabilityProfilesByResource := fhircoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, true)
+	capabilitySearchCodes := fhircoverage.SearchCodesFromCapabilityStatement(capabilityStatement)
 	if len(capabilityTypes) == 0 {
 		// Some CapabilityStatements omit per-resource create interactions.
 		// Fall back to server-declared resource/profile scope instead of unscoped derivation.
-		capabilityTypes = testcoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, false)
-		capabilityProfiles = testcoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, false)
-		capabilityProfilesByResource = testcoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, false)
+		capabilityTypes = fhircoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, false)
+		capabilityProfiles = fhircoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, false)
+		capabilityProfilesByResource = fhircoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, false)
 	}
 	if len(capabilityProfiles) > 0 {
 		types, err := intersectCaseInsensitive(cfg.includeResourceTypes, capabilityTypes)
@@ -360,39 +362,28 @@ func newDebugTracer(debug bool) *tracing.Tracer {
 	return tracing.New(os.Stderr)
 }
 
-// testPlanFile is the on-disk test plan artifact: the seed dataset (stage J)
-// plus the executable test AST (stage L). It is produced by "coverage ast" and
-// consumed by "coverage provision" (uploads the dataset) and "coverage run"
-// (executes the AST). Carrying the dataset in the plan lets provisioning and
-// execution work from the plan alone, without the source package.
-type testPlanFile struct {
-	Version string         `json:"version"`
-	Dataset *model.Dataset `json:"dataset,omitempty"`
-	Root    map[string]any `json:"root"`
-}
-
-// encodeTestPlan builds the on-disk test plan artifact from a generated AST and
-// its seed dataset.
-func encodeTestPlan(astPlan *testast.Plan, ds *model.Dataset) ([]byte, error) {
-	root, err := testast.EncodeNode(astPlan.Root)
+// encodeTestPlan builds the on-disk test plan artifact from a generated AST.
+// The seed dataset is embedded in the AST plan (astPlan.Dataset), so the plan
+// is the single artifact that drives provisioning and execution.
+func encodeTestPlan(astPlan *testast.Plan) ([]byte, error) {
+	payload, err := testast.EncodePlan(astPlan)
 	if err != nil {
-		return nil, fmt.Errorf("encode test AST: %w", err)
+		return nil, fmt.Errorf("encode test plan: %w", err)
 	}
-	payload := testPlanFile{Version: astPlan.Version, Dataset: ds, Root: root}
 	return json.MarshalIndent(payload, "", "  ")
 }
 
 // decodeTestPlan reads a test plan artifact and returns its AST and seed dataset.
 func decodeTestPlan(raw []byte) (*testast.Plan, *model.Dataset, error) {
-	var payload testPlanFile
+	var payload map[string]any
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return nil, nil, fmt.Errorf("parse test plan: %w", err)
 	}
-	root, err := testast.DecodeNode(payload.Root)
+	plan, err := testast.DecodePlan(payload)
 	if err != nil {
-		return nil, nil, fmt.Errorf("decode test plan root: %w", err)
+		return nil, nil, fmt.Errorf("decode test plan: %w", err)
 	}
-	return &testast.Plan{Version: payload.Version, Root: root}, payload.Dataset, nil
+	return plan, testgeneration.FromCoreDataset(plan.Dataset), nil
 }
 
 // datasetResourceKeys returns the "Type/id" keys of every resource in a dataset,

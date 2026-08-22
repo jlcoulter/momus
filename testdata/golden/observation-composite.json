@@ -1,0 +1,34 @@
+{
+  "structureDefinitions": [
+    {
+      "url": "http://example.org/StructureDefinition/observation",
+      "type": "Observation",
+      "elements": [
+        { "path": "Observation", "min": 0, "max": "*" },
+        { "path": "Observation.status", "min": 1, "max": "1", "types": [{ "code": "code" }] },
+        { "path": "Observation.code", "min": 1, "max": "1", "types": [{ "code": "CodeableConcept" }] },
+        { "path": "Observation.valueQuantity", "min": 0, "max": "1", "types": [{ "code": "Quantity" }] }
+      ]
+    }
+  ],
+  "searchParameters": [
+    { "code": "status", "base": ["Observation"], "type": "token", "expression": "Observation.status" },
+    { "code": "code", "base": ["Observation"], "type": "token", "expression": "Observation.code" },
+    { "code": "value-quantity", "base": ["Observation"], "type": "quantity", "expression": "Observation.value" },
+    { "code": "code-value-quantity", "base": ["Observation"], "type": "composite", "expression": "Observation.code | Observation.value" }
+  ],
+  "valueSets": [],
+  "codeSystems": [],
+  "resources": [
+    {
+      "profileUrl": "http://example.org/StructureDefinition/observation",
+      "resource": {
+        "resourceType": "Observation",
+        "id": "observation-composite-sample-1",
+        "status": "final",
+        "code": { "coding": [{ "system": "http://example.org/sys", "code": "glucose" }], "text": "Glucose" },
+        "valueQuantity": { "value": 5.4, "unit": "mmol/L", "system": "http://unitsofmeasure.org", "code": "mmol/L" }
+      }
+    }
+  ]
+}

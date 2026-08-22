@@ -1,0 +1,1514 @@
+{
+  "version": "v1",
+  "root": {
+    "Steps": [
+      {
+        "Steps": [
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location?name:zzz=momus-search",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Location|name|search-invalid-modifier"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "search|Location|name|search-invalid-modifier",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "search|Location|name",
+                  "ProfileURL": "",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-invalid-modifier",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location?name=momus-invalid-zzz",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Location|name|search-invalid-value"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts a type-valid, non-matching search value",
+                "RequirementID": "search|Location|name|search-invalid-value",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "search|Location|name",
+                  "ProfileURL": "",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-invalid-value",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location?name=momus-search",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Location|name|search-multiple-results"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server returns multiple search results",
+                "RequirementID": "search|Location|name|search-multiple-results",
+                "Expression": "body.total \u003e= 2",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-multiple-results",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location?name=momus-invalid-zzz",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Location|name|search-no-results"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "search|Location|name|search-no-results",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "search|Location|name",
+                  "ProfileURL": "",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-no-results",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location?name=momus-search",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Location|name|search-valid"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "search|Location|name|search-valid",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "search|Location|name",
+                  "ProfileURL": "",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-valid",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location?near:zzz=-33.8688%7C151.2093",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Location|near|search-invalid-modifier"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "search|Location|near|search-invalid-modifier",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "search|Location|near",
+                  "ProfileURL": "",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-invalid-modifier",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location?near=90.0%7C0.0",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Location|near|search-invalid-value"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts a type-valid, non-matching search value",
+                "RequirementID": "search|Location|near|search-invalid-value",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "search|Location|near",
+                  "ProfileURL": "",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-invalid-value",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location?near=-33.8688%7C151.2093",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Location|near|search-multiple-results"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server returns multiple search results",
+                "RequirementID": "search|Location|near|search-multiple-results",
+                "Expression": "body.total \u003e= 2",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-multiple-results",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location?near=90.0%7C0.0",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Location|near|search-no-results"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "search|Location|near|search-no-results",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "search|Location|near",
+                  "ProfileURL": "",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-no-results",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location?near=-33.8688%7C151.2093",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Location|near|search-valid"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "search|Location|near|search-valid",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "search|Location|near",
+                  "ProfileURL": "",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-valid",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-operation-delete-379292",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Location|operation-delete"
+                },
+                "Body": {
+                  "id": "momus-location-operation-delete-379292",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location",
+                  "status": "status"
+                }
+              },
+              {
+                "Description": "exercise operation-delete",
+                "RequirementID": "operation|Location|operation-delete",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-delete",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "DELETE",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-operation-delete-379292",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Location|operation-delete"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise operation-delete",
+                "RequirementID": "operation|Location|operation-delete",
+                "Expression": "status in [200,204]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-delete",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-operation-history-1543845985",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Location|operation-history"
+                },
+                "Body": {
+                  "id": "momus-location-operation-history-1543845985",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "exercise operation-history",
+                "RequirementID": "operation|Location|operation-history",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-history",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-operation-history-1543845985/_history",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Location|operation-history"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise operation-history",
+                "RequirementID": "operation|Location|operation-history",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-history",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-operation-patch-977196451",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Location|operation-patch"
+                },
+                "Body": {
+                  "id": "momus-location-operation-patch-977196451",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location",
+                  "status": "status"
+                }
+              },
+              {
+                "Description": "exercise operation-patch",
+                "RequirementID": "operation|Location|operation-patch",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-patch",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "PATCH",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-operation-patch-977196451",
+                "Headers": {
+                  "Content-Type": "application/json-patch+json",
+                  "X-Momus-Requirement-ID": "operation|Location|operation-patch"
+                },
+                "Body": [
+                  {
+                    "op": "add",
+                    "path": "/",
+                    "value": {
+                      "status": "status"
+                    }
+                  }
+                ]
+              },
+              {
+                "Description": "exercise operation-patch",
+                "RequirementID": "operation|Location|operation-patch",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-patch",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-operation-read-434582051",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Location|operation-read"
+                },
+                "Body": {
+                  "id": "momus-location-operation-read-434582051",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "name": "Name",
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location",
+                  "status": "status"
+                }
+              },
+              {
+                "Description": "exercise operation-read",
+                "RequirementID": "operation|Location|operation-read",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-read",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-operation-read-434582051",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Location|operation-read"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise operation-read",
+                "RequirementID": "operation|Location|operation-read",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-read",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-operation-update-178977646",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Location|operation-update"
+                },
+                "Body": {
+                  "id": "momus-location-operation-update-178977646",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location",
+                  "status": "status"
+                }
+              },
+              {
+                "Description": "exercise operation-update",
+                "RequirementID": "operation|Location|operation-update",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-update",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-operation-update-178977646",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Location|operation-update"
+                },
+                "Body": {
+                  "id": "momus-location-operation-update-178977646",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location",
+                  "status": "status"
+                }
+              },
+              {
+                "Description": "exercise operation-update",
+                "RequirementID": "operation|Location|operation-update",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-update",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-crud-location",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Location|state-crud-sequence"
+                },
+                "Body": {
+                  "id": "momus-crud-location",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|Location|state-crud-sequence",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-crud-location",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Location|state-crud-sequence"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|Location|state-crud-sequence",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-crud-location",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Location|state-crud-sequence"
+                },
+                "Body": {
+                  "id": "momus-crud-location",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|Location|state-crud-sequence",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-crud-location",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Location|state-crud-sequence"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|Location|state-crud-sequence",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "DELETE",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-crud-location",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Location|state-crud-sequence"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|Location|state-crud-sequence",
+                "Expression": "status in [200,204]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-crud-location",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Location|state-crud-sequence"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|Location|state-crud-sequence",
+                "Expression": "status in [404]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "DELETE",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-missing",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Location|state-delete-nonexistent"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-delete-nonexistent",
+                "RequirementID": "state|Location|state-delete-nonexistent",
+                "Expression": "status in [200,204,404]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-delete-nonexistent",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-missing",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Location|state-read-nonexistent"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-read-nonexistent",
+                "RequirementID": "state|Location|state-read-nonexistent",
+                "Expression": "status in [404]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-read-nonexistent",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-datatype-invalid-lexical-1157871698",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position.latitude|decimal|datatype-invalid-lexical"
+                },
+                "Body": {
+                  "id": "momus-location-datatype-invalid-lexical-1157871698",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": "12abc",
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position.latitude|decimal|datatype-invalid-lexical",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position.latitude|datatype|decimal",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position.latitude",
+                  "Domain": "datatype",
+                  "Variant": "datatype-invalid-lexical",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-datatype-null-1910415321",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position.latitude|decimal|datatype-null"
+                },
+                "Body": {
+                  "id": "momus-location-datatype-null-1910415321",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": null,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position.latitude|decimal|datatype-null",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position.latitude|datatype|decimal",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position.latitude",
+                  "Domain": "datatype",
+                  "Variant": "datatype-null",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-datatype-valid-1790583390",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position.latitude|decimal|datatype-valid"
+                },
+                "Body": {
+                  "id": "momus-location-datatype-valid-1790583390",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position.latitude|decimal|datatype-valid",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position.latitude|datatype|decimal",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position.latitude",
+                  "Domain": "datatype",
+                  "Variant": "datatype-valid",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-datatype-wrong-json-type-97043745",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position.latitude|decimal|datatype-wrong-json-type"
+                },
+                "Body": {
+                  "id": "momus-location-datatype-wrong-json-type-97043745",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": "not-a-number",
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position.latitude|decimal|datatype-wrong-json-type",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position.latitude|datatype|decimal",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position.latitude",
+                  "Domain": "datatype",
+                  "Variant": "datatype-wrong-json-type",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-missing-required-448758866",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position.latitude|missing-required"
+                },
+                "Body": {
+                  "id": "momus-location-missing-required-448758866",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position.latitude|missing-required",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position.latitude|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position.latitude",
+                  "Domain": "cardinality",
+                  "Variant": "missing-required",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-valid-min-1978156559",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position.latitude|valid-min"
+                },
+                "Body": {
+                  "id": "momus-location-valid-min-1978156559",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position.latitude|valid-min",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position.latitude|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position.latitude",
+                  "Domain": "cardinality",
+                  "Variant": "valid-min",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-datatype-invalid-lexical-168226125",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position.longitude|decimal|datatype-invalid-lexical"
+                },
+                "Body": {
+                  "id": "momus-location-datatype-invalid-lexical-168226125",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": "12abc"
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position.longitude|decimal|datatype-invalid-lexical",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position.longitude|datatype|decimal",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position.longitude",
+                  "Domain": "datatype",
+                  "Variant": "datatype-invalid-lexical",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-datatype-null-1069213728",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position.longitude|decimal|datatype-null"
+                },
+                "Body": {
+                  "id": "momus-location-datatype-null-1069213728",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": null
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position.longitude|decimal|datatype-null",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position.longitude|datatype|decimal",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position.longitude",
+                  "Domain": "datatype",
+                  "Variant": "datatype-null",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-datatype-valid-1061020285",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position.longitude|decimal|datatype-valid"
+                },
+                "Body": {
+                  "id": "momus-location-datatype-valid-1061020285",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position.longitude|decimal|datatype-valid",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position.longitude|datatype|decimal",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position.longitude",
+                  "Domain": "datatype",
+                  "Variant": "datatype-valid",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-datatype-wrong-json-type-1614100458",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position.longitude|decimal|datatype-wrong-json-type"
+                },
+                "Body": {
+                  "id": "momus-location-datatype-wrong-json-type-1614100458",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": "not-a-number"
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position.longitude|decimal|datatype-wrong-json-type",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position.longitude|datatype|decimal",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position.longitude",
+                  "Domain": "datatype",
+                  "Variant": "datatype-wrong-json-type",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-missing-required-2004424409",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position.longitude|missing-required"
+                },
+                "Body": {
+                  "id": "momus-location-missing-required-2004424409",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position.longitude|missing-required",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position.longitude|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position.longitude",
+                  "Domain": "cardinality",
+                  "Variant": "missing-required",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-valid-min-1622216886",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position.longitude|valid-min"
+                },
+                "Body": {
+                  "id": "momus-location-valid-min-1622216886",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position.longitude|valid-min",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position.longitude|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position.longitude",
+                  "Domain": "cardinality",
+                  "Variant": "valid-min",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-datatype-invalid-lexical-1126042896",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position|BackboneElement|datatype-invalid-lexical"
+                },
+                "Body": {
+                  "id": "momus-location-datatype-invalid-lexical-1126042896",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": "not-a-BackboneElement",
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position|BackboneElement|datatype-invalid-lexical",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position|datatype|BackboneElement",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position",
+                  "Domain": "datatype",
+                  "Variant": "datatype-invalid-lexical",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-datatype-null-131324115",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position|BackboneElement|datatype-null"
+                },
+                "Body": {
+                  "id": "momus-location-datatype-null-131324115",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": null,
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position|BackboneElement|datatype-null",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position|datatype|BackboneElement",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position",
+                  "Domain": "datatype",
+                  "Variant": "datatype-null",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-datatype-valid-2031123028",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position|BackboneElement|datatype-valid"
+                },
+                "Body": {
+                  "id": "momus-location-datatype-valid-2031123028",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position|BackboneElement|datatype-valid",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position|datatype|BackboneElement",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position",
+                  "Domain": "datatype",
+                  "Variant": "datatype-valid",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-datatype-wrong-json-type-783288783",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position|BackboneElement|datatype-wrong-json-type"
+                },
+                "Body": {
+                  "id": "momus-location-datatype-wrong-json-type-783288783",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": true,
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position|BackboneElement|datatype-wrong-json-type",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position|datatype|BackboneElement",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position",
+                  "Domain": "datatype",
+                  "Variant": "datatype-wrong-json-type",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-missing-required-208701132",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position|missing-required"
+                },
+                "Body": {
+                  "id": "momus-location-missing-required-208701132",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position|missing-required",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position",
+                  "Domain": "cardinality",
+                  "Variant": "missing-required",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Location/momus-location-valid-min-2009935469",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/location|Location.position|valid-min"
+                },
+                "Body": {
+                  "id": "momus-location-valid-min-2009935469",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/location"
+                    ]
+                  },
+                  "position": {
+                    "latitude": 123.45,
+                    "longitude": 123.45
+                  },
+                  "resourceType": "Location"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/location|Location.position|valid-min",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/location|Location.position|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/location",
+                  "ResourceType": "Location",
+                  "ElementPath": "Location.position",
+                  "Domain": "cardinality",
+                  "Variant": "valid-min",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

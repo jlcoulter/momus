@@ -1,0 +1,1010 @@
+{
+  "version": "v1",
+  "root": {
+    "Steps": [
+      {
+        "Steps": [
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Patient?name:zzz=momus-search",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Patient|name|search-invalid-modifier"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "search|Patient|name|search-invalid-modifier",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "search|Patient|name",
+                  "ProfileURL": "",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-invalid-modifier",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Patient?name=momus-invalid-zzz",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Patient|name|search-invalid-value"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts a type-valid, non-matching search value",
+                "RequirementID": "search|Patient|name|search-invalid-value",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "search|Patient|name",
+                  "ProfileURL": "",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-invalid-value",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Patient?name=momus-search",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Patient|name|search-multiple-results"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server returns multiple search results",
+                "RequirementID": "search|Patient|name|search-multiple-results",
+                "Expression": "body.total \u003e= 2",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-multiple-results",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Patient?name=momus-invalid-zzz",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Patient|name|search-no-results"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "search|Patient|name|search-no-results",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "search|Patient|name",
+                  "ProfileURL": "",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-no-results",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Patient?name=momus-search",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|Patient|name|search-valid"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "search|Patient|name|search-valid",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "search|Patient|name",
+                  "ProfileURL": "",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-valid",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-operation-delete-1612029882",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Patient|operation-delete"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-patient-operation-delete-1612029882",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": [
+                    {
+                      "family": "Momus",
+                      "given": [
+                        "Test"
+                      ]
+                    }
+                  ],
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "exercise operation-delete",
+                "RequirementID": "operation|Patient|operation-delete",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-delete",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "DELETE",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-operation-delete-1612029882",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Patient|operation-delete"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise operation-delete",
+                "RequirementID": "operation|Patient|operation-delete",
+                "Expression": "status in [200,204]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-delete",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-operation-history-612420303",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Patient|operation-history"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-patient-operation-history-612420303",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": [
+                    {
+                      "family": "Momus",
+                      "given": [
+                        "Test"
+                      ]
+                    }
+                  ],
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "exercise operation-history",
+                "RequirementID": "operation|Patient|operation-history",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-history",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-operation-history-612420303/_history",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Patient|operation-history"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise operation-history",
+                "RequirementID": "operation|Patient|operation-history",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-history",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-operation-patch-1197474521",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Patient|operation-patch"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-patient-operation-patch-1197474521",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": [
+                    {
+                      "family": "Momus",
+                      "given": [
+                        "Test"
+                      ]
+                    }
+                  ],
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "exercise operation-patch",
+                "RequirementID": "operation|Patient|operation-patch",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-patch",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "PATCH",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-operation-patch-1197474521",
+                "Headers": {
+                  "Content-Type": "application/json-patch+json",
+                  "X-Momus-Requirement-ID": "operation|Patient|operation-patch"
+                },
+                "Body": [
+                  {
+                    "op": "add",
+                    "path": "/",
+                    "value": {
+                      "gender": "male"
+                    }
+                  }
+                ]
+              },
+              {
+                "Description": "exercise operation-patch",
+                "RequirementID": "operation|Patient|operation-patch",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-patch",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-operation-read-733475765",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Patient|operation-read"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-patient-operation-read-733475765",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": [
+                    {
+                      "family": "Momus",
+                      "given": [
+                        "Test"
+                      ]
+                    }
+                  ],
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "exercise operation-read",
+                "RequirementID": "operation|Patient|operation-read",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-read",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-operation-read-733475765",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Patient|operation-read"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise operation-read",
+                "RequirementID": "operation|Patient|operation-read",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-read",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-operation-update-395211428",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Patient|operation-update"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-patient-operation-update-395211428",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": [
+                    {
+                      "family": "Momus",
+                      "given": [
+                        "Test"
+                      ]
+                    }
+                  ],
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "exercise operation-update",
+                "RequirementID": "operation|Patient|operation-update",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-update",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-operation-update-395211428",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|Patient|operation-update"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-patient-operation-update-395211428",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": [
+                    {
+                      "family": "Momus",
+                      "given": [
+                        "Test"
+                      ]
+                    }
+                  ],
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "exercise operation-update",
+                "RequirementID": "operation|Patient|operation-update",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-update",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-crud-patient",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Patient|state-crud-sequence"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-crud-patient",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": [
+                    {
+                      "family": "Momus",
+                      "given": [
+                        "Test"
+                      ]
+                    }
+                  ],
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|Patient|state-crud-sequence",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-crud-patient",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Patient|state-crud-sequence"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|Patient|state-crud-sequence",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-crud-patient",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Patient|state-crud-sequence"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-crud-patient",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": [
+                    {
+                      "family": "Momus",
+                      "given": [
+                        "Test"
+                      ]
+                    }
+                  ],
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|Patient|state-crud-sequence",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-crud-patient",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Patient|state-crud-sequence"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|Patient|state-crud-sequence",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "DELETE",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-crud-patient",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Patient|state-crud-sequence"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|Patient|state-crud-sequence",
+                "Expression": "status in [200,204]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-crud-patient",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Patient|state-crud-sequence"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|Patient|state-crud-sequence",
+                "Expression": "status in [404]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "DELETE",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-missing",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Patient|state-delete-nonexistent"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-delete-nonexistent",
+                "RequirementID": "state|Patient|state-delete-nonexistent",
+                "Expression": "status in [200,204,404]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-delete-nonexistent",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-missing",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|Patient|state-read-nonexistent"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-read-nonexistent",
+                "RequirementID": "state|Patient|state-read-nonexistent",
+                "Expression": "status in [404]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-read-nonexistent",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-datatype-invalid-lexical-1524346553",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-invalid-lexical"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-patient-datatype-invalid-lexical-1524346553",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": "not-a-HumanName",
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-invalid-lexical",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/patient|Patient.name|datatype|HumanName",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "Patient.name",
+                  "Domain": "datatype",
+                  "Variant": "datatype-invalid-lexical",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-datatype-null-1796488836",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-null"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-patient-datatype-null-1796488836",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": null,
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-null",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/patient|Patient.name|datatype|HumanName",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "Patient.name",
+                  "Domain": "datatype",
+                  "Variant": "datatype-null",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-datatype-valid-2056347089",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-valid"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-patient-datatype-valid-2056347089",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": [
+                    {
+                      "family": "Momus",
+                      "given": [
+                        "Test"
+                      ]
+                    }
+                  ],
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-valid",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/patient|Patient.name|datatype|HumanName",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "Patient.name",
+                  "Domain": "datatype",
+                  "Variant": "datatype-valid",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-datatype-wrong-json-type-1090438694",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-wrong-json-type"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-patient-datatype-wrong-json-type-1090438694",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": true,
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-wrong-json-type",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/patient|Patient.name|datatype|HumanName",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "Patient.name",
+                  "Domain": "datatype",
+                  "Variant": "datatype-wrong-json-type",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-missing-required-1027105714",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|missing-required"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-patient-missing-required-1027105714",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|missing-required",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/patient|Patient.name|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "Patient.name",
+                  "Domain": "cardinality",
+                  "Variant": "missing-required",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-multiple-values-1149616609",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|multiple-values"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-patient-multiple-values-1149616609",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": [
+                    {
+                      "family": "Momus",
+                      "given": [
+                        "Test"
+                      ]
+                    }
+                  ],
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|multiple-values",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/patient|Patient.name|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "Patient.name",
+                  "Domain": "cardinality",
+                  "Variant": "multiple-values",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/Patient/momus-patient-valid-min-1996412143",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|valid-min"
+                },
+                "Body": {
+                  "gender": "male",
+                  "id": "momus-patient-valid-min-1996412143",
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/patient"
+                    ]
+                  },
+                  "name": [
+                    {
+                      "family": "Momus",
+                      "given": [
+                        "Test"
+                      ]
+                    }
+                  ],
+                  "resourceType": "Patient"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|valid-min",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/patient|Patient.name|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/patient",
+                  "ResourceType": "Patient",
+                  "ElementPath": "Patient.name",
+                  "Domain": "cardinality",
+                  "Variant": "valid-min",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

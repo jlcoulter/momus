@@ -26,23 +26,24 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/jlcoulter/momus/internal/test/ast"
+	"github.com/jlcoulter/momus/internal/core/ast"
 )
 
 // Server is a mock HTTP server that either returns a fixed response or behaves
 // like a stateful FHIR server driven by a test plan.
 type Server struct {
-	status   int
-	body     string
-	port     int
-	basePath string
-	logger   bool
-	plan     *planRoutes
-	planErr  error
-	store    *Store
-	server   *http.Server
-	ln       net.Listener
-	mu       sync.RWMutex
+	status    int
+	body      string
+	port      int
+	basePath  string
+	logger    bool
+	plan      *planRoutes
+	planErr   error
+	store     *Store
+	validator Validator
+	server    *http.Server
+	ln        net.Listener
+	mu        sync.RWMutex
 }
 
 // Option configures a mock Server.
@@ -218,15 +219,26 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Search: GET /{resourceType}?query returns a Bundle of stored resources.
+	// Search: GET /{resourceType}?query returns a Bundle of matching resources.
 	if r.Method == http.MethodGet && len(segments) == 1 && segments[0] != "" {
-		writeSearchBundle(w, store, segments[0])
+		params := make(map[string]string)
+		for k, vs := range r.URL.Query() {
+			if len(vs) > 0 {
+				params[k] = vs[0]
+			}
+		}
+		results, err := store.Search(segments[0], params)
+		if err != nil {
+			writeOperationOutcome(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeSearchBundle(w, results)
 		return
 	}
 
 	// History: GET /{resourceType}/{id}/_history returns a Bundle.
 	if r.Method == http.MethodGet && len(segments) == 3 && segments[2] == "_history" {
-		writeSearchBundle(w, store, segments[0])
+		writeSearchBundle(w, nil)
 		return
 	}
 
@@ -249,9 +261,29 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 				writeOperationOutcome(w, http.StatusBadRequest, "invalid request body")
 				return
 			}
+			// Semantic validation: when a validator is installed and the payload
+			// declares a profile, reject non-conformant payloads with 422 + an
+			// OperationOutcome naming each issue.
+			if s.validator != nil {
+				profileURL, resource, hasProfile := profileAndResource(body)
+				if hasProfile {
+					issues, verr := s.validator.Validate(r.Context(), profileURL, resource)
+					if verr == nil && len(issues) > 0 {
+						writeValidationFailure(w, issues)
+						return
+					}
+				}
+			}
 			store.Put(resourceType, id, body)
 			w.Header().Set("Content-Type", "application/fhir+json")
-			w.WriteHeader(http.StatusOK)
+			// With a semantic validator active, a conformant (or unprofiled)
+			// store is a create/update and FHIR returns 201 (T13). Without a
+			// validator the historical 200 is preserved.
+			status := http.StatusOK
+			if s.validator != nil {
+				status = http.StatusCreated
+			}
+			w.WriteHeader(status)
 			_, _ = w.Write(body)
 			return
 		case http.MethodDelete:
@@ -268,15 +300,11 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// writeSearchBundle returns a Bundle of every stored resource of a type.
-func writeSearchBundle(w http.ResponseWriter, store *Store, resourceType string) {
-	items := store.List(resourceType)
-	entries := make([]map[string]any, 0, len(items))
-	for _, body := range items {
-		var res map[string]any
-		if err := json.Unmarshal(body, &res); err == nil {
-			entries = append(entries, map[string]any{"resource": res})
-		}
+// writeSearchBundle returns a searchset Bundle of the given resources.
+func writeSearchBundle(w http.ResponseWriter, resources []map[string]any) {
+	entries := make([]map[string]any, 0, len(resources))
+	for _, res := range resources {
+		entries = append(entries, map[string]any{"resource": res})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"resourceType": "Bundle",

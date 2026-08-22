@@ -7,9 +7,9 @@ import (
 	"os"
 	"sort"
 
+	fhircoverage "github.com/jlcoulter/momus/internal/fhir/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
-	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
 )
 
 // capabilityEvidence summarises a verification of the seed dataset's resource
@@ -49,7 +49,7 @@ func verifyPlanAgainstCapability(ctx context.Context, cfg *config, reg *registry
 			ev.Error = err
 		}
 	} else if cfg != nil && cfg.baseURL != "" {
-		fetched, err := testcoverage.FetchCapabilityStatement(ctx, cfg.baseURL, testcoverage.CapabilityFetchOptions{
+		fetched, err := fhircoverage.FetchCapabilityStatement(ctx, cfg.baseURL, fhircoverage.CapabilityFetchOptions{
 			BearerToken:   cfg.apiBearerToken,
 			BasicUsername: cfg.apiBasicUsername,
 			BasicPassword: cfg.apiBasicPassword,
@@ -72,8 +72,8 @@ func verifyPlanAgainstCapability(ctx context.Context, cfg *config, reg *registry
 		return ev
 	}
 	ev.Fetched = true
-	ev.SupportedTypes = testcoverage.ResourceTypesFromCapabilityStatement(cs, false)
-	ev.SupportedProfiles = testcoverage.SupportedProfileURLsFromCapabilityStatement(cs, false)
+	ev.SupportedTypes = fhircoverage.ResourceTypesFromCapabilityStatement(cs, false)
+	ev.SupportedProfiles = fhircoverage.SupportedProfileURLsFromCapabilityStatement(cs, false)
 
 	supportedTypes := make(map[string]struct{}, len(ev.SupportedTypes))
 	for _, t := range ev.SupportedTypes {

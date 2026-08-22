@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	testast "github.com/jlcoulter/momus/internal/test/ast"
-	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
-	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
-	testrunner "github.com/jlcoulter/momus/internal/test/runner"
+	reportwriter "github.com/jlcoulter/momus/internal/fhir/report"
+
+	testast "github.com/jlcoulter/momus/internal/core/ast"
+	testcoverage "github.com/jlcoulter/momus/internal/core/coverage"
+	coregeneration "github.com/jlcoulter/momus/internal/core/generation"
+	testrunner "github.com/jlcoulter/momus/internal/core/runner"
 )
 
 // This file holds the generic stage functions of the test pipeline that are
@@ -31,7 +33,7 @@ func executePlan(cfg *config, ctx context.Context, astPlan *testast.Plan, preCre
 		writeBase = cfg.baseURL
 	}
 
-	fmt.Printf("Testing phase: executing %d test cases\n", testgeneration.RequirementCount(astPlan))
+	fmt.Printf("Testing phase: executing %d test cases\n", coregeneration.RequirementCount(astPlan))
 
 	// Render a live progress bar to stderr during execution (only when stderr
 	// is a terminal). It is cleared before the report is printed.
@@ -98,6 +100,21 @@ func writeRunReport(cfg *config, report *testrunner.Report, coverageEvaluation t
 		if err := writeOutputFile(cfg.outputPath, append(out, '\n')); err != nil {
 			return fmt.Errorf("write test report to %s: %w", cfg.outputPath, err)
 		}
+	}
+
+	// The navigable output directory (default .momus/output) is always written
+	// unless the user opted out with "-". It slices the run into small,
+	// navigable files (index, per-case, by-resource, by-parameter) instead of
+	// one monolith.
+	outputDir := cfg.outputDir
+	if outputDir == "" {
+		outputDir = ".momus/output"
+	}
+	if outputDir != "-" {
+		if err := reportwriter.WriteDir(outputDir, report, coverageEvaluation, coverageEvaluated, reportwriter.Options{WriteFull: cfg.includeCases}); err != nil {
+			return fmt.Errorf("write output directory %s: %w", outputDir, err)
+		}
+		fmt.Printf("Output directory written to %s\n", outputDir)
 	}
 
 	requirementCases, setupCases := countRequirementAndSetupCases(report.Cases)

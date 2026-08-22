@@ -213,12 +213,13 @@ The registry knows definitions. The constraint model represents testable
 rules extracted from those definitions. The registry does not decide test
 coverage directly.
 
-The constraint model is implemented in `internal/fhir/constraint` as a flat,
-`Kind`-discriminated `Constraint` type with a stable `ID` used to anchor
-coverage requirements and test traceability. `constraint.Derive` walks every
-indexed StructureDefinition, SearchParameter, and CapabilityStatement and
-normalises them into cardinality, datatype, terminology, invariant,
-reference, fixed, pattern, search, and interaction constraints.
+The constraint model is implemented in `internal/fhir/constraintderive` as a
+flat, `Kind`-discriminated `Constraint` type with a stable `ID` used to anchor
+coverage requirements and test traceability. `constraintderive.DeriveScoped`
+walks every indexed StructureDefinition, SearchParameter, and
+CapabilityStatement and normalises them into cardinality, datatype,
+terminology, invariant, reference, fixed, pattern, search, and interaction
+constraints.
 
 ## Coverage as a first-class concept
 
@@ -229,24 +230,29 @@ Package structure:
 
 ```text
 internal/
-                test/
+                core/
                                 coverage/
                                                 model.go
-                                                derive.go
                                                 planner.go
                                                 evaluator.go
                                                 report.go
                                                 html.go
-                                                capability_scope.go
+                                generation/
+                                                payload_builder.go
+                                                scaffold.go
 
+                fhir/
+                                coverage/
+                                                derive.go
+                                                capability_scope.go
                                 generation/
                                                 positive.go
                                                 negative.go
-                                                boundary.go
                                                 interaction.go
                                                 search.go
                                                 operations.go
                                                 dependencies.go
+                                                builder.go
 ```
 
 The responsibilities are distinct:
@@ -607,7 +613,7 @@ needs, not the data itself. In the implementation this is realised by each
 references) rather than a separate `DataRequirement` type.
 
 `Dataset` is generated state: concrete resources and references between them.
-`BuildSetupDataset` in `internal/test/generation` produces the seed `Dataset`
+`BuildSetupDataset` in `internal/fhir/generation` produces the seed `Dataset`
 from the data each obligation needs, including search-matching seeds and
 transitively-referenced types.
 
@@ -671,10 +677,38 @@ covered.
 
 ## Package layout
 
+The codebase follows a narrow-core-wide-composition layout: a domain-agnostic
+core (`internal/core`) holds the generic engine, and the FHIR domain
+(`internal/fhir`) implements the domain-specific adapters that plug into it.
+The core never imports FHIR; FHIR depends on core, never the reverse.
+
 - `cmd/momus` — CLI entry point.
+- `internal/core/ast` — executable test AST (node definitions and encoding).
+- `internal/core/coverage` — coverage requirements, the dependency DAG
+        planner, evaluation, and reporting (JSON/console/HTML).
+- `internal/core/generation` — the domain-agnostic test-generation framework.
+        It owns `GenerateFromCoveragePlan`, `BuildOptions`, `RequirementCount`,
+        and pure helpers (URL joining, ID sanitising, profile ordering). It
+        delegates all domain synthesis through the `PayloadBuilder` interface
+        and has zero FHIR imports.
+- `internal/core/runner` — test execution.
+- `internal/core/assertions` — assertion interface and evaluation.
+- `internal/core/tracing` — concurrency-safe HTTP request/response tracer.
+- `internal/core/constraint` — the generic constraint model.
 - `internal/fhir/model` — normalised FHIR domain model (no I/O, no execution).
-- `internal/fhir/constraint` — constraint model: normalised, `Kind`-typed
-        contractual rules derived from the registry.
+- `internal/fhir/constraintderive` — FHIR constraint derivation: walks every
+        indexed StructureDefinition, SearchParameter, and CapabilityStatement
+        and normalises them into cardinality, datatype, terminology, invariant,
+        reference, fixed, pattern, search, and interaction constraints.
+- `internal/fhir/coverage` — FHIR coverage derivation (derive + capability
+        scope), producing the coverage plan of obligations.
+- `internal/fhir/generation` — the FHIR adapter. It implements
+        `core/generation.PayloadBuilder` (DependencyPlan, BuildResourceCases,
+        BuildBody, search-value resolution) and owns all FHIR synthesis:
+        payload generation (`synthesizeBody`), negative mutation, search seeds,
+        dependency planning, and case construction. `BuildSetupDataset`
+        produces the seed `Dataset` from the data each obligation needs,
+        including search-matching seeds and transitively-referenced types.
 - `internal/fhir/package` — package loading and registry building.
 - `internal/fhir/registry` — immutable FHIR/API knowledge index.
 - `internal/fhir/terminology` — terminology expansion and lookup.
@@ -683,19 +717,6 @@ covered.
         `$export`; distinct from the coverage-driven data pipeline).
 - `internal/fhir/provisioning` — `Provisioner` (`ServerProvisioner` PUTs a
         `Dataset` to the server, dependency-ordered).
-- `internal/test/coverage` — coverage requirements, derivation, the dependency
-        DAG planner, evaluation, and reporting (JSON/console/HTML).
-- `internal/test/generation` — the single registry-driven data pipeline. Its
-        core, `synthesizeBody`, generates every body (provisioned seed resources
-        and test-case payloads) from the registry as the source of truth;
-        negative variants mutate an otherwise-valid payload against exactly one
-        constraint and assert rejection. `BuildSetupDataset` produces the seed
-        `Dataset` from the data each obligation needs, including search-matching
-        seeds and transitively-referenced types.
-- `internal/test/ast` — executable test AST (node definitions and encoding).
-- `internal/test/runner` — test execution.
-- `internal/test/assertions` — assertion interface and evaluation.
-- `internal/tracing` — concurrency-safe HTTP request/response tracer.
 - `internal/openapi` — OpenAPI loading and API contract support.
 
 ## Implementation staging

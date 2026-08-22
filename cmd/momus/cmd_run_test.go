@@ -11,16 +11,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/core/ast"
+	"github.com/jlcoulter/momus/internal/core/coverage"
+	testgeneration "github.com/jlcoulter/momus/internal/fhir/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
-	"github.com/jlcoulter/momus/internal/test/ast"
-	"github.com/jlcoulter/momus/internal/test/coverage"
 )
 
 // writeTestPlan encodes a test plan (seed dataset + test AST) to a temp file and
 // returns its path, so "coverage run"/"coverage provision" can consume it.
 func writeTestPlan(t *testing.T, plan *ast.Plan, ds *model.Dataset) string {
 	t.Helper()
-	out, err := encodeTestPlan(plan, ds)
+	plan.Dataset = testgeneration.ToCoreDataset(ds)
+	out, err := encodeTestPlan(plan)
 	if err != nil {
 		t.Fatalf("encodeTestPlan: %v", err)
 	}

@@ -27,19 +27,22 @@ What is implemented:
 - **Normalised FHIR model** — `StructureDefinition`, `ValueSet`, `CodeSystem`,
   `CapabilityStatement`, and `SearchParameter` normalised into internal model
   types.
-- **Constraint model** (`internal/fhir/constraint`) — a flat, `Kind`-typed set
-  of contractual rules derived from the registry with stable identifiers
+- **Constraint model** (`internal/fhir/constraintderive`) — a flat, `Kind`-typed
+  set of contractual rules derived from the registry with stable identifiers
   (`cardinality`, `datatype`, `terminology`, `invariant`, `reference`, `fixed`,
   `pattern`, `search`, `interaction`, `api-operation`, `api-parameter`).
-- **Coverage derivation** (`internal/test/coverage`) — constraint-driven
+- **Coverage derivation** (`internal/fhir/coverage`) — constraint-driven
   obligations across the cardinality, datatype, terminology, invariant,
   reference, and required-slice structure domains, plus search, operation,
   state/CRUD, and (opt-in) pairwise interaction coverage. Every requirement is
   traceable to its source constraint.
-- **Test generation** (`internal/test/generation`) — positive, negative, and
-  boundary cases. Negative variants mutate a valid payload against exactly one
-  constraint and assert rejection; boundary helpers emit edge values for string
-  length, numeric, and cardinality ranges.
+- **Test generation** (`internal/fhir/generation` + `internal/core/generation`) —
+  positive, negative, and boundary cases. The domain-agnostic core framework
+  (`internal/core/generation`) orchestrates generation and delegates all
+  payload/search synthesis through a `PayloadBuilder` interface; the FHIR
+  adapter (`internal/fhir/generation`) implements it. Negative variants mutate
+  a valid payload against exactly one constraint and assert rejection; boundary
+  helpers emit edge values for string length, numeric, and cardinality ranges.
 - **Interaction (pairwise) coverage** — at `--strength 2`, pairwise obligations
   between accept requirements on the same profile are derived and generation
   selects a near-minimal set by greedy set-cover, grouping compatible accepts
@@ -75,13 +78,22 @@ What is implemented:
 
 ## Layout
 
+The codebase follows a narrow-core-wide-composition layout: a domain-agnostic
+core (`internal/core`) holds the generic engine, and the FHIR domain
+(`internal/fhir`) implements the domain-specific adapters that plug into it.
+The core never imports FHIR; FHIR depends on core, never the reverse.
+
 ```
 cmd/momus/          CLI entry point
-internal/fhir/      FHIR model, constraint model, package loading, registry,
-                    terminology, resource generation, planner, provisioning
-internal/test/      test AST, assertions, generation, runner, coverage
+internal/core/      domain-agnostic engine: test AST, coverage model/planner/
+                    evaluator/report, generation framework, runner, assertions,
+                    tracing, constraint model
+internal/fhir/      FHIR domain: model, constraint derivation, coverage
+                    derivation, generation adapter (PayloadBuilder), package
+                    loading, registry, terminology, provisioning, bulk,
+                    profile validator (validate), FHIRPath engine (fhirpath),
+                    golden self-conformance runner, navigable report writer
 internal/openapi/   OpenAPI document loading and API constraint derivation
-internal/tracing/   concurrency-safe HTTP request/response tracer
 docs/               architecture and feature documentation
 pkg/                reserved public API (intentionally empty)
 ```
@@ -104,8 +116,8 @@ go run ./cmd/momus --help
 
 ## CLI
 
-Momus uses a Cobra-based CLI with three command groups: `package`, `coverage`,
-and `api`.
+Momus uses a Cobra-based CLI with command groups: `package`, `coverage`,
+`api`, `mock`, `test`, `validate`, and `conformance`.
 
 ### `package` — FHIR package operations
 
@@ -201,6 +213,33 @@ overall contractual coverage, per-domain percentages, and per-domain /
 per-resource / per-variant lists where every executed item shows a pass/fail
 badge and expands to its assertion, request URL/body, and response body.
 
+#### Navigable output directory
+
+Every run also writes a **navigable output directory** to `.momus/output` by
+default, so a large run is sliced into small, easy-to-navigate files instead of
+one monolithic JSON:
+
+```text
+.momus/output/
+  index.json        summary, coverage %, failed-case pointers
+  index.html        navigable tree
+  summary.json      the concise run summary
+  full.json         the monolithic artifact (only with --include-cases)
+  cases/<req-id>.json      one small file per case
+  by-resource/<Type>.json      pass/fail matrix per resource type
+  by-parameter/<param>.json    pass/fail matrix per search/operation param
+  failed-index.json  failed cases grouped by reason
+```
+
+- `--output-dir path` relocates it; `--output-dir -` disables it.
+- `--output file.json` still writes the single-file JSON for CI tooling.
+- Inspect one case in full depth (request, response, assertion, trace) without
+  touching the rest of the report:
+
+```sh
+go run ./cmd/momus coverage explain 'search|Patient|name|search-valid'
+```
+
 Generate realistic bulk data as NDJSON (the FHIR Bulk Data `$export` format):
 
 ```sh
@@ -277,6 +316,71 @@ Generate and execute tests against a live API:
 ```sh
 go run ./cmd/momus api run ./openapi.json --base-url http://localhost:8080
 ```
+
+### `validate` — profile conformance
+
+Validate a FHIR JSON resource against a profile, printing one line per
+violation. The profile is resolved from the loaded package(s):
+
+```sh
+go run ./cmd/momus validate ./resource.json \
+  --package package.tgz \
+  --profile http://hl7.org/fhir/StructureDefinition/Patient
+```
+
+Without `--profile`, Momus uses the resource's own `meta.profile` claims. Exit
+code is non-zero when the resource fails validation.
+
+### `mock` — a local FHIR server for development
+
+Start a mock FHIR server that holds resources in memory and serves real FHIR
+semantics (PUT/POST store, GET retrieves, DELETE removes, search returns a
+Bundle):
+
+```sh
+go run ./cmd/momus mock --port 8080
+```
+
+With `--semantic --package package.tgz`, the mock also enforces profile
+conformance: a non-conformant PUT/POST is rejected with `422` + an
+OperationOutcome naming each issue, so positive and negative test cases are
+meaningful:
+
+```sh
+go run ./cmd/momus mock --port 8080 --semantic --package package.tgz
+```
+
+### `conformance self-test` — the golden-matrix oracle
+
+Run Momus's own generated tests against the semantic mock for every reference
+fixture, proving conformance logic works end to end with no network:
+
+```sh
+go run ./cmd/momus conformance self-test
+```
+
+Each fixture derives a coverage plan, generates the test AST, snapshots it
+byte-identically, provisions seed data, and asserts 100% pass. This is the
+developer's daily oracle: add a feature, add a fixture, and every parameter's
+positive/negative/edge cases are exercised and proven. Exits non-zero on any
+failure.
+
+Reference fixtures under `testdata/golden/` cover the breadth of what the
+application supports, with one fixture per search-parameter family:
+
+- `patient` — string (`name`) and token (`gender`) search; HumanName
+- `observation-slice` — token search with slice constraints
+- `observation-invariant` — token search with invariant regex
+- `search-operations` — string/token/`_id` at interaction strength 2 (pairwise
+  search-parameter combinations)
+- `patient-date` — `date` search
+- `observation-value` — `quantity` and `reference` search with `Quantity`
+- `location-near` — `special` (`near`) geographic search with coordinates
+- `observation-composite` — `composite` search (`part1$part2`)
+
+Each fixture asserts the positive, negative, and edge cases for its search
+parameters (valid, no-results, invalid-value, invalid-modifier,
+multiple-results) plus the datatypes its elements use.
 
 ## Coverage pipeline
 

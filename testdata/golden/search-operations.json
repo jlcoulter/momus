@@ -1,0 +1,55 @@
+{
+  "structureDefinitions": [
+    {
+      "url": "http://example.org/StructureDefinition/practitioner",
+      "type": "Practitioner",
+      "elements": [
+        { "path": "Practitioner", "min": 0, "max": "*" },
+        { "path": "Practitioner.name", "min": 1, "max": "*", "types": [{ "code": "HumanName" }] },
+        { "path": "Practitioner.active", "min": 0, "max": "1", "types": [{ "code": "boolean" }] }
+      ]
+    }
+  ],
+  "searchParameters": [
+    { "code": "name", "base": ["Practitioner"], "type": "string", "expression": "Practitioner.name" },
+    { "code": "active", "base": ["Practitioner"], "type": "token", "expression": "Practitioner.active" },
+    { "code": "_id", "base": ["Resource"], "type": "token", "expression": "Resource.id" }
+  ],
+  "valueSets": [],
+  "codeSystems": [],
+  "capabilityStatements": [
+    {
+      "url": "http://example.org/CapabilityStatement/golden-search",
+      "name": "GoldenSearch",
+      "status": "active",
+      "fhirVersion": "4.0.1",
+      "rest": [
+        {
+          "mode": "server",
+          "resource": [
+            {
+              "type": "Practitioner",
+              "searchParam": [
+                { "name": "_id", "type": "token", "definition": "http://hl7.org/fhir/SearchParameter/Resource-id" },
+                { "name": "name", "type": "string", "definition": "http://example.org/SearchParameter/practitioner-name" },
+                { "name": "active", "type": "token", "definition": "http://example.org/SearchParameter/practitioner-active" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "strength": 2,
+  "resources": [
+    {
+      "profileUrl": "http://example.org/StructureDefinition/practitioner",
+      "resource": {
+        "resourceType": "Practitioner",
+        "id": "practitioner-sample-1",
+        "active": true,
+        "name": [{ "family": "Smith", "given": ["Alex"] }]
+      }
+    }
+  ]
+}

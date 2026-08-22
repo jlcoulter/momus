@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	testconstraint "github.com/jlcoulter/momus/internal/fhir/constraint"
+	testconstraint "github.com/jlcoulter/momus/internal/fhir/constraintderive"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	"github.com/spf13/cobra"
 )

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jlcoulter/momus/internal/test/ast"
+	"github.com/jlcoulter/momus/internal/core/ast"
 )
 
 func TestStorePutGetDelete(t *testing.T) {
@@ -224,9 +224,9 @@ func TestPlanAwareServerSearch(t *testing.T) {
 	defer s.Close()
 
 	base := "http://" + addr
-	// Store two patients.
-	for _, id := range []string{"p1", "p2"} {
-		body := `{"resourceType":"Patient","id":"` + id + `"}`
+	// Store two patients with names, one without.
+	put := func(id, name string) {
+		body := `{"resourceType":"Patient","id":"` + id + `","name":"` + name + `"}`
 		req, _ := http.NewRequest(http.MethodPut, base+"/Patient/"+id, bytes.NewReader([]byte(body)))
 		req.Header.Set("Content-Type", "application/fhir+json")
 		resp, err := http.DefaultClient.Do(req)
@@ -235,15 +235,42 @@ func TestPlanAwareServerSearch(t *testing.T) {
 		}
 		resp.Body.Close()
 	}
+	put("p1", "Doe")
+	put("p2", "Doe")
+	put("p3", "Smith")
 
-	// Search returns a Bundle with total 2.
-	resp, err := http.Get(base + "/Patient?name=Doe")
+	// A search with no query params returns all stored resources.
+	total := searchTotal(t, base+"/Patient")
+	if total != 3 {
+		t.Fatalf("plain search total = %d, want 3", total)
+	}
+
+	// A filtered search matches only resources whose field equals the value.
+	total = searchTotal(t, base+"/Patient?name=Doe")
+	if total != 2 {
+		t.Fatalf("name=Doe total = %d, want 2", total)
+	}
+	total = searchTotal(t, base+"/Patient?name=Smith")
+	if total != 1 {
+		t.Fatalf("name=Smith total = %d, want 1", total)
+	}
+
+	// _count limits the returned set.
+	total = searchTotal(t, base+"/Patient?_count=1")
+	if total != 1 {
+		t.Fatalf("_count=1 total = %d, want 1", total)
+	}
+}
+
+func searchTotal(t *testing.T, url string) int {
+	t.Helper()
+	resp, err := http.Get(url)
 	if err != nil {
-		t.Fatalf("search: %v", err)
+		t.Fatalf("search %s: %v", url, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("search status = %d, want 200", resp.StatusCode)
+		t.Fatalf("search %s status = %d, want 200", url, resp.StatusCode)
 	}
 	var bundle struct {
 		ResourceType string `json:"resourceType"`
@@ -256,12 +283,10 @@ func TestPlanAwareServerSearch(t *testing.T) {
 	if bundle.ResourceType != "Bundle" {
 		t.Fatalf("resourceType = %q, want Bundle", bundle.ResourceType)
 	}
-	if bundle.Total != 2 {
-		t.Fatalf("total = %d, want 2", bundle.Total)
+	if len(bundle.Entry) != bundle.Total {
+		t.Fatalf("entry count %d != total %d", len(bundle.Entry), bundle.Total)
 	}
-	if len(bundle.Entry) != 2 {
-		t.Fatalf("entry count = %d, want 2", len(bundle.Entry))
-	}
+	return bundle.Total
 }
 
 func TestPlanAwareServerRejectsFromPlan(t *testing.T) {

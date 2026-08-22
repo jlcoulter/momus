@@ -1,0 +1,33 @@
+{
+  "structureDefinitions": [
+    {
+      "url": "http://example.org/StructureDefinition/observation",
+      "type": "Observation",
+      "elements": [
+        { "path": "Observation", "min": 0, "max": "*" },
+        { "path": "Observation.status", "min": 1, "max": "1", "types": [{ "code": "code" }] },
+        { "path": "Observation.subject", "min": 0, "max": "1", "types": [{ "code": "Reference" }] },
+        { "path": "Observation.valueQuantity", "min": 0, "max": "1", "types": [{ "code": "Quantity" }] }
+      ]
+    }
+  ],
+  "searchParameters": [
+    { "code": "status", "base": ["Observation"], "type": "token", "expression": "Observation.status" },
+    { "code": "subject", "base": ["Observation"], "type": "reference", "expression": "Observation.subject" },
+    { "code": "value-quantity", "base": ["Observation"], "type": "quantity", "expression": "Observation.value" }
+  ],
+  "valueSets": [],
+  "codeSystems": [],
+  "resources": [
+    {
+      "profileUrl": "http://example.org/StructureDefinition/observation",
+      "resource": {
+        "resourceType": "Observation",
+        "id": "observation-value-sample-1",
+        "status": "final",
+        "subject": { "reference": "Patient/obs-subject" },
+        "valueQuantity": { "value": 180.5, "unit": "cm", "system": "http://unitsofmeasure.org", "code": "cm" }
+      }
+    }
+  ]
+}

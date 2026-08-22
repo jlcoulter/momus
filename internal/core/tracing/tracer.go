@@ -1,0 +1,264 @@
+// Package tracing provides a lightweight, concurrency-safe HTTP request/response
+// tracer used to surface every request a Momus run makes (capability fetch,
+// dataset provisioning, and test execution) when --debug is enabled.
+package tracing
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"sort"
+	"strings"
+	"sync"
+)
+
+// maxBodyBytes caps how much of a request/response body is printed so a single
+// large payload cannot flood debug output. The full body is still available in
+// the structured report when IncludeDebug is set.
+const maxBodyBytes = 4096
+
+// ANSI escape codes used to colour trace output. They are only emitted when the
+// tracer is writing to a terminal (or colour is forced on), so piped output
+// stays plain.
+const (
+	reset  = "\x1b[0m"
+	bold   = "\x1b[1m"
+	dim    = "\x1b[2m"
+	cyan   = "\x1b[36m"
+	green  = "\x1b[32m"
+	yellow = "\x1b[33m"
+	red    = "\x1b[31m"
+)
+
+// Tracer logs outgoing HTTP requests and their responses to a writer. It is
+// safe for concurrent use (parallel test branches log from multiple goroutines).
+type Tracer struct {
+	mu      sync.Mutex
+	w       io.Writer
+	maxBody int
+	seq     int
+	color   bool
+	json    bool
+}
+
+// Event is a single structured trace record: either a request or a response.
+// When kind is "request", Status is empty and Headers/Body are the request's;
+// when kind is "response", Method/URL/Headers/Body describe the response and
+// Status carries the HTTP status code. Sequence pairs a request with its
+// response.
+type Event struct {
+	Sequence  int               `json:"sequence"`
+	Kind      string            `json:"kind"` // "request" | "response"
+	Method    string            `json:"method"`
+	URL       string            `json:"url"`
+	Status    int               `json:"status,omitempty"`
+	Headers   map[string]string `json:"headers,omitempty"`
+	Body      string            `json:"body,omitempty"`
+	Truncated int               `json:"truncated,omitempty"`
+}
+
+// New returns a Tracer that writes human-readable text to w. When w is nil the
+// tracer is a no-op. Colour is enabled automatically when w is a terminal.
+func New(w io.Writer) *Tracer {
+	return &Tracer{w: w, maxBody: maxBodyBytes, color: isTerminal(w)}
+}
+
+// NewJSON returns a Tracer that writes one JSON Event per line (JSON Lines) to
+// w, so the request/response stream is machine-parseable. When w is nil the
+// tracer is a no-op.
+func NewJSON(w io.Writer) *Tracer {
+	return &Tracer{w: w, maxBody: maxBodyBytes, json: true}
+}
+
+// LogRequest records an outgoing request. body is the request payload (may be
+// nil for requests without a body). It returns the sequence number assigned to
+// this request, which must be passed to LogResponse so the response is paired
+// with the correct request under concurrency.
+func (t *Tracer) LogRequest(req *http.Request, body []byte) int {
+	if t == nil || t.w == nil || req == nil {
+		return 0
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.seq++
+	if t.json {
+		t.writeJSONEvent(Event{
+			Sequence: t.seq,
+			Kind:     "request",
+			Method:   req.Method,
+			URL:      req.URL.String(),
+			Headers:  headerMap(req.Header),
+			Body:     string(body),
+		})
+		return t.seq
+	}
+	t.writeHeader(fmt.Sprintf("==> REQUEST #%d", t.seq), cyan)
+	t.writeLine("%s %s", t.paint(bold, req.Method), req.URL.String())
+	t.writeHeaders(req.Header)
+	t.writeBody(body)
+	t.writeBlank()
+	return t.seq
+}
+
+// LogResponse records the response to a request. seq is the sequence number
+// returned by the matching LogRequest call. headers and body may be nil/empty.
+func (t *Tracer) LogResponse(req *http.Request, seq int, status int, headers http.Header, body []byte) {
+	if t == nil || t.w == nil || req == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.json {
+		truncated := 0
+		if len(body) > t.maxBody {
+			truncated = len(body) - t.maxBody
+			body = body[:t.maxBody]
+		}
+		t.writeJSONEvent(Event{
+			Sequence:  seq,
+			Kind:      "response",
+			Method:    req.Method,
+			URL:       req.URL.String(),
+			Status:    status,
+			Headers:   headerMap(headers),
+			Body:      string(body),
+			Truncated: truncated,
+		})
+		return
+	}
+	t.writeHeader(fmt.Sprintf("<== RESPONSE #%d", seq), statusColor(status))
+	t.writeLine("%s %s -> %s", req.Method, req.URL.String(), t.paint(statusColor(status), fmt.Sprintf("%d %s", status, http.StatusText(status))))
+	t.writeHeaders(headers)
+	t.writeBody(body)
+	t.writeBlank()
+}
+
+// writeJSONEvent marshals an Event to a single JSON line. It is called with t.mu
+// held.
+func (t *Tracer) writeJSONEvent(ev Event) {
+	b, err := json.Marshal(ev)
+	if err != nil {
+		return
+	}
+	t.w.Write(b)
+	t.w.Write([]byte("\n"))
+}
+
+// headerMap flattens an http.Header into a single-value-per-key map, redacting
+// sensitive values.
+func headerMap(headers http.Header) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(headers))
+	for k, vals := range headers {
+		v := ""
+		if len(vals) > 0 {
+			v = vals[0]
+		}
+		if isSensitiveHeader(k) {
+			v = "<redacted>"
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// writeHeader prints a section title, coloured when enabled.
+func (t *Tracer) writeHeader(title string, color string) {
+	fmt.Fprintf(t.w, "--- %s ---\n", t.paint(color, title))
+}
+
+func (t *Tracer) writeLine(format string, args ...any) {
+	fmt.Fprintf(t.w, format+"\n", args...)
+}
+
+func (t *Tracer) writeBlank() {
+	fmt.Fprintln(t.w)
+}
+
+// paint wraps s in an ANSI colour code when colour is enabled, returning s
+// unchanged otherwise.
+func (t *Tracer) paint(code, s string) string {
+	if !t.color || code == "" {
+		return s
+	}
+	return code + s + reset
+}
+
+// writeHeaders prints headers in sorted order, redacting sensitive values.
+func (t *Tracer) writeHeaders(headers http.Header) {
+	if len(headers) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(headers))
+	for k := range headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		values := headers[k]
+		if isSensitiveHeader(k) {
+			t.writeLine("%s: %s", t.paint(dim, k), t.paint(red, "<redacted>"))
+			continue
+		}
+		for _, v := range values {
+			t.writeLine("%s: %s", t.paint(dim, k), v)
+		}
+	}
+}
+
+// isSensitiveHeader reports whether a header value should be redacted in trace
+// output (credentials and tokens must never be echoed to the console).
+func isSensitiveHeader(name string) bool {
+	switch strings.ToLower(name) {
+	case "authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key":
+		return true
+	}
+	return false
+}
+
+// statusColor returns the colour used for a response based on its status class:
+// green for 2xx, yellow for 3xx, red for 4xx/5xx, and no colour otherwise.
+func statusColor(status int) string {
+	switch {
+	case status >= 200 && status < 300:
+		return green
+	case status >= 300 && status < 400:
+		return yellow
+	case status >= 400:
+		return red
+	}
+	return ""
+}
+
+func (t *Tracer) writeBody(body []byte) {
+	if len(body) == 0 {
+		return
+	}
+	original := len(body)
+	if original > t.maxBody {
+		body = body[:t.maxBody]
+	}
+	t.w.Write(body)
+	if original > t.maxBody {
+		fmt.Fprintf(t.w, "\n... (%d more bytes truncated)\n", original-t.maxBody)
+	}
+}
+
+// isTerminal reports whether w is a character device (i.e. an interactive
+// terminal) so colour can be enabled only when it will render, not when output
+// is redirected to a file or pipe.
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}

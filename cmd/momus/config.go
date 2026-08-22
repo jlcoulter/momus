@@ -16,6 +16,7 @@ type config struct {
 	// Output
 	outputPath string
 	htmlReport string
+	outputDir  string // default ".momus/output"; navigable directory report
 
 	// Derivation scoping
 	includeResourceTypes   []string
@@ -51,4 +52,13 @@ type config struct {
 	exhaustive        bool
 	bulkCount         int
 	bulkPerTypeCounts []string
+
+	// Validate
+	profileURLs []string
+	packagePath string
+
+	// Conformance self-test
+	goldenDir       string
+	conformanceOut  string
+	conformanceJSON bool
 }
