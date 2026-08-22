@@ -81,6 +81,16 @@ func (b *fhirBuilder) SearchAcceptValue(req coverage.CoverageRequirement, code s
 		return "2024-01-01"
 	case "integer", "unsignedInt", "positiveInt", "decimal":
 		return "123.45"
+	case "Quantity":
+		// A quantity search value is "number|system|code"; return a value that
+		// matches the provisioned seed's quantity.
+		return "123.45|http://unitsofmeasure.org|mmol"
+	case "Reference":
+		// A reference search value is "Type/id"; match the provisioned seed.
+		if t := firstTargetResourceType(def, b.reg); t != "" {
+			return t + "/" + coregen.SetupResourceID(t)
+		}
+		return "momus-search"
 	default:
 		return "momus-search"
 	}

@@ -1,0 +1,33 @@
+{
+  "structureDefinitions": [
+    {
+      "url": "http://example.org/StructureDefinition/patient",
+      "type": "Patient",
+      "elements": [
+        { "path": "Patient", "min": 0, "max": "*" },
+        { "path": "Patient.name", "min": 1, "max": "*", "types": [{ "code": "HumanName" }] },
+        { "path": "Patient.birthDate", "min": 0, "max": "1", "types": [{ "code": "date" }] },
+        { "path": "Patient.deceasedBoolean", "min": 0, "max": "1", "types": [{ "code": "boolean" }] }
+      ]
+    }
+  ],
+  "searchParameters": [
+    { "code": "name", "base": ["Patient"], "type": "string", "expression": "Patient.name" },
+    { "code": "birthdate", "base": ["Patient"], "type": "date", "expression": "Patient.birthDate" },
+    { "code": "deceased", "base": ["Patient"], "type": "token", "expression": "Patient.deceased" }
+  ],
+  "valueSets": [],
+  "codeSystems": [],
+  "resources": [
+    {
+      "profileUrl": "http://example.org/StructureDefinition/patient",
+      "resource": {
+        "resourceType": "Patient",
+        "id": "patient-date-sample-1",
+        "name": [{ "family": "Doe", "given": ["Jane"] }],
+        "birthDate": "1990-05-15",
+        "deceasedBoolean": false
+      }
+    }
+  ]
+}

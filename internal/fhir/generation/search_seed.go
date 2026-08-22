@@ -189,8 +189,9 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 		setPathLeaf(body, elementPath, value)
 		return true
 	case "Reference":
-		// A reference search matches the reference string ("Type/id").
-		setPathLeaf(body, elementPath, value)
+		// A reference search matches the reference string ("Type/id") held in the
+		// Reference object's `reference` member.
+		setReferenceLeaf(body, elementPath, value)
 		return true
 	case "Quantity":
 		// A quantity search matches value/system/code of a Quantity element. Set
@@ -541,6 +542,34 @@ func setPathLeafBoolean(body map[string]any, path, value string) {
 	default:
 		cur[leaf] = value
 	}
+}
+
+// setReferenceLeaf places the search value ("Type/id") on a Reference object's
+// `reference` member.
+func setReferenceLeaf(body map[string]any, path, value string) {
+	cur, field := containerForPath(body, path)
+	raw, ok := cur[field]
+	if !ok {
+		cur[field] = map[string]any{"reference": value}
+		return
+	}
+	if arr, ok := raw.([]any); ok {
+		if len(arr) > 0 {
+			if m, ok := arr[0].(map[string]any); ok {
+				m["reference"] = value
+				return
+			}
+			arr[0] = map[string]any{"reference": value}
+			return
+		}
+		cur[field] = []any{map[string]any{"reference": value}}
+		return
+	}
+	if m, ok := raw.(map[string]any); ok {
+		m["reference"] = value
+		return
+	}
+	cur[field] = map[string]any{"reference": value}
 }
 
 // setQuantityLeaf places a search value on a Quantity element so a quantity

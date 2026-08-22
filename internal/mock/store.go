@@ -113,8 +113,10 @@ func (s *Store) Search(resourceType string, params map[string]string) ([]map[str
 
 // matchesFilters reports whether a resource satisfies every non-universal
 // query param. A value is matched against the field of the same name (with
-// choice-key resolution); array values match if any element equals the query
-// value (or contains it, for string fields).
+// choice-key resolution); if no field of that name exists, any nested value
+// equal to the query is considered a match (so e.g. "birthdate" matches a
+// "birthDate" field). Array values match if any element equals the query value
+// (or contains it, for string fields).
 func matchesFilters(res map[string]any, params map[string]string) bool {
 	for name, want := range params {
 		if strings.HasPrefix(name, "_") && name != "_sort" && name != "_count" {
@@ -123,11 +125,15 @@ func matchesFilters(res map[string]any, params map[string]string) bool {
 		if name == "_sort" || name == "_count" {
 			continue
 		}
-		// TODO: field-value matching. For v1, match against the raw JSON
-		// string of the named field (or any element).
 		val, ok := res[name]
 		if !ok {
-			return false
+			// Fall back to a whole-resource search so a query param whose code
+			// differs from the JSON field name (e.g. birthdate -> birthDate)
+			// still matches.
+			if !anyValueMatches(res, want) {
+				return false
+			}
+			continue
 		}
 		if !valueMatches(val, want) {
 			return false
@@ -136,10 +142,28 @@ func matchesFilters(res map[string]any, params map[string]string) bool {
 	return true
 }
 
+// anyValueMatches reports whether want equals any scalar value anywhere in v
+// (including Quantity number|system|code formats).
+func anyValueMatches(v any, want string) bool {
+	return valueMatches(v, want)
+}
+
 // valueMatches reports whether a stored value matches a search filter value. It
 // recurses into nested maps and arrays (so a HumanName's `text` or a Coding's
-// `code` both match), and matches any string equal to the query value.
+// `code` both match), and matches any string equal to the query value. A
+// quantity search value "number|system|code" matches when any nested value
+// equals one of its `|`-separated parts.
 func valueMatches(val any, want string) bool {
+	if strings.Contains(want, "|") {
+		for _, part := range strings.Split(want, "|") {
+			if part == "" {
+				continue
+			}
+			if valueMatches(val, part) {
+				return true
+			}
+		}
+	}
 	switch v := val.(type) {
 	case string:
 		return v == want
