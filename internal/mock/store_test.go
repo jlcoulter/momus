@@ -8,12 +8,21 @@ func TestStoreSearchQuantityMatchesParts(t *testing.T) {
 
 	// Quantity search "180.5|http://unitsofmeasure.org|cm" should match via its
 	// | -separated parts.
-	got, err := s.Search("Observation", map[string]string{"valueQuantity": "180.5"})
+	got, err := s.Search("Observation", map[string]string{"valueQuantity": "180.5|http://unitsofmeasure.org|cm"})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
 	if len(got) != 1 {
-		t.Fatalf("expected 1 match for valueQuantity=180.5, got %d", len(got))
+		t.Fatalf("expected 1 match for valueQuantity=180.5|http://unitsofmeasure.org|cm, got %d", len(got))
+	}
+
+	// A quantity whose parts all differ from the resource must not match.
+	got, err = s.Search("Observation", map[string]string{"valueQuantity": "99|http://example.org|in"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected 0 matches for a mismatched quantity code, got %d", len(got))
 	}
 }
 
