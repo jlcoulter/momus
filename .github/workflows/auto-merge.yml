@@ -1,0 +1,18 @@
+name: auto-merge-release
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.head.ref, 'release-please--branches--master')
+    steps:
+      - name: Enable auto-merge on release PR
+        run: |
+          gh pr merge "$PR_URL" --auto --squash
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
