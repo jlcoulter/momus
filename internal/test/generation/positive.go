@@ -83,6 +83,11 @@ type BuildOptions struct {
 	// not supported is skipped, so we never claim conformance to a profile the
 	// server cannot validate. When nil/empty, all profiles are allowed.
 	CapabilityProfiles map[string]struct{}
+	// Progress, when set, is invoked after each resource type's cases are
+	// generated, with the number of resource types completed so far and the
+	// total number of resource types. It is used to render a progress bar in the
+	// CLI during test-plan generation.
+	Progress func(done, total int)
 }
 
 // GenerateFromCoveragePlan maps coverage requirements into a concrete AST.
@@ -110,6 +115,22 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 	}
 
 	root := &ast.Sequence{Steps: make([]ast.Node, 0)}
+	// Count the total requirements that will actually emit cases (those with
+	// coverage obligations) for progress reporting.
+	totalReqs := 0
+	for _, level := range depPlan.Levels {
+		for _, resourceType := range level {
+			totalReqs += len(byResource[resourceType])
+		}
+	}
+	doneReqs := 0
+	progress := func() {
+		if options.Progress == nil {
+			return
+		}
+		doneReqs++
+		options.Progress(doneReqs, totalReqs)
+	}
 	for _, level := range depPlan.Levels {
 		resourceNodes := make([]ast.Node, 0, len(level))
 		for _, resourceType := range level {
@@ -126,7 +147,7 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 			// generated AST contains only test cases, which run against data already
 			// provisioned on the server. Test cases that need seed data reference it by
 			// its deterministic setup id (e.g. operations target "momus-setup-<Type>").
-			for _, caseSeq := range buildResourceCases(byResource[resourceType], plan, options, deps) {
+			for _, caseSeq := range buildResourceCases(byResource[resourceType], plan, options, deps, progress) {
 				resourceSeq.Steps = append(resourceSeq.Steps, caseSeq)
 			}
 

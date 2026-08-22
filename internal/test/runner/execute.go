@@ -44,6 +44,11 @@ type ExecuteOptions struct {
 	// treated as created so setup-reference validation passes for test cases that
 	// reference them.
 	PreCreated map[string]struct{}
+	// Progress, when set, is invoked after each test case completes with the
+	// number of cases completed so far and the total number of cases. It is used
+	// to render a progress bar in the CLI. total is the number of requirement
+	// cases (setup cases are not counted toward it).
+	Progress func(done, total int)
 }
 
 const maxDebugBodyBytes = 4096
@@ -133,6 +138,8 @@ func Execute(ctx context.Context, plan ast.Node, options ExecuteOptions) (*Repor
 		writeBasicPassword: options.WriteBasicPassword,
 		includeDebug:       options.IncludeDebug,
 		tracer:             options.Tracer,
+		progress:           options.Progress,
+		progressTotal:      countRequirementAsserts(plan),
 		report:             &Report{Cases: make([]CaseResult, 0)},
 		variables:          make(map[string]any),
 		created:            cloneStringSet(options.PreCreated),
@@ -158,6 +165,9 @@ type executor struct {
 	writeBasicPassword string
 	includeDebug       bool
 	tracer             *tracing.Tracer
+	progress           func(done, total int)
+	progressTotal      int
+	progressDone       int
 	report             *Report
 	lastResult         assertions.Result
 	hasResult          bool
@@ -179,6 +189,42 @@ func cloneStringSet(src map[string]struct{}) map[string]struct{} {
 		out[k] = struct{}{}
 	}
 	return out
+}
+
+// countRequirementAsserts returns the number of non-setup Assert nodes in the
+// plan. This is the total used for progress reporting.
+func countRequirementAsserts(node ast.Node) int {
+	count := 0
+	var walk func(ast.Node)
+	walk = func(n ast.Node) {
+		switch node := n.(type) {
+		case *ast.Sequence:
+			for _, step := range node.Steps {
+				walk(step)
+			}
+		case *ast.Parallel:
+			for _, step := range node.Steps {
+				walk(step)
+			}
+		case *ast.Assert:
+			if !strings.HasPrefix(node.RequirementID, "setup:") {
+				count++
+			}
+		}
+	}
+	walk(node)
+	return count
+}
+
+// notifyProgress invokes the progress callback (when set) with the number of
+// requirement cases completed so far and the total. It is called after each
+// case is recorded.
+func (e *executor) notifyProgress() {
+	if e.progress == nil {
+		return
+	}
+	e.progressDone++
+	e.progress(e.progressDone, e.progressTotal)
 }
 
 func (e *executor) runNode(node ast.Node) error {
@@ -209,6 +255,7 @@ func (e *executor) runNode(node ast.Node) error {
 				Debug:  e.copyDebugIfEnabled(),
 			})
 			e.errorRecorded = true
+			e.notifyProgress()
 		}
 		return nil
 	case *ast.Capture:
@@ -469,6 +516,7 @@ func (e *executor) evaluateAssert(assertNode *ast.Assert) {
 		result.Debug = e.copyDebugIfEnabled()
 		e.report.Failed++
 		e.report.Cases = append(e.report.Cases, result)
+		e.notifyProgress()
 		return
 	}
 	if !e.hasResult {
@@ -477,6 +525,7 @@ func (e *executor) evaluateAssert(assertNode *ast.Assert) {
 		result.Debug = e.copyDebugIfEnabled()
 		e.report.Failed++
 		e.report.Cases = append(e.report.Cases, result)
+		e.notifyProgress()
 		return
 	}
 
@@ -488,6 +537,7 @@ func (e *executor) evaluateAssert(assertNode *ast.Assert) {
 		result.Debug = e.copyDebugIfEnabled()
 		e.report.Failed++
 		e.report.Cases = append(e.report.Cases, result)
+		e.notifyProgress()
 		return
 	}
 
@@ -510,6 +560,7 @@ func (e *executor) evaluateAssert(assertNode *ast.Assert) {
 		e.report.Passed++
 	}
 	e.report.Cases = append(e.report.Cases, result)
+	e.notifyProgress()
 }
 
 func (e *executor) copyDebugIfEnabled() *CaseDebug {

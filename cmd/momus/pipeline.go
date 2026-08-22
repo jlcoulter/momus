@@ -32,6 +32,10 @@ func executePlan(cfg *config, ctx context.Context, astPlan *testast.Plan, preCre
 	}
 
 	fmt.Printf("Testing phase: executing %d test cases\n", testgeneration.RequirementCount(astPlan))
+
+	// Render a live progress bar to stderr during execution (only when stderr
+	// is a terminal). It is cleared before the report is printed.
+	bar := newProgressBar(40)
 	report, err := testrunner.Execute(ctx, astPlan.Root, testrunner.ExecuteOptions{
 		BaseURL:            cfg.baseURL,
 		WriteBaseURL:       writeBase,
@@ -43,7 +47,9 @@ func executePlan(cfg *config, ctx context.Context, astPlan *testast.Plan, preCre
 		IncludeDebug:       cfg.debug || cfg.htmlReport != "",
 		Tracer:             newDebugTracer(cfg.debug),
 		PreCreated:         preCreated,
+		Progress:           bar.render,
 	})
+	bar.finish()
 	if err != nil {
 		return nil, testcoverage.EvaluationReport{}, err
 	}
@@ -86,9 +92,9 @@ func writeRunReport(cfg *config, report *testrunner.Report, coverageEvaluation t
 		return err
 	}
 
-	if cfg.outputPath == "" {
-		fmt.Println(string(out))
-	} else {
+	// The full JSON report is only written to a file via --output; it is never
+	// dumped to stdout (the concise summary below is the user-facing output).
+	if cfg.outputPath != "" {
 		if err := writeOutputFile(cfg.outputPath, append(out, '\n')); err != nil {
 			return fmt.Errorf("write test report to %s: %w", cfg.outputPath, err)
 		}
@@ -104,12 +110,17 @@ func writeRunReport(cfg *config, report *testrunner.Report, coverageEvaluation t
 		}
 		if coverageEvaluation.UncoveredRequirements > 0 {
 			fmt.Printf("Uncovered contractual obligations: %d\n", coverageEvaluation.UncoveredRequirements)
-			printCoverageGapSummary(coverageEvaluation)
-			for idx, req := range coverageEvaluation.Uncovered {
-				if idx >= 10 {
-					break
+			// The detailed gap breakdown (by domain/resource/variant and the
+			// uncovered requirement IDs) is verbose; it is only printed with
+			// --debug. The full detail is always in the JSON report.
+			if cfg.debug {
+				printCoverageGapSummary(coverageEvaluation)
+				for idx, req := range coverageEvaluation.Uncovered {
+					if idx >= 10 {
+						break
+					}
+					fmt.Printf("  - %s\n", req.ID)
 				}
-				fmt.Printf("  - %s\n", req.ID)
 			}
 		}
 	} else if !coverageEvaluated {
