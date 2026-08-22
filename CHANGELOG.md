@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/jlcoulter/momus/compare/v1.1.0...v1.2.0) (2026-08-22)
+
+
+### Features
+
+* add mock server command ([#12](https://github.com/jlcoulter/momus/issues/12)) ([0fdf2b1](https://github.com/jlcoulter/momus/commit/0fdf2b108f859104c6f1b7b050c3314bed1f9bab))
+
 ## [1.1.0](https://github.com/jlcoulter/momus/compare/v1.0.1...v1.1.0) (2026-08-21)
 
 
