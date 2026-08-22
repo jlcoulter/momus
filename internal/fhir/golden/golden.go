@@ -77,7 +77,7 @@ func Run(ctx context.Context, name string, fx *Fixture) (*Result, error) {
 	validator := validate.New(reg)
 	ms := mock.New(200, "",
 		mock.WithPlanAware(),
-		mock.WithValidator(mockValidatorAdapter{inner: validator}),
+		mock.WithValidator(validate.NewMockAdapter(reg)),
 		mock.WithLogger(false),
 		mock.WithBasePath("/fhir"),
 	)
@@ -216,24 +216,6 @@ func rewriteBase(node ast.Node, old, new string) {
 		n.URL = strings.ReplaceAll(n.URL, old, new)
 	case *ast.Capture:
 	}
-}
-
-// mockValidatorAdapter adapts a *validate.ProfileValidator to the mock.Validator
-// interface (whose Issue type is local to the mock package).
-type mockValidatorAdapter struct {
-	inner *validate.ProfileValidator
-}
-
-func (a mockValidatorAdapter) Validate(ctx context.Context, profileURL string, resource map[string]any) ([]mock.Issue, error) {
-	issues, err := a.inner.Validate(ctx, profileURL, resource)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]mock.Issue, 0, len(issues))
-	for _, iss := range issues {
-		out = append(out, mock.Issue{Path: iss.Path, Kind: iss.Kind, Message: iss.Message, Value: iss.Value})
-	}
-	return out, nil
 }
 
 // sortedKeys returns a sorted slice of a map's keys (helper for any future

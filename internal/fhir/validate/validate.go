@@ -13,6 +13,7 @@ import (
 	"fmt"
 
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+	"github.com/jlcoulter/momus/internal/mock"
 )
 
 // Issue is a single validation violation: a path, a check kind, a one-line
@@ -41,6 +42,32 @@ type ProfileValidator struct {
 // New returns a ProfileValidator backed by the given registry.
 func New(reg *registry.Registry) *ProfileValidator {
 	return &ProfileValidator{reg: reg}
+}
+
+// MockAdapter adapts a *ProfileValidator to the mock.Validator interface, whose
+// Issue type is declared locally in the mock package. It lets the semantic mock
+// consume this validator without coupling internal/mock to the FHIR side.
+type MockAdapter struct {
+	inner *ProfileValidator
+}
+
+// Validate implements mock.Validator.
+func (a MockAdapter) Validate(ctx context.Context, profileURL string, resource map[string]any) ([]mock.Issue, error) {
+	issues, err := a.inner.Validate(ctx, profileURL, resource)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]mock.Issue, 0, len(issues))
+	for _, iss := range issues {
+		out = append(out, mock.Issue{Path: iss.Path, Kind: iss.Kind, Message: iss.Message, Value: iss.Value})
+	}
+	return out, nil
+}
+
+// NewMockAdapter builds a mock.Validator that validates against the profiles in
+// reg, for wiring into the semantic mock.
+func NewMockAdapter(reg *registry.Registry) mock.Validator {
+	return MockAdapter{inner: New(reg)}
 }
 
 // Validate implements Validator. It resolves profileURL to a ResolvedProfile

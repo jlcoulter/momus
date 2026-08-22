@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+	"github.com/jlcoulter/momus/internal/fhir/validate"
 	"github.com/jlcoulter/momus/internal/mock"
 )
 
@@ -37,10 +38,6 @@ func TestValidateCmdConformantResource(t *testing.T) {
 }
 
 func TestValidatorAdapter(t *testing.T) {
-	r := registry.New()
-	_ = r
-	ad := validatorAdapter{inner: nil}
-	_ = ad
-	// Ensure the adapter compiles against the mock.Validator interface.
-	var _ mock.Validator = validatorAdapter{}
+	// Ensure the shared adapter compiles against the mock.Validator interface.
+	var _ mock.Validator = validate.NewMockAdapter(registry.New())
 }
