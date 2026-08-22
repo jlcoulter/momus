@@ -1,0 +1,21 @@
+{
+  "structureDefinitions": [
+    {
+      "url": "http://example.org/StructureDefinition/practitioner",
+      "type": "Practitioner",
+      "elements": [
+        { "path": "Practitioner", "min": 0, "max": "*" },
+        { "path": "Practitioner.name", "min": 1, "max": "*", "types": [{ "code": "HumanName" }] },
+        { "path": "Practitioner.active", "min": 0, "max": "1", "types": [{ "code": "boolean" }] }
+      ]
+    }
+  ],
+  "searchParameters": [
+    { "code": "name", "base": ["Practitioner"], "type": "string", "expression": "Practitioner.name" },
+    { "code": "active", "base": ["Practitioner"], "type": "token", "expression": "Practitioner.active" }
+  ],
+  "valueSets": [],
+  "codeSystems": [],
+  "capabilityStatements": [],
+  "resources": []
+}

@@ -95,9 +95,16 @@ func invariantMessage(c model.ElementConstraint) string {
 }
 
 // checkCardinality (T2) enforces required-presence: an element with Min > 0
-// must be present in the resource.
+// must be present in the resource. A required child is only enforced when its
+// ancestor path chain is present (an absent optional parent cannot obligate its
+// required children), mirroring FHIR's conditional cardinality semantics.
 func (v *ProfileValidator) checkCardinality(node *model.ElementNode, def *model.ElementDefinition, resource map[string]any) []Issue {
 	if def.Min <= 0 {
+		return nil
+	}
+	// If any ancestor element along the path is absent, the child is not
+	// required (its optional parent chain does not exist).
+	if !ancestorsPresent(resource, node.Path) {
 		return nil
 	}
 	values, present := resolvePath(resource, node.Path)
@@ -109,6 +116,43 @@ func (v *ProfileValidator) checkCardinality(node *model.ElementNode, def *model.
 		}}
 	}
 	return nil
+}
+
+// ancestorsPresent reports whether every element on the path chain up to (but
+// excluding) the leaf is present in the resource. For "Observation.component.
+// code", it checks that "Observation.component" resolves.
+func ancestorsPresent(resource map[string]any, path string) bool {
+	segments := elementSegments(path)
+	// Walk the parent segments: check each prefix except the leaf.
+	cur := []any{resource}
+	for i := 0; i < len(segments)-1; i++ {
+		var next []any
+		for _, c := range cur {
+			m, ok := c.(map[string]any)
+			if !ok {
+				continue
+			}
+			key := segments[i]
+			if _, ok := m[key]; ok {
+				key = segments[i]
+			} else if rk := resolveLeafKey(m, segments[i]); rk != "" {
+				key = rk
+			} else {
+				continue
+			}
+			switch val := m[key].(type) {
+			case []any:
+				next = append(next, val...)
+			default:
+				next = append(next, val)
+			}
+		}
+		if len(next) == 0 {
+			return false
+		}
+		cur = next
+	}
+	return true
 }
 
 // checkDatatype (T3) verifies an element's value JSON kind matches its declared
