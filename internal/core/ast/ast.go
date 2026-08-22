@@ -9,9 +9,44 @@ type Node interface {
 }
 
 // Plan is a serializable test plan artifact.
+//
+// Dataset, when non-nil, is the seed data the plan provisions ahead of
+// execution. Embedding it in the plan makes the AST the single artifact that
+// drives provisioning and execution: both stages work from the plan alone,
+// without the source package. It is intentionally generic (opaque resource
+// bodies) so the AST does not depend on any domain model.
 type Plan struct {
-	Version string `json:"version"`
-	Root    Node   `json:"root"`
+	Version string   `json:"version"`
+	Root    Node     `json:"root"`
+	Dataset *Dataset `json:"dataset,omitempty"`
+}
+
+// Dataset is the seed data a test plan provisions ahead of execution. It is
+// the generic, domain-free representation of generated resources; a domain
+// adapter (e.g. FHIR) converts its typed dataset to and from this shape.
+type Dataset struct {
+	Resources     map[string]*ResourceInstance `json:"resources"`
+	Relationships []Reference                  `json:"relationships,omitempty"`
+}
+
+// ResourceInstance is a single generated resource instance.
+//
+// LocalID is the Momus-assigned ID used within a dataset; ServerID is the ID
+// assigned by the target server once the resource is provisioned.
+type ResourceInstance struct {
+	LocalID      string         `json:"localId"`
+	ResourceType string         `json:"resourceType"`
+	Profile      string         `json:"profile,omitempty"`
+	Resource     map[string]any `json:"resource"`
+	ServerID     string         `json:"serverId,omitempty"`
+	Version      string         `json:"version,omitempty"`
+}
+
+// Reference is a relationship between two generated resource instances.
+type Reference struct {
+	SourceID string `json:"sourceId"`
+	Path     string `json:"path"`
+	TargetID string `json:"targetId"`
 }
 
 // Sequence runs its steps in order; later steps depend on earlier ones.

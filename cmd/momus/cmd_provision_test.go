@@ -9,6 +9,7 @@ import (
 
 	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/fhir/model"
+	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 )
 
 // TestProvisionCmdUploadsDatasetFromTestPlan verifies that "coverage provision"
@@ -100,7 +101,8 @@ func TestEncodeDecodeTestPlanRoundTrips(t *testing.T) {
 		},
 		Relationships: []model.Reference{{SourceID: "momus-setup-patient", Path: "p", TargetID: "momus-setup-patient"}},
 	}
-	out, err := encodeTestPlan(plan, dataset)
+	plan.Dataset = testgeneration.ToCoreDataset(dataset)
+	out, err := encodeTestPlan(plan)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}

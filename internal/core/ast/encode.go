@@ -83,8 +83,12 @@ func EncodePlan(plan *Plan) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{
+	out := map[string]any{
 		"version": plan.Version,
 		"root":    root,
-	}, nil
+	}
+	if plan.Dataset != nil {
+		out["dataset"] = plan.Dataset
+	}
+	return out, nil
 }

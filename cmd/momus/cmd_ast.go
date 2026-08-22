@@ -38,10 +38,11 @@ func newAstCmd(cfg *config) *cobra.Command {
 				return err
 			}
 
-			astPlan, setupDataset, err := buildTestPlan(cfg, reg, coveragePlan, preferredProfilesByResource, coverageResourceTypes, coverageProfileURLs)
+			astPlan, err := buildTestPlan(cfg, reg, coveragePlan, preferredProfilesByResource, coverageResourceTypes, coverageProfileURLs)
 			if err != nil {
 				return err
 			}
+			setupDataset := testgeneration.FromCoreDataset(astPlan.Dataset)
 
 			// The server's CapabilityStatement defines the test plan: derivation was
 			// scoped to the resource types/profiles it declares. Surface hard evidence
@@ -49,7 +50,7 @@ func newAstCmd(cfg *config) *cobra.Command {
 			ev := verifyPlanAgainstCapability(cmd.Context(), cfg, reg, setupDataset)
 			reportCapabilityEvidence(ev, cfg.baseURL)
 
-			out, err := encodeTestPlan(astPlan, setupDataset)
+			out, err := encodeTestPlan(astPlan)
 			if err != nil {
 				return fmt.Errorf("encode test plan: %w", err)
 			}

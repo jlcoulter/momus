@@ -70,10 +70,11 @@ func newTestFhirCmd(cfg *config) *cobra.Command {
 
 			// Stage 3: generate the test plan (seed dataset + test AST).
 			fmt.Println("Generating test plan...")
-			astPlan, setupDataset, err := buildTestPlan(cfg, reg, coveragePlan, preferredProfilesByResource, coverageResourceTypes, coverageProfileURLs)
+			astPlan, err := buildTestPlan(cfg, reg, coveragePlan, preferredProfilesByResource, coverageResourceTypes, coverageProfileURLs)
 			if err != nil {
 				return err
 			}
+			setupDataset := testgeneration.FromCoreDataset(astPlan.Dataset)
 			fmt.Printf("Generated test plan with %d requirement cases and %d seed resources\n", testgeneration.RequirementCount(astPlan), len(setupDataset.Resources))
 
 			// Feed the generated plan's reject routes into the mock so it rejects

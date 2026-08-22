@@ -190,6 +190,91 @@ func isWholeNumber(f float64) bool {
 	return f == math.Trunc(f)
 }
 
+// DecodePlan is the inverse of EncodePlan: it reconstructs a Plan (version,
+// root AST, and optional dataset) from a JSON-friendly map.
+func DecodePlan(raw map[string]any) (*Plan, error) {
+	if raw == nil {
+		return nil, fmt.Errorf("decode plan: raw is nil")
+	}
+	version, _ := raw["version"].(string)
+	rootRaw, ok := raw["root"]
+	if !ok {
+		return nil, fmt.Errorf("decode plan: missing \"root\"")
+	}
+	rootMap, ok := rootRaw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("decode plan: \"root\" must be a JSON object, got %T", rootRaw)
+	}
+	root, err := DecodeNode(rootMap)
+	if err != nil {
+		return nil, fmt.Errorf("decode plan root: %w", err)
+	}
+	plan := &Plan{Version: version, Root: root}
+	if dsRaw, ok := raw["dataset"]; ok && dsRaw != nil {
+		dsMap, ok := dsRaw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("decode plan: \"dataset\" must be a JSON object, got %T", dsRaw)
+		}
+		ds, err := decodeDataset(dsMap)
+		if err != nil {
+			return nil, fmt.Errorf("decode plan dataset: %w", err)
+		}
+		plan.Dataset = ds
+	}
+	return plan, nil
+}
+
+// decodeDataset reconstructs a Dataset from a JSON-friendly map.
+func decodeDataset(raw map[string]any) (*Dataset, error) {
+	ds := &Dataset{
+		Resources:     make(map[string]*ResourceInstance),
+		Relationships: make([]Reference, 0),
+	}
+	if resRaw, ok := raw["resources"]; ok && resRaw != nil {
+		resMap, ok := resRaw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("\"resources\" must be a JSON object, got %T", resRaw)
+		}
+		for key, val := range resMap {
+			instMap, ok := val.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("resource %q must be a JSON object, got %T", key, val)
+			}
+			inst := &ResourceInstance{
+				LocalID:      getString(instMap, "localId"),
+				ResourceType: getString(instMap, "resourceType"),
+				Profile:      getString(instMap, "profile"),
+				ServerID:     getString(instMap, "serverId"),
+				Version:      getString(instMap, "version"),
+			}
+			if res, ok := instMap["resource"]; ok && res != nil {
+				if rm, ok := res.(map[string]any); ok {
+					inst.Resource = rm
+				}
+			}
+			ds.Resources[key] = inst
+		}
+	}
+	if relRaw, ok := raw["relationships"]; ok && relRaw != nil {
+		relArr, ok := relRaw.([]any)
+		if !ok {
+			return nil, fmt.Errorf("\"relationships\" must be a JSON array, got %T", relRaw)
+		}
+		for _, el := range relArr {
+			elMap, ok := el.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("relationship must be a JSON object, got %T", el)
+			}
+			ds.Relationships = append(ds.Relationships, Reference{
+				SourceID: getString(elMap, "sourceId"),
+				Path:     getString(elMap, "path"),
+				TargetID: getString(elMap, "targetId"),
+			})
+		}
+	}
+	return ds, nil
+}
+
 // getString reads a string field from a map, returning "" for missing or
 // non-string values.
 func getString(raw map[string]any, key string) string {

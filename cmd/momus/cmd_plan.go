@@ -29,12 +29,13 @@ func newPlanCmd(cfg *config) *cobra.Command {
 				return err
 			}
 
-			astPlan, setupDataset, err := buildTestPlan(cfg, reg, coveragePlan, nil, nil, nil)
+			astPlan, err := buildTestPlan(cfg, reg, coveragePlan, nil, nil, nil)
 			if err != nil {
 				return err
 			}
+			setupDataset := testgeneration.FromCoreDataset(astPlan.Dataset)
 
-			out, err := encodeTestPlan(astPlan, setupDataset)
+			out, err := encodeTestPlan(astPlan)
 			if err != nil {
 				return fmt.Errorf("encode test plan: %w", err)
 			}

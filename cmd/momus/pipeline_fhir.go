@@ -74,8 +74,10 @@ func deriveCoveragePlan(cfg *config, reg *registry.Registry, resourceTypes, prof
 
 // buildTestPlan builds the test plan (seed dataset + test AST) from a coverage
 // plan, restricting the seed dataset to the given capability resource types and
-// profiles when non-empty.
-func buildTestPlan(cfg *config, reg *registry.Registry, coveragePlan *testcoverage.CoveragePlan, preferredProfilesByResource map[string][]string, capabilityResourceTypes, capabilityProfiles []string) (*testast.Plan, *model.Dataset, error) {
+// profiles when non-empty. The seed dataset is embedded in the returned AST
+// plan, so the plan is the single artifact that drives provisioning and
+// execution.
+func buildTestPlan(cfg *config, reg *registry.Registry, coveragePlan *testcoverage.CoveragePlan, preferredProfilesByResource map[string][]string, capabilityResourceTypes, capabilityProfiles []string) (*testast.Plan, error) {
 	// Render a live progress bar to stderr during generation (only when stderr
 	// is a terminal). It is cleared before the next stage prints.
 	bar := newProgressBar(40)
@@ -104,13 +106,14 @@ func buildTestPlan(cfg *config, reg *registry.Registry, coveragePlan *testcovera
 	astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, buildOpts)
 	bar.finish()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	setupDataset, err := testgeneration.BuildSetupDataset(coveragePlan, buildOpts)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return astPlan, setupDataset, nil
+	astPlan.Dataset = testgeneration.ToCoreDataset(setupDataset)
+	return astPlan, nil
 }
 
 // provisionDataset uploads the seed dataset to the target server. It is a
