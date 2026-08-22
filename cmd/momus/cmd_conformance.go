@@ -45,29 +45,51 @@ func newConformanceSelfTestCmd(cfg *config) *cobra.Command {
 
 			ctx := context.Background()
 			failed := 0
+
+			var out *os.File
+			if cfg.conformanceOut != "" {
+				out, err = os.Create(cfg.conformanceOut)
+				if err != nil {
+					return fmt.Errorf("create output file %s: %w", cfg.conformanceOut, err)
+				}
+				defer out.Close()
+			}
+			// logf writes to stdout and, when configured, appends the same line
+			// to the detail output file so a run can be inspected after the fact.
+			logf := func(format string, args ...any) {
+				fmt.Printf(format, args...)
+				if out != nil {
+					fmt.Fprintf(out, format, args...)
+				}
+			}
+
 			for _, name := range fixtures {
 				fx, err := golden.LoadFixture(filepath.Join(dir, name+".json"))
 				if err != nil {
-					fmt.Printf("[FAIL] %s: load fixture: %v\n", name, err)
+					logf("[FAIL] %s: load fixture: %v\n", name, err)
 					failed++
 					continue
 				}
 				res, err := golden.Run(ctx, name, fx)
 				if err != nil {
-					fmt.Printf("[FAIL] %s: %v\n", name, err)
+					logf("[FAIL] %s: %v\n", name, err)
 					failed++
 					continue
 				}
-				fmt.Printf("[PASS] %s: %d/%d cases\n", name, res.Passed, res.Generated)
+				logf("[PASS] %s: %d/%d cases\n", name, res.Passed, res.Generated)
 			}
 			if failed > 0 {
+				if out != nil {
+					fmt.Fprintf(out, "conformance self-test: %d fixture(s) failed\n", failed)
+				}
 				return fmt.Errorf("conformance self-test: %d fixture(s) failed", failed)
 			}
-			fmt.Printf("conformance self-test: all %d fixture(s) passed\n", len(fixtures))
+			logf("conformance self-test: all %d fixture(s) passed\n", len(fixtures))
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&cfg.goldenDir, "fixtures", "", "path to the golden fixtures directory (default: repo testdata/golden)")
+	cmd.Flags().StringVar(&cfg.conformanceOut, "output", "", "write a per-fixture detail log to this file (also printed to stdout)")
 	return cmd
 }
 
