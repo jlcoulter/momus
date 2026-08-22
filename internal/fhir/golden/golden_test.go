@@ -19,7 +19,7 @@ func TestGoldenAll(t *testing.T) {
 			if err != nil {
 				t.Fatalf("load fixture: %v", err)
 			}
-			res, err := Run(context.Background(), name, fx)
+			res, err := Run(context.Background(), name, fx, nil)
 			if err != nil {
 				t.Fatalf("golden run: %v", err)
 			}

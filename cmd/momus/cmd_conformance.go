@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/jlcoulter/momus/internal/core/tracing"
 	"github.com/jlcoulter/momus/internal/fhir/golden"
 	"github.com/spf13/cobra"
 )
@@ -46,50 +48,46 @@ func newConformanceSelfTestCmd(cfg *config) *cobra.Command {
 			ctx := context.Background()
 			failed := 0
 
-			var out *os.File
+			var out io.Writer = os.Stdout
+			var outFile *os.File
 			if cfg.conformanceOut != "" {
-				out, err = os.Create(cfg.conformanceOut)
+				outFile, err = os.Create(cfg.conformanceOut)
 				if err != nil {
 					return fmt.Errorf("create output file %s: %w", cfg.conformanceOut, err)
 				}
-				defer out.Close()
+				defer outFile.Close()
+				out = outFile
 			}
-			// logf writes to stdout and, when configured, appends the same line
-			// to the detail output file so a run can be inspected after the fact.
-			logf := func(format string, args ...any) {
-				fmt.Printf(format, args...)
-				if out != nil {
-					fmt.Fprintf(out, format, args...)
-				}
-			}
+			// Tracer captures the full HTTP request/response stream (method,
+			// URL, status, headers, body) for every provisioning call and test
+			// case, written to the output file so a run can be inspected.
+			tracer := tracing.New(out)
 
 			for _, name := range fixtures {
 				fx, err := golden.LoadFixture(filepath.Join(dir, name+".json"))
 				if err != nil {
-					logf("[FAIL] %s: load fixture: %v\n", name, err)
+					fmt.Printf("[FAIL] %s: load fixture: %v\n", name, err)
 					failed++
 					continue
 				}
-				res, err := golden.Run(ctx, name, fx)
+				fmt.Fprintf(out, "\n==== fixture %s ====\n", name)
+				res, err := golden.Run(ctx, name, fx, tracer)
 				if err != nil {
-					logf("[FAIL] %s: %v\n", name, err)
+					fmt.Printf("[FAIL] %s: %v\n", name, err)
 					failed++
 					continue
 				}
-				logf("[PASS] %s: %d/%d cases\n", name, res.Passed, res.Generated)
+				fmt.Printf("[PASS] %s: %d/%d cases\n", name, res.Passed, res.Generated)
 			}
 			if failed > 0 {
-				if out != nil {
-					fmt.Fprintf(out, "conformance self-test: %d fixture(s) failed\n", failed)
-				}
 				return fmt.Errorf("conformance self-test: %d fixture(s) failed", failed)
 			}
-			logf("conformance self-test: all %d fixture(s) passed\n", len(fixtures))
+			fmt.Printf("conformance self-test: all %d fixture(s) passed\n", len(fixtures))
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&cfg.goldenDir, "fixtures", "", "path to the golden fixtures directory (default: repo testdata/golden)")
-	cmd.Flags().StringVar(&cfg.conformanceOut, "output", "", "write a per-fixture detail log to this file (also printed to stdout)")
+	cmd.Flags().StringVar(&cfg.conformanceOut, "output", "", "write the HTTP request/response trace to this file (method, URL, status, headers, body)")
 	return cmd
 }
 

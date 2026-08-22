@@ -1,0 +1,5 @@
+[PASS] observation-invariant: 37/37 cases
+[PASS] observation-slice: 29/29 cases
+[PASS] patient: 30/30 cases
+[PASS] search-operations: 40/40 cases
+conformance self-test: all 4 fixture(s) passed

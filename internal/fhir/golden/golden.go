@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/core/runner"
+	"github.com/jlcoulter/momus/internal/core/tracing"
 	fhircoverage "github.com/jlcoulter/momus/internal/fhir/coverage"
 	fhirgeneration "github.com/jlcoulter/momus/internal/fhir/generation"
 	"github.com/jlcoulter/momus/internal/fhir/validate"
@@ -37,7 +39,9 @@ type Result struct {
 
 // Run generates, snapshots, and executes a single fixture's plan against the
 // semantic mock, asserting every case passes. It returns an error on failure.
-func Run(ctx context.Context, name string, fx *Fixture) (*Result, error) {
+// When tracer is non-nil, every HTTP request/response made by provisioning and
+// execution is logged to it (method, URL, status, headers, body).
+func Run(ctx context.Context, name string, fx *Fixture, tracer *tracing.Tracer) (*Result, error) {
 	reg, err := BuildRegistry(fx)
 	if err != nil {
 		return nil, fmt.Errorf("golden %s: build registry: %w", name, err)
@@ -100,11 +104,11 @@ func Run(ctx context.Context, name string, fx *Fixture) (*Result, error) {
 	// 6. Provision the seed dataset (search seeds + referenced resources) so
 	// searches return matches and CRUD/operations have data. Without this, a
 	// search-multiple-results case has nothing to match and fails vacuously.
-	if err := provisionSeed(ctx, opts, coveragePlan, mockBase); err != nil {
+	if err := provisionSeed(ctx, opts, coveragePlan, mockBase, tracer); err != nil {
 		return nil, fmt.Errorf("golden %s: provision seed: %w", name, err)
 	}
 	// 7. Execute and assert 100% pass.
-	report, err := runner.Execute(ctx, plan.Root, runner.ExecuteOptions{BaseURL: mockBase})
+	report, err := runner.Execute(ctx, plan.Root, runner.ExecuteOptions{BaseURL: mockBase, Tracer: tracer})
 	if err != nil {
 		return nil, fmt.Errorf("golden %s: execute: %w", name, err)
 	}
@@ -125,7 +129,7 @@ func Run(ctx context.Context, name string, fx *Fixture) (*Result, error) {
 // provisionSeed generates and uploads the seed dataset for a coverage plan to
 // the mock server, using the same BuildSetupDataset the coverage provision
 // command uses.
-func provisionSeed(ctx context.Context, options fhirgeneration.BuildOptions, coveragePlan *coverage.CoveragePlan, mockBase string) error {
+func provisionSeed(ctx context.Context, options fhirgeneration.BuildOptions, coveragePlan *coverage.CoveragePlan, mockBase string, tracer *tracing.Tracer) error {
 	options.BaseURL = mockBase
 	ds, err := fhirgeneration.BuildSetupDataset(coveragePlan, options)
 	if err != nil {
@@ -143,11 +147,22 @@ func provisionSeed(ctx context.Context, options fhirgeneration.BuildOptions, cov
 			return err
 		}
 		req.Header.Set("Content-Type", "application/fhir+json")
+		reqSeq := 0
+		if tracer != nil {
+			reqSeq = tracer.LogRequest(req, body)
+		}
 		resp, err := client.Do(req)
 		if err != nil {
 			return err
 		}
+		rb, rerr := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		if rerr != nil {
+			return fmt.Errorf("read seed response %s: %w", localID, rerr)
+		}
+		if tracer != nil {
+			tracer.LogResponse(req, reqSeq, resp.StatusCode, resp.Header, rb)
+		}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			return fmt.Errorf("provision seed %s: mock returned %s", localID, resp.Status)
 		}
