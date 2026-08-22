@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
+	"github.com/jlcoulter/momus/internal/mock"
 	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 	"github.com/spf13/cobra"
 )
@@ -21,10 +22,25 @@ func newTestFhirCmd(cfg *config) *cobra.Command {
 		Short: "Run the full end-to-end FHIR conformance test pipeline against a package",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cfg.baseURL == "" {
-				return fmt.Errorf("base URL is required; provide --base-url")
-			}
 			rootPath := args[0]
+
+			// When --mock is set, start a plan-aware mock server and target it.
+			// The mock's base URL is used unless the caller supplied --base-url.
+			var mockServer *mock.Server
+			if cfg.mock {
+				s, baseURL, err := startMock(cfg, "/fhir")
+				if err != nil {
+					return err
+				}
+				mockServer = s
+				defer s.Close()
+				if cfg.baseURL == "" {
+					cfg.baseURL = baseURL
+				}
+			}
+			if cfg.baseURL == "" {
+				return fmt.Errorf("base URL is required; provide --base-url or --mock")
+			}
 
 			// Stage 1: resolve the package graph and build the scoped registry.
 			graph, reg, err := resolvePackageGraph(cfg, rootPath)
@@ -54,6 +70,12 @@ func newTestFhirCmd(cfg *config) *cobra.Command {
 			}
 			fmt.Printf("Generated test plan with %d requirement cases and %d seed resources\n", testgeneration.RequirementCount(astPlan), len(setupDataset.Resources))
 
+			// Feed the generated plan's reject routes into the mock so it rejects
+			// the requests the plan expects to be rejected.
+			if mockServer != nil {
+				setMockPlan(mockServer, astPlan)
+			}
+
 			// Stage 4: provision the seed dataset to the target server.
 			if err := provisionDataset(cfg, cmd.Context(), setupDataset); err != nil {
 				return err
@@ -75,8 +97,10 @@ func newTestFhirCmd(cfg *config) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write test result report JSON to a file")
 	cmd.Flags().StringVar(&cfg.htmlReport, "html", "", "write an HTML coverage report with drill-down to a file")
 	cmd.Flags().BoolVar(&cfg.failOnUncovered, "fail-on-uncovered", false, "return non-zero exit code when contractual coverage has uncovered obligations")
-	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target FHIR base URL for the server under test")
+	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target FHIR base URL for the server under test (defaults to the mock server when --mock is set)")
 	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate FHIR base URL for write (PUT/PATCH/POST/DELETE) requests; defaults to --base-url")
+	cmd.Flags().BoolVar(&cfg.mock, "mock", false, "start an in-process plan-aware mock FHIR server and test against it")
+	cmd.Flags().IntVar(&cfg.mockPort, "mock-port", 0, "port for the mock server (default: ephemeral)")
 	cmd.Flags().StringVar(&cfg.capabilityBaseURL, "capability-base-url", "", "optional alternate FHIR base URL to fetch CapabilityStatement metadata for scope/profile selection")
 	cmd.Flags().StringVar(&cfg.metadataFile, "metadata", "", "path to a local CapabilityStatement JSON file to use for scope/profile selection instead of fetching /metadata")
 	cmd.Flags().StringVar(&cfg.apiBearerToken, "api-bearer-token", "", "bearer token used for API requests during provisioning and execution")
