@@ -314,13 +314,15 @@ func BuildMeta(profileURLs []string) map[string]any {
 	return map[string]any{"profile": profiles}
 }
 
+// StableChecksum returns a deterministic non-negative hash of value, used to
+// derive stable resource IDs. FNV-1a over the UTF-8 bytes has far fewer
+// collisions than the previous modulo-of-sums approach, and its output is
+// folded into a 32-bit space with a bounded, reproducible result.
 func StableChecksum(value string) int {
-	sum := 0
-	for _, r := range value {
-		sum = (sum*31 + int(r)) % 1000000
+	h := uint32(2166136261)
+	for i := 0; i < len(value); i++ {
+		h ^= uint32(value[i])
+		h *= 16777619
 	}
-	if sum < 0 {
-		return -sum
-	}
-	return sum
+	return int(h & 0x7fffffff)
 }
