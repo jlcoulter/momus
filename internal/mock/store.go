@@ -125,6 +125,15 @@ func matchesFilters(res map[string]any, params map[string]string) bool {
 		if name == "_sort" || name == "_count" {
 			continue
 		}
+		// A near (special) search matches a Location whose position is within
+		// the query's bounding box; approximate it as an exact coordinate match
+		// for the golden harness (coordinates are deterministic).
+		if name == "near" {
+			if !nearMatches(res, want) {
+				return false
+			}
+			continue
+		}
 		val, ok := res[name]
 		if !ok {
 			// Fall back to a whole-resource search so a query param whose code
@@ -146,6 +155,64 @@ func matchesFilters(res map[string]any, params map[string]string) bool {
 // (including Quantity number|system|code formats).
 func anyValueMatches(v any, want string) bool {
 	return valueMatches(v, want)
+}
+
+// nearMatches reports whether a Location resource's position coordinates match
+// a near search value "lat|long" (optionally "lat|long|distance"). It compares
+// latitude and longitude exactly, which is sufficient for the deterministic
+// golden harness coordinates.
+func nearMatches(res map[string]any, want string) bool {
+	parts := strings.Split(want, "|")
+	if len(parts) < 2 {
+		return false
+	}
+	latQ, lngQ := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	latQf, err1 := strconv.ParseFloat(latQ, 64)
+	lngQf, err2 := strconv.ParseFloat(lngQ, 64)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return findNearPosition(res, latQf, lngQf)
+}
+
+// findNearPosition reports whether any Location.position.latitude/longitude in
+// the resource equals the query coordinate pair.
+func findNearPosition(v any, latQ, lngQ float64) bool {
+	switch t := v.(type) {
+	case map[string]any:
+		if lat, ok := toFloat(t["latitude"]); ok {
+			if lng, ok := toFloat(t["longitude"]); ok {
+				if lat == latQ && lng == lngQ {
+					return true
+				}
+			}
+		}
+		for _, e := range t {
+			if findNearPosition(e, latQ, lngQ) {
+				return true
+			}
+		}
+	case []any:
+		for _, e := range t {
+			if findNearPosition(e, latQ, lngQ) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// toFloat returns a numeric JSON value as a float64.
+func toFloat(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	}
+	return 0, false
 }
 
 // valueMatches reports whether a stored value matches a search filter value. It

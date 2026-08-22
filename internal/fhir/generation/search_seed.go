@@ -151,6 +151,13 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 		return false
 	}
 	typeCode, repeatable := searchLeafType(resourceType, elementPath, reg)
+	// A special search (e.g. near) matches geographic coordinates, not a single
+	// leaf's primitive value. Set the Location position's lat/long from the
+	// "lat|long" search value, independent of the leaf element's own type.
+	if strings.ToLower(sp.Type) == "special" {
+		setSpecialLeaf(body, elementPath, value)
+		return true
+	}
 	switch typeCode {
 	case "string", "markdown", "uri", "url", "id", "oid", "uuid", "base64Binary":
 		setPathLeaf(body, elementPath, value)
@@ -199,8 +206,8 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 		setQuantityLeaf(body, elementPath, value)
 		return true
 	default:
-		// composite/special/unknown: no single leaf type can be seeded; the
-		// caller returns nil so the obligation remains status-only.
+		// composite/unknown: no single leaf type can be seeded; the caller
+		// returns nil so the obligation remains status-only.
 		return false
 	}
 }
@@ -602,4 +609,33 @@ func firstNumericPart(value string) any {
 		return f
 	}
 	return value
+}
+
+// setSpecialLeaf places geographic coordinates from a special (near) search
+// value "lat|long" (or "lat|long|distance") on the Location's position. The
+// element path resolves to the longitude/latitude leaves; we set both from the
+// value's leading two coordinate parts.
+func setSpecialLeaf(body map[string]any, path, value string) {
+	parts := strings.Split(value, "|")
+	lat, lng := "", ""
+	if len(parts) > 1 {
+		lng = strings.TrimSpace(parts[1])
+	}
+	if len(parts) > 0 {
+		lat = strings.TrimSpace(parts[0])
+	}
+	// The expression is "position.longitude | position.latitude" (or vice
+	// versa). We resolve the parent container of the longitude path and set both
+	// latitude and longitude on it.
+	cur, _ := containerForPath(body, path)
+	if lng != "" {
+		if f, err := strconv.ParseFloat(lng, 64); err == nil {
+			cur["longitude"] = f
+		}
+	}
+	if lat != "" {
+		if f, err := strconv.ParseFloat(lat, 64); err == nil {
+			cur["latitude"] = f
+		}
+	}
 }

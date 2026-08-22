@@ -65,6 +65,12 @@ func (b *fhirBuilder) SearchAcceptValue(req coverage.CoverageRequirement, code s
 	if elementPath == "" {
 		return "momus-search"
 	}
+	// For a special (near) search the query value is coordinates, not the
+	// element's own datatype. Check the search parameter type first.
+	switch strings.ToLower(sp.Type) {
+	case "special":
+		return nearSearchValue(b, req, code)
+	}
 	def, ok := searchElementDefinition(req.ResourceType, elementPath, b.reg)
 	if !ok || def == nil {
 		return "momus-search"
@@ -116,6 +122,13 @@ func (b *fhirBuilder) SearchInvalidValue(req coverage.CoverageRequirement, code 
 // searchValidNonMatchValue returns a syntactically valid value, appropriate to
 // the search parameter type, that cannot match any provisioned resource. Such a
 // value is accepted by a conformant server (200 with no results).
+// nearSearchValue returns a coordinate value for a near (special) search. It
+// resolves the Location position defaults to a fixed Sydney coordinate so the
+// provisioned seed matches.
+func nearSearchValue(b *fhirBuilder, req coverage.CoverageRequirement, code string) string {
+	return "-33.8688|151.2093"
+}
+
 func searchValidNonMatchValue(paramType string) string {
 	switch paramType {
 	case "token":
@@ -132,7 +145,11 @@ func searchValidNonMatchValue(paramType string) string {
 		return "123456.789"
 	case "boolean":
 		return "true"
-	default: // string, composite, special, and unknown
+	case "special":
+		// A special (near) search uses coordinates; return a far-away location
+		// so it is lexically valid but matches nothing.
+		return "90.0|0.0"
+	default: // string, composite, and unknown
 		return "momus-invalid-zzz"
 	}
 }

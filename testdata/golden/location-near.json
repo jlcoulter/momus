@@ -1,0 +1,34 @@
+{
+  "structureDefinitions": [
+    {
+      "url": "http://example.org/StructureDefinition/location",
+      "type": "Location",
+      "elements": [
+        { "path": "Location", "min": 0, "max": "*" },
+        { "path": "Location.status", "min": 0, "max": "1", "types": [{ "code": "code" }] },
+        { "path": "Location.name", "min": 0, "max": "1", "types": [{ "code": "string" }] },
+        { "path": "Location.position", "min": 1, "max": "1", "types": [{ "code": "BackboneElement" }] },
+        { "path": "Location.position.longitude", "min": 1, "max": "1", "types": [{ "code": "decimal" }] },
+        { "path": "Location.position.latitude", "min": 1, "max": "1", "types": [{ "code": "decimal" }] }
+      ]
+    }
+  ],
+  "searchParameters": [
+    { "code": "name", "base": ["Location"], "type": "string", "expression": "Location.name" },
+    { "code": "near", "base": ["Location"], "type": "special", "expression": "Location.position.longitude | Location.position.latitude" }
+  ],
+  "valueSets": [],
+  "codeSystems": [],
+  "resources": [
+    {
+      "profileUrl": "http://example.org/StructureDefinition/location",
+      "resource": {
+        "resourceType": "Location",
+        "id": "location-near-sample-1",
+        "status": "active",
+        "name": "Sydney Clinic",
+        "position": { "longitude": 151.2093, "latitude": -33.8688 }
+      }
+    }
+  ]
+}
