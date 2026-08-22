@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jlcoulter/momus/internal/test/ast"
+	"github.com/jlcoulter/momus/internal/core/ast"
 )
 
 func TestExecutePreCreatedAllowsSetupReferenceValidation(t *testing.T) {

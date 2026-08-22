@@ -1,9 +1,10 @@
-package coverage
+package fhircoverage
 
 import (
 	"testing"
 
-	"github.com/jlcoulter/momus/internal/fhir/constraint"
+	"github.com/jlcoulter/momus/internal/core/constraint"
+	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -27,7 +28,7 @@ func TestDeriveMVPPlanPatientNameOneToMany(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
@@ -35,13 +36,13 @@ func TestDeriveMVPPlanPatientNameOneToMany(t *testing.T) {
 		t.Fatalf("got %d requirements, want 21", len(plan.Requirements))
 	}
 
-	if !hasVariant(plan, CoverageVariantValidMin) {
+	if !hasVariant(plan, coverage.CoverageVariantValidMin) {
 		t.Fatal("expected valid-min requirement")
 	}
-	if !hasVariant(plan, CoverageVariantMissingRequired) {
+	if !hasVariant(plan, coverage.CoverageVariantMissingRequired) {
 		t.Fatal("expected missing-required requirement")
 	}
-	if !hasVariant(plan, CoverageVariantMultipleValues) {
+	if !hasVariant(plan, coverage.CoverageVariantMultipleValues) {
 		t.Fatal("expected multiple-values requirement")
 	}
 }
@@ -60,14 +61,14 @@ func TestDeriveMVPPlanPatientNameOptionalSingle(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 	if len(plan.Requirements) != 14 {
 		t.Fatalf("got %d requirements, want 14", len(plan.Requirements))
 	}
-	if plan.Summary.PrunedByReason[PruneReasonOptionalFiltered] == 0 {
+	if plan.Summary.PrunedByReason[coverage.PruneReasonOptionalFiltered] == 0 {
 		t.Fatal("expected optional-filtered prune reason")
 	}
 }
@@ -83,7 +84,7 @@ func TestDeriveMVPPlanDerivesWithoutPatientProfiles(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
@@ -103,14 +104,14 @@ func TestDerivePlanIncludeOptional(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{IncludeOptional: true})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{IncludeOptional: true})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 	if len(plan.Requirements) != 9 {
 		t.Fatalf("got %d requirements, want 9", len(plan.Requirements))
 	}
-	if !hasVariant(plan, CoverageVariantValidMin) {
+	if !hasVariant(plan, coverage.CoverageVariantValidMin) {
 		t.Fatal("expected valid-min requirement")
 	}
 }
@@ -136,7 +137,7 @@ func TestDerivePlanScopeAndPruningOptions(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{
+	plan, err := DerivePlan(r, coverage.DeriveOptions{
 		IncludeResourceTypes: []string{"Patient"},
 		MustSupportOnly:      true,
 		ExcludePathPrefixes:  []string{"Patient.meta"},
@@ -151,10 +152,10 @@ func TestDerivePlanScopeAndPruningOptions(t *testing.T) {
 	if plan.Summary.ByResourceType["Patient"] != 10 {
 		t.Fatalf("got patient summary count %d, want 10", plan.Summary.ByResourceType["Patient"])
 	}
-	if plan.Summary.PrunedByReason[PruneReasonResourceFiltered] == 0 {
+	if plan.Summary.PrunedByReason[coverage.PruneReasonResourceFiltered] == 0 {
 		t.Fatal("expected resource-filtered prune reason")
 	}
-	if plan.Summary.PrunedByReason[PruneReasonExcludedPathPrefix] == 0 {
+	if plan.Summary.PrunedByReason[coverage.PruneReasonExcludedPathPrefix] == 0 {
 		t.Fatal("expected excluded-path-prefix prune reason")
 	}
 }
@@ -180,7 +181,7 @@ func TestDerivePlanSkipsNonResourceStructureDefinitions(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{IncludeOptional: true})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{IncludeOptional: true})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
@@ -213,7 +214,7 @@ func TestDerivePlanIncludesDependencyTargetsFromElementMetadata(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{IncludeOptional: true})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{IncludeOptional: true})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
@@ -250,14 +251,14 @@ func TestDerivePlanPrunesOptionalReferenceDependencies(t *testing.T) {
 		Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: "*"}},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{IncludeOptional: false})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{IncludeOptional: false})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 
 	var found bool
 	for _, req := range plan.Requirements {
-		if req.ResourceType != "Location" || req.ElementPath != "Location.name" || req.Variant != CoverageVariantValidMin {
+		if req.ResourceType != "Location" || req.ElementPath != "Location.name" || req.Variant != coverage.CoverageVariantValidMin {
 			continue
 		}
 		found = true
@@ -272,12 +273,12 @@ func TestDerivePlanPrunesOptionalReferenceDependencies(t *testing.T) {
 
 func TestDeriveMVPPlanFailsWithoutStructureDefinitions(t *testing.T) {
 	r := registry.New()
-	if _, err := DerivePlan(r, DeriveOptions{}); err == nil {
+	if _, err := DerivePlan(r, coverage.DeriveOptions{}); err == nil {
 		t.Fatal("expected error when no structure definitions exist")
 	}
 }
 
-func hasVariant(plan *CoveragePlan, variant CoverageVariant) bool {
+func hasVariant(plan *coverage.CoveragePlan, variant coverage.CoverageVariant) bool {
 	for _, req := range plan.Requirements {
 		if req.Variant == variant {
 			return true
@@ -309,25 +310,25 @@ func TestDerivePlanEmitMultiDomainObligations(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 
-	for _, v := range []CoverageVariant{
-		CoverageVariantDatatypeValid,
-		CoverageVariantDatatypeInvalidLexical,
-		CoverageVariantDatatypeWrongJSONType,
-		CoverageVariantDatatypeNull,
+	for _, v := range []coverage.CoverageVariant{
+		coverage.CoverageVariantDatatypeValid,
+		coverage.CoverageVariantDatatypeInvalidLexical,
+		coverage.CoverageVariantDatatypeWrongJSONType,
+		coverage.CoverageVariantDatatypeNull,
 	} {
 		if !hasVariant(plan, v) {
 			t.Fatalf("expected datatype variant %s", v)
 		}
 	}
-	for _, v := range []CoverageVariant{
-		CoverageVariantTerminologyValid,
-		CoverageVariantTerminologyInvalid,
-		CoverageVariantTerminologyAbsent,
+	for _, v := range []coverage.CoverageVariant{
+		coverage.CoverageVariantTerminologyValid,
+		coverage.CoverageVariantTerminologyInvalid,
+		coverage.CoverageVariantTerminologyAbsent,
 	} {
 		if !hasVariant(plan, v) {
 			t.Fatalf("expected terminology variant %s", v)
@@ -335,22 +336,22 @@ func TestDerivePlanEmitMultiDomainObligations(t *testing.T) {
 	}
 	// Only the positive invariant satisfies obligation is derived; violates is not
 	// (a concrete violation cannot be constructed reliably).
-	if !hasVariant(plan, CoverageVariantInvariantSatisfies) {
+	if !hasVariant(plan, coverage.CoverageVariantInvariantSatisfies) {
 		t.Fatal("expected invariant satisfies variant")
 	}
-	if hasVariant(plan, CoverageVariantInvariantViolates) {
+	if hasVariant(plan, coverage.CoverageVariantInvariantViolates) {
 		t.Fatal("invariant violates must not be derived (no reliable violation can be constructed)")
 	}
-	for _, v := range []CoverageVariant{
-		CoverageVariantReferenceValid,
-		CoverageVariantReferenceWrongTarget,
-		CoverageVariantReferenceDangling,
+	for _, v := range []coverage.CoverageVariant{
+		coverage.CoverageVariantReferenceValid,
+		coverage.CoverageVariantReferenceWrongTarget,
+		coverage.CoverageVariantReferenceDangling,
 	} {
 		if !hasVariant(plan, v) {
 			t.Fatalf("expected reference variant %s", v)
 		}
 	}
-	if plan.Summary.ByDomain[CoverageDomainDatatype] == 0 || plan.Summary.ByDomain[CoverageDomainTerminology] == 0 || plan.Summary.ByDomain[CoverageDomainInvariant] == 0 || plan.Summary.ByDomain[CoverageDomainReference] == 0 {
+	if plan.Summary.ByDomain[coverage.CoverageDomainDatatype] == 0 || plan.Summary.ByDomain[coverage.CoverageDomainTerminology] == 0 || plan.Summary.ByDomain[coverage.CoverageDomainInvariant] == 0 || plan.Summary.ByDomain[coverage.CoverageDomainReference] == 0 {
 		t.Fatalf("missing domain summaries: %+v", plan.Summary.ByDomain)
 	}
 }
@@ -366,14 +367,14 @@ func TestDerivePlanAnchorsRequirementToConstraintID(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 
 	wantID := constraint.ID("http://example.org/StructureDefinition/observation", "Observation.value", string(constraint.KindDatatype), "string")
 	for _, req := range plan.Requirements {
-		if req.ElementPath != "Observation.value" || req.Domain != CoverageDomainDatatype {
+		if req.ElementPath != "Observation.value" || req.Domain != coverage.CoverageDomainDatatype {
 			continue
 		}
 		if req.ConstraintID != wantID {
@@ -394,16 +395,16 @@ func TestDerivePlanRequiredSliceStructureObligation(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 
-	if !hasVariant(plan, CoverageVariantStructureSlicePresent) {
+	if !hasVariant(plan, coverage.CoverageVariantStructureSlicePresent) {
 		t.Fatal("expected structure-slice-present obligation")
 	}
 	for _, req := range plan.Requirements {
-		if req.Domain == CoverageDomainStructure {
+		if req.Domain == coverage.CoverageDomainStructure {
 			if req.ConstraintID != constraint.ID("http://example.org/StructureDefinition/patient", "Patient.contact", "structure") {
 				t.Fatalf("unexpected structure constraint id %q", req.ConstraintID)
 			}
@@ -428,18 +429,18 @@ func TestDerivePlanSliceDoesNotOverrideBaseCardinality(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 
 	// The base element is optional, so no missing-required obligation may be
 	// derived for Patient.contact even though a required slice exists.
-	if hasVariant(plan, CoverageVariantMissingRequired) {
+	if hasVariant(plan, coverage.CoverageVariantMissingRequired) {
 		t.Fatal("missing-required derived for an optional base element; slice cardinality leaked into the base")
 	}
 	// The required slice still yields its own structure obligation.
-	if !hasVariant(plan, CoverageVariantStructureSlicePresent) {
+	if !hasVariant(plan, coverage.CoverageVariantStructureSlicePresent) {
 		t.Fatal("expected structure-slice-present obligation for the required slice")
 	}
 }
@@ -459,12 +460,12 @@ func TestDerivePlanOptionalSliceDoesNotSuppressRequiredBase(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{IncludeOptional: true})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{IncludeOptional: true})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 
-	if !hasVariant(plan, CoverageVariantMissingRequired) {
+	if !hasVariant(plan, coverage.CoverageVariantMissingRequired) {
 		t.Fatal("missing-required suppressed for a required base element by an optional slice")
 	}
 }
@@ -496,7 +497,7 @@ func TestDerivePlanScopedToRootPackage(t *testing.T) {
 
 	r.SetScope([]string{"http://example.org/StructureDefinition/root-patient"})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
@@ -548,7 +549,7 @@ func TestDerivePlanInheritsParentElementsThroughRegistry(t *testing.T) {
 
 	r.SetScope([]string{childURL})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
@@ -588,7 +589,7 @@ func TestDerivePlanChoiceElementEmitsPerDatatypeObligations(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
@@ -624,7 +625,7 @@ func TestDerivePlanErrorsWhenAllElementsPruned(t *testing.T) {
 
 	// MustSupportOnly prunes every element, so DerivePlan must error rather than
 	// return a plan with zero element coverage.
-	if _, err := DerivePlan(r, DeriveOptions{MustSupportOnly: true}); err == nil {
+	if _, err := DerivePlan(r, coverage.DeriveOptions{MustSupportOnly: true}); err == nil {
 		t.Fatal("expected error when all elements are pruned by MustSupportOnly")
 	}
 }

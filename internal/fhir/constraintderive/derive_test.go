@@ -1,10 +1,11 @@
-package constraint
+package constraintderive
 
 import (
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/core/constraint"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -89,7 +90,7 @@ func testRegistry() *registry.Registry {
 	return reg
 }
 
-func requireConstraint(t *testing.T, constraints []Constraint, kind Kind, id string) Constraint {
+func requireConstraint(t *testing.T, constraints []constraint.Constraint, kind constraint.Kind, id string) constraint.Constraint {
 	t.Helper()
 	for _, c := range constraints {
 		if c.Kind == kind && c.ID == id {
@@ -97,10 +98,10 @@ func requireConstraint(t *testing.T, constraints []Constraint, kind Kind, id str
 		}
 	}
 	t.Fatalf("expected constraint kind=%s id=%s, got:\n%s", kind, id, formatConstraints(constraints))
-	return Constraint{}
+	return constraint.Constraint{}
 }
 
-func formatConstraints(constraints []Constraint) string {
+func formatConstraints(constraints []constraint.Constraint) string {
 	var b strings.Builder
 	for _, c := range constraints {
 		b.WriteString("  - ")
@@ -116,7 +117,7 @@ func TestDeriveElementConstraints(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	card := requireConstraint(t, derived, KindCardinality, ID(profileURL, "Observation.status", string(KindCardinality)))
+	card := requireConstraint(t, derived, constraint.KindCardinality, constraint.ID(profileURL, "Observation.status", string(constraint.KindCardinality)))
 	if card.Min != 1 || card.Max != "1" {
 		t.Fatalf("cardinality = %d..%s, want 1..1", card.Min, card.Max)
 	}
@@ -124,30 +125,30 @@ func TestDeriveElementConstraints(t *testing.T) {
 		t.Fatalf("unexpected card context: %+v", card)
 	}
 
-	requireConstraint(t, derived, KindDatatype, ID(profileURL, "Observation.status", string(KindDatatype), "code"))
-	requireConstraint(t, derived, KindDatatype, ID(profileURL, "Observation.birthDate", string(KindDatatype), "date"))
+	requireConstraint(t, derived, constraint.KindDatatype, constraint.ID(profileURL, "Observation.status", string(constraint.KindDatatype), "code"))
+	requireConstraint(t, derived, constraint.KindDatatype, constraint.ID(profileURL, "Observation.birthDate", string(constraint.KindDatatype), "date"))
 
-	term := requireConstraint(t, derived, KindTerminology, ID(profileURL, "Observation.status", string(KindTerminology)))
+	term := requireConstraint(t, derived, constraint.KindTerminology, constraint.ID(profileURL, "Observation.status", string(constraint.KindTerminology)))
 	if term.BindingStrength != "required" || term.ValueSet != "http://hl7.org/fhir/ValueSet/observation-status" {
 		t.Fatalf("unexpected terminology constraint: %+v", term)
 	}
 
-	inv := requireConstraint(t, derived, KindInvariant, ID(profileURL, "Observation.status", string(KindInvariant), "obs-1"))
+	inv := requireConstraint(t, derived, constraint.KindInvariant, constraint.ID(profileURL, "Observation.status", string(constraint.KindInvariant), "obs-1"))
 	if inv.Expression != "status.exists()" || inv.Severity != "error" {
 		t.Fatalf("unexpected invariant constraint: %+v", inv)
 	}
 
-	ref := requireConstraint(t, derived, KindReference, ID(profileURL, "Observation.subject", string(KindReference)))
+	ref := requireConstraint(t, derived, constraint.KindReference, constraint.ID(profileURL, "Observation.subject", string(constraint.KindReference)))
 	if len(ref.TargetProfiles) != 1 || ref.TargetProfiles[0] != "http://example.org/StructureDefinition/patient" {
 		t.Fatalf("unexpected reference constraint: %+v", ref)
 	}
 
-	pat := requireConstraint(t, derived, KindPattern, ID(profileURL, "Observation.birthDate", string(KindPattern)))
+	pat := requireConstraint(t, derived, constraint.KindPattern, constraint.ID(profileURL, "Observation.birthDate", string(constraint.KindPattern)))
 	if pat.Value != "2024-01-01" {
 		t.Fatalf("unexpected pattern constraint: %+v", pat)
 	}
 
-	fixed := requireConstraint(t, derived, KindFixed, ID(profileURL, "Observation.code", string(KindFixed)))
+	fixed := requireConstraint(t, derived, constraint.KindFixed, constraint.ID(profileURL, "Observation.code", string(constraint.KindFixed)))
 	if fixed.Value != "value-placeholder" {
 		t.Fatalf("unexpected fixed constraint: %+v", fixed)
 	}
@@ -159,7 +160,7 @@ func TestDeriveSkipsRootElement(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The root element "Observation" must not produce a cardinality constraint.
-	rootID := ID(profileURL, "Observation", string(KindCardinality))
+	rootID := constraint.ID(profileURL, "Observation", string(constraint.KindCardinality))
 	for _, c := range derived {
 		if c.ID == rootID {
 			t.Fatalf("root element produced constraint %+v", c)
@@ -172,7 +173,7 @@ func TestDeriveSearchConstraints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sp := requireConstraint(t, derived, KindSearch, ID("http://hl7.org/fhir/SearchParameter/Observation-code", string(KindSearch), "Observation", "code"))
+	sp := requireConstraint(t, derived, constraint.KindSearch, constraint.ID("http://hl7.org/fhir/SearchParameter/Observation-code", string(constraint.KindSearch), "Observation", "code"))
 	if sp.SearchCode != "code" || sp.SearchType != "token" || sp.ResourceType != "Observation" {
 		t.Fatalf("unexpected search constraint: %+v", sp)
 	}
@@ -186,10 +187,10 @@ func TestDeriveCapabilityConstraints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	requireConstraint(t, derived, KindInteraction, ID("http://example.org/CapabilityStatement/server", string(KindInteraction), "Observation", "create"))
-	requireConstraint(t, derived, KindInteraction, ID("http://example.org/CapabilityStatement/server", string(KindInteraction), "Observation", "read"))
+	requireConstraint(t, derived, constraint.KindInteraction, constraint.ID("http://example.org/CapabilityStatement/server", string(constraint.KindInteraction), "Observation", "create"))
+	requireConstraint(t, derived, constraint.KindInteraction, constraint.ID("http://example.org/CapabilityStatement/server", string(constraint.KindInteraction), "Observation", "read"))
 
-	op := requireConstraint(t, derived, KindOperation, ID("http://example.org/CapabilityStatement/server", string(KindOperation), "Observation", "everything"))
+	op := requireConstraint(t, derived, constraint.KindOperation, constraint.ID("http://example.org/CapabilityStatement/server", string(constraint.KindOperation), "Observation", "everything"))
 	if op.OperationName != "everything" {
 		t.Fatalf("operation name = %q, want everything", op.OperationName)
 	}
@@ -268,7 +269,7 @@ func TestDeriveScopedMergesParentChain(t *testing.T) {
 	}
 
 	// Inherited cardinality attributed to the child (subject) profile.
-	inheritedCard := requireConstraint(t, derived, KindCardinality, ID(childURL, "Patient.name", string(KindCardinality)))
+	inheritedCard := requireConstraint(t, derived, constraint.KindCardinality, constraint.ID(childURL, "Patient.name", string(constraint.KindCardinality)))
 	if inheritedCard.Min != 1 || inheritedCard.Max != "*" {
 		t.Fatalf("inherited cardinality = %d..%s, want 1..*", inheritedCard.Min, inheritedCard.Max)
 	}
@@ -277,13 +278,13 @@ func TestDeriveScopedMergesParentChain(t *testing.T) {
 	}
 
 	// Inherited datatype constraint, also attributed to the child.
-	inheritedType := requireConstraint(t, derived, KindDatatype, ID(childURL, "Patient.name", string(KindDatatype), "HumanName"))
+	inheritedType := requireConstraint(t, derived, constraint.KindDatatype, constraint.ID(childURL, "Patient.name", string(constraint.KindDatatype), "HumanName"))
 	if inheritedType.ResourceType != "Patient" || inheritedType.Datatype != "HumanName" {
 		t.Fatalf("unexpected inherited datatype constraint: %+v", inheritedType)
 	}
 
 	// The child's own differential element also produces constraints.
-	childCard := requireConstraint(t, derived, KindCardinality, ID(childURL, "Patient.identifier", string(KindCardinality)))
+	childCard := requireConstraint(t, derived, constraint.KindCardinality, constraint.ID(childURL, "Patient.identifier", string(constraint.KindCardinality)))
 	if childCard.Min != 1 || childCard.Max != "1" {
 		t.Fatalf("child cardinality = %d..%s, want 1..1", childCard.Min, childCard.Max)
 	}
@@ -301,17 +302,17 @@ func TestDeriveScopedMergesParentChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	parentCard := requireConstraint(t, unscoped, KindCardinality, ID(parentURL, "Patient.name", string(KindCardinality)))
+	parentCard := requireConstraint(t, unscoped, constraint.KindCardinality, constraint.ID(parentURL, "Patient.name", string(constraint.KindCardinality)))
 	if parentCard.ProfileURL != parentURL {
 		t.Fatalf("Derive parent cardinality ProfileURL = %q, want %q", parentCard.ProfileURL, parentURL)
 	}
 }
 
 func TestIDDropsEmptyParts(t *testing.T) {
-	if got := ID("", string(KindSearch), "Observation", "code"); got != "search|Observation|code" {
+	if got := constraint.ID("", string(constraint.KindSearch), "Observation", "code"); got != "search|Observation|code" {
 		t.Fatalf("got %q", got)
 	}
-	if got := ID(profileURL, "Observation.status", string(KindCardinality)); got != profileURL+"|Observation.status|cardinality" {
+	if got := constraint.ID(profileURL, "Observation.status", string(constraint.KindCardinality)); got != profileURL+"|Observation.status|cardinality" {
 		t.Fatalf("got %q", got)
 	}
 }

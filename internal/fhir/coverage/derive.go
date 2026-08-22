@@ -1,4 +1,4 @@
-package coverage
+package fhircoverage
 
 import (
 	"errors"
@@ -8,7 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jlcoulter/momus/internal/fhir/constraint"
+	"github.com/jlcoulter/momus/internal/core/constraint"
+	"github.com/jlcoulter/momus/internal/core/coverage"
+	"github.com/jlcoulter/momus/internal/fhir/constraintderive"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -28,14 +30,14 @@ var defaultLowValueSegments = map[string]struct{}{
 // constraint (cardinality, datatype, terminology, invariant, reference) is
 // mapped to its coverage obligations. Required slices produce structure
 // obligations, which the constraint model does not yet model.
-func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, error) {
+func DerivePlan(r *registry.Registry, options coverage.DeriveOptions) (*coverage.CoveragePlan, error) {
 	if r == nil {
 		return nil, errors.New("registry is required")
 	}
 
 	options = normalizeOptions(options)
 
-	constraints, err := constraint.DeriveScoped(r)
+	constraints, err := constraintderive.DeriveScoped(r)
 	if err != nil {
 		return nil, err
 	}
@@ -65,18 +67,18 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 			continue
 		}
 		if profile.Kind != "" && !strings.EqualFold(profile.Kind, "resource") {
-			trackPruned(plan, PruneReasonResourceFiltered)
+			trackPruned(plan, coverage.PruneReasonResourceFiltered)
 			continue
 		}
 		if len(includeResources) > 0 {
 			if _, ok := includeResources[strings.ToLower(profile.Type)]; !ok {
-				trackPruned(plan, PruneReasonResourceFiltered)
+				trackPruned(plan, coverage.PruneReasonResourceFiltered)
 				continue
 			}
 		}
 		if len(includeProfiles) > 0 {
 			if _, ok := includeProfiles[strings.ToLower(profile.URL)]; !ok {
-				trackPruned(plan, PruneReasonProfileFiltered)
+				trackPruned(plan, coverage.PruneReasonProfileFiltered)
 				continue
 			}
 		}
@@ -121,7 +123,7 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 					ResourceType: profile.Type,
 					ElementPath:  element.Path,
 				}
-				addRequirement(plan, seen, synthetic, de, CoverageDomainStructure, CoverageVariantStructureSlicePresent)
+				addRequirement(plan, seen, synthetic, de, coverage.CoverageDomainStructure, coverage.CoverageVariantStructureSlicePresent)
 			}
 		}
 	}
@@ -202,12 +204,12 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 			continue
 		}
 		if _, ok := inScopeResourceTypes[c.ResourceType]; ok {
-			appendRequirement(plan, seen, CoverageRequirement{
+			appendRequirement(plan, seen, coverage.CoverageRequirement{
 				ID:            fmt.Sprintf("operation|%s|%s", c.ResourceType, c.OperationName),
 				ProfileURL:    profileURLByType[c.ResourceType],
 				ResourceType:  c.ResourceType,
-				Domain:        CoverageDomainOperation,
-				Variant:       CoverageVariantOperationCustom,
+				Domain:        coverage.CoverageDomainOperation,
+				Variant:       coverage.CoverageVariantOperationCustom,
 				OperationName: c.OperationName,
 			})
 		}
@@ -239,12 +241,12 @@ func DerivePlan(r *registry.Registry, options DeriveOptions) (*CoveragePlan, err
 // Interaction obligations are derived only over accept obligations: a negative
 // mutation exercises exactly one constraint, so it cannot coexist with another
 // obligation in the same payload.
-func deriveInteractionObligations(plan *CoveragePlan, seen map[string]struct{}) {
+func deriveInteractionObligations(plan *coverage.CoveragePlan, seen map[string]struct{}) {
 	type groupKey struct {
 		resourceType string
 		profileURL   string
 	}
-	groups := make(map[groupKey][]CoverageRequirement)
+	groups := make(map[groupKey][]coverage.CoverageRequirement)
 	for _, req := range plan.Requirements {
 		if isNonElementDomain(req.Domain) || req.Variant.IsReject() {
 			continue
@@ -273,18 +275,18 @@ func deriveInteractionObligations(plan *CoveragePlan, seen map[string]struct{}) 
 			for j := i + 1; j < len(reqs); j++ {
 				a, b := reqs[i], reqs[j]
 				id := "interaction|" + a.ID + "++" + b.ID
-				interaction := CoverageRequirement{
+				interaction := coverage.CoverageRequirement{
 					ID:           id,
 					ProfileURL:   a.ProfileURL,
 					ResourceType: a.ResourceType,
 					ElementPath:  a.ElementPath + " ++ " + b.ElementPath,
-					Domain:       CoverageDomainInteraction,
-					Variant:      CoverageVariantInteractionPair,
+					Domain:       coverage.CoverageDomainInteraction,
+					Variant:      coverage.CoverageVariantInteractionPair,
 					PairA:        a.ID,
 					PairB:        b.ID,
 				}
 				appendRequirement(plan, seen, interaction)
-				plan.Interactions = append(plan.Interactions, InteractionRequirement{
+				plan.Interactions = append(plan.Interactions, coverage.InteractionRequirement{
 					ID:           id,
 					ProfileURL:   a.ProfileURL,
 					ResourceType: a.ResourceType,
@@ -297,15 +299,15 @@ func deriveInteractionObligations(plan *CoveragePlan, seen map[string]struct{}) 
 	}
 }
 
-func newCoveragePlan() *CoveragePlan {
-	return &CoveragePlan{
-		Requirements: make([]CoverageRequirement, 0),
+func newCoveragePlan() *coverage.CoveragePlan {
+	return &coverage.CoveragePlan{
+		Requirements: make([]coverage.CoverageRequirement, 0),
 		Strength:     1,
-		Summary: CoverageSummary{
-			ByDomain:       make(map[CoverageDomain]int),
+		Summary: coverage.CoverageSummary{
+			ByDomain:       make(map[coverage.CoverageDomain]int),
 			ByResourceType: make(map[string]int),
-			ByVariant:      make(map[CoverageVariant]int),
-			PrunedByReason: make(map[PruneReason]int),
+			ByVariant:      make(map[coverage.CoverageVariant]int),
+			PrunedByReason: make(map[coverage.PruneReason]int),
 		},
 	}
 }
@@ -322,9 +324,9 @@ type derivableElement struct {
 // isNonElementDomain reports whether a coverage domain is derived independently
 // of resource-element constraints and does not participate in pairwise
 // interaction grouping.
-func isNonElementDomain(domain CoverageDomain) bool {
+func isNonElementDomain(domain coverage.CoverageDomain) bool {
 	switch domain {
-	case CoverageDomainInteraction, CoverageDomainSearch, CoverageDomainOperation, CoverageDomainState:
+	case coverage.CoverageDomainInteraction, coverage.CoverageDomainSearch, coverage.CoverageDomainOperation, coverage.CoverageDomainState:
 		return true
 	default:
 		return false
@@ -346,22 +348,22 @@ func isElementConstraintKind(k constraint.Kind) bool {
 
 // appendSearchObligations adds the search coverage obligations for a search
 // constraint applied to a single resource type.
-func appendSearchObligations(plan *CoveragePlan, seen map[string]struct{}, c constraint.Constraint, resourceType string) {
+func appendSearchObligations(plan *coverage.CoveragePlan, seen map[string]struct{}, c constraint.Constraint, resourceType string) {
 	if strings.TrimSpace(c.SearchCode) == "" {
 		return
 	}
-	for _, variant := range []CoverageVariant{
-		CoverageVariantSearchValid,
-		CoverageVariantSearchNoResults,
-		CoverageVariantSearchInvalidValue,
-		CoverageVariantSearchMultipleResults,
-		CoverageVariantSearchInvalidModifier,
+	for _, variant := range []coverage.CoverageVariant{
+		coverage.CoverageVariantSearchValid,
+		coverage.CoverageVariantSearchNoResults,
+		coverage.CoverageVariantSearchInvalidValue,
+		coverage.CoverageVariantSearchMultipleResults,
+		coverage.CoverageVariantSearchInvalidModifier,
 	} {
-		appendRequirement(plan, seen, CoverageRequirement{
+		appendRequirement(plan, seen, coverage.CoverageRequirement{
 			ID:           fmt.Sprintf("search|%s|%s|%s", resourceType, c.SearchCode, variant),
 			ConstraintID: c.ID,
 			ResourceType: resourceType,
-			Domain:       CoverageDomainSearch,
+			Domain:       coverage.CoverageDomainSearch,
 			Variant:      variant,
 			SearchCode:   c.SearchCode,
 		})
@@ -370,19 +372,19 @@ func appendSearchObligations(plan *CoveragePlan, seen map[string]struct{}, c con
 
 // appendOperationObligations adds the CRUD-style operation obligations (read,
 // update, delete, history) for a resource type.
-func appendOperationObligations(plan *CoveragePlan, seen map[string]struct{}, resourceType, profileURL string) {
-	for _, variant := range []CoverageVariant{
-		CoverageVariantOperationRead,
-		CoverageVariantOperationUpdate,
-		CoverageVariantOperationPatch,
-		CoverageVariantOperationDelete,
-		CoverageVariantOperationHistory,
+func appendOperationObligations(plan *coverage.CoveragePlan, seen map[string]struct{}, resourceType, profileURL string) {
+	for _, variant := range []coverage.CoverageVariant{
+		coverage.CoverageVariantOperationRead,
+		coverage.CoverageVariantOperationUpdate,
+		coverage.CoverageVariantOperationPatch,
+		coverage.CoverageVariantOperationDelete,
+		coverage.CoverageVariantOperationHistory,
 	} {
-		appendRequirement(plan, seen, CoverageRequirement{
+		appendRequirement(plan, seen, coverage.CoverageRequirement{
 			ID:           fmt.Sprintf("operation|%s|%s", resourceType, variant),
 			ProfileURL:   profileURL,
 			ResourceType: resourceType,
-			Domain:       CoverageDomainOperation,
+			Domain:       coverage.CoverageDomainOperation,
 			Variant:      variant,
 		})
 	}
@@ -390,17 +392,17 @@ func appendOperationObligations(plan *CoveragePlan, seen map[string]struct{}, re
 
 // appendStateObligations adds the negative state-transition obligations for a
 // resource type (reading/deleting a nonexistent resource).
-func appendStateObligations(plan *CoveragePlan, seen map[string]struct{}, resourceType, profileURL string) {
-	for _, variant := range []CoverageVariant{
-		CoverageVariantStateCRUDSequence,
-		CoverageVariantStateReadNonexistent,
-		CoverageVariantStateDeleteNonexistent,
+func appendStateObligations(plan *coverage.CoveragePlan, seen map[string]struct{}, resourceType, profileURL string) {
+	for _, variant := range []coverage.CoverageVariant{
+		coverage.CoverageVariantStateCRUDSequence,
+		coverage.CoverageVariantStateReadNonexistent,
+		coverage.CoverageVariantStateDeleteNonexistent,
 	} {
-		appendRequirement(plan, seen, CoverageRequirement{
+		appendRequirement(plan, seen, coverage.CoverageRequirement{
 			ID:           fmt.Sprintf("state|%s|%s", resourceType, variant),
 			ProfileURL:   profileURL,
 			ResourceType: resourceType,
-			Domain:       CoverageDomainState,
+			Domain:       coverage.CoverageDomainState,
 			Variant:      variant,
 		})
 	}
@@ -408,16 +410,16 @@ func appendStateObligations(plan *CoveragePlan, seen map[string]struct{}, resour
 
 // appendSearchCombinationObligations adds a pairwise combination obligation for
 // every pair of distinct search parameters of a resource type.
-func appendSearchCombinationObligations(plan *CoveragePlan, seen map[string]struct{}, resourceType, profileURL string, codes []string) {
+func appendSearchCombinationObligations(plan *coverage.CoveragePlan, seen map[string]struct{}, resourceType, profileURL string, codes []string) {
 	codes = uniqueSortedStrings(codes)
 	for i := 0; i < len(codes); i++ {
 		for j := i + 1; j < len(codes); j++ {
-			appendRequirement(plan, seen, CoverageRequirement{
-				ID:           fmt.Sprintf("search|%s|%s++%s|%s", resourceType, codes[i], codes[j], CoverageVariantSearchCombination),
+			appendRequirement(plan, seen, coverage.CoverageRequirement{
+				ID:           fmt.Sprintf("search|%s|%s++%s|%s", resourceType, codes[i], codes[j], coverage.CoverageVariantSearchCombination),
 				ProfileURL:   profileURL,
 				ResourceType: resourceType,
-				Domain:       CoverageDomainSearch,
-				Variant:      CoverageVariantSearchCombination,
+				Domain:       coverage.CoverageDomainSearch,
+				Variant:      coverage.CoverageVariantSearchCombination,
 				SearchCode:   codes[i],
 				SearchCodeB:  codes[j],
 			})
@@ -440,32 +442,32 @@ func uniqueSortedStrings(values []string) []string {
 	return out
 }
 
-func appendObligations(plan *CoveragePlan, seen map[string]struct{}, c constraint.Constraint, de derivableElement) {
+func appendObligations(plan *coverage.CoveragePlan, seen map[string]struct{}, c constraint.Constraint, de derivableElement) {
 	switch c.Kind {
 	case constraint.KindCardinality:
-		addRequirement(plan, seen, c, de, CoverageDomainCardinality, CoverageVariantValidMin)
+		addRequirement(plan, seen, c, de, coverage.CoverageDomainCardinality, coverage.CoverageVariantValidMin)
 		if de.element.Min > 0 {
-			addRequirement(plan, seen, c, de, CoverageDomainCardinality, CoverageVariantMissingRequired)
+			addRequirement(plan, seen, c, de, coverage.CoverageDomainCardinality, coverage.CoverageVariantMissingRequired)
 		}
 		if allowsMultiple(de.element.Max) {
-			addRequirement(plan, seen, c, de, CoverageDomainCardinality, CoverageVariantMultipleValues)
+			addRequirement(plan, seen, c, de, coverage.CoverageDomainCardinality, coverage.CoverageVariantMultipleValues)
 		}
 	case constraint.KindDatatype:
-		for _, variant := range []CoverageVariant{
-			CoverageVariantDatatypeValid,
-			CoverageVariantDatatypeInvalidLexical,
-			CoverageVariantDatatypeWrongJSONType,
-			CoverageVariantDatatypeNull,
+		for _, variant := range []coverage.CoverageVariant{
+			coverage.CoverageVariantDatatypeValid,
+			coverage.CoverageVariantDatatypeInvalidLexical,
+			coverage.CoverageVariantDatatypeWrongJSONType,
+			coverage.CoverageVariantDatatypeNull,
 		} {
-			addRequirement(plan, seen, c, de, CoverageDomainDatatype, variant)
+			addRequirement(plan, seen, c, de, coverage.CoverageDomainDatatype, variant)
 		}
 	case constraint.KindTerminology:
-		for _, variant := range []CoverageVariant{
-			CoverageVariantTerminologyValid,
-			CoverageVariantTerminologyInvalid,
-			CoverageVariantTerminologyAbsent,
+		for _, variant := range []coverage.CoverageVariant{
+			coverage.CoverageVariantTerminologyValid,
+			coverage.CoverageVariantTerminologyInvalid,
+			coverage.CoverageVariantTerminologyAbsent,
 		} {
-			addRequirement(plan, seen, c, de, CoverageDomainTerminology, variant)
+			addRequirement(plan, seen, c, de, coverage.CoverageDomainTerminology, variant)
 		}
 	case constraint.KindInvariant:
 		// Only the positive satisfies obligation is derived. A concrete
@@ -474,19 +476,19 @@ func appendObligations(plan *CoveragePlan, seen map[string]struct{}, c constrain
 		// implemented), and nulling the subject element does not break most
 		// invariants, so deriving a violates obligation would generate a test that
 		// a conformant server accepts and the reject assertion would falsely fail.
-		addRequirement(plan, seen, c, de, CoverageDomainInvariant, CoverageVariantInvariantSatisfies)
+		addRequirement(plan, seen, c, de, coverage.CoverageDomainInvariant, coverage.CoverageVariantInvariantSatisfies)
 	case constraint.KindReference:
-		for _, variant := range []CoverageVariant{
-			CoverageVariantReferenceValid,
-			CoverageVariantReferenceWrongTarget,
-			CoverageVariantReferenceDangling,
+		for _, variant := range []coverage.CoverageVariant{
+			coverage.CoverageVariantReferenceValid,
+			coverage.CoverageVariantReferenceWrongTarget,
+			coverage.CoverageVariantReferenceDangling,
 		} {
-			addRequirement(plan, seen, c, de, CoverageDomainReference, variant)
+			addRequirement(plan, seen, c, de, coverage.CoverageDomainReference, variant)
 		}
 	}
 }
 
-func addRequirement(plan *CoveragePlan, seen map[string]struct{}, c constraint.Constraint, de derivableElement, domain CoverageDomain, variant CoverageVariant) {
+func addRequirement(plan *coverage.CoveragePlan, seen map[string]struct{}, c constraint.Constraint, de derivableElement, domain coverage.CoverageDomain, variant coverage.CoverageVariant) {
 	// Include the datatype in the obligation ID when present so that choice
 	// elements (e.g. value[x] declared string|integer|dateTime) yield distinct
 	// obligations per datatype instead of collapsing to the first one via the
@@ -495,7 +497,7 @@ func addRequirement(plan *CoveragePlan, seen map[string]struct{}, c constraint.C
 	if c.Datatype != "" {
 		id = fmt.Sprintf("%s|%s|%s|%s", c.ProfileURL, c.ElementPath, c.Datatype, variant)
 	}
-	appendRequirement(plan, seen, CoverageRequirement{
+	appendRequirement(plan, seen, coverage.CoverageRequirement{
 		ID:                id,
 		ConstraintID:      c.ID,
 		ProfileURL:        c.ProfileURL,
@@ -562,7 +564,7 @@ func appendUniqueString(values []string, candidate string) []string {
 	return append(values, candidate)
 }
 
-func appendRequirement(plan *CoveragePlan, seen map[string]struct{}, req CoverageRequirement) {
+func appendRequirement(plan *coverage.CoveragePlan, seen map[string]struct{}, req coverage.CoverageRequirement) {
 	if _, ok := seen[req.ID]; ok {
 		return
 	}
@@ -573,29 +575,29 @@ func appendRequirement(plan *CoveragePlan, seen map[string]struct{}, req Coverag
 	plan.Summary.ByVariant[req.Variant]++
 }
 
-func isDerivableElement(element model.ElementDefinition, options DeriveOptions) (bool, PruneReason) {
+func isDerivableElement(element model.ElementDefinition, options coverage.DeriveOptions) (bool, coverage.PruneReason) {
 	if element.Path == "" {
-		return false, PruneReasonRootPath
+		return false, coverage.PruneReasonRootPath
 	}
 	// Skip root entries like "Patient" and derive from concrete child paths.
 	if !strings.Contains(element.Path, ".") {
-		return false, PruneReasonRootPath
+		return false, coverage.PruneReasonRootPath
 	}
 
 	if hasExcludedPrefix(element.Path, options.ExcludePathPrefixes) {
-		return false, PruneReasonExcludedPathPrefix
+		return false, coverage.PruneReasonExcludedPathPrefix
 	}
 
 	if !options.IncludeLowValuePaths && isLowValuePath(element.Path) {
-		return false, PruneReasonLowValuePath
+		return false, coverage.PruneReasonLowValuePath
 	}
 
 	if options.MustSupportOnly && !element.MustSupport {
-		return false, PruneReasonMustSupportFiltered
+		return false, coverage.PruneReasonMustSupportFiltered
 	}
 
 	if !options.IncludeOptional && element.Min == 0 && !element.MustSupport {
-		return false, PruneReasonOptionalFiltered
+		return false, coverage.PruneReasonOptionalFiltered
 	}
 
 	return true, ""
@@ -612,7 +614,7 @@ func allowsMultiple(max string) bool {
 	return n > 1
 }
 
-func normalizeOptions(options DeriveOptions) DeriveOptions {
+func normalizeOptions(options coverage.DeriveOptions) coverage.DeriveOptions {
 	// Reserved for future option normalization.
 	return options
 }
@@ -700,7 +702,7 @@ func toSet(values []string) map[string]struct{} {
 	return set
 }
 
-func trackPruned(plan *CoveragePlan, reason PruneReason) {
+func trackPruned(plan *coverage.CoveragePlan, reason coverage.PruneReason) {
 	if reason == "" {
 		return
 	}

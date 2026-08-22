@@ -1,4 +1,4 @@
-// Package ast defines the abstract syntax tree for test plans.
+// Package ast defines the core test-plan abstract syntax tree.
 package ast
 
 import "net/http"

@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jlcoulter/momus/internal/test/assertions"
-	"github.com/jlcoulter/momus/internal/test/ast"
-	"github.com/jlcoulter/momus/internal/tracing"
+	"github.com/jlcoulter/momus/internal/core/assertions"
+	"github.com/jlcoulter/momus/internal/core/ast"
+	"github.com/jlcoulter/momus/internal/core/tracing"
 )
 
 // ExecuteOptions configures AST execution.

@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jlcoulter/momus/internal/test/ast"
+	"github.com/jlcoulter/momus/internal/core/ast"
 )
 
 // pathParamPattern matches a `{param}` placeholder in an operation path.

@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/core/ast"
+	"github.com/jlcoulter/momus/internal/core/coverage"
+	"github.com/jlcoulter/momus/internal/core/runner"
 	"github.com/jlcoulter/momus/internal/fhir/model"
-	"github.com/jlcoulter/momus/internal/test/ast"
-	"github.com/jlcoulter/momus/internal/test/coverage"
-	"github.com/jlcoulter/momus/internal/test/runner"
 )
 
 func TestParsePerTypeCounts(t *testing.T) {

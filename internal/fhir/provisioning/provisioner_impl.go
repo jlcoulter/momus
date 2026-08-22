@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jlcoulter/momus/internal/core/tracing"
 	"github.com/jlcoulter/momus/internal/fhir/model"
-	"github.com/jlcoulter/momus/internal/tracing"
 )
 
 // Options configures a ServerProvisioner.

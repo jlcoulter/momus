@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	testast "github.com/jlcoulter/momus/internal/test/ast"
-	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
+	testast "github.com/jlcoulter/momus/internal/core/ast"
+	testcoverage "github.com/jlcoulter/momus/internal/core/coverage"
+	testrunner "github.com/jlcoulter/momus/internal/core/runner"
 	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
-	testrunner "github.com/jlcoulter/momus/internal/test/runner"
 )
 
 // This file holds the generic stage functions of the test pipeline that are

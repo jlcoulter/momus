@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
-	"github.com/jlcoulter/momus/internal/test/coverage"
 )
 
 // appendSearchSeedResources adds seed resources that let search-accept

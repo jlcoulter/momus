@@ -1,6 +1,6 @@
 // Package constraint defines the constraint model: a normalised,
-// machine-testable representation of contractual rules derived from the
-// FHIR registry.
+// machine-testable representation of contractual rules derived from a
+// registry.
 //
 // The registry knows definitions; the constraint model represents the
 // testable rules extracted from those definitions. It is the bridge between

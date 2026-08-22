@@ -1,4 +1,4 @@
-package coverage
+package fhircoverage
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jlcoulter/momus/internal/core/tracing"
 	"github.com/jlcoulter/momus/internal/fhir/model"
-	"github.com/jlcoulter/momus/internal/tracing"
 )
 
 // CapabilityFetchOptions configures live CapabilityStatement retrieval.

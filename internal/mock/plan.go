@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jlcoulter/momus/internal/test/ast"
+	"github.com/jlcoulter/momus/internal/core/ast"
 )
 
 // planFile is the on-disk test plan artifact: a version plus the executable

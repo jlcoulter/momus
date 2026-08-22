@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jlcoulter/momus/internal/test/ast"
-	"github.com/jlcoulter/momus/internal/test/coverage"
+	"github.com/jlcoulter/momus/internal/core/ast"
+	"github.com/jlcoulter/momus/internal/core/coverage"
 )
 
 // buildResourceCases turns a resource type's obligations into a list of test

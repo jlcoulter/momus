@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/fhir/model"
-	"github.com/jlcoulter/momus/internal/test/ast"
 )
 
 // TestProvisionCmdUploadsDatasetFromTestPlan verifies that "coverage provision"

@@ -4,10 +4,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/core/ast"
+	"github.com/jlcoulter/momus/internal/core/coverage"
+	fhircoverage "github.com/jlcoulter/momus/internal/fhir/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
-	"github.com/jlcoulter/momus/internal/test/ast"
-	"github.com/jlcoulter/momus/internal/test/coverage"
 )
 
 const interactionProfile = "http://example.org/StructureDefinition/patient"
@@ -217,7 +218,7 @@ func TestGenerateFromCoveragePlanStrengthTwoEndToEnd(t *testing.T) {
 		},
 	})
 
-	plan, err := coverage.DerivePlan(r, coverage.DeriveOptions{Strength: 2})
+	plan, err := fhircoverage.DerivePlan(r, coverage.DeriveOptions{Strength: 2})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}

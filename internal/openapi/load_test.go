@@ -3,7 +3,7 @@ package openapi
 import (
 	"testing"
 
-	"github.com/jlcoulter/momus/internal/fhir/constraint"
+	"github.com/jlcoulter/momus/internal/core/constraint"
 )
 
 const testDoc = `{

@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jlcoulter/momus/internal/test/ast"
-	"github.com/jlcoulter/momus/internal/test/coverage"
+	"github.com/jlcoulter/momus/internal/core/ast"
+	"github.com/jlcoulter/momus/internal/core/coverage"
 )
 
 // buildOperationCase builds a single operation or state-transition case: a

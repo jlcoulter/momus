@@ -1,4 +1,4 @@
-package constraint
+package constraintderive
 
 import (
 	"errors"
@@ -6,21 +6,22 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jlcoulter/momus/internal/core/constraint"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
 
 // Derive extracts the full constraint model from a registry. It walks every
 // indexed StructureDefinition, SearchParameter, and CapabilityStatement and
-// normalises the rules they define into stable Constraint values.
+// normalises the rules they define into stable constraint.Constraint values.
 //
 // Results are de-duplicated by identifier and returned sorted by ID.
-func Derive(r *registry.Registry) ([]Constraint, error) {
+func Derive(r *registry.Registry) ([]constraint.Constraint, error) {
 	if r == nil {
 		return nil, errors.New("registry is required")
 	}
 
-	all := make([]Constraint, 0)
+	all := make([]constraint.Constraint, 0)
 
 	for _, sd := range r.StructureDefinitions() {
 		if sd == nil {
@@ -53,12 +54,12 @@ func Derive(r *registry.Registry) ([]Constraint, error) {
 //
 // When no scope has been set, ScopedStructureDefinitions returns every indexed
 // StructureDefinition and the element set matches Derive exactly.
-func DeriveScoped(r *registry.Registry) ([]Constraint, error) {
+func DeriveScoped(r *registry.Registry) ([]constraint.Constraint, error) {
 	if r == nil {
 		return nil, errors.New("registry is required")
 	}
 
-	all := make([]Constraint, 0)
+	all := make([]constraint.Constraint, 0)
 
 	for _, sd := range r.ScopedStructureDefinitions() {
 		if sd == nil {
@@ -88,9 +89,9 @@ func DeriveScoped(r *registry.Registry) ([]Constraint, error) {
 
 // dedupSorted de-duplicates constraints by ID (dropping empty IDs) and returns
 // them sorted by ID. Results are deterministic regardless of iteration order.
-func dedupSorted(constraints []Constraint) []Constraint {
+func dedupSorted(constraints []constraint.Constraint) []constraint.Constraint {
 	seen := make(map[string]struct{})
-	out := make([]Constraint, 0, len(constraints))
+	out := make([]constraint.Constraint, 0, len(constraints))
 	for _, c := range constraints {
 		if c.ID == "" {
 			continue
@@ -108,12 +109,12 @@ func dedupSorted(constraints []Constraint) []Constraint {
 // deriveElementConstraints converts a single StructureDefinition element into
 // its constituent constraints. Root-level elements (paths without a dot) are
 // structural and carry no testable obligations.
-func deriveElementConstraints(sd *model.StructureDefinition, element model.ElementDefinition) []Constraint {
+func deriveElementConstraints(sd *model.StructureDefinition, element model.ElementDefinition) []constraint.Constraint {
 	if element.Path == "" || !strings.Contains(element.Path, ".") {
 		return nil
 	}
 
-	var out []Constraint
+	var out []constraint.Constraint
 	out = append(out, cardinalityConstraint(sd, element))
 	out = append(out, datatypeConstraints(sd, element)...)
 	if c, ok := terminologyConstraint(sd, element); ok {
@@ -132,10 +133,10 @@ func deriveElementConstraints(sd *model.StructureDefinition, element model.Eleme
 	return out
 }
 
-func cardinalityConstraint(sd *model.StructureDefinition, element model.ElementDefinition) Constraint {
-	return Constraint{
-		ID:           ID(sd.URL, element.Path, string(KindCardinality)),
-		Kind:         KindCardinality,
+func cardinalityConstraint(sd *model.StructureDefinition, element model.ElementDefinition) constraint.Constraint {
+	return constraint.Constraint{
+		ID:           constraint.ID(sd.URL, element.Path, string(constraint.KindCardinality)),
+		Kind:         constraint.KindCardinality,
 		ProfileURL:   sd.URL,
 		ResourceType: sd.Type,
 		ElementPath:  element.Path,
@@ -144,15 +145,15 @@ func cardinalityConstraint(sd *model.StructureDefinition, element model.ElementD
 	}
 }
 
-func datatypeConstraints(sd *model.StructureDefinition, element model.ElementDefinition) []Constraint {
-	var out []Constraint
+func datatypeConstraints(sd *model.StructureDefinition, element model.ElementDefinition) []constraint.Constraint {
+	var out []constraint.Constraint
 	for _, t := range element.Types {
 		if t.Code == "" {
 			continue
 		}
-		out = append(out, Constraint{
-			ID:           ID(sd.URL, element.Path, string(KindDatatype), t.Code),
-			Kind:         KindDatatype,
+		out = append(out, constraint.Constraint{
+			ID:           constraint.ID(sd.URL, element.Path, string(constraint.KindDatatype), t.Code),
+			Kind:         constraint.KindDatatype,
 			ProfileURL:   sd.URL,
 			ResourceType: sd.Type,
 			ElementPath:  element.Path,
@@ -162,13 +163,13 @@ func datatypeConstraints(sd *model.StructureDefinition, element model.ElementDef
 	return out
 }
 
-func terminologyConstraint(sd *model.StructureDefinition, element model.ElementDefinition) (Constraint, bool) {
+func terminologyConstraint(sd *model.StructureDefinition, element model.ElementDefinition) (constraint.Constraint, bool) {
 	if element.Binding == nil {
-		return Constraint{}, false
+		return constraint.Constraint{}, false
 	}
-	return Constraint{
-		ID:              ID(sd.URL, element.Path, string(KindTerminology)),
-		Kind:            KindTerminology,
+	return constraint.Constraint{
+		ID:              constraint.ID(sd.URL, element.Path, string(constraint.KindTerminology)),
+		Kind:            constraint.KindTerminology,
 		ProfileURL:      sd.URL,
 		ResourceType:    sd.Type,
 		ElementPath:     element.Path,
@@ -177,8 +178,8 @@ func terminologyConstraint(sd *model.StructureDefinition, element model.ElementD
 	}, true
 }
 
-func invariantConstraints(sd *model.StructureDefinition, element model.ElementDefinition) []Constraint {
-	var out []Constraint
+func invariantConstraints(sd *model.StructureDefinition, element model.ElementDefinition) []constraint.Constraint {
+	var out []constraint.Constraint
 	for i, inv := range element.Constraints {
 		if strings.TrimSpace(inv.Expression) == "" && strings.TrimSpace(inv.Key) == "" {
 			continue
@@ -187,9 +188,9 @@ func invariantConstraints(sd *model.StructureDefinition, element model.ElementDe
 		if key == "" {
 			key = fmt.Sprintf("inv-%d", i)
 		}
-		out = append(out, Constraint{
-			ID:           ID(sd.URL, element.Path, string(KindInvariant), key),
-			Kind:         KindInvariant,
+		out = append(out, constraint.Constraint{
+			ID:           constraint.ID(sd.URL, element.Path, string(constraint.KindInvariant), key),
+			Kind:         constraint.KindInvariant,
 			ProfileURL:   sd.URL,
 			ResourceType: sd.Type,
 			ElementPath:  element.Path,
@@ -202,14 +203,14 @@ func invariantConstraints(sd *model.StructureDefinition, element model.ElementDe
 	return out
 }
 
-func referenceConstraint(sd *model.StructureDefinition, element model.ElementDefinition) (Constraint, bool) {
+func referenceConstraint(sd *model.StructureDefinition, element model.ElementDefinition) (constraint.Constraint, bool) {
 	targets := collectTargetProfiles(element)
 	if len(targets) == 0 {
-		return Constraint{}, false
+		return constraint.Constraint{}, false
 	}
-	return Constraint{
-		ID:             ID(sd.URL, element.Path, string(KindReference)),
-		Kind:           KindReference,
+	return constraint.Constraint{
+		ID:             constraint.ID(sd.URL, element.Path, string(constraint.KindReference)),
+		Kind:           constraint.KindReference,
 		ProfileURL:     sd.URL,
 		ResourceType:   sd.Type,
 		ElementPath:    element.Path,
@@ -217,13 +218,13 @@ func referenceConstraint(sd *model.StructureDefinition, element model.ElementDef
 	}, true
 }
 
-func fixedConstraint(sd *model.StructureDefinition, element model.ElementDefinition) (Constraint, bool) {
+func fixedConstraint(sd *model.StructureDefinition, element model.ElementDefinition) (constraint.Constraint, bool) {
 	if element.Fixed == nil {
-		return Constraint{}, false
+		return constraint.Constraint{}, false
 	}
-	return Constraint{
-		ID:           ID(sd.URL, element.Path, string(KindFixed)),
-		Kind:         KindFixed,
+	return constraint.Constraint{
+		ID:           constraint.ID(sd.URL, element.Path, string(constraint.KindFixed)),
+		Kind:         constraint.KindFixed,
 		ProfileURL:   sd.URL,
 		ResourceType: sd.Type,
 		ElementPath:  element.Path,
@@ -231,13 +232,13 @@ func fixedConstraint(sd *model.StructureDefinition, element model.ElementDefinit
 	}, true
 }
 
-func patternConstraint(sd *model.StructureDefinition, element model.ElementDefinition) (Constraint, bool) {
+func patternConstraint(sd *model.StructureDefinition, element model.ElementDefinition) (constraint.Constraint, bool) {
 	if element.Pattern == nil {
-		return Constraint{}, false
+		return constraint.Constraint{}, false
 	}
-	return Constraint{
-		ID:           ID(sd.URL, element.Path, string(KindPattern)),
-		Kind:         KindPattern,
+	return constraint.Constraint{
+		ID:           constraint.ID(sd.URL, element.Path, string(constraint.KindPattern)),
+		Kind:         constraint.KindPattern,
 		ProfileURL:   sd.URL,
 		ResourceType: sd.Type,
 		ElementPath:  element.Path,
@@ -271,8 +272,8 @@ func collectTargetProfiles(element model.ElementDefinition) []string {
 	return out
 }
 
-func deriveSearchConstraints(sp *model.SearchParameter) []Constraint {
-	var out []Constraint
+func deriveSearchConstraints(sp *model.SearchParameter) []constraint.Constraint {
+	var out []constraint.Constraint
 	if sp == nil || strings.TrimSpace(sp.Code) == "" {
 		return out
 	}
@@ -280,9 +281,9 @@ func deriveSearchConstraints(sp *model.SearchParameter) []Constraint {
 		if strings.TrimSpace(base) == "" {
 			continue
 		}
-		out = append(out, Constraint{
-			ID:               ID(sp.URL, string(KindSearch), base, sp.Code),
-			Kind:             KindSearch,
+		out = append(out, constraint.Constraint{
+			ID:               constraint.ID(sp.URL, string(constraint.KindSearch), base, sp.Code),
+			Kind:             constraint.KindSearch,
 			ResourceType:     base,
 			SearchName:       sp.Name,
 			SearchCode:       sp.Code,
@@ -293,8 +294,8 @@ func deriveSearchConstraints(sp *model.SearchParameter) []Constraint {
 	return out
 }
 
-func deriveCapabilityConstraints(cs *model.CapabilityStatement) []Constraint {
-	var out []Constraint
+func deriveCapabilityConstraints(cs *model.CapabilityStatement) []constraint.Constraint {
+	var out []constraint.Constraint
 	if cs == nil {
 		return out
 	}
@@ -310,9 +311,9 @@ func deriveCapabilityConstraints(cs *model.CapabilityStatement) []Constraint {
 				if strings.TrimSpace(inter.Code) == "" {
 					continue
 				}
-				out = append(out, Constraint{
-					ID:           ID(cs.URL, string(KindInteraction), res.Type, inter.Code),
-					Kind:         KindInteraction,
+				out = append(out, constraint.Constraint{
+					ID:           constraint.ID(cs.URL, string(constraint.KindInteraction), res.Type, inter.Code),
+					Kind:         constraint.KindInteraction,
 					ResourceType: res.Type,
 					Interaction:  inter.Code,
 				})
@@ -323,9 +324,9 @@ func deriveCapabilityConstraints(cs *model.CapabilityStatement) []Constraint {
 					continue
 				}
 				name = strings.TrimPrefix(name, "$")
-				out = append(out, Constraint{
-					ID:            ID(cs.URL, string(KindOperation), res.Type, name),
-					Kind:          KindOperation,
+				out = append(out, constraint.Constraint{
+					ID:            constraint.ID(cs.URL, string(constraint.KindOperation), res.Type, name),
+					Kind:          constraint.KindOperation,
 					ResourceType:  res.Type,
 					OperationName: name,
 				})

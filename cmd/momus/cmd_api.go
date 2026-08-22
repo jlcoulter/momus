@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jlcoulter/momus/internal/fhir/constraint"
+	testast "github.com/jlcoulter/momus/internal/core/ast"
+	"github.com/jlcoulter/momus/internal/core/constraint"
+	testrunner "github.com/jlcoulter/momus/internal/core/runner"
 	"github.com/jlcoulter/momus/internal/openapi"
-	testast "github.com/jlcoulter/momus/internal/test/ast"
-	testrunner "github.com/jlcoulter/momus/internal/test/runner"
 	"github.com/spf13/cobra"
 )
 

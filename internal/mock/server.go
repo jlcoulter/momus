@@ -26,7 +26,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/jlcoulter/momus/internal/test/ast"
+	"github.com/jlcoulter/momus/internal/core/ast"
 )
 
 // Server is a mock HTTP server that either returns a fixed response or behaves

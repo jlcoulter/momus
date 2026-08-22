@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/core/ast"
+	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
-	"github.com/jlcoulter/momus/internal/test/ast"
-	"github.com/jlcoulter/momus/internal/test/coverage"
 )
 
 // TestResolveBoundCodingFallsBackToExample verifies that when the bound

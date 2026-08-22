@@ -1,8 +1,9 @@
-package coverage
+package fhircoverage
 
 import (
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -20,13 +21,13 @@ func TestDerivePlanAddsSearchModifierAndCombination(t *testing.T) {
 	r.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Resource-id", Name: "_id", Code: "_id", Base: []string{"Resource"}, Type: "token"})
 	r.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Organization-active", Name: "active", Code: "active", Base: []string{"Organization"}, Type: "token"})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 	var hasModifier bool
 	for _, req := range plan.Requirements {
-		if req.Variant == CoverageVariantSearchInvalidModifier {
+		if req.Variant == coverage.CoverageVariantSearchInvalidModifier {
 			hasModifier = true
 		}
 	}
@@ -36,7 +37,7 @@ func TestDerivePlanAddsSearchModifierAndCombination(t *testing.T) {
 
 	// Pairwise combinations are opt-in at strength 2. Declare both search codes
 	// (including the universal _id) so a pair is available to combine.
-	plan2, err := DerivePlan(r, DeriveOptions{
+	plan2, err := DerivePlan(r, coverage.DeriveOptions{
 		Strength: 2,
 		CapabilitySearchCodes: map[string][]string{
 			"Organization": {"_id", "active"},
@@ -47,7 +48,7 @@ func TestDerivePlanAddsSearchModifierAndCombination(t *testing.T) {
 	}
 	var hasCombination bool
 	for _, req := range plan2.Requirements {
-		if req.Variant == CoverageVariantSearchCombination {
+		if req.Variant == coverage.CoverageVariantSearchCombination {
 			hasCombination = true
 			if req.SearchCode == "" || req.SearchCodeB == "" {
 				t.Fatalf("combination requirement missing codes: %+v", req)
@@ -84,13 +85,13 @@ func TestDerivePlanAddsSearchObligations(t *testing.T) {
 		Type: "token",
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
-	var search []CoverageRequirement
+	var search []coverage.CoverageRequirement
 	for _, req := range plan.Requirements {
-		if req.Domain == CoverageDomainSearch {
+		if req.Domain == coverage.CoverageDomainSearch {
 			search = append(search, req)
 		}
 	}
@@ -146,13 +147,13 @@ func TestDerivePlanUniversalSearchCodesRequireCapabilityDeclaration(t *testing.T
 	})
 
 	// With no capability scope, universal parameters are excluded for every type.
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 	codes := map[string]bool{}
 	for _, req := range plan.Requirements {
-		if req.Domain == CoverageDomainSearch {
+		if req.Domain == coverage.CoverageDomainSearch {
 			codes[req.SearchCode] = true
 		}
 	}
@@ -164,7 +165,7 @@ func TestDerivePlanUniversalSearchCodesRequireCapabilityDeclaration(t *testing.T
 	}
 
 	// When the server declares a universal code, it is included for the type.
-	plan2, err := DerivePlan(r, DeriveOptions{
+	plan2, err := DerivePlan(r, coverage.DeriveOptions{
 		CapabilitySearchCodes: map[string][]string{
 			"Organization": {"_id", "active"},
 		},
@@ -174,7 +175,7 @@ func TestDerivePlanUniversalSearchCodesRequireCapabilityDeclaration(t *testing.T
 	}
 	codes2 := map[string]bool{}
 	for _, req := range plan2.Requirements {
-		if req.Domain == CoverageDomainSearch {
+		if req.Domain == coverage.CoverageDomainSearch {
 			codes2[req.SearchCode] = true
 		}
 	}
@@ -222,13 +223,13 @@ func TestDerivePlanIncludeUniversalSearchParams(t *testing.T) {
 	})
 
 	// With no capability scope and no opt-in, universal parameters are excluded.
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 	codes := map[string]bool{}
 	for _, req := range plan.Requirements {
-		if req.Domain == CoverageDomainSearch {
+		if req.Domain == coverage.CoverageDomainSearch {
 			codes[req.SearchCode] = true
 		}
 	}
@@ -241,13 +242,13 @@ func TestDerivePlanIncludeUniversalSearchParams(t *testing.T) {
 
 	// With IncludeUniversalSearchParams, universal parameters are included for
 	// every in-scope type even when the server does not declare them.
-	plan2, err := DerivePlan(r, DeriveOptions{IncludeUniversalSearchParams: true})
+	plan2, err := DerivePlan(r, coverage.DeriveOptions{IncludeUniversalSearchParams: true})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 	codes2 := map[string]bool{}
 	for _, req := range plan2.Requirements {
-		if req.Domain == CoverageDomainSearch {
+		if req.Domain == coverage.CoverageDomainSearch {
 			codes2[req.SearchCode] = true
 		}
 	}

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jlcoulter/momus/internal/test/ast"
+	"github.com/jlcoulter/momus/internal/core/ast"
 )
 
 func TestStorePutGetDelete(t *testing.T) {

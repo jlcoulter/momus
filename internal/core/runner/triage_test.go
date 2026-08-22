@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/jlcoulter/momus/internal/test/assertions"
-	"github.com/jlcoulter/momus/internal/test/ast"
+	"github.com/jlcoulter/momus/internal/core/assertions"
+	"github.com/jlcoulter/momus/internal/core/ast"
 )
 
 func TestClassifyTriage(t *testing.T) {

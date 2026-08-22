@@ -4,9 +4,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
-	"github.com/jlcoulter/momus/internal/test/coverage"
 )
 
 // buildDependencyPlan computes the resource dependency order for execution,

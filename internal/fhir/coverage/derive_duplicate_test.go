@@ -1,14 +1,15 @@
-package coverage
+package fhircoverage
 
 import (
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
 
 // uniqueRequirementCount returns the number of distinct requirement IDs.
-func uniqueRequirementCount(plan *CoveragePlan) int {
+func uniqueRequirementCount(plan *coverage.CoveragePlan) int {
 	seen := make(map[string]struct{}, len(plan.Requirements))
 	for _, req := range plan.Requirements {
 		seen[req.ID] = struct{}{}
@@ -46,7 +47,7 @@ func TestDerivePlanNeverProducesDuplicateIDs(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}

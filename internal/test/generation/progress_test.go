@@ -3,7 +3,7 @@ package generation
 import (
 	"testing"
 
-	"github.com/jlcoulter/momus/internal/test/coverage"
+	"github.com/jlcoulter/momus/internal/core/coverage"
 )
 
 func TestGenerateFromCoveragePlanProgress(t *testing.T) {

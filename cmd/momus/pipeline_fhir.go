@@ -7,12 +7,13 @@ import (
 	"os"
 	"path/filepath"
 
+	testast "github.com/jlcoulter/momus/internal/core/ast"
+	testcoverage "github.com/jlcoulter/momus/internal/core/coverage"
+	fhircoverage "github.com/jlcoulter/momus/internal/fhir/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	provisioning "github.com/jlcoulter/momus/internal/fhir/provisioning"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
-	testast "github.com/jlcoulter/momus/internal/test/ast"
-	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
 	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 )
 
@@ -58,7 +59,7 @@ func resolvePackageGraph(cfg *config, rootPath string) (*fhirpackage.ResolvedGra
 // deriveCoveragePlan derives the coverage plan from the registry, scoped to the
 // given resource types, profiles, and search codes.
 func deriveCoveragePlan(cfg *config, reg *registry.Registry, resourceTypes, profileURLs []string, searchCodes map[string][]string) (*testcoverage.CoveragePlan, error) {
-	return testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
+	return fhircoverage.DerivePlan(reg, testcoverage.DeriveOptions{
 		IncludeResourceTypes:         resourceTypes,
 		IncludeProfileURLs:           profileURLs,
 		ExcludePathPrefixes:          cfg.excludePathPrefixes,

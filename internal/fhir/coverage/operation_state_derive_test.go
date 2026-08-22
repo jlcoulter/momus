@@ -1,8 +1,9 @@
-package coverage
+package fhircoverage
 
 import (
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -24,13 +25,13 @@ func TestDerivePlanAddsCustomOperationObligation(t *testing.T) {
 		}}},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 	var found bool
 	for _, req := range plan.Requirements {
-		if req.Variant == CoverageVariantOperationCustom {
+		if req.Variant == coverage.CoverageVariantOperationCustom {
 			found = true
 			if req.OperationName != "everything" {
 				t.Fatalf("operation name = %q, want everything", req.OperationName)
@@ -53,17 +54,17 @@ func TestDerivePlanAddsOperationAndStateObligations(t *testing.T) {
 		},
 	})
 
-	plan, err := DerivePlan(r, DeriveOptions{})
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
 
 	var ops, states int
 	for _, req := range plan.Requirements {
-		if req.Domain == CoverageDomainOperation {
+		if req.Domain == coverage.CoverageDomainOperation {
 			ops++
 		}
-		if req.Domain == CoverageDomainState {
+		if req.Domain == coverage.CoverageDomainState {
 			states++
 		}
 	}
@@ -75,7 +76,7 @@ func TestDerivePlanAddsOperationAndStateObligations(t *testing.T) {
 	}
 
 	for _, req := range plan.Requirements {
-		if req.Domain != CoverageDomainOperation && req.Domain != CoverageDomainState {
+		if req.Domain != coverage.CoverageDomainOperation && req.Domain != coverage.CoverageDomainState {
 			continue
 		}
 		if req.ResourceType != "Organization" {

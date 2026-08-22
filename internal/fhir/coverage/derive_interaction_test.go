@@ -1,8 +1,9 @@
-package coverage
+package fhircoverage
 
 import (
 	"testing"
 
+	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -34,7 +35,7 @@ func interactionFixture() *registry.Registry {
 }
 
 // countAcceptBaseRequirements returns base (non-interaction) accept obligations.
-func countAcceptBaseRequirements(plan *CoveragePlan) int {
+func countAcceptBaseRequirements(plan *coverage.CoveragePlan) int {
 	count := 0
 	for _, req := range plan.Requirements {
 		if isNonElementDomain(req.Domain) {
@@ -49,7 +50,7 @@ func countAcceptBaseRequirements(plan *CoveragePlan) int {
 }
 
 func TestDerivePlanStrengthOneHasNoInteractions(t *testing.T) {
-	plan, err := DerivePlan(interactionFixture(), DeriveOptions{Strength: 1})
+	plan, err := DerivePlan(interactionFixture(), coverage.DeriveOptions{Strength: 1})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
@@ -60,14 +61,14 @@ func TestDerivePlanStrengthOneHasNoInteractions(t *testing.T) {
 		t.Fatalf("got %d interactions at strength 1, want 0", len(plan.Interactions))
 	}
 	for _, req := range plan.Requirements {
-		if req.Domain == CoverageDomainInteraction {
+		if req.Domain == coverage.CoverageDomainInteraction {
 			t.Fatalf("unexpected interaction requirement at strength 1: %s", req.ID)
 		}
 	}
 }
 
 func TestDerivePlanStrengthTwoDerivesPairwiseInteractions(t *testing.T) {
-	plan, err := DerivePlan(interactionFixture(), DeriveOptions{Strength: 2})
+	plan, err := DerivePlan(interactionFixture(), coverage.DeriveOptions{Strength: 2})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}
@@ -87,7 +88,7 @@ func TestDerivePlanStrengthTwoDerivesPairwiseInteractions(t *testing.T) {
 		t.Fatalf("summary interactions = %d, want %d", plan.Summary.Interactions, len(plan.Interactions))
 	}
 
-	byID := make(map[string]CoverageRequirement, len(plan.Requirements))
+	byID := make(map[string]coverage.CoverageRequirement, len(plan.Requirements))
 	for _, req := range plan.Requirements {
 		byID[req.ID] = req
 	}
@@ -96,7 +97,7 @@ func TestDerivePlanStrengthTwoDerivesPairwiseInteractions(t *testing.T) {
 		if !ok {
 			t.Fatalf("interaction %s missing from requirements", in.ID)
 		}
-		if req.Domain != CoverageDomainInteraction || req.Variant != CoverageVariantInteractionPair {
+		if req.Domain != coverage.CoverageDomainInteraction || req.Variant != coverage.CoverageVariantInteractionPair {
 			t.Fatalf("interaction %s has domain %q variant %q", in.ID, req.Domain, req.Variant)
 		}
 		if req.PairA != in.RequirementA || req.PairB != in.RequirementB {
@@ -108,10 +109,10 @@ func TestDerivePlanStrengthTwoDerivesPairwiseInteractions(t *testing.T) {
 		if !aOK || !bOK {
 			t.Fatalf("interaction %s references missing source requirements", in.ID)
 		}
-		if a.Domain == CoverageDomainInteraction || a.Variant.IsReject() {
+		if a.Domain == coverage.CoverageDomainInteraction || a.Variant.IsReject() {
 			t.Fatalf("interaction %s source A is not an accept base obligation", in.ID)
 		}
-		if b.Domain == CoverageDomainInteraction || b.Variant.IsReject() {
+		if b.Domain == coverage.CoverageDomainInteraction || b.Variant.IsReject() {
 			t.Fatalf("interaction %s source B is not an accept base obligation", in.ID)
 		}
 		if a.ProfileURL != b.ProfileURL || a.ProfileURL != req.ProfileURL {
@@ -121,7 +122,7 @@ func TestDerivePlanStrengthTwoDerivesPairwiseInteractions(t *testing.T) {
 }
 
 func TestDerivePlanStrengthTwoHasUniqueInteractionIDs(t *testing.T) {
-	plan, err := DerivePlan(interactionFixture(), DeriveOptions{Strength: 2})
+	plan, err := DerivePlan(interactionFixture(), coverage.DeriveOptions{Strength: 2})
 	if err != nil {
 		t.Fatalf("DerivePlan returned error: %v", err)
 	}

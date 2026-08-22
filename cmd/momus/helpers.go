@@ -12,14 +12,15 @@ import (
 	"strings"
 	"syscall"
 
+	testast "github.com/jlcoulter/momus/internal/core/ast"
+	testcoverage "github.com/jlcoulter/momus/internal/core/coverage"
+	testrunner "github.com/jlcoulter/momus/internal/core/runner"
+	"github.com/jlcoulter/momus/internal/core/tracing"
 	testbulk "github.com/jlcoulter/momus/internal/fhir/bulk"
+	fhircoverage "github.com/jlcoulter/momus/internal/fhir/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	provisioning "github.com/jlcoulter/momus/internal/fhir/provisioning"
-	testast "github.com/jlcoulter/momus/internal/test/ast"
-	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
-	testrunner "github.com/jlcoulter/momus/internal/test/runner"
-	"github.com/jlcoulter/momus/internal/tracing"
 	"github.com/spf13/cobra"
 )
 
@@ -46,7 +47,7 @@ func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer
 		}
 		capabilityStatement = loaded
 	} else if metadataBaseURL != "" {
-		capabilityStatement, fetchErr = testcoverage.FetchCapabilityStatement(cmd.Context(), metadataBaseURL, testcoverage.CapabilityFetchOptions{
+		capabilityStatement, fetchErr = fhircoverage.FetchCapabilityStatement(cmd.Context(), metadataBaseURL, fhircoverage.CapabilityFetchOptions{
 			BearerToken:   cfg.apiBearerToken,
 			BasicUsername: cfg.apiBasicUsername,
 			BasicPassword: cfg.apiBasicPassword,
@@ -71,16 +72,16 @@ func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer
 
 	// The CapabilityStatement always defines the test plan: extract resource
 	// types, profiles, and search codes from what the server declares.
-	capabilityTypes := testcoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, true)
-	capabilityProfiles := testcoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, true)
-	capabilityProfilesByResource := testcoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, true)
-	capabilitySearchCodes := testcoverage.SearchCodesFromCapabilityStatement(capabilityStatement)
+	capabilityTypes := fhircoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, true)
+	capabilityProfiles := fhircoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, true)
+	capabilityProfilesByResource := fhircoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, true)
+	capabilitySearchCodes := fhircoverage.SearchCodesFromCapabilityStatement(capabilityStatement)
 	if len(capabilityTypes) == 0 {
 		// Some CapabilityStatements omit per-resource create interactions.
 		// Fall back to server-declared resource/profile scope instead of unscoped derivation.
-		capabilityTypes = testcoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, false)
-		capabilityProfiles = testcoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, false)
-		capabilityProfilesByResource = testcoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, false)
+		capabilityTypes = fhircoverage.ResourceTypesFromCapabilityStatement(capabilityStatement, false)
+		capabilityProfiles = fhircoverage.SupportedProfileURLsFromCapabilityStatement(capabilityStatement, false)
+		capabilityProfilesByResource = fhircoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, false)
 	}
 	if len(capabilityProfiles) > 0 {
 		types, err := intersectCaseInsensitive(cfg.includeResourceTypes, capabilityTypes)

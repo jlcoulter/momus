@@ -4,7 +4,7 @@ package runner
 import (
 	"context"
 
-	"github.com/jlcoulter/momus/internal/test/ast"
+	"github.com/jlcoulter/momus/internal/core/ast"
 )
 
 // Runner executes a test plan's AST.

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jlcoulter/momus/internal/test/ast"
+	"github.com/jlcoulter/momus/internal/core/ast"
 )
 
 // parallelTwo returns a Sequence whose only step is a Parallel of two

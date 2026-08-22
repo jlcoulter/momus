@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
+	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/mock"
-	"github.com/jlcoulter/momus/internal/test/ast"
 )
 
 // startMock starts a plan-aware mock server for the "test" command. It returns
