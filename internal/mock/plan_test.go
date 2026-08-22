@@ -72,6 +72,25 @@ func TestRejectStatus(t *testing.T) {
 	}
 }
 
+func TestRequestURI(t *testing.T) {
+	cases := []struct {
+		url  string
+		want string
+	}{
+		{"http://example.org/Patient?name=x", "/Patient?name=x"},
+		{"http://example.org/Patient/p1", "/Patient/p1"},
+		{"/Patient?name=x", "/Patient?name=x"},
+		{"Patient/p1", "/Patient/p1"},
+		{"http://example.org", "/"},
+	}
+	for _, tc := range cases {
+		got := requestURI(tc.url)
+		if got != tc.want {
+			t.Fatalf("requestURI(%q) = %q, want %q", tc.url, got, tc.want)
+		}
+	}
+}
+
 // writePlan writes a minimal test plan with a reject route and returns its path.
 func writePlan(t *testing.T, rejectMethod, rejectURL string) string {
 	t.Helper()
@@ -340,5 +359,88 @@ func TestSetPlanEnablesPlanAware(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("PUT after SetPlan status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestRejectRouteMatchesQuery(t *testing.T) {
+	// A reject route keyed by path+query must match a search with that query.
+	s := New(http.StatusOK, "", WithPlanAware())
+	addr, err := s.Start()
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer s.Close()
+
+	plan := &ast.Plan{Root: &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: "GET", URL: "http://example.org/Organization?name:zzz=momus"},
+		&ast.Assert{Expression: "status in [400,412,422]"},
+	}}}
+	s.SetPlan(plan.Root)
+
+	// The search with the invalid modifier must be rejected.
+	resp, err := http.Get("http://" + addr + "/Organization?name:zzz=momus")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("reject status = %d, want 400", resp.StatusCode)
+	}
+
+	// A different query on the same path must NOT be rejected (no route match).
+	resp, err = http.Get("http://" + addr + "/Organization?name=other")
+	if err != nil {
+		t.Fatalf("GET other: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("other query status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestInstanceGetNotOverriddenByReject(t *testing.T) {
+	// A reject route on a plain instance GET (the final 404 of a CRUD sequence)
+	// must not override the store's natural 200 for an existing resource.
+	s := New(http.StatusOK, "", WithPlanAware())
+	addr, err := s.Start()
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer s.Close()
+
+	// Store a resource.
+	req, _ := http.NewRequest(http.MethodPut, "http://"+addr+"/Patient/p1", bytes.NewReader([]byte(`{"resourceType":"Patient","id":"p1"}`)))
+	req.Header.Set("Content-Type", "application/fhir+json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT: %v", err)
+	}
+	resp.Body.Close()
+
+	// Feed a plan that expects GET /Patient/p1 to be rejected (404).
+	plan := &ast.Plan{Root: &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: "GET", URL: "http://example.org/Patient/p1"},
+		&ast.Assert{Expression: "status in [404]"},
+	}}}
+	s.SetPlan(plan.Root)
+
+	// The existing resource must still return 200 (store is authoritative).
+	resp, err = http.Get("http://" + addr + "/Patient/p1")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET existing status = %d, want 200", resp.StatusCode)
+	}
+
+	// A missing resource returns 404 naturally.
+	resp, err = http.Get("http://" + addr + "/Patient/missing")
+	if err != nil {
+		t.Fatalf("GET missing: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("GET missing status = %d, want 404", resp.StatusCode)
 	}
 }

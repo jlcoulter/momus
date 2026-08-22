@@ -169,15 +169,6 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 	store := s.store
 	s.mu.RUnlock()
 
-	// Reject routes from the plan take precedence: a request the plan expects
-	// to be rejected returns the matching 4xx. Routes are keyed by method + path
-	// (the full incoming path, including any base path) so they match the plan's
-	// absolute request URLs regardless of the host the mock is served on.
-	if route, ok := plan.rejects[r.Method+" "+r.URL.Path]; ok {
-		w.WriteHeader(route.status)
-		return
-	}
-
 	// Strip the base path (e.g. "/fhir") so routing sees the resource path.
 	path := r.URL.Path
 	if s.basePath != "" && strings.HasPrefix(path, s.basePath) {
@@ -188,6 +179,22 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	segments := strings.Split(strings.TrimPrefix(path, "/"), "/")
+
+	// Reject routes from the plan take precedence for requests the store cannot
+	// naturally reject: searches with invalid modifiers and writes with invalid
+	// payloads. They are keyed by method + full request URI (path + query) so
+	// distinct search queries match distinctly.
+	//
+	// Plain instance GETs (no query) are excluded: the store's natural 200/404
+	// is authoritative there, and a reject route on a shared instance URL (e.g.
+	// the final 404 of a CRUD sequence) must not override the intermediate 200s.
+	isInstanceGet := r.Method == http.MethodGet && len(segments) == 2 && r.URL.RawQuery == ""
+	if !isInstanceGet {
+		if route, ok := plan.rejects[r.Method+" "+r.URL.RequestURI()]; ok {
+			w.WriteHeader(route.status)
+			return
+		}
+	}
 
 	// /metadata returns a minimal CapabilityStatement.
 	if len(segments) == 1 && segments[0] == "metadata" {

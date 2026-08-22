@@ -83,32 +83,34 @@ func walkPlan(node ast.Node, routes *planRoutes) {
 }
 
 // recordReject records a request as a reject route when its assertion allows a
-// 4xx rejection status. The route is keyed by "METHOD path" (the path only, not
-// the full URL) so it matches regardless of the host the mock is served on.
+// 4xx rejection status. The route is keyed by "METHOD path?query" (the full
+// request URI, host-stripped) so distinct search queries match distinctly.
 func recordReject(req *ast.Request, assert *ast.Assert, routes *planRoutes) {
 	status, ok := rejectStatus(assert.Expression)
 	if !ok {
 		return
 	}
-	key := req.Method + " " + requestPath(req.URL)
+	key := req.Method + " " + requestURI(req.URL)
 	routes.rejects[key] = rejectRoute{status: status}
 }
 
-// requestPath returns the path portion of a request URL, stripping any scheme
-// and host. It handles both absolute URLs ("http://host/Patient/p1") and
-// relative paths ("/Patient/p1").
-func requestPath(url string) string {
+// requestURI returns the path and query portion of a request URL, stripping any
+// scheme and host. It handles both absolute URLs
+// ("http://host/Patient?name=x") and relative paths ("/Patient?name=x").
+func requestURI(url string) string {
+	rest := url
 	if idx := strings.Index(url, "://"); idx >= 0 {
-		rest := url[idx+3:]
+		rest = url[idx+3:]
 		if slash := strings.IndexByte(rest, '/'); slash >= 0 {
-			return rest[slash:]
+			rest = rest[slash:]
+		} else {
+			return "/"
 		}
-		return "/"
 	}
-	if !strings.HasPrefix(url, "/") {
-		return "/" + url
+	if !strings.HasPrefix(rest, "/") {
+		rest = "/" + rest
 	}
-	return url
+	return rest
 }
 
 // rejectStatus returns the 4xx status an assertion allows, and whether it is a
