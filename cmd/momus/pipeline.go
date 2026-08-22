@@ -92,9 +92,9 @@ func writeRunReport(cfg *config, report *testrunner.Report, coverageEvaluation t
 		return err
 	}
 
-	if cfg.outputPath == "" {
-		fmt.Println(string(out))
-	} else {
+	// The full JSON report is only written to a file via --output; it is never
+	// dumped to stdout (the concise summary below is the user-facing output).
+	if cfg.outputPath != "" {
 		if err := writeOutputFile(cfg.outputPath, append(out, '\n')); err != nil {
 			return fmt.Errorf("write test report to %s: %w", cfg.outputPath, err)
 		}
