@@ -16,6 +16,7 @@ type config struct {
 	// Output
 	outputPath string
 	htmlReport string
+	outputDir  string // default ".momus/output"; navigable directory report
 
 	// Derivation scoping
 	includeResourceTypes   []string

@@ -58,6 +58,7 @@ func newRootCmd(cfg *config) *cobra.Command {
 		newRunCmd(cfg),
 		newPlanCmd(cfg),
 		newBulkCmd(cfg),
+		newExplainCmd(cfg),
 	)
 
 	rootCmd.AddCommand(packageCmd, coverageCmd, newApiCmd(cfg), newMockCmd(cfg), newTestCmd(cfg))
