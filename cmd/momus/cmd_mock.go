@@ -10,26 +10,36 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newMockCmd returns the "mock" command, which starts a mock HTTP server. In
-// fixed mode it responds to every request with a fixed status and body. With
-// --plan it behaves like a stateful FHIR server: it holds resources in memory
-// and serves real FHIR semantics (PUT/POST store, GET retrieves, DELETE removes,
-// search returns a Bundle), and it reads the test plan to reject the requests
-// the plan expects to be rejected.
+// newMockCmd returns the "mock" command, which starts a mock HTTP server. By
+// default it is plan-aware: it holds resources in memory and serves real FHIR
+// semantics (PUT/POST store, GET retrieves, DELETE removes, search returns a
+// Bundle), and with --plan it reads a test plan to reject the requests the plan
+// expects to be rejected. With --fixed it instead responds to every request with
+// a fixed status and body.
 func newMockCmd(cfg *config) *cobra.Command {
 	var status int
 	var body string
 	var port int
 	var planPath string
 	var basePath string
+	var fixed bool
 
 	cmd := &cobra.Command{
 		Use:   "mock",
-		Short: "Start a mock HTTP server (fixed or plan-aware FHIR)",
+		Short: "Start a mock HTTP server (plan-aware FHIR by default, or fixed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts := []mock.Option{mock.WithPort(port), mock.WithBasePath(basePath)}
-			if planPath != "" {
+			mode := "plan-aware"
+			switch {
+			case fixed:
+				// Fixed mode: respond with the configured status/body.
+				mode = "fixed"
+			case planPath != "":
+				// Plan-aware with reject routes from a plan file.
 				opts = append(opts, mock.WithPlan(planPath))
+			default:
+				// Plan-aware with an empty reject set (real FHIR semantics).
+				opts = append(opts, mock.WithPlanAware())
 			}
 			s := mock.New(status, body, opts...)
 			addr, err := s.Start()
@@ -38,10 +48,6 @@ func newMockCmd(cfg *config) *cobra.Command {
 			}
 			defer s.Close()
 
-			mode := "fixed"
-			if planPath != "" {
-				mode = "plan-aware"
-			}
 			fmt.Printf("Mock server listening on http://%s (mode: %s)\n", addr, mode)
 			fmt.Println("Press Ctrl-C to stop.")
 
@@ -56,7 +62,8 @@ func newMockCmd(cfg *config) *cobra.Command {
 	cmd.Flags().IntVar(&status, "status", 200, "HTTP status code to return for every request (fixed mode)")
 	cmd.Flags().StringVar(&body, "body", "", "response body to return for every request (fixed mode)")
 	cmd.Flags().IntVar(&port, "port", 0, "port to listen on (default: ephemeral)")
-	cmd.Flags().StringVar(&planPath, "plan", "", "path to a test plan JSON; enables plan-aware FHIR mode with an in-memory store")
+	cmd.Flags().StringVar(&planPath, "plan", "", "path to a test plan JSON; loads its reject routes (plan-aware mode)")
 	cmd.Flags().StringVar(&basePath, "base-path", "/fhir", "base path the server serves under (e.g. /fhir); stripped from request paths before routing")
+	cmd.Flags().BoolVar(&fixed, "fixed", false, "respond to every request with a fixed status and body instead of plan-aware FHIR semantics")
 	return cmd
 }

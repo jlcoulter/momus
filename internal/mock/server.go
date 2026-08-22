@@ -1,12 +1,12 @@
 // Package mock provides a configurable HTTP server that behaves like a FHIR
 // server. It can run in two modes:
 //
-//   - Fixed mode (the default): every request returns a fixed status and body.
-//   - Plan-aware mode (when a test plan is supplied): it holds resources in an
-//     in-memory store and serves real FHIR semantics — PUT/POST store a
-//     resource, GET retrieves it, DELETE removes it, and search returns a
-//     Bundle. It also reads the test plan to learn which requests are expected
-//     to be rejected (negative tests) and returns the matching 4xx status.
+//   - Plan-aware mode (the default): it holds resources in an in-memory store
+//     and serves real FHIR semantics — PUT/POST store a resource, GET retrieves
+//     it, DELETE removes it, and search returns a Bundle. It can also read a
+//     test plan to learn which requests are expected to be rejected (negative
+//     tests) and return the matching 4xx status.
+//   - Fixed mode (--fixed): every request returns a fixed status and body.
 //
 // This makes it a useful stand-in target for exercising test plans end to end
 // without a real server.
