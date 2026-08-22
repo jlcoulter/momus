@@ -70,6 +70,8 @@ func (b *fhirBuilder) SearchAcceptValue(req coverage.CoverageRequirement, code s
 	switch strings.ToLower(sp.Type) {
 	case "special":
 		return nearSearchValue(b, req, code)
+	case "composite":
+		return compositeAcceptValue(b, req, code)
 	}
 	def, ok := searchElementDefinition(req.ResourceType, elementPath, b.reg)
 	if !ok || def == nil {
@@ -119,14 +121,56 @@ func (b *fhirBuilder) SearchInvalidValue(req coverage.CoverageRequirement, code 
 	}
 }
 
-// searchValidNonMatchValue returns a syntactically valid value, appropriate to
-// the search parameter type, that cannot match any provisioned resource. Such a
-// value is accepted by a conformant server (200 with no results).
 // nearSearchValue returns a coordinate value for a near (special) search. It
-// resolves the Location position defaults to a fixed Sydney coordinate so the
-// provisioned seed matches.
+// resolves to a fixed Sydney coordinate so the provisioned seed matches.
 func nearSearchValue(b *fhirBuilder, req coverage.CoverageRequirement, code string) string {
 	return "-33.8688|151.2093"
+}
+
+// compositeAcceptValue returns a "part1$part2" composite search value that
+// matches the provisioned seed. It synthesises a value for each component of
+// the composite expression, joining them with '$'.
+func compositeAcceptValue(b *fhirBuilder, req coverage.CoverageRequirement, code string) string {
+	sp, ok := b.reg.SearchParameter(req.ResourceType, code)
+	if !ok {
+		return "momus-search$momus-search"
+	}
+	paths := compositePaths(sp.Expression)
+	if len(paths) < 2 {
+		return "momus-search$momus-search"
+	}
+	parts := make([]string, 0, len(paths))
+	for _, path := range paths {
+		def, ok := searchElementDefinition(req.ResourceType, path, b.reg)
+		if !ok || def == nil {
+			parts = append(parts, "momus-search")
+			continue
+		}
+		parts = append(parts, elementSearchValue(def, b.reg))
+	}
+	return strings.Join(parts, "$")
+}
+
+// elementSearchValue returns a query value for a single composite component
+// element, matching how that element's search type is seeded.
+func elementSearchValue(def *model.ElementDefinition, reg *registry.Registry) string {
+	switch primaryTypeCode(def) {
+	case "code", "Coding", "CodeableConcept":
+		if bound, ok := resolveBoundCoding(def, reg); ok && bound.Code != "" {
+			return bound.Code
+		}
+		return "momus-search"
+	case "boolean":
+		return "true"
+	case "date", "dateTime", "instant", "time":
+		return "2024-01-01"
+	case "integer", "unsignedInt", "positiveInt", "decimal":
+		return "123.45"
+	case "Quantity":
+		return "123.45|http://unitsofmeasure.org|mmol"
+	default:
+		return "momus-search"
+	}
 }
 
 func searchValidNonMatchValue(paramType string) string {
@@ -149,7 +193,11 @@ func searchValidNonMatchValue(paramType string) string {
 		// A special (near) search uses coordinates; return a far-away location
 		// so it is lexically valid but matches nothing.
 		return "90.0|0.0"
-	default: // string, composite, and unknown
+	case "composite":
+		// A composite value is "part1$part2"; return a syntactically valid pair
+		// that cannot match any provisioned resource.
+		return "momus-nomatch$momus-nomatch"
+	default: // string and unknown
 		return "momus-invalid-zzz"
 	}
 }

@@ -25,6 +25,9 @@ type Fixture struct {
 	ValueSets            []*model.ValueSet            `json:"valueSets"`
 	CodeSystems          []*model.CodeSystem          `json:"codeSystems"`
 	CapabilityStatements []*model.CapabilityStatement `json:"capabilityStatements"`
+	// Strength is the interaction strength for derivation (1 = individual
+	// requirements, 2 = also pairwise search-parameter combinations).
+	Strength int `json:"strength,omitempty"`
 	// Resources are sample conformant resources, each tagged with a profile URL
 	// they are expected to conform to.
 	Resources []SampleResource `json:"resources"`

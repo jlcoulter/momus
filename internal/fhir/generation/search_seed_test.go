@@ -296,13 +296,13 @@ func TestSearchSeedSkipsNonMatchableSearch(t *testing.T) {
 		{Path: "Patient", Min: 0, Max: "*"},
 		{Path: "Patient.active", Min: 1, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
 	}})
-	// `composite-name` is a composite search: it spans multiple elements and no
-	// single leaf value can seed a match, so no matching seed is added (the
-	// search remains status-only).
-	reg.AddSearchParameter(&model.SearchParameter{URL: "http://example.org/SearchParameter/Patient-composite-name", Name: "composite-name", Code: "composite-name", Base: []string{"Patient"}, Type: "composite", Expression: "Patient.name.family | Patient.name.given"})
+	// `unknown-param` points at a non-existent element path, so the engine
+	// cannot resolve a leaf to seed and no matching seed is added (the search
+	// remains status-only).
+	reg.AddSearchParameter(&model.SearchParameter{URL: "http://example.org/SearchParameter/Patient-unknown", Name: "unknown-param", Code: "unknown-param", Base: []string{"Patient"}, Type: "token", Expression: "Patient.noSuchElement"})
 
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
-		{ID: "search|Patient|composite-name|multiple", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchMultipleResults, SearchCode: "composite-name"},
+		{ID: "search|Patient|unknown-param|multiple", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchMultipleResults, SearchCode: "unknown-param"},
 	}}
 	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
 
@@ -312,7 +312,7 @@ func TestSearchSeedSkipsNonMatchableSearch(t *testing.T) {
 	}
 	for _, inst := range ds.Resources {
 		if strings.HasPrefix(inst.LocalID, "momus-search-") {
-			t.Fatalf("expected no search seed for a non-matchable composite search; got %s", inst.LocalID)
+			t.Fatalf("expected no search seed for a non-matchable search; got %s", inst.LocalID)
 		}
 	}
 }

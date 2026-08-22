@@ -40,6 +40,7 @@
       ]
     }
   ],
+  "strength": 2,
   "resources": [
     {
       "profileUrl": "http://example.org/StructureDefinition/practitioner",

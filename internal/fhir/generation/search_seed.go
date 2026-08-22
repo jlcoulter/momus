@@ -150,6 +150,12 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 	if elementPath == "" {
 		return false
 	}
+	// A composite search combines two component values into one query value
+	// "part1$part2". Split the search value on '$' and place each component on
+	// the corresponding element the expression names (split on '|').
+	if strings.ToLower(sp.Type) == "composite" {
+		return applyCompositeMatch(body, sp.Expression, resourceType, value, reg)
+	}
 	typeCode, repeatable := searchLeafType(resourceType, elementPath, reg)
 	// A special search (e.g. near) matches geographic coordinates, not a single
 	// leaf's primitive value. Set the Location position's lat/long from the
@@ -609,6 +615,60 @@ func firstNumericPart(value string) any {
 		return f
 	}
 	return value
+}
+
+// applyCompositeMatch places each component of a composite search value
+// "part1$part2" on the corresponding element of the composite expression
+// "pathA | pathB".
+func applyCompositeMatch(body map[string]any, expression, resourceType, value string, reg *registry.Registry) bool {
+	parts := strings.Split(value, "$")
+	if len(parts) < 2 {
+		return false
+	}
+	paths := compositePaths(expression)
+	if len(paths) < len(parts) {
+		// Pad with the last path so extra parts still have a target.
+		for len(paths) < len(parts) {
+			paths = append(paths, paths[len(paths)-1])
+		}
+	}
+	for i, part := range parts {
+		if i >= len(paths) || paths[i] == "" {
+			return false
+		}
+		path := paths[i]
+		typeCode, _ := searchLeafType(resourceType, path, reg)
+		switch typeCode {
+		case "code", "Coding", "CodeableConcept":
+			system := boundCodingSystem(resourceType, path, reg)
+			setSearchCodeValue(body, path, part, typeCode, false, system)
+		case "Quantity":
+			setQuantityLeaf(body, path, part)
+		case "boolean":
+			setPathLeafBoolean(body, path, part)
+		default:
+			setPathLeaf(body, path, part)
+		}
+	}
+	return true
+}
+
+// compositePaths extracts the ordered element paths from a composite search
+// expression "pathA | pathB", stripping a leading resource-type token.
+func compositePaths(expression string) []string {
+	expr := strings.ReplaceAll(expression, ",", "|")
+	var paths []string
+	for _, p := range strings.Split(expr, "|") {
+		p = strings.TrimSpace(p)
+		segs := strings.Split(p, ".")
+		if len(segs) > 1 && isBaseResourceTypeToken(segs[0], "") {
+			segs = segs[1:]
+		}
+		if len(segs) > 0 {
+			paths = append(paths, strings.Join(segs, "."))
+		}
+	}
+	return paths
 }
 
 // setSpecialLeaf places geographic coordinates from a special (near) search

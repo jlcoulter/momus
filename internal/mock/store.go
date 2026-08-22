@@ -219,8 +219,23 @@ func toFloat(v any) (float64, bool) {
 // recurses into nested maps and arrays (so a HumanName's `text` or a Coding's
 // `code` both match), and matches any string equal to the query value. A
 // quantity search value "number|system|code" matches when any nested value
-// equals one of its `|`-separated parts.
+// equals one of its `|`-separated parts, and a composite "part1$part2" matches
+// when the resource contains both parts.
 func valueMatches(val any, want string) bool {
+	if strings.Contains(want, "$") {
+		parts := strings.Split(want, "$")
+		matched := true
+		for _, part := range parts {
+			if part == "" {
+				continue
+			}
+			if !valueMatches(val, part) {
+				matched = false
+				break
+			}
+		}
+		return matched
+	}
 	if strings.Contains(want, "|") {
 		for _, part := range strings.Split(want, "|") {
 			if part == "" {

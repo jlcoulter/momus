@@ -55,6 +55,7 @@ func Run(ctx context.Context, name string, fx *Fixture, tracer *tracing.Tracer) 
 	capabilitySearchCodes := fhircoverage.SearchCodesFromCapabilityStatementUnion(fx.CapabilityStatements)
 	coveragePlan, err := fhircoverage.DerivePlan(reg, coverage.DeriveOptions{
 		CapabilitySearchCodes: capabilitySearchCodes,
+		Strength:              fx.Strength,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("golden %s: derive: %w", name, err)
