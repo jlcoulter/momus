@@ -170,6 +170,14 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 		setSpecialLeaf(body, elementPath, value)
 		return true
 	}
+	// A date search targets a date/dateTime value regardless of the element's
+	// first choice type (e.g. Provenance.occurred[x] is Period|dateTime). Place
+	// the date value on the concrete dateTime choice member.
+	switch strings.ToLower(sp.Type) {
+	case "date", "dateTime", "instant", "time":
+		setDateLeaf(body, elementPath, value, reg, resourceType)
+		return true
+	}
 	switch typeCode {
 	case "string", "markdown", "uri", "url", "id", "oid", "uuid", "base64Binary":
 		setPathLeaf(body, elementPath, value)
@@ -210,8 +218,11 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 		return true
 	case "date", "dateTime", "instant", "time":
 		// A date search matches the element's date value. Use the search value
-		// (a valid date) so the provisioned seed is matched by the query.
-		setPathLeaf(body, elementPath, value)
+		// (a valid date) so the provisioned seed is matched by the query. A
+		// choice-type element (e.g. Provenance.occurred[x]) serialises under the
+		// concrete choice key (occurredDateTime), so set that rather than the
+		// bare choice name.
+		setDateLeaf(body, elementPath, value, reg, resourceType)
 		return true
 	case "integer", "unsignedInt", "positiveInt", "decimal", "number":
 		// A number search matches a numeric element value. The search value is
@@ -386,7 +397,8 @@ func isFunctionName(name string) bool {
 
 // searchLeafType resolves the FHIR type code of the element a search expression
 // points at (and whether it is repeatable), by looking it up in the resource's
-// resolved profile.
+// resolved profile. A choice-type element (e.g. "occurred") is looked up with
+// its "[x]" suffix too, since the profile indexes it as "Provenance.occurred[x]".
 func searchLeafType(resourceType, elementPath string, reg *registry.Registry) (typeCode string, repeatable bool) {
 	profiles := reg.ProfilesForResource(resourceType)
 	for _, profile := range profiles {
@@ -394,9 +406,17 @@ func searchLeafType(resourceType, elementPath string, reg *registry.Registry) (t
 		if err != nil || resolved == nil {
 			continue
 		}
-		node, ok := resolved.Elements[resourceType+"."+elementPath]
-		if ok && node != nil && node.Definition != nil && len(node.Definition.Types) > 0 {
-			return node.Definition.Types[0].Code, node.Definition.Max == "*"
+		// Try the exact key, then the choice-type "[x]" form (e.g. "occurred" ->
+		// "occurred[x]") when the element is a choice.
+		keys := []string{resourceType + "." + elementPath}
+		if !strings.HasSuffix(elementPath, "[x]") {
+			keys = append(keys, resourceType+"."+elementPath+"[x]")
+		}
+		for _, key := range keys {
+			node, ok := resolved.Elements[key]
+			if ok && node != nil && node.Definition != nil && len(node.Definition.Types) > 0 {
+				return node.Definition.Types[0].Code, node.Definition.Max == "*"
+			}
 		}
 	}
 	return "", false
@@ -417,6 +437,26 @@ func setPathLeaf(body map[string]any, path string, value string) {
 		cur = descendContainer(cur, segs[i])
 	}
 	cur[segs[len(segs)-1]] = value
+}
+
+// setDateLeaf places a date search value on a date element, resolving a choice
+// element (e.g. Provenance.occurred[x]) to its concrete choice key
+// (occurredDateTime) so the value lands on the serialised member.
+func setDateLeaf(body map[string]any, path, value string, reg *registry.Registry, resourceType string) {
+	segments := strings.Split(path, ".")
+	leaf := segments[len(segments)-1]
+	// If the leaf is a choice element (e.g. "occurred" typed Period|dateTime),
+	// prefer the dateTime choice member so the primitive date value is valid.
+	if def, ok := searchElementDefinition(resourceType, path, reg); ok && def != nil {
+		for _, et := range def.Types {
+			if et.Code == "dateTime" || et.Code == "date" || et.Code == "instant" || et.Code == "time" {
+				leaf = leaf + upperCamelTypeName(et.Code)
+				break
+			}
+		}
+	}
+	segments[len(segments)-1] = leaf
+	setPathLeaf(body, strings.Join(segments, "."), value)
 }
 
 // descendContainer moves cur into the child named by key, handling a map
