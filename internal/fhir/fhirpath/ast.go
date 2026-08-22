@@ -1,6 +1,10 @@
 package fhirpath
 
-import "context"
+import (
+	"context"
+	"strings"
+	"unicode"
+)
 
 // expr is a parsed FHIRPath expression node.
 type expr interface {
@@ -214,20 +218,11 @@ func collectDeep(item any, name string) []any {
 }
 
 // choiceKeyMatches mirrors validate's choice-key resolution for the fhirpath
-// package (kept local to avoid an import cycle).
+// package (kept local to avoid an import cycle). It uses the same unicode-aware
+// uppercase-suffix rule so both resolve choice-type keys identically.
 func choiceKeyMatches(key, name string) bool {
-	if len(key) <= len(name) {
+	if len(key) <= len(name) || !strings.HasPrefix(key, name) {
 		return false
 	}
-	runes := []rune(key)
-	base := runes[:len(name)]
-	if string(base) != name {
-		return false
-	}
-	// The char after the name must be uppercase (choice suffix).
-	if len(runes) > len(name) {
-		next := runes[len(name)]
-		return next >= 'A' && next <= 'Z'
-	}
-	return false
+	return unicode.IsUpper(rune(key[len(name)]))
 }
