@@ -20,19 +20,37 @@ import (
 type Server struct {
 	status int
 	body   string
+	port   int
 	server *http.Server
 	ln     net.Listener
 }
 
-// New returns a mock server that responds with the given status and body.
-func New(status int, body string) *Server {
-	return &Server{status: status, body: body}
+// Option configures a mock Server.
+type Option func(*Server)
+
+// WithPort sets the port the server binds to. When zero, an ephemeral port is
+// chosen automatically.
+func WithPort(port int) Option {
+	return func(s *Server) { s.port = port }
 }
 
-// Start binds the server to an ephemeral port and begins serving. It returns
-// the address the server is listening on (e.g. "127.0.0.1:54321").
+// New returns a mock server that responds with the given status and body.
+func New(status int, body string, opts ...Option) *Server {
+	s := &Server{status: status, body: body}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+// Start binds the server to a port and begins serving. It returns the address
+// the server is listening on (e.g. "127.0.0.1:54321").
 func (s *Server) Start() (string, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	addr := "127.0.0.1:0"
+	if s.port != 0 {
+		addr = fmt.Sprintf("127.0.0.1:%d", s.port)
+	}
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return "", fmt.Errorf("mock listen: %w", err)
 	}

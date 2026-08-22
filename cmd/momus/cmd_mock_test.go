@@ -20,4 +20,7 @@ func TestMockCmdRegistered(t *testing.T) {
 	if mockCmd.Flags().Lookup("body") == nil {
 		t.Fatal("mock command missing --body flag")
 	}
+	if mockCmd.Flags().Lookup("port") == nil {
+		t.Fatal("mock command missing --port flag")
+	}
 }

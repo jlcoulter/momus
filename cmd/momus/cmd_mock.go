@@ -15,12 +15,13 @@ import (
 func newMockCmd(cfg *config) *cobra.Command {
 	var status int
 	var body string
+	var port int
 
 	cmd := &cobra.Command{
 		Use:   "mock",
 		Short: "Start a minimal mock HTTP server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s := mock.New(status, body)
+			s := mock.New(status, body, mock.WithPort(port))
 			addr, err := s.Start()
 			if err != nil {
 				return err
@@ -40,5 +41,6 @@ func newMockCmd(cfg *config) *cobra.Command {
 	}
 	cmd.Flags().IntVar(&status, "status", 200, "HTTP status code to return for every request")
 	cmd.Flags().StringVar(&body, "body", "", "response body to return for every request")
+	cmd.Flags().IntVar(&port, "port", 0, "port to listen on (default: ephemeral)")
 	return cmd
 }
