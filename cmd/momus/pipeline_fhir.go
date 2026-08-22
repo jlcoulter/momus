@@ -75,6 +75,9 @@ func deriveCoveragePlan(cfg *config, reg *registry.Registry, resourceTypes, prof
 // plan, restricting the seed dataset to the given capability resource types and
 // profiles when non-empty.
 func buildTestPlan(cfg *config, reg *registry.Registry, coveragePlan *testcoverage.CoveragePlan, preferredProfilesByResource map[string][]string, capabilityResourceTypes, capabilityProfiles []string) (*testast.Plan, *model.Dataset, error) {
+	// Render a live progress bar to stderr during generation (only when stderr
+	// is a terminal). It is cleared before the next stage prints.
+	bar := newProgressBar(40)
 	buildOpts := testgeneration.BuildOptions{
 		BaseURL:                        cfg.baseURL,
 		WriteBaseURL:                   cfg.writeBaseURL,
@@ -82,6 +85,7 @@ func buildTestPlan(cfg *config, reg *registry.Registry, coveragePlan *testcovera
 		PreferredProfileURLsByResource: preferredProfilesByResource,
 		Strength:                       cfg.interactionStrength,
 		Exhaustive:                     cfg.exhaustive,
+		Progress:                       bar.render,
 	}
 	if len(capabilityResourceTypes) > 0 {
 		buildOpts.CapabilityResourceTypes = make(map[string]struct{}, len(capabilityResourceTypes))
@@ -97,6 +101,7 @@ func buildTestPlan(cfg *config, reg *registry.Registry, coveragePlan *testcovera
 	}
 
 	astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, buildOpts)
+	bar.finish()
 	if err != nil {
 		return nil, nil, err
 	}

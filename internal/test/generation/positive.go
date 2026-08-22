@@ -83,6 +83,11 @@ type BuildOptions struct {
 	// not supported is skipped, so we never claim conformance to a profile the
 	// server cannot validate. When nil/empty, all profiles are allowed.
 	CapabilityProfiles map[string]struct{}
+	// Progress, when set, is invoked after each resource type's cases are
+	// generated, with the number of resource types completed so far and the
+	// total number of resource types. It is used to render a progress bar in the
+	// CLI during test-plan generation.
+	Progress func(done, total int)
 }
 
 // GenerateFromCoveragePlan maps coverage requirements into a concrete AST.
@@ -110,6 +115,17 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 	}
 
 	root := &ast.Sequence{Steps: make([]ast.Node, 0)}
+	// Count the resource types that will actually emit cases (those with
+	// coverage obligations) for progress reporting.
+	totalTypes := 0
+	for _, level := range depPlan.Levels {
+		for _, resourceType := range level {
+			if len(byResource[resourceType]) > 0 {
+				totalTypes++
+			}
+		}
+	}
+	doneTypes := 0
 	for _, level := range depPlan.Levels {
 		resourceNodes := make([]ast.Node, 0, len(level))
 		for _, resourceType := range level {
@@ -131,6 +147,10 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 			}
 
 			resourceNodes = append(resourceNodes, resourceSeq)
+			doneTypes++
+			if options.Progress != nil {
+				options.Progress(doneTypes, totalTypes)
+			}
 		}
 
 		if len(resourceNodes) == 0 {
