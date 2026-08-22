@@ -110,12 +110,17 @@ func writeRunReport(cfg *config, report *testrunner.Report, coverageEvaluation t
 		}
 		if coverageEvaluation.UncoveredRequirements > 0 {
 			fmt.Printf("Uncovered contractual obligations: %d\n", coverageEvaluation.UncoveredRequirements)
-			printCoverageGapSummary(coverageEvaluation)
-			for idx, req := range coverageEvaluation.Uncovered {
-				if idx >= 10 {
-					break
+			// The detailed gap breakdown (by domain/resource/variant and the
+			// uncovered requirement IDs) is verbose; it is only printed with
+			// --debug. The full detail is always in the JSON report.
+			if cfg.debug {
+				printCoverageGapSummary(coverageEvaluation)
+				for idx, req := range coverageEvaluation.Uncovered {
+					if idx >= 10 {
+						break
+					}
+					fmt.Printf("  - %s\n", req.ID)
 				}
-				fmt.Printf("  - %s\n", req.ID)
 			}
 		}
 	} else if !coverageEvaluated {
