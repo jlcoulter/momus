@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/jlcoulter/momus/compare/v1.0.1...v1.1.0) (2026-08-21)
+
+
+### Features
+
+* universal search parameters opt in flag ([#9](https://github.com/jlcoulter/momus/issues/9)) ([6d0fb8d](https://github.com/jlcoulter/momus/commit/6d0fb8dfc89fba2a96ffd70ade79c3d7dbe61718))
+
 ## [1.0.1](https://github.com/jlcoulter/momus/compare/v1.0.0...v1.0.1) (2026-08-21)
 
 
