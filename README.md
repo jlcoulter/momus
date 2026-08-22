@@ -90,7 +90,9 @@ internal/core/      domain-agnostic engine: test AST, coverage model/planner/
                     tracing, constraint model
 internal/fhir/      FHIR domain: model, constraint derivation, coverage
                     derivation, generation adapter (PayloadBuilder), package
-                    loading, registry, terminology, provisioning, bulk
+                    loading, registry, terminology, provisioning, bulk,
+                    profile validator (validate), FHIRPath engine (fhirpath),
+                    golden self-conformance runner, navigable report writer
 internal/openapi/   OpenAPI document loading and API constraint derivation
 docs/               architecture and feature documentation
 pkg/                reserved public API (intentionally empty)
@@ -114,8 +116,8 @@ go run ./cmd/momus --help
 
 ## CLI
 
-Momus uses a Cobra-based CLI with three command groups: `package`, `coverage`,
-and `api`.
+Momus uses a Cobra-based CLI with command groups: `package`, `coverage`,
+`api`, `mock`, `test`, `validate`, and `conformance`.
 
 ### `package` — FHIR package operations
 
@@ -211,6 +213,33 @@ overall contractual coverage, per-domain percentages, and per-domain /
 per-resource / per-variant lists where every executed item shows a pass/fail
 badge and expands to its assertion, request URL/body, and response body.
 
+#### Navigable output directory
+
+Every run also writes a **navigable output directory** to `.momus/output` by
+default, so a large run is sliced into small, easy-to-navigate files instead of
+one monolithic JSON:
+
+```text
+.momus/output/
+  index.json        summary, coverage %, failed-case pointers
+  index.html        navigable tree
+  summary.json      the concise run summary
+  full.json         the monolithic artifact (only with --include-cases)
+  cases/<req-id>.json      one small file per case
+  by-resource/<Type>.json      pass/fail matrix per resource type
+  by-parameter/<param>.json    pass/fail matrix per search/operation param
+  failed-index.json  failed cases grouped by reason
+```
+
+- `--output-dir path` relocates it; `--output-dir -` disables it.
+- `--output file.json` still writes the single-file JSON for CI tooling.
+- Inspect one case in full depth (request, response, assertion, trace) without
+  touching the rest of the report:
+
+```sh
+go run ./cmd/momus coverage explain 'search|Patient|name|search-valid'
+```
+
 Generate realistic bulk data as NDJSON (the FHIR Bulk Data `$export` format):
 
 ```sh
@@ -287,6 +316,54 @@ Generate and execute tests against a live API:
 ```sh
 go run ./cmd/momus api run ./openapi.json --base-url http://localhost:8080
 ```
+
+### `validate` — profile conformance
+
+Validate a FHIR JSON resource against a profile, printing one line per
+violation. The profile is resolved from the loaded package(s):
+
+```sh
+go run ./cmd/momus validate ./resource.json \
+  --package package.tgz \
+  --profile http://hl7.org/fhir/StructureDefinition/Patient
+```
+
+Without `--profile`, Momus uses the resource's own `meta.profile` claims. Exit
+code is non-zero when the resource fails validation.
+
+### `mock` — a local FHIR server for development
+
+Start a mock FHIR server that holds resources in memory and serves real FHIR
+semantics (PUT/POST store, GET retrieves, DELETE removes, search returns a
+Bundle):
+
+```sh
+go run ./cmd/momus mock --port 8080
+```
+
+With `--semantic --package package.tgz`, the mock also enforces profile
+conformance: a non-conformant PUT/POST is rejected with `422` + an
+OperationOutcome naming each issue, so positive and negative test cases are
+meaningful:
+
+```sh
+go run ./cmd/momus mock --port 8080 --semantic --package package.tgz
+```
+
+### `conformance self-test` — the golden-matrix oracle
+
+Run Momus's own generated tests against the semantic mock for every reference
+fixture, proving conformance logic works end to end with no network:
+
+```sh
+go run ./cmd/momus conformance self-test
+```
+
+Each fixture derives a coverage plan, generates the test AST, snapshots it
+byte-identically, provisions seed data, and asserts 100% pass. This is the
+developer's daily oracle: add a feature, add a fixture, and every parameter's
+positive/negative/edge cases are exercised and proven. Exits non-zero on any
+failure.
 
 ## Coverage pipeline
 
