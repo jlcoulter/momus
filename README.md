@@ -27,19 +27,22 @@ What is implemented:
 - **Normalised FHIR model** — `StructureDefinition`, `ValueSet`, `CodeSystem`,
   `CapabilityStatement`, and `SearchParameter` normalised into internal model
   types.
-- **Constraint model** (`internal/fhir/constraint`) — a flat, `Kind`-typed set
-  of contractual rules derived from the registry with stable identifiers
+- **Constraint model** (`internal/fhir/constraintderive`) — a flat, `Kind`-typed
+  set of contractual rules derived from the registry with stable identifiers
   (`cardinality`, `datatype`, `terminology`, `invariant`, `reference`, `fixed`,
   `pattern`, `search`, `interaction`, `api-operation`, `api-parameter`).
-- **Coverage derivation** (`internal/test/coverage`) — constraint-driven
+- **Coverage derivation** (`internal/fhir/coverage`) — constraint-driven
   obligations across the cardinality, datatype, terminology, invariant,
   reference, and required-slice structure domains, plus search, operation,
   state/CRUD, and (opt-in) pairwise interaction coverage. Every requirement is
   traceable to its source constraint.
-- **Test generation** (`internal/test/generation`) — positive, negative, and
-  boundary cases. Negative variants mutate a valid payload against exactly one
-  constraint and assert rejection; boundary helpers emit edge values for string
-  length, numeric, and cardinality ranges.
+- **Test generation** (`internal/fhir/generation` + `internal/core/generation`) —
+  positive, negative, and boundary cases. The domain-agnostic core framework
+  (`internal/core/generation`) orchestrates generation and delegates all
+  payload/search synthesis through a `PayloadBuilder` interface; the FHIR
+  adapter (`internal/fhir/generation`) implements it. Negative variants mutate
+  a valid payload against exactly one constraint and assert rejection; boundary
+  helpers emit edge values for string length, numeric, and cardinality ranges.
 - **Interaction (pairwise) coverage** — at `--strength 2`, pairwise obligations
   between accept requirements on the same profile are derived and generation
   selects a near-minimal set by greedy set-cover, grouping compatible accepts
@@ -75,13 +78,20 @@ What is implemented:
 
 ## Layout
 
+The codebase follows a narrow-core-wide-composition layout: a domain-agnostic
+core (`internal/core`) holds the generic engine, and the FHIR domain
+(`internal/fhir`) implements the domain-specific adapters that plug into it.
+The core never imports FHIR; FHIR depends on core, never the reverse.
+
 ```
 cmd/momus/          CLI entry point
-internal/fhir/      FHIR model, constraint model, package loading, registry,
-                    terminology, resource generation, planner, provisioning
-internal/test/      test AST, assertions, generation, runner, coverage
+internal/core/      domain-agnostic engine: test AST, coverage model/planner/
+                    evaluator/report, generation framework, runner, assertions,
+                    tracing, constraint model
+internal/fhir/      FHIR domain: model, constraint derivation, coverage
+                    derivation, generation adapter (PayloadBuilder), package
+                    loading, registry, terminology, provisioning, bulk
 internal/openapi/   OpenAPI document loading and API constraint derivation
-internal/tracing/   concurrency-safe HTTP request/response tracer
 docs/               architecture and feature documentation
 pkg/                reserved public API (intentionally empty)
 ```
