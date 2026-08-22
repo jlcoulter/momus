@@ -115,17 +115,22 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 	}
 
 	root := &ast.Sequence{Steps: make([]ast.Node, 0)}
-	// Count the resource types that will actually emit cases (those with
+	// Count the total requirements that will actually emit cases (those with
 	// coverage obligations) for progress reporting.
-	totalTypes := 0
+	totalReqs := 0
 	for _, level := range depPlan.Levels {
 		for _, resourceType := range level {
-			if len(byResource[resourceType]) > 0 {
-				totalTypes++
-			}
+			totalReqs += len(byResource[resourceType])
 		}
 	}
-	doneTypes := 0
+	doneReqs := 0
+	progress := func() {
+		if options.Progress == nil {
+			return
+		}
+		doneReqs++
+		options.Progress(doneReqs, totalReqs)
+	}
 	for _, level := range depPlan.Levels {
 		resourceNodes := make([]ast.Node, 0, len(level))
 		for _, resourceType := range level {
@@ -142,15 +147,11 @@ func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions)
 			// generated AST contains only test cases, which run against data already
 			// provisioned on the server. Test cases that need seed data reference it by
 			// its deterministic setup id (e.g. operations target "momus-setup-<Type>").
-			for _, caseSeq := range buildResourceCases(byResource[resourceType], plan, options, deps) {
+			for _, caseSeq := range buildResourceCases(byResource[resourceType], plan, options, deps, progress) {
 				resourceSeq.Steps = append(resourceSeq.Steps, caseSeq)
 			}
 
 			resourceNodes = append(resourceNodes, resourceSeq)
-			doneTypes++
-			if options.Progress != nil {
-				options.Progress(doneTypes, totalTypes)
-			}
 		}
 
 		if len(resourceNodes) == 0 {

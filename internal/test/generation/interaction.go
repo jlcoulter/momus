@@ -13,7 +13,8 @@ import (
 // it groups compatible accept obligations into a single shared-payload test
 // (selected by greedy set-cover) so pairwise interaction obligations are
 // exercised together, while each reject obligation keeps its own test.
-func buildResourceCases(reqs []coverage.CoverageRequirement, plan *coverage.CoveragePlan, options BuildOptions, deps []string) []ast.Node {
+// progress, when non-nil, is invoked after each requirement is processed.
+func buildResourceCases(reqs []coverage.CoverageRequirement, plan *coverage.CoveragePlan, options BuildOptions, deps []string, progress func()) []ast.Node {
 	// Search/operation/state obligations are separate requests (GET/DELETE/etc.)
 	// and do not participate in interaction candidate grouping.
 	searchReqs := make([]coverage.CoverageRequirement, 0)
@@ -33,6 +34,9 @@ func buildResourceCases(reqs []coverage.CoverageRequirement, plan *coverage.Cove
 	cases := make([]ast.Node, 0, len(reqs))
 	for _, req := range searchReqs {
 		cases = append(cases, buildSearchCase(req, options))
+		if progress != nil {
+			progress()
+		}
 	}
 	for _, req := range opReqs {
 		if req.Variant == coverage.CoverageVariantStateCRUDSequence {
@@ -40,12 +44,18 @@ func buildResourceCases(reqs []coverage.CoverageRequirement, plan *coverage.Cove
 			continue
 		}
 		cases = append(cases, buildOperationCase(req, options))
+		if progress != nil {
+			progress()
+		}
 	}
 
 	if effectiveStrength(plan, options) < 2 {
 		for _, req := range rest {
 			if node := buildSingleRequirementCase(req, options, deps); node != nil {
 				cases = append(cases, node)
+			}
+			if progress != nil {
+				progress()
 			}
 		}
 		return cases
@@ -55,6 +65,9 @@ func buildResourceCases(reqs []coverage.CoverageRequirement, plan *coverage.Cove
 	for _, cand := range selected {
 		if node := buildCandidateCase(cand, options, deps); node != nil {
 			cases = append(cases, node)
+		}
+		if progress != nil {
+			progress()
 		}
 	}
 	return cases
