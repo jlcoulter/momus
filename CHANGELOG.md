@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/jlcoulter/momus/compare/v1.2.0...v1.3.0) (2026-08-22)
+
+
+### Features
+
+* add end-to-end test command ([#15](https://github.com/jlcoulter/momus/issues/15)) ([e53d329](https://github.com/jlcoulter/momus/commit/e53d329ce520d31ff62d6ae1bba9aafee5b34eb1))
+
 ## [1.2.0](https://github.com/jlcoulter/momus/compare/v1.1.0...v1.2.0) (2026-08-22)
 
 
