@@ -2,6 +2,7 @@ package generation
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/jlcoulter/momus/internal/core/coverage"
@@ -174,9 +175,31 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 	case "Address":
 		setAddressLeaf(body, elementPath, value)
 		return true
+	case "boolean":
+		setPathLeafBoolean(body, elementPath, value)
+		return true
+	case "date", "dateTime", "instant", "time":
+		// A date search matches the element's date value. Use the search value
+		// (a valid date) so the provisioned seed is matched by the query.
+		setPathLeaf(body, elementPath, value)
+		return true
+	case "integer", "unsignedInt", "positiveInt", "decimal", "number":
+		// A number search matches a numeric element value. The search value is
+		// type-valid, so place it on the leaf.
+		setPathLeaf(body, elementPath, value)
+		return true
+	case "Reference":
+		// A reference search matches the reference string ("Type/id").
+		setPathLeaf(body, elementPath, value)
+		return true
+	case "Quantity":
+		// A quantity search matches value/system/code of a Quantity element. Set
+		// the first three members so the query "value|system|code" can match.
+		setQuantityLeaf(body, elementPath, value)
+		return true
 	default:
-		// boolean/date/number/quantity/reference/choice: "momus-search" is not a
-		// valid value, so no matching seed is produced.
+		// composite/special/unknown: no single leaf type can be seeded; the
+		// caller returns nil so the obligation remains status-only.
 		return false
 	}
 }
@@ -504,4 +527,50 @@ func setFieldLeaf(body map[string]any, path, leaf, value string) {
 			m[leaf] = value
 		}
 	}
+}
+
+// setPathLeafBoolean sets a boolean value at a dotted element path, parsing the
+// string "true"/"false" into a Go bool.
+func setPathLeafBoolean(body map[string]any, path, value string) {
+	cur, leaf := containerForPath(body, path)
+	switch value {
+	case "true":
+		cur[leaf] = true
+	case "false":
+		cur[leaf] = false
+	default:
+		cur[leaf] = value
+	}
+}
+
+// setQuantityLeaf places a search value on a Quantity element so a quantity
+// search can match it. The value is "number|system|code"; only the number and
+// code parts that are present are applied.
+func setQuantityLeaf(body map[string]any, path, value string) {
+	cur, field := containerForPath(body, path)
+	raw, ok := cur[field]
+	if !ok {
+		cur[field] = map[string]any{"value": firstNumericPart(value)}
+		return
+	}
+	q, ok := raw.(map[string]any)
+	if !ok {
+		cur[field] = map[string]any{"value": firstNumericPart(value)}
+		return
+	}
+	if _, hasValue := q["value"]; !hasValue {
+		q["value"] = firstNumericPart(value)
+	}
+}
+
+// firstNumericPart returns the leading numeric portion of a "number|system|code"
+// search value, or "0" if none is present.
+func firstNumericPart(value string) any {
+	if i := strings.IndexByte(value, '|'); i >= 0 {
+		value = value[:i]
+	}
+	if f, err := strconv.ParseFloat(value, 64); err == nil {
+		return f
+	}
+	return value
 }

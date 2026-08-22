@@ -1147,10 +1147,14 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 		return true, true
 	case "integer", "unsignedInt", "positiveInt":
 		return 1, true
+	case "decimal":
+		return 123.45, true
 	case "date":
 		return "2024-01-01", true
 	case "dateTime", "instant":
 		return "2024-01-01T00:00:00Z", true
+	case "time":
+		return "12:00:00", true
 	case "Identifier":
 		identifier := map[string]any{}
 		populateRequiredChildren(identifier, node, reg)
@@ -1214,6 +1218,40 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 		return enrichGeneratedValueWithTypeProfiles(value, node.Definition, reg), true
 	case "Period":
 		value := map[string]any{"start": "2024-01-01T00:00:00Z", "end": "2024-12-31T23:59:59Z"}
+		populateRequiredChildren(value, node, reg)
+		applySimpleConstraints(value, node, reg)
+		return enrichGeneratedValueWithTypeProfiles(value, node.Definition, reg), true
+	case "Quantity":
+		value := map[string]any{
+			"value":  123.45,
+			"unit":   "mmol",
+			"system": "http://unitsofmeasure.org",
+			"code":   "mmol",
+		}
+		populateRequiredChildren(value, node, reg)
+		applySimpleConstraints(value, node, reg)
+		return enrichGeneratedValueWithTypeProfiles(value, node.Definition, reg), true
+	case "Ratio":
+		value := map[string]any{
+			"numerator":   map[string]any{"value": 1.0},
+			"denominator": map[string]any{"value": 2.0},
+		}
+		populateRequiredChildren(value, node, reg)
+		applySimpleConstraints(value, node, reg)
+		return enrichGeneratedValueWithTypeProfiles(value, node.Definition, reg), true
+	case "Range":
+		value := map[string]any{
+			"low":  map[string]any{"value": 1.0},
+			"high": map[string]any{"value": 10.0},
+		}
+		populateRequiredChildren(value, node, reg)
+		applySimpleConstraints(value, node, reg)
+		return enrichGeneratedValueWithTypeProfiles(value, node.Definition, reg), true
+	case "Attachment":
+		value := map[string]any{
+			"contentType": "text/plain",
+			"url":         "http://example.org/attachment.txt",
+		}
 		populateRequiredChildren(value, node, reg)
 		applySimpleConstraints(value, node, reg)
 		return enrichGeneratedValueWithTypeProfiles(value, node.Definition, reg), true

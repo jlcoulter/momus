@@ -287,21 +287,22 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 	}
 }
 
-// TestSearchSeedSkipsNonMatchableSearch verifies that a boolean search (where
-// "momus-search" is not a valid value) produces no matching seed; the search
-// remains status-only.
+// TestSearchSeedSkipsNonMatchableSearch verifies that a composite/special
+// search (with no single leaf a search value can be placed on) produces no
+// matching seed; the search remains status-only.
 func TestSearchSeedSkipsNonMatchableSearch(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
 		{Path: "Patient", Min: 0, Max: "*"},
 		{Path: "Patient.active", Min: 1, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
 	}})
-	// `active` is a boolean: the placeholder value "momus-search" cannot match,
-	// so no matching seed is added (the search remains status-only).
-	reg.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Patient-active", Name: "active", Code: "active", Base: []string{"Patient"}, Type: "token", Expression: "Patient.active"})
+	// `composite-name` is a composite search: it spans multiple elements and no
+	// single leaf value can seed a match, so no matching seed is added (the
+	// search remains status-only).
+	reg.AddSearchParameter(&model.SearchParameter{URL: "http://example.org/SearchParameter/Patient-composite-name", Name: "composite-name", Code: "composite-name", Base: []string{"Patient"}, Type: "composite", Expression: "Patient.name.family | Patient.name.given"})
 
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
-		{ID: "search|Patient|active|multiple", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchMultipleResults, SearchCode: "active"},
+		{ID: "search|Patient|composite-name|multiple", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchMultipleResults, SearchCode: "composite-name"},
 	}}
 	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
 
@@ -310,8 +311,8 @@ func TestSearchSeedSkipsNonMatchableSearch(t *testing.T) {
 		t.Fatalf("BuildSetupDataset returned error: %v", err)
 	}
 	for _, inst := range ds.Resources {
-		if b, ok := inst.Resource["active"].(bool); ok && b {
-			t.Fatalf("expected no active:true seed for a non-matchable search; got %s", inst.LocalID)
+		if strings.HasPrefix(inst.LocalID, "momus-search-") {
+			t.Fatalf("expected no search seed for a non-matchable composite search; got %s", inst.LocalID)
 		}
 	}
 }

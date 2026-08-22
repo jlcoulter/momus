@@ -77,6 +77,10 @@ func (b *fhirBuilder) SearchAcceptValue(req coverage.CoverageRequirement, code s
 		return "momus-search"
 	case "boolean":
 		return "true"
+	case "date", "dateTime", "instant", "time":
+		return "2024-01-01"
+	case "integer", "unsignedInt", "positiveInt", "decimal":
+		return "123.45"
 	default:
 		return "momus-search"
 	}
