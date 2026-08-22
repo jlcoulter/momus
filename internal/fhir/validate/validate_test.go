@@ -211,6 +211,37 @@ func TestValidateMaxCardinalityWithinBound(t *testing.T) {
 	}
 }
 
+func TestValidateMaxCardinalityPerArrayInstance(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/params",
+		Type: "Parameters",
+		Elements: []model.ElementDefinition{
+			{Path: "Parameters", Min: 0, Max: "*"},
+			{Path: "Parameters.parameter", Min: 0, Max: "*", Types: []model.ElementType{{Code: "BackboneElement"}}},
+			{Path: "Parameters.parameter.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+			{Path: "Parameters.parameter.value[x]", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+	v := New(r)
+	// Each parameter entry has exactly one name (max 1 per instance); the three
+	// entries collectively have three names but none exceeds the per-instance bound.
+	res := map[string]any{"resourceType": "Parameters", "parameter": []any{
+		map[string]any{"name": "_outputFormat", "valueString": "ndjson"},
+		map[string]any{"name": "_type", "valueString": "Patient"},
+		map[string]any{"name": "_typeFilter", "valueString": "x"},
+	}}
+	issues, err := v.Validate(context.Background(), "http://example.org/StructureDefinition/params", res)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	for _, iss := range issues {
+		if iss.Kind == "cardinality" && iss.Path == "Parameters.parameter.name" && iss.Message != "required element Parameters.parameter.name is missing" {
+			t.Fatalf("expected no per-instance max-cardinality issue, got %+v", iss)
+		}
+	}
+}
+
 func TestParseMax(t *testing.T) {
 	cases := []struct {
 		max     string
