@@ -3,10 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
-	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
 	"github.com/spf13/cobra"
 )
 
@@ -18,43 +16,12 @@ func newDeriveCmd(cfg *config) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rootPath := args[0]
-			searchDir := cfg.depsDir
-			if searchDir == "" {
-				searchDir = filepath.Dir(rootPath)
-			}
-			cacheDir := cfg.downloadDir
-			if cacheDir == "" {
-				cacheDir = filepath.Join(searchDir, ".momus", "packages")
-			}
-
-			graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
-				DepsDir:        searchDir,
-				DownloadDir:    cacheDir,
-				ConflictPolicy: fhirpackage.ConflictPolicy(cfg.conflictPolicy),
-			})
-			if err != nil {
-				return err
-			}
-			if err := writeDebugGraph(cfg.debug, graph); err != nil {
-				return err
-			}
-
-			builder := fhirpackage.NewRegistryBuilder()
-			reg, err := builder.BuildFromPackagesScoped(graph.Packages, graph.Root)
+			graph, reg, err := resolvePackageGraph(cfg, rootPath)
 			if err != nil {
 				return err
 			}
 
-			plan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
-				IncludeResourceTypes:         cfg.includeResourceTypes,
-				IncludeProfileURLs:           cfg.includeProfileURLs,
-				ExcludePathPrefixes:          cfg.excludePathPrefixes,
-				MustSupportOnly:              cfg.mustSupportOnly,
-				IncludeOptional:              cfg.includeOptional,
-				IncludeLowValuePaths:         cfg.includeLowValuePaths,
-				Strength:                     cfg.interactionStrength,
-				IncludeUniversalSearchParams: cfg.includeUniversalSearch,
-			})
+			plan, err := deriveCoveragePlan(cfg, reg, cfg.includeResourceTypes, cfg.includeProfileURLs, nil)
 			if err != nil {
 				return err
 			}

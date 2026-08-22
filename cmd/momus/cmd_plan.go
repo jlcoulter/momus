@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
-	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
 	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 	"github.com/spf13/cobra"
 )
@@ -21,57 +19,17 @@ func newPlanCmd(cfg *config) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rootPath := args[0]
-			searchDir := cfg.depsDir
-			if searchDir == "" {
-				searchDir = filepath.Dir(rootPath)
-			}
-			cacheDir := cfg.downloadDir
-			if cacheDir == "" {
-				cacheDir = filepath.Join(searchDir, ".momus", "packages")
-			}
-
-			graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
-				DepsDir:        searchDir,
-				DownloadDir:    cacheDir,
-				ConflictPolicy: fhirpackage.ConflictPolicy(cfg.conflictPolicy),
-			})
+			graph, reg, err := resolvePackageGraph(cfg, rootPath)
 			if err != nil {
 				return err
 			}
 
-			builder := fhirpackage.NewRegistryBuilder()
-			reg, err := builder.BuildFromPackagesScoped(graph.Packages, graph.Root)
+			coveragePlan, err := deriveCoveragePlan(cfg, reg, cfg.includeResourceTypes, cfg.includeProfileURLs, nil)
 			if err != nil {
 				return err
 			}
 
-			coveragePlan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
-				IncludeResourceTypes:         cfg.includeResourceTypes,
-				IncludeProfileURLs:           cfg.includeProfileURLs,
-				ExcludePathPrefixes:          cfg.excludePathPrefixes,
-				MustSupportOnly:              cfg.mustSupportOnly,
-				IncludeOptional:              cfg.includeOptional,
-				IncludeLowValuePaths:         cfg.includeLowValuePaths,
-				Strength:                     cfg.interactionStrength,
-				IncludeUniversalSearchParams: cfg.includeUniversalSearch,
-			})
-			if err != nil {
-				return err
-			}
-
-			buildOpts := testgeneration.BuildOptions{
-				BaseURL:                        cfg.baseURL,
-				WriteBaseURL:                   cfg.writeBaseURL,
-				Registry:                       reg,
-				PreferredProfileURLsByResource: nil,
-				Strength:                       cfg.interactionStrength,
-				Exhaustive:                     cfg.exhaustive,
-			}
-			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, buildOpts)
-			if err != nil {
-				return err
-			}
-			setupDataset, err := testgeneration.BuildSetupDataset(coveragePlan, buildOpts)
+			astPlan, setupDataset, err := buildTestPlan(cfg, reg, coveragePlan, nil, nil, nil)
 			if err != nil {
 				return err
 			}
