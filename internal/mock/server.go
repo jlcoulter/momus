@@ -36,6 +36,7 @@ type Server struct {
 	body     string
 	port     int
 	basePath string
+	logger   bool
 	plan     *planRoutes
 	planErr  error
 	store    *Store
@@ -59,6 +60,14 @@ func WithPort(port int) Option {
 // the server serves at the root.
 func WithBasePath(basePath string) Option {
 	return func(s *Server) { s.basePath = strings.TrimRight(basePath, "/") }
+}
+
+// WithLogger enables per-request logging to stderr (chi's Logger middleware).
+// It is on by default for the standalone "mock" command, but the in-process mock
+// used by "test --mock" disables it so it does not spam the terminal during a
+// run.
+func WithLogger(enabled bool) Option {
+	return func(s *Server) { s.logger = enabled }
 }
 
 // WithPlan enables plan-aware mode, loading the reject routes from the given
@@ -105,7 +114,7 @@ func (s *Server) SetPlan(root ast.Node) {
 // New returns a mock server. In fixed mode it responds with the given status
 // and body; with WithPlan it behaves as a stateful FHIR server.
 func New(status int, body string, opts ...Option) *Server {
-	s := &Server{status: status, body: body}
+	s := &Server{status: status, body: body, logger: true}
 	for _, o := range opts {
 		o(s)
 	}
@@ -130,10 +139,13 @@ func (s *Server) Start() (string, error) {
 
 	r := chi.NewRouter()
 	// Basic middleware boilerplate: a request id, real client IP, request
-	// logging, and panic recovery.
+	// logging, and panic recovery. Request logging is conditional so the
+	// in-process mock used by "test --mock" does not spam the terminal.
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
+	if s.logger {
+		r.Use(middleware.Logger)
+	}
 	r.Use(middleware.Recoverer)
 
 	if s.plan != nil {

@@ -32,6 +32,10 @@ func executePlan(cfg *config, ctx context.Context, astPlan *testast.Plan, preCre
 	}
 
 	fmt.Printf("Testing phase: executing %d test cases\n", testgeneration.RequirementCount(astPlan))
+
+	// Render a live progress bar to stderr during execution (only when stderr
+	// is a terminal). It is cleared before the report is printed.
+	bar := newProgressBar(40)
 	report, err := testrunner.Execute(ctx, astPlan.Root, testrunner.ExecuteOptions{
 		BaseURL:            cfg.baseURL,
 		WriteBaseURL:       writeBase,
@@ -43,7 +47,9 @@ func executePlan(cfg *config, ctx context.Context, astPlan *testast.Plan, preCre
 		IncludeDebug:       cfg.debug || cfg.htmlReport != "",
 		Tracer:             newDebugTracer(cfg.debug),
 		PreCreated:         preCreated,
+		Progress:           bar.render,
 	})
+	bar.finish()
 	if err != nil {
 		return nil, testcoverage.EvaluationReport{}, err
 	}

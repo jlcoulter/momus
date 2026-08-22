@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	"github.com/jlcoulter/momus/internal/mock"
@@ -23,6 +24,7 @@ func newTestFhirCmd(cfg *config) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rootPath := args[0]
+			start := time.Now()
 
 			// When --mock is set, start a plan-aware mock server and target it.
 			// The mock's base URL is used unless the caller supplied --base-url.
@@ -43,6 +45,7 @@ func newTestFhirCmd(cfg *config) *cobra.Command {
 			}
 
 			// Stage 1: resolve the package graph and build the scoped registry.
+			fmt.Printf("Resolving package graph for %s...\n", rootPath)
 			graph, reg, err := resolvePackageGraph(cfg, rootPath)
 			if err != nil {
 				return err
@@ -50,9 +53,11 @@ func newTestFhirCmd(cfg *config) *cobra.Command {
 			// Overlay the package's own CapabilityStatement as the reduced scope
 			// over the full registry (mirrors "coverage ast").
 			reg.OverlayCapabilityScope()
+			fmt.Printf("Resolved %d packages\n", len(graph.Packages))
 
 			// Stage 2: derive coverage obligations, scoped to the server's
 			// CapabilityStatement when reachable.
+			fmt.Println("Deriving coverage obligations...")
 			coverageResourceTypes, coverageProfileURLs, preferredProfilesByResource, coverageSearchCodes, err := resourceScopeForRun(cmd, cfg, newDebugTracer(cfg.debug))
 			if err != nil {
 				return err
@@ -64,6 +69,7 @@ func newTestFhirCmd(cfg *config) *cobra.Command {
 			fmt.Printf("Derived %d coverage requirements from %d resolved packages\n", len(coveragePlan.Requirements), len(graph.Packages))
 
 			// Stage 3: generate the test plan (seed dataset + test AST).
+			fmt.Println("Generating test plan...")
 			astPlan, setupDataset, err := buildTestPlan(cfg, reg, coveragePlan, preferredProfilesByResource, coverageResourceTypes, coverageProfileURLs)
 			if err != nil {
 				return err
@@ -88,7 +94,11 @@ func newTestFhirCmd(cfg *config) *cobra.Command {
 			}
 
 			// Stage 6: write and print the report, honoring --fail-on-uncovered.
-			return writeRunReport(cfg, report, coverageEvaluation, true)
+			if err := writeRunReport(cfg, report, coverageEvaluation, true); err != nil {
+				return err
+			}
+			fmt.Printf("Total time: %s\n", time.Since(start).Round(time.Millisecond))
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&cfg.depsDir, "deps-dir", "", "directory to search for dependency package archives (.tgz/.tar.gz)")
