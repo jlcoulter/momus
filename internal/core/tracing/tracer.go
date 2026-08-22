@@ -4,6 +4,7 @@
 package tracing
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -39,12 +40,36 @@ type Tracer struct {
 	maxBody int
 	seq     int
 	color   bool
+	json    bool
 }
 
-// New returns a Tracer that writes to w. When w is nil the tracer is a no-op.
-// Colour is enabled automatically when w is a terminal.
+// Event is a single structured trace record: either a request or a response.
+// When kind is "request", Status is empty and Headers/Body are the request's;
+// when kind is "response", Method/URL/Headers/Body describe the response and
+// Status carries the HTTP status code. Sequence pairs a request with its
+// response.
+type Event struct {
+	Sequence  int               `json:"sequence"`
+	Kind      string            `json:"kind"` // "request" | "response"
+	Method    string            `json:"method"`
+	URL       string            `json:"url"`
+	Status    int               `json:"status,omitempty"`
+	Headers   map[string]string `json:"headers,omitempty"`
+	Body      string            `json:"body,omitempty"`
+	Truncated int               `json:"truncated,omitempty"`
+}
+
+// New returns a Tracer that writes human-readable text to w. When w is nil the
+// tracer is a no-op. Colour is enabled automatically when w is a terminal.
 func New(w io.Writer) *Tracer {
 	return &Tracer{w: w, maxBody: maxBodyBytes, color: isTerminal(w)}
+}
+
+// NewJSON returns a Tracer that writes one JSON Event per line (JSON Lines) to
+// w, so the request/response stream is machine-parseable. When w is nil the
+// tracer is a no-op.
+func NewJSON(w io.Writer) *Tracer {
+	return &Tracer{w: w, maxBody: maxBodyBytes, json: true}
 }
 
 // LogRequest records an outgoing request. body is the request payload (may be
@@ -58,6 +83,17 @@ func (t *Tracer) LogRequest(req *http.Request, body []byte) int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.seq++
+	if t.json {
+		t.writeJSONEvent(Event{
+			Sequence: t.seq,
+			Kind:     "request",
+			Method:   req.Method,
+			URL:      req.URL.String(),
+			Headers:  headerMap(req.Header),
+			Body:     string(body),
+		})
+		return t.seq
+	}
 	t.writeHeader(fmt.Sprintf("==> REQUEST #%d", t.seq), cyan)
 	t.writeLine("%s %s", t.paint(bold, req.Method), req.URL.String())
 	t.writeHeaders(req.Header)
@@ -74,11 +110,60 @@ func (t *Tracer) LogResponse(req *http.Request, seq int, status int, headers htt
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.json {
+		truncated := 0
+		if len(body) > t.maxBody {
+			truncated = len(body) - t.maxBody
+			body = body[:t.maxBody]
+		}
+		t.writeJSONEvent(Event{
+			Sequence:  seq,
+			Kind:      "response",
+			Method:    req.Method,
+			URL:       req.URL.String(),
+			Status:    status,
+			Headers:   headerMap(headers),
+			Body:      string(body),
+			Truncated: truncated,
+		})
+		return
+	}
 	t.writeHeader(fmt.Sprintf("<== RESPONSE #%d", seq), statusColor(status))
 	t.writeLine("%s %s -> %s", req.Method, req.URL.String(), t.paint(statusColor(status), fmt.Sprintf("%d %s", status, http.StatusText(status))))
 	t.writeHeaders(headers)
 	t.writeBody(body)
 	t.writeBlank()
+}
+
+// writeJSONEvent marshals an Event to a single JSON line. It is called with t.mu
+// held.
+func (t *Tracer) writeJSONEvent(ev Event) {
+	b, err := json.Marshal(ev)
+	if err != nil {
+		return
+	}
+	t.w.Write(b)
+	t.w.Write([]byte("\n"))
+}
+
+// headerMap flattens an http.Header into a single-value-per-key map, redacting
+// sensitive values.
+func headerMap(headers http.Header) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(headers))
+	for k, vals := range headers {
+		v := ""
+		if len(vals) > 0 {
+			v = vals[0]
+		}
+		if isSensitiveHeader(k) {
+			v = "<redacted>"
+		}
+		out[k] = v
+	}
+	return out
 }
 
 // writeHeader prints a section title, coloured when enabled.

@@ -60,8 +60,14 @@ func newConformanceSelfTestCmd(cfg *config) *cobra.Command {
 			}
 			// Tracer captures the full HTTP request/response stream (method,
 			// URL, status, headers, body) for every provisioning call and test
-			// case, written to the output file so a run can be inspected.
-			tracer := tracing.New(out)
+			// case, written to the output file so a run can be inspected. With
+			// --output-format json it emits one structured JSON record per line.
+			var tracer *tracing.Tracer
+			if cfg.conformanceJSON {
+				tracer = tracing.NewJSON(out)
+			} else {
+				tracer = tracing.New(out)
+			}
 
 			for _, name := range fixtures {
 				fx, err := golden.LoadFixture(filepath.Join(dir, name+".json"))
@@ -70,7 +76,9 @@ func newConformanceSelfTestCmd(cfg *config) *cobra.Command {
 					failed++
 					continue
 				}
-				fmt.Fprintf(out, "\n==== fixture %s ====\n", name)
+				if !cfg.conformanceJSON {
+					fmt.Fprintf(out, "\n==== fixture %s ====\n", name)
+				}
 				res, err := golden.Run(ctx, name, fx, tracer)
 				if err != nil {
 					fmt.Printf("[FAIL] %s: %v\n", name, err)
@@ -88,6 +96,7 @@ func newConformanceSelfTestCmd(cfg *config) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&cfg.goldenDir, "fixtures", "", "path to the golden fixtures directory (default: repo testdata/golden)")
 	cmd.Flags().StringVar(&cfg.conformanceOut, "output", "", "write the HTTP request/response trace to this file (method, URL, status, headers, body)")
+	cmd.Flags().BoolVar(&cfg.conformanceJSON, "output-format", false, "write the trace as JSON Lines (one structured record per request/response)")
 	return cmd
 }
 

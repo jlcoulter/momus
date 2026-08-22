@@ -2,6 +2,7 @@ package tracing
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -134,6 +135,73 @@ func TestTracerColorOffByDefaultForNonTerminal(t *testing.T) {
 
 	if strings.Contains(buf.String(), "\x1b[") {
 		t.Errorf("expected no ANSI codes for a non-terminal writer:\n%q", buf.String())
+	}
+}
+
+func TestTracerJSONOutput(t *testing.T) {
+	var buf bytes.Buffer
+	tr := NewJSON(&buf)
+
+	req, _ := http.NewRequest(http.MethodPut, "http://host/fhir/Patient/1", strings.NewReader(`{"resourceType":"Patient"}`))
+	req.Header.Set("Content-Type", "application/fhir+json")
+	req.Header.Set("Authorization", "Bearer secret-token")
+	seq := tr.LogRequest(req, []byte(`{"resourceType":"Patient"}`))
+	tr.LogResponse(req, seq, http.StatusCreated, http.Header{"ETag": []string{`W/"1"`}}, []byte(`{"id":"1"}`))
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 JSON lines, got %d: %q", len(lines), buf.String())
+	}
+
+	var reqEv, respEv Event
+	if err := json.Unmarshal([]byte(lines[0]), &reqEv); err != nil {
+		t.Fatalf("decode request line: %v", err)
+	}
+	if err := json.Unmarshal([]byte(lines[1]), &respEv); err != nil {
+		t.Fatalf("decode response line: %v", err)
+	}
+
+	if reqEv.Kind != "request" || reqEv.Sequence != 1 || reqEv.Method != http.MethodPut || reqEv.URL != "http://host/fhir/Patient/1" {
+		t.Errorf("request event = %+v", reqEv)
+	}
+	if reqEv.Headers["Authorization"] != "<redacted>" {
+		t.Errorf("expected Authorization redacted, got %q", reqEv.Headers["Authorization"])
+	}
+	if reqEv.Body != `{"resourceType":"Patient"}` {
+		t.Errorf("request body = %q", reqEv.Body)
+	}
+
+	if respEv.Kind != "response" || respEv.Sequence != 1 || respEv.Status != http.StatusCreated {
+		t.Errorf("response event = %+v", respEv)
+	}
+	if respEv.Headers["ETag"] != `W/"1"` {
+		t.Errorf("response ETag = %q", respEv.Headers["ETag"])
+	}
+	if respEv.Body != `{"id":"1"}` {
+		t.Errorf("response body = %q", respEv.Body)
+	}
+	if strings.Contains(buf.String(), "secret-token") {
+		t.Errorf("JSON output leaked the bearer token:\n%s", buf.String())
+	}
+}
+
+func TestTracerJSONTruncatesLargeBodies(t *testing.T) {
+	var buf bytes.Buffer
+	tr := NewJSON(&buf)
+	tr.maxBody = 8
+
+	req, _ := http.NewRequest(http.MethodGet, "http://host/fhir/Patient", nil)
+	tr.LogResponse(req, 1, http.StatusOK, nil, []byte("0123456789abcdef"))
+
+	var ev Event
+	if err := json.Unmarshal(bytes.TrimRight(buf.Bytes(), "\n"), &ev); err != nil {
+		t.Fatalf("decode line: %v", err)
+	}
+	if ev.Body != "01234567" {
+		t.Errorf("truncated body = %q, want prefix", ev.Body)
+	}
+	if ev.Truncated != 8 {
+		t.Errorf("truncated = %d, want 8", ev.Truncated)
 	}
 }
 

@@ -58,6 +58,7 @@ type config struct {
 	packagePath string
 
 	// Conformance self-test
-	goldenDir      string
-	conformanceOut string
+	goldenDir       string
+	conformanceOut  string
+	conformanceJSON bool
 }
