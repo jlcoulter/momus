@@ -54,18 +54,11 @@ func (v *ProfileValidator) checkInvariants(ctx context.Context, node *model.Elem
 		}
 		values, present := resolvePath(resource, node.Path)
 		if !present {
-			// No element value; evaluate against the missing (empty) context.
-			ok, known, err := fhirpath.EvalBool(ctx, c.Expression, nil)
-			if err != nil {
-				continue // a parse/unknown error on the constraint is not a violation
-			}
-			if known && !ok {
-				issues = append(issues, Issue{
-					Path:    node.Path,
-					Kind:    "invariant",
-					Message: invariantMessage(c),
-				})
-			}
+			// The element is absent: an invariant only constrains element
+			// instances, so an absent element is vacuously satisfied. Evaluating
+			// against a nil context would turn "extension.exists() != value.
+			// exists()" (ext-1) into "false != false" and falsely reject every
+			// element without an extension field.
 			continue
 		}
 		for _, val := range values {
@@ -123,17 +116,17 @@ func (v *ProfileValidator) checkCardinality(node *model.ElementNode, def *model.
 // checkMaxCardinality (T2b) enforces upper-bound cardinality: an element with a
 // numeric Max > 1 (or a bounded value such as "1") must not contain more members
 // than allowed. "0" means prohibited, "*" is unbounded. Like required-presence,
-// the bound is only enforced when the element is actually present.
+// the bound is only enforced when the element is actually present. The bound
+// applies per element instance: when the element's parent repeats (an array
+// parent like Parameters.parameter), the count is taken per parent instance, not
+// across the whole collection.
 func (v *ProfileValidator) checkMaxCardinality(node *model.ElementNode, def *model.ElementDefinition, resource map[string]any) []Issue {
 	max, bounded := parseMax(def.Max)
 	if !bounded {
 		return nil
 	}
-	values, present := resolvePath(resource, node.Path)
-	if !present {
-		return nil
-	}
-	if len(values) > max {
+	count := maxLeafCount(resource, node.Path)
+	if count > max {
 		return []Issue{{
 			Path:    node.Path,
 			Kind:    "cardinality",
@@ -141,6 +134,69 @@ func (v *ProfileValidator) checkMaxCardinality(node *model.ElementNode, def *mod
 		}}
 	}
 	return nil
+}
+
+// maxLeafCount returns the maximum number of leaf values carried by a single
+// parent instance at the given path. For a non-repeatable parent there is one
+// instance (e.g. a top-level scalar counts its own members). For a repeatable
+// parent (an array such as Parameters.parameter) the bound is evaluated per
+// array element, so a max-1 leaf that appears once in each of several parent
+// instances does not exceed its bound. It returns 0 when the element is absent.
+func maxLeafCount(resource map[string]any, path string) int {
+	segments := elementSegments(path)
+	if len(segments) == 0 {
+		return 0
+	}
+	// Walk to the parent segment, keeping each parent instance as a distinct
+	// group rather than flattening arrays together.
+	parents := []map[string]any{resource}
+	for i := 0; i < len(segments)-1; i++ {
+		var next []map[string]any
+		for _, p := range parents {
+			key := segments[i]
+			if _, ok := p[key]; !ok {
+				if rk := resolveLeafKey(p, segments[i]); rk != "" {
+					key = rk
+				} else {
+					continue
+				}
+			}
+			switch val := p[key].(type) {
+			case []any:
+				for _, el := range val {
+					if em, ok := el.(map[string]any); ok {
+						next = append(next, em)
+					}
+				}
+			case map[string]any:
+				next = append(next, val)
+			}
+		}
+		if len(next) == 0 {
+			return 0
+		}
+		parents = next
+	}
+	leaf := segments[len(segments)-1]
+	maxCount := 0
+	for _, p := range parents {
+		key := leaf
+		if _, ok := p[leaf]; !ok {
+			if rk := resolveLeafKey(p, leaf); rk != "" {
+				key = rk
+			} else {
+				continue
+			}
+		}
+		count := 1
+		if arr, isArr := p[key].([]any); isArr {
+			count = len(arr)
+		}
+		if count > maxCount {
+			maxCount = count
+		}
+	}
+	return maxCount
 }
 
 // parseMax interprets an ElementDefinition.Max cardinality string. It returns
