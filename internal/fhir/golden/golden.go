@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"time"
 
@@ -216,15 +215,4 @@ func rewriteBase(node ast.Node, old, new string) {
 		n.URL = strings.ReplaceAll(n.URL, old, new)
 	case *ast.Capture:
 	}
-}
-
-// sortedKeys returns a sorted slice of a map's keys (helper for any future
-// deterministic rendering).
-func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
