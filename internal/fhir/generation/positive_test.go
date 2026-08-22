@@ -1361,3 +1361,56 @@ func contains(haystack []string, needle string) bool {
 	}
 	return false
 }
+
+// TestGenerateSingleValueMissingDatatypes verifies that the previously
+// fall-through datatypes (decimal, time, Quantity, Ratio, Range, Attachment)
+// are now explicitly synthesized.
+func TestGenerateSingleValueMissingDatatypes(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/observation", Type: "Observation", Elements: []model.ElementDefinition{
+		{Path: "Observation", Min: 0, Max: "*"},
+		{Path: "Observation.valueDecimal", Min: 0, Max: "1", Types: []model.ElementType{{Code: "decimal"}}},
+		{Path: "Observation.effectiveTime", Min: 0, Max: "1", Types: []model.ElementType{{Code: "time"}}},
+		{Path: "Observation.valueQuantity", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Quantity"}}},
+		{Path: "Observation.valueRatio", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Ratio"}}},
+		{Path: "Observation.valueRange", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Range"}}},
+		{Path: "Observation.attachment", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Attachment"}}},
+	}})
+
+	cases := []struct {
+		path string
+		want func(any) bool
+	}{
+		{"Observation.valueDecimal", func(v any) bool { _, ok := v.(float64); return ok }},
+		{"Observation.effectiveTime", func(v any) bool { _, ok := v.(string); return ok }},
+		{"Observation.valueQuantity", func(v any) bool { _, ok := v.(map[string]any); return ok }},
+		{"Observation.valueRatio", func(v any) bool { _, ok := v.(map[string]any); return ok }},
+		{"Observation.valueRange", func(v any) bool { _, ok := v.(map[string]any); return ok }},
+		{"Observation.attachment", func(v any) bool { _, ok := v.(map[string]any); return ok }},
+	}
+	for _, c := range cases {
+		node := &model.ElementNode{Path: c.path, Definition: &model.ElementDefinition{Path: c.path, Types: []model.ElementType{{Code: leafTypeOf(c.path)}}}}
+		val, ok := generateSingleValue(node, reg)
+		if !ok || !c.want(val) {
+			t.Errorf("generateSingleValue(%s) = %v ok=%v, want synthesized %T", c.path, val, ok, val)
+		}
+	}
+}
+
+func leafTypeOf(path string) string {
+	switch {
+	case strings.HasSuffix(path, "valueDecimal"):
+		return "decimal"
+	case strings.HasSuffix(path, "effectiveTime"):
+		return "time"
+	case strings.HasSuffix(path, "valueQuantity"):
+		return "Quantity"
+	case strings.HasSuffix(path, "valueRatio"):
+		return "Ratio"
+	case strings.HasSuffix(path, "valueRange"):
+		return "Range"
+	case strings.HasSuffix(path, "attachment"):
+		return "Attachment"
+	}
+	return ""
+}
