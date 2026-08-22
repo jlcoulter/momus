@@ -149,6 +149,9 @@ func provisionSeed(ctx context.Context, options fhirgeneration.BuildOptions, cov
 			return err
 		}
 		resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return fmt.Errorf("provision seed %s: mock returned %s", localID, resp.Status)
+		}
 	}
 	return nil
 }
