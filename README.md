@@ -365,6 +365,23 @@ developer's daily oracle: add a feature, add a fixture, and every parameter's
 positive/negative/edge cases are exercised and proven. Exits non-zero on any
 failure.
 
+Reference fixtures under `testdata/golden/` cover the breadth of what the
+application supports, with one fixture per search-parameter family:
+
+- `patient` — string (`name`) and token (`gender`) search; HumanName
+- `observation-slice` — token search with slice constraints
+- `observation-invariant` — token search with invariant regex
+- `search-operations` — string/token/`_id` at interaction strength 2 (pairwise
+  search-parameter combinations)
+- `patient-date` — `date` search
+- `observation-value` — `quantity` and `reference` search with `Quantity`
+- `location-near` — `special` (`near`) geographic search with coordinates
+- `observation-composite` — `composite` search (`part1$part2`)
+
+Each fixture asserts the positive, negative, and edge cases for its search
+parameters (valid, no-results, invalid-value, invalid-modifier,
+multiple-results) plus the datatypes its elements use.
+
 ## Coverage pipeline
 
 The executable pipeline, with each command owning one stage:
