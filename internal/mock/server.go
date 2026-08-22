@@ -1,28 +1,44 @@
-// Package mock provides a minimal HTTP server that returns a fixed response
-// for every request. It is useful as a stand-in target when developing or
-// exercising test plans without a real server.
+// Package mock provides a configurable HTTP server that behaves like a FHIR
+// server. It can run in two modes:
+//
+//   - Fixed mode (the default): every request returns a fixed status and body.
+//   - Plan-aware mode (when a test plan is supplied): it holds resources in an
+//     in-memory store and serves real FHIR semantics — PUT/POST store a
+//     resource, GET retrieves it, DELETE removes it, and search returns a
+//     Bundle. It also reads the test plan to learn which requests are expected
+//     to be rejected (negative tests) and returns the matching 4xx status.
+//
+// This makes it a useful stand-in target for exercising test plans end to end
+// without a real server.
 package mock
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-// Server is a minimal mock HTTP server that responds to every request with a
-// fixed status code and body.
+// Server is a mock HTTP server that either returns a fixed response or behaves
+// like a stateful FHIR server driven by a test plan.
 type Server struct {
-	status int
-	body   string
-	port   int
-	server *http.Server
-	ln     net.Listener
+	status   int
+	body     string
+	port     int
+	basePath string
+	plan     *planRoutes
+	planErr  error
+	store    *Store
+	server   *http.Server
+	ln       net.Listener
 }
 
 // Option configures a mock Server.
@@ -34,7 +50,32 @@ func WithPort(port int) Option {
 	return func(s *Server) { s.port = port }
 }
 
-// New returns a mock server that responds with the given status and body.
+// WithBasePath sets the base path the server serves under (e.g. "/fhir"). It is
+// stripped from incoming request paths before routing, so a test plan targeting
+// "http://host/fhir/Patient" hits the same handler as "/Patient". When empty,
+// the server serves at the root.
+func WithBasePath(basePath string) Option {
+	return func(s *Server) { s.basePath = strings.TrimRight(basePath, "/") }
+}
+
+// WithPlan enables plan-aware mode, loading the reject routes from the given
+// test plan file. When set, the server holds resources in memory and serves
+// real FHIR semantics instead of a fixed response.
+func WithPlan(planPath string) Option {
+	return func(s *Server) {
+		routes, err := loadPlanRoutes(planPath)
+		if err != nil {
+			// Defer the error to Start so the caller can surface it.
+			s.planErr = err
+			return
+		}
+		s.plan = routes
+		s.store = NewStore()
+	}
+}
+
+// New returns a mock server. In fixed mode it responds with the given status
+// and body; with WithPlan it behaves as a stateful FHIR server.
 func New(status int, body string, opts ...Option) *Server {
 	s := &Server{status: status, body: body}
 	for _, o := range opts {
@@ -46,6 +87,9 @@ func New(status int, body string, opts ...Option) *Server {
 // Start binds the server to a port and begins serving. It returns the address
 // the server is listening on (e.g. "127.0.0.1:54321").
 func (s *Server) Start() (string, error) {
+	if s.planErr != nil {
+		return "", s.planErr
+	}
 	addr := "127.0.0.1:0"
 	if s.port != 0 {
 		addr = fmt.Sprintf("127.0.0.1:%d", s.port)
@@ -64,7 +108,11 @@ func (s *Server) Start() (string, error) {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	r.Handle("/*", http.HandlerFunc(s.handle))
+	if s.plan != nil {
+		r.Handle("/*", http.HandlerFunc(s.handlePlan))
+	} else {
+		r.Handle("/*", http.HandlerFunc(s.handleFixed))
+	}
 
 	s.server = &http.Server{
 		Handler: r,
@@ -77,12 +125,147 @@ func (s *Server) Start() (string, error) {
 	return ln.Addr().String(), nil
 }
 
-// handle writes the fixed status and body for any request.
-func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
+// handleFixed writes the fixed status and body for any request.
+func (s *Server) handleFixed(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(s.status)
 	if s.body != "" {
 		_, _ = w.Write([]byte(s.body))
 	}
+}
+
+// handlePlan serves a request with real FHIR semantics backed by the in-memory
+// store and the test plan's reject routes.
+func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
+	// Reject routes from the plan take precedence: a request the plan expects
+	// to be rejected returns the matching 4xx. Routes are keyed by method + path
+	// (the full incoming path, including any base path) so they match the plan's
+	// absolute request URLs regardless of the host the mock is served on.
+	if route, ok := s.plan.rejects[r.Method+" "+r.URL.Path]; ok {
+		w.WriteHeader(route.status)
+		return
+	}
+
+	// Strip the base path (e.g. "/fhir") so routing sees the resource path.
+	path := r.URL.Path
+	if s.basePath != "" && strings.HasPrefix(path, s.basePath) {
+		path = strings.TrimPrefix(path, s.basePath)
+		if path == "" {
+			path = "/"
+		}
+	}
+
+	segments := strings.Split(strings.TrimPrefix(path, "/"), "/")
+
+	// /metadata returns a minimal CapabilityStatement.
+	if len(segments) == 1 && segments[0] == "metadata" {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"resourceType": "CapabilityStatement",
+			"status":       "active",
+			"fhirVersion":  "4.0.1",
+		})
+		return
+	}
+
+	// Search: GET /{resourceType}?query returns a Bundle of stored resources.
+	if r.Method == http.MethodGet && len(segments) == 1 && segments[0] != "" {
+		writeSearchBundle(w, s.store, segments[0])
+		return
+	}
+
+	// History: GET /{resourceType}/{id}/_history returns a Bundle.
+	if r.Method == http.MethodGet && len(segments) == 3 && segments[2] == "_history" {
+		writeSearchBundle(w, s.store, segments[0])
+		return
+	}
+
+	// Instance operations: /{resourceType}/{id}
+	if len(segments) == 2 && segments[0] != "" && segments[1] != "" {
+		resourceType, id := segments[0], segments[1]
+		switch r.Method {
+		case http.MethodGet:
+			if body, ok := s.store.Get(resourceType, id); ok {
+				w.Header().Set("Content-Type", "application/fhir+json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(body)
+				return
+			}
+			writeOperationOutcome(w, http.StatusNotFound, "Resource not found")
+			return
+		case http.MethodPut, http.MethodPost:
+			body, err := readBody(r)
+			if err != nil {
+				writeOperationOutcome(w, http.StatusBadRequest, "invalid request body")
+				return
+			}
+			s.store.Put(resourceType, id, body)
+			w.Header().Set("Content-Type", "application/fhir+json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(body)
+			return
+		case http.MethodDelete:
+			s.store.Delete(resourceType, id)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+
+	// Fallback: accept with the configured status.
+	w.WriteHeader(s.status)
+	if s.body != "" {
+		_, _ = w.Write([]byte(s.body))
+	}
+}
+
+// writeSearchBundle returns a Bundle of every stored resource of a type.
+func writeSearchBundle(w http.ResponseWriter, store *Store, resourceType string) {
+	items := store.List(resourceType)
+	entries := make([]map[string]any, 0, len(items))
+	for _, body := range items {
+		var res map[string]any
+		if err := json.Unmarshal(body, &res); err == nil {
+			entries = append(entries, map[string]any{"resource": res})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"resourceType": "Bundle",
+		"type":         "searchset",
+		"total":        len(entries),
+		"entry":        entries,
+	})
+}
+
+// writeOperationOutcome returns a minimal FHIR OperationOutcome.
+func writeOperationOutcome(w http.ResponseWriter, status int, diagnostics string) {
+	writeJSON(w, status, map[string]any{
+		"resourceType": "OperationOutcome",
+		"issue": []any{
+			map[string]any{
+				"severity":    "error",
+				"code":        "not-found",
+				"diagnostics": diagnostics,
+			},
+		},
+	})
+}
+
+// writeJSON writes a JSON response with the given status.
+func writeJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+// readBody reads the request body, returning an error when it is empty.
+func readBody(r *http.Request) ([]byte, error) {
+	defer r.Body.Close()
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+	if len(body) == 0 {
+		return nil, fmt.Errorf("empty request body")
+	}
+	return body, nil
 }
 
 // Close shuts the server down, waiting up to a short grace period for in-flight

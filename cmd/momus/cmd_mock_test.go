@@ -23,4 +23,10 @@ func TestMockCmdRegistered(t *testing.T) {
 	if mockCmd.Flags().Lookup("port") == nil {
 		t.Fatal("mock command missing --port flag")
 	}
+	if mockCmd.Flags().Lookup("plan") == nil {
+		t.Fatal("mock command missing --plan flag")
+	}
+	if mockCmd.Flags().Lookup("base-path") == nil {
+		t.Fatal("mock command missing --base-path flag")
+	}
 }
