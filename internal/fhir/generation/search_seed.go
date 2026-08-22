@@ -396,9 +396,10 @@ func isFunctionName(name string) bool {
 }
 
 // searchLeafType resolves the FHIR type code of the element a search expression
-// points at (and whether it is repeatable), by looking it up in the resource's
-// resolved profile. A choice-type element (e.g. "occurred") is looked up with
-// its "[x]" suffix too, since the profile indexes it as "Provenance.occurred[x]".
+// points at (and whether it is repeatable). It first looks the full path up in
+// the resource's resolved profile (with the choice "[x]" form), then falls back
+// to walking nested datatypes (e.g. Provenance.signature.type resolves through
+// the Signature datatype's own definition).
 func searchLeafType(resourceType, elementPath string, reg *registry.Registry) (typeCode string, repeatable bool) {
 	profiles := reg.ProfilesForResource(resourceType)
 	for _, profile := range profiles {
@@ -418,8 +419,57 @@ func searchLeafType(resourceType, elementPath string, reg *registry.Registry) (t
 				return node.Definition.Types[0].Code, node.Definition.Max == "*"
 			}
 		}
+		// Nested datatype path: walk segments, resolving each container's type,
+		// then look up the leaf in the datatype's own definition.
+		if tc, rep, found := resolveNestedLeafType(resolved, resourceType, elementPath, reg); found {
+			return tc, rep
+		}
 	}
 	return "", false
+}
+
+// resolveNestedLeafType walks a dotted element path whose container is a complex
+// datatype, resolving the leaf's type from the datatype's own StructureDefinition.
+func resolveNestedLeafType(resolved *model.ResolvedProfile, resourceType, elementPath string, reg *registry.Registry) (string, bool, bool) {
+	segments := strings.Split(elementPath, ".")
+	if len(segments) < 2 {
+		return "", false, false
+	}
+	// Resolve the top-level container (the first segment) to its datatype.
+	container, ok := resolved.Elements[resourceType+"."+segments[0]]
+	if !ok || container == nil || container.Definition == nil || len(container.Definition.Types) == 0 {
+		return "", false, false
+	}
+	containerType := container.Definition.Types[0].Code
+	sub, err := reg.ResolveProfile("http://hl7.org/fhir/StructureDefinition/" + containerType)
+	if err != nil || sub == nil {
+		return "", false, false
+	}
+	// Walk the remaining segments within the datatype definition.
+	cur := sub
+	for i := 1; i < len(segments); i++ {
+		key := containerType + "." + strings.Join(segments[1:i+1], ".")
+		node, ok := cur.Elements[key]
+		if !ok || node == nil || node.Definition == nil {
+			return "", false, false
+		}
+		if i == len(segments)-1 {
+			if len(node.Definition.Types) > 0 {
+				return node.Definition.Types[0].Code, node.Definition.Max == "*", true
+			}
+			return "", false, false
+		}
+		// Descend into the next datatype if it is complex.
+		if len(node.Definition.Types) > 0 {
+			containerType = node.Definition.Types[0].Code
+			sub, err = reg.ResolveProfile("http://hl7.org/fhir/StructureDefinition/" + containerType)
+			if err != nil || sub == nil {
+				return "", false, false
+			}
+			cur = sub
+		}
+	}
+	return "", false, false
 }
 
 // setPathLeaf sets a primitive string value at a dotted element path within the
