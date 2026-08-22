@@ -3,6 +3,7 @@ package validate
 import (
 	"context"
 
+	"github.com/jlcoulter/momus/internal/fhir/fhirpath"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 )
 
@@ -36,7 +37,61 @@ func (v *ProfileValidator) checkElement(ctx context.Context, node *model.Element
 	issues = append(issues, v.checkTerminology(node, def, resource)...)
 	issues = append(issues, v.checkFixedPattern(node, def, resource)...)
 	issues = append(issues, v.checkSlicePresence(node, def, resource)...)
+	issues = append(issues, v.checkInvariants(ctx, node, def, resource)...)
 	return issues
+}
+
+// checkInvariants (T11) evaluates each error-severity FHIRPath constraint on an
+// element against its value as %context. A constraint that evaluates false (and
+// is known) is a violation; an out-of-scope (unknown) result is not.
+func (v *ProfileValidator) checkInvariants(ctx context.Context, node *model.ElementNode, def *model.ElementDefinition, resource map[string]any) []Issue {
+	var issues []Issue
+	for _, c := range def.Constraints {
+		if c.Severity != "error" || c.Expression == "" {
+			continue
+		}
+		values, present := resolvePath(resource, node.Path)
+		if !present {
+			// No element value; evaluate against the missing (empty) context.
+			ok, known, err := fhirpath.EvalBool(ctx, c.Expression, nil)
+			if err != nil {
+				continue // a parse/unknown error on the constraint is not a violation
+			}
+			if known && !ok {
+				issues = append(issues, Issue{
+					Path:    node.Path,
+					Kind:    "invariant",
+					Message: invariantMessage(c),
+				})
+			}
+			continue
+		}
+		for _, val := range values {
+			if !isPresent(val) {
+				continue
+			}
+			ok, known, err := fhirpath.EvalBool(ctx, c.Expression, val)
+			if err != nil {
+				continue
+			}
+			if known && !ok {
+				issues = append(issues, Issue{
+					Path:    node.Path,
+					Kind:    "invariant",
+					Message: invariantMessage(c),
+					Value:   val,
+				})
+			}
+		}
+	}
+	return issues
+}
+
+func invariantMessage(c model.ElementConstraint) string {
+	if c.Human != "" {
+		return "invariant " + c.Key + ": " + c.Human
+	}
+	return "invariant " + c.Key + " is not satisfied"
 }
 
 // checkCardinality (T2) enforces required-presence: an element with Min > 0
