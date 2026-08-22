@@ -2,6 +2,7 @@ package mock
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -135,10 +136,17 @@ func matchesFilters(res map[string]any, params map[string]string) bool {
 	return true
 }
 
+// valueMatches reports whether a stored value matches a search filter value. It
+// recurses into nested maps and arrays (so a HumanName's `text` or a Coding's
+// `code` both match), and matches any string equal to the query value.
 func valueMatches(val any, want string) bool {
 	switch v := val.(type) {
 	case string:
 		return v == want
+	case float64:
+		return fmt.Sprintf("%g", v) == want
+	case bool:
+		return fmt.Sprintf("%v", v) == want
 	case []any:
 		for _, e := range v {
 			if valueMatches(e, want) {
@@ -147,9 +155,10 @@ func valueMatches(val any, want string) bool {
 		}
 		return false
 	case map[string]any:
-		// For a codeable/coding, match the "code" field.
-		if code, ok := v["code"].(string); ok && code == want {
-			return true
+		for _, e := range v {
+			if valueMatches(e, want) {
+				return true
+			}
 		}
 		return false
 	default:
