@@ -106,6 +106,12 @@ func buildSearchSeedInstances(req coverage.CoverageRequirement, count int, optio
 		if !matched {
 			return nil
 		}
+		// Re-resolve coding displays: overwriting a search value resets the coding
+		// (dropping its display), but a profile may require a display on the very
+		// element the search writes (e.g. HealthcareService.type.coding.display).
+		// Normalising after the match restores the canonical display so the seed
+		// still validates.
+		normalisePayloadCodingDisplays(body, options.Registry)
 		out = append(out, &model.ResourceInstance{
 			LocalID:      localID,
 			ResourceType: req.ResourceType,
@@ -184,6 +190,17 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 		// A string search on HumanName matches the text/family tokens; ensure the
 		// value appears there.
 		setNameLeaf(body, elementPath, value)
+		return true
+	case "Identifier":
+		// A token search on an Identifier matches its `value` member (and a
+		// type/system search may match those). Place the value on the identifier's
+		// `value` field so the query matches.
+		setFieldLeaf(body, elementPath, "value", value)
+		return true
+	case "ContactPoint":
+		// A token search on a ContactPoint matches its `value` (telecom number/
+		// address) and `system`. Place the value on the contact point's `value`.
+		setFieldLeaf(body, elementPath, "value", value)
 		return true
 	case "Address":
 		setAddressLeaf(body, elementPath, value)
