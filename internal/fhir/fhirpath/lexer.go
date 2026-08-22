@@ -207,7 +207,7 @@ func (l *lexer) lexNumber() token {
 	start := l.pos
 	for l.pos < len(l.input) {
 		r := l.input[l.pos]
-		if unicode.IsDigit(r) || r == '.' || r == '-' {
+		if unicode.IsDigit(r) || r == '.' {
 			l.pos++
 		} else {
 			break

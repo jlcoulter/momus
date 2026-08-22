@@ -105,6 +105,41 @@ func TestEvalStringLiteral(t *testing.T) {
 	}
 }
 
+func TestEvalSubtraction(t *testing.T) {
+	res, err := evalStr(t, "3 - 2 = 1", map[string]any{})
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if !resTruthyBool(res) {
+		t.Fatalf("3 - 2 = 1 should be true, got %+v", res.value)
+	}
+}
+
+func TestLexerSeparatesNumberAndMinus(t *testing.T) {
+	l := &lexer{input: []rune("3-2")}
+	tok, err := l.next()
+	if err != nil {
+		t.Fatalf("next: %v", err)
+	}
+	if tok.kind != tokNumber || tok.text != "3" {
+		t.Fatalf("first token = %+v, want number '3'", tok)
+	}
+	tok, err = l.next()
+	if err != nil {
+		t.Fatalf("next: %v", err)
+	}
+	if tok.kind != tokMinus {
+		t.Fatalf("second token = %+v, want tokMinus", tok)
+	}
+	tok, err = l.next()
+	if err != nil {
+		t.Fatalf("next: %v", err)
+	}
+	if tok.kind != tokNumber || tok.text != "2" {
+		t.Fatalf("third token = %+v, want number '2'", tok)
+	}
+}
+
 func resTruthyBool(r Result) bool {
 	b, _ := resTruthy(r)
 	return b
