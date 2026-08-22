@@ -6,6 +6,7 @@ import (
 	"math"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // evalFunction implements the supported FHIRPath functions. Any function
@@ -328,11 +329,28 @@ func evalMatches(contextValue any, args []Result) Result {
 	if !ok {
 		return asResult(false)
 	}
-	re, err := regexp.Compile(pattern)
+	re, err := compileMatches(pattern)
 	if err != nil {
 		return unknownResult()
 	}
 	return asResult(re.MatchString(s))
+}
+
+// matchesRegexCache memoizes compiled regexes so invariant expressions with the
+// same pattern are not recompiled on every element evaluation.
+var matchesRegexCache sync.Map // pattern string -> *regexp.Regexp
+
+// compileMatches returns a compiled regexp for pattern, caching the result.
+func compileMatches(pattern string) (*regexp.Regexp, error) {
+	if v, ok := matchesRegexCache.Load(pattern); ok {
+		return v.(*regexp.Regexp), nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+	matchesRegexCache.Store(pattern, re)
+	return re, nil
 }
 
 func evalToInteger(contextValue any) Result {
