@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/jlcoulter/momus/internal/test/ast"
 )
 
 func TestStorePutGetDelete(t *testing.T) {
@@ -297,5 +299,46 @@ func TestWithPlanMissingFile(t *testing.T) {
 	s := New(http.StatusOK, "", WithPlan(filepath.Join(t.TempDir(), "missing.json")))
 	if _, err := s.Start(); err == nil {
 		t.Fatal("expected error for missing plan file")
+	}
+}
+
+func TestSetPlanEnablesPlanAware(t *testing.T) {
+	// Start plan-aware with an empty plan, then feed a reject route via SetPlan.
+	s := New(http.StatusOK, "", WithPlanAware())
+	addr, err := s.Start()
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer s.Close()
+
+	// Before SetPlan, a PUT is accepted (stored).
+	req, _ := http.NewRequest(http.MethodPut, "http://"+addr+"/Patient/p1", bytes.NewReader([]byte(`{"resourceType":"Patient","id":"p1"}`)))
+	req.Header.Set("Content-Type", "application/fhir+json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT before SetPlan: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT before SetPlan status = %d, want 200", resp.StatusCode)
+	}
+
+	// Feed a plan that expects PUT /Patient/reject-me to be rejected.
+	plan := &ast.Plan{Root: &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: "PUT", URL: "http://example.org/Patient/reject-me"},
+		&ast.Assert{Expression: "status in [400,412,422]"},
+	}}}
+	s.SetPlan(plan.Root)
+
+	// Now the reject route is honored.
+	req, _ = http.NewRequest(http.MethodPut, "http://"+addr+"/Patient/reject-me", bytes.NewReader([]byte(`{"resourceType":"Patient"}`)))
+	req.Header.Set("Content-Type", "application/fhir+json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT after SetPlan: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("PUT after SetPlan status = %d, want 400", resp.StatusCode)
 	}
 }

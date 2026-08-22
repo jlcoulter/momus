@@ -36,6 +36,10 @@ type config struct {
 	coveragePlanPath  string
 	includeCases      bool
 
+	// Mock server
+	mock     bool
+	mockPort int
+
 	// API / write authentication
 	apiBearerToken     string
 	apiBasicUsername   string

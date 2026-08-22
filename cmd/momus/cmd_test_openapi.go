@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/jlcoulter/momus/internal/mock"
 	"github.com/jlcoulter/momus/internal/openapi"
 	"github.com/spf13/cobra"
 )
@@ -19,8 +20,22 @@ func newTestOpenapiCmd(cfg *config) *cobra.Command {
 		Short: "Run the full end-to-end conformance test pipeline against an OpenAPI document",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// When --mock is set, start a plan-aware mock server and target it.
+			// The mock's base URL is used unless the caller supplied --base-url.
+			var mockServer *mock.Server
+			if cfg.mock {
+				s, baseURL, err := startMock(cfg, "")
+				if err != nil {
+					return err
+				}
+				mockServer = s
+				defer s.Close()
+				if cfg.baseURL == "" {
+					cfg.baseURL = baseURL
+				}
+			}
 			if cfg.baseURL == "" {
-				return fmt.Errorf("base URL is required; provide --base-url")
+				return fmt.Errorf("base URL is required; provide --base-url or --mock")
 			}
 			doc, err := loadOpenAPIDocument(args[0])
 			if err != nil {
@@ -31,6 +46,12 @@ func newTestOpenapiCmd(cfg *config) *cobra.Command {
 				return err
 			}
 			fmt.Printf("Generated test plan with %d operation cases from %s\n", len(doc.Paths), args[0])
+
+			// Feed the generated plan's reject routes into the mock so it rejects
+			// the requests the plan expects to be rejected.
+			if mockServer != nil {
+				setMockPlan(mockServer, astPlan)
+			}
 
 			// OpenAPI has no seed dataset to provision and no coverage plan yet,
 			// so provisioning and coverage evaluation are skipped.
@@ -43,8 +64,10 @@ func newTestOpenapiCmd(cfg *config) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write test result report JSON to a file")
 	cmd.Flags().StringVar(&cfg.htmlReport, "html", "", "write an HTML coverage report with drill-down to a file")
-	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target API base URL for the server under test")
+	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target API base URL for the server under test (defaults to the mock server when --mock is set)")
 	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate API base URL for write (POST/PUT/PATCH) requests; defaults to --base-url")
+	cmd.Flags().BoolVar(&cfg.mock, "mock", false, "start an in-process plan-aware mock server and test against it")
+	cmd.Flags().IntVar(&cfg.mockPort, "mock-port", 0, "port for the mock server (default: ephemeral)")
 	cmd.Flags().StringVar(&cfg.apiBearerToken, "api-bearer-token", "", "bearer token used for API requests during execution")
 	cmd.Flags().StringVar(&cfg.apiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during execution")
 	cmd.Flags().StringVar(&cfg.apiBasicPassword, "api-basic-password", "", "basic auth password used for API requests during execution")

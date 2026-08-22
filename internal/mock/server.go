@@ -21,10 +21,12 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jlcoulter/momus/internal/test/ast"
 )
 
 // Server is a mock HTTP server that either returns a fixed response or behaves
@@ -39,6 +41,7 @@ type Server struct {
 	store    *Store
 	server   *http.Server
 	ln       net.Listener
+	mu       sync.RWMutex
 }
 
 // Option configures a mock Server.
@@ -70,6 +73,31 @@ func WithPlan(planPath string) Option {
 			return
 		}
 		s.plan = routes
+		s.store = NewStore()
+	}
+}
+
+// WithPlanAware enables plan-aware mode with an empty reject-route set and an
+// in-memory store, so the server serves real FHIR semantics immediately. The
+// reject routes are filled in later via SetPlan once the test plan exists. This
+// is used by the "test" command, which starts the mock before the plan is
+// generated (the plan's base URL depends on the mock's address).
+func WithPlanAware() Option {
+	return func(s *Server) {
+		s.plan = &planRoutes{rejects: make(map[string]rejectRoute)}
+		s.store = NewStore()
+	}
+}
+
+// SetPlan installs the reject routes from an in-memory test AST root and
+// enables plan-aware mode. It is used by the "test" command, which starts the
+// mock before the plan is generated (the plan's base URL depends on the mock's
+// address), then feeds the plan in once it exists.
+func (s *Server) SetPlan(root ast.Node) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.plan = buildPlanRoutes(root)
+	if s.store == nil {
 		s.store = NewStore()
 	}
 }
@@ -136,11 +164,16 @@ func (s *Server) handleFixed(w http.ResponseWriter, r *http.Request) {
 // handlePlan serves a request with real FHIR semantics backed by the in-memory
 // store and the test plan's reject routes.
 func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	plan := s.plan
+	store := s.store
+	s.mu.RUnlock()
+
 	// Reject routes from the plan take precedence: a request the plan expects
 	// to be rejected returns the matching 4xx. Routes are keyed by method + path
 	// (the full incoming path, including any base path) so they match the plan's
 	// absolute request URLs regardless of the host the mock is served on.
-	if route, ok := s.plan.rejects[r.Method+" "+r.URL.Path]; ok {
+	if route, ok := plan.rejects[r.Method+" "+r.URL.Path]; ok {
 		w.WriteHeader(route.status)
 		return
 	}
@@ -168,13 +201,13 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 
 	// Search: GET /{resourceType}?query returns a Bundle of stored resources.
 	if r.Method == http.MethodGet && len(segments) == 1 && segments[0] != "" {
-		writeSearchBundle(w, s.store, segments[0])
+		writeSearchBundle(w, store, segments[0])
 		return
 	}
 
 	// History: GET /{resourceType}/{id}/_history returns a Bundle.
 	if r.Method == http.MethodGet && len(segments) == 3 && segments[2] == "_history" {
-		writeSearchBundle(w, s.store, segments[0])
+		writeSearchBundle(w, store, segments[0])
 		return
 	}
 
@@ -183,7 +216,7 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 		resourceType, id := segments[0], segments[1]
 		switch r.Method {
 		case http.MethodGet:
-			if body, ok := s.store.Get(resourceType, id); ok {
+			if body, ok := store.Get(resourceType, id); ok {
 				w.Header().Set("Content-Type", "application/fhir+json")
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write(body)
@@ -197,13 +230,13 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 				writeOperationOutcome(w, http.StatusBadRequest, "invalid request body")
 				return
 			}
-			s.store.Put(resourceType, id, body)
+			store.Put(resourceType, id, body)
 			w.Header().Set("Content-Type", "application/fhir+json")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(body)
 			return
 		case http.MethodDelete:
-			s.store.Delete(resourceType, id)
+			store.Delete(resourceType, id)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}

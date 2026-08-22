@@ -49,10 +49,14 @@ func loadPlanRoutes(path string) (*planRoutes, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode test plan %s: %w", path, err)
 	}
+	return buildPlanRoutes(root), nil
+}
 
+// buildPlanRoutes derives the reject routes from an in-memory test AST root.
+func buildPlanRoutes(root ast.Node) *planRoutes {
 	routes := &planRoutes{rejects: make(map[string]rejectRoute)}
 	walkPlan(root, routes)
-	return routes, nil
+	return routes
 }
 
 // walkPlan traverses the AST, pairing each Request with the Assert that follows
