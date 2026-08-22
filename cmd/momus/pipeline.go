@@ -6,8 +6,8 @@ import (
 
 	testast "github.com/jlcoulter/momus/internal/core/ast"
 	testcoverage "github.com/jlcoulter/momus/internal/core/coverage"
+	coregeneration "github.com/jlcoulter/momus/internal/core/generation"
 	testrunner "github.com/jlcoulter/momus/internal/core/runner"
-	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 )
 
 // This file holds the generic stage functions of the test pipeline that are
@@ -31,7 +31,7 @@ func executePlan(cfg *config, ctx context.Context, astPlan *testast.Plan, preCre
 		writeBase = cfg.baseURL
 	}
 
-	fmt.Printf("Testing phase: executing %d test cases\n", testgeneration.RequirementCount(astPlan))
+	fmt.Printf("Testing phase: executing %d test cases\n", coregeneration.RequirementCount(astPlan))
 
 	// Render a live progress bar to stderr during execution (only when stderr
 	// is a terminal). It is cleared before the report is printed.

@@ -6,6 +6,7 @@ import (
 
 	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/core/coverage"
+	coregen "github.com/jlcoulter/momus/internal/core/generation"
 )
 
 // buildOperationCase builds a single operation or state-transition case: a
@@ -13,13 +14,13 @@ import (
 // assertion carrying the coverage trace. Instance operations create their own
 // dedicated resource first so they never operate on (or destroy) the shared
 // provisioned seed that other cases and payloads depend on.
-func buildOperationCase(req coverage.CoverageRequirement, options BuildOptions) ast.Node {
+func buildOperationCase(req coverage.CoverageRequirement, options coregen.BuildOptions) ast.Node {
 	method, path, expression, expected := operationSpec(req, options)
 
 	// Negative state transitions and server-level custom operations run a single
 	// request against a well-known target and must not create an instance.
 	if isStandaloneOperation(req) {
-		url := joinURL(baseURLForMethod(options, method), req.ResourceType) + path
+		url := coregen.JoinURL(coregen.BaseURLForMethod(options, method), req.ResourceType) + path
 		return &ast.Sequence{Steps: []ast.Node{
 			&ast.Request{
 				Method:  method,
@@ -35,11 +36,11 @@ func buildOperationCase(req coverage.CoverageRequirement, options BuildOptions) 
 	// itself. This isolates each operation from the shared seed: a DELETE removes
 	// only the dedicated instance and can never delete a seed resource that other
 	// cases or payloads reference. The dedicated id is deterministic.
-	id := requirementResourceID(req)
+	id := coregen.RequirementResourceID(req)
 	createBody := operationUpdateBody(req, options, id)
 	createHeaders := map[string]string{"Content-Type": "application/fhir+json", "X-Momus-Requirement-ID": req.ID}
-	createURL := joinInstanceURL(baseURLForMethod(options, "PUT"), req.ResourceType, id)
-	opURL := joinURL(baseURLForMethod(options, method), req.ResourceType) + path
+	createURL := coregen.JoinInstanceURL(coregen.BaseURLForMethod(options, "PUT"), req.ResourceType, id)
+	opURL := coregen.JoinURL(coregen.BaseURLForMethod(options, method), req.ResourceType) + path
 
 	var opBody any
 	opContentType := "application/fhir+json"
@@ -77,13 +78,13 @@ func isStandaloneOperation(req coverage.CoverageRequirement) bool {
 
 // buildCRUDCase builds a full create -> read -> update -> read -> delete ->
 // read (404) state-transition sequence for a resource type.
-func buildCRUDCase(req coverage.CoverageRequirement, options BuildOptions) ast.Node {
+func buildCRUDCase(req coverage.CoverageRequirement, options coregen.BuildOptions) ast.Node {
 	resourceType := req.ResourceType
 	id := crudResourceID(resourceType)
 	body := operationUpdateBody(req, options, id)
 	headers := map[string]string{"Content-Type": "application/fhir+json", "X-Momus-Requirement-ID": req.ID}
 	crudURL := func(method string) string {
-		return joinURL(baseURLForMethod(options, method), resourceType) + "/" + id
+		return coregen.JoinURL(coregen.BaseURLForMethod(options, method), resourceType) + "/" + id
 	}
 	return &ast.Sequence{Steps: []ast.Node{
 		&ast.Request{Method: "PUT", URL: crudURL("PUT"), Headers: headers, Body: body},
@@ -119,9 +120,9 @@ func operationAssert(req coverage.CoverageRequirement, expression, expected stri
 
 // operationSpec returns the HTTP method, resource-relative path, assertion
 // expression, and expected outcome for an operation or state variant.
-func operationSpec(req coverage.CoverageRequirement, options BuildOptions) (method, path, expression, expected string) {
+func operationSpec(req coverage.CoverageRequirement, options coregen.BuildOptions) (method, path, expression, expected string) {
 	_ = options
-	target := requirementResourceID(req)
+	target := coregen.RequirementResourceID(req)
 	missing := "momus-missing"
 	switch req.Variant {
 	case coverage.CoverageVariantOperationRead:
@@ -153,10 +154,10 @@ func operationSpec(req coverage.CoverageRequirement, options BuildOptions) (meth
 // the same profile-driven generation as positive test payloads. The id must
 // match the resource id used in the request URL (servers reject a PUT whose
 // body id disagrees with the URL id, e.g. HAPI-0420).
-func operationUpdateBody(req coverage.CoverageRequirement, options BuildOptions, id string) map[string]any {
-	profiles := orderedProfilesForResource(req.ResourceType, req.ProfileURL, options.PreferredProfileURLsByResource)
-	primaryProfile := firstProfileURL(profiles)
-	body, _ := buildBodyTemplate(req, id, profiles, primaryProfile, nil, options.Registry, true)
+func operationUpdateBody(req coverage.CoverageRequirement, options coregen.BuildOptions, id string) map[string]any {
+	profiles := coregen.OrderedProfilesForResource(req.ResourceType, req.ProfileURL, options.PreferredProfileURLsByResource)
+	primaryProfile := coregen.FirstProfileURL(profiles)
+	body, _ := options.Builder.BuildBody(req, id, profiles, primaryProfile, nil, true)
 	return body
 }
 
@@ -164,8 +165,8 @@ func operationUpdateBody(req coverage.CoverageRequirement, options BuildOptions,
 // from the resource's synthesized body, so a PATCH test does not hard-code a
 // `status` property that resources without one would reject. It falls back to
 // `status`/`active` only when no simple top-level property is available.
-func patchProperty(req coverage.CoverageRequirement, options BuildOptions) (string, any) {
-	id := requirementResourceID(req)
+func patchProperty(req coverage.CoverageRequirement, options coregen.BuildOptions) (string, any) {
+	id := coregen.RequirementResourceID(req)
 	body := operationUpdateBody(req, options, id)
 	keys := make([]string, 0, len(body))
 	for k := range body {
@@ -186,5 +187,5 @@ func patchProperty(req coverage.CoverageRequirement, options BuildOptions) (stri
 
 // crudResourceID returns the deterministic resource id used by a CRUD sequence.
 func crudResourceID(resourceType string) string {
-	return "momus-crud-" + sanitizeFHIRID(resourceType)
+	return "momus-crud-" + coregen.SanitizeFHIRID(resourceType)
 }

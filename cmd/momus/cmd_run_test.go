@@ -13,8 +13,8 @@ import (
 
 	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/core/coverage"
+	testgeneration "github.com/jlcoulter/momus/internal/fhir/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
-	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 )
 
 // writeTestPlan encodes a test plan (seed dataset + test AST) to a temp file and

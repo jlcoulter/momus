@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/core/coverage"
+	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -16,7 +17,7 @@ func TestStateDeleteNonexistentPortableAssertion(t *testing.T) {
 		ID: "st-2", ResourceType: "Organization", Domain: coverage.CoverageDomainState,
 		Variant: coverage.CoverageVariantStateDeleteNonexistent,
 	}
-	_, _, expression, expected := operationSpec(req, BuildOptions{})
+	_, _, expression, expected := operationSpec(req, coregen.BuildOptions{})
 	if expression != "status in [200,204,404]" {
 		t.Fatalf("delete-nonexistent expression = %q, want portable status in [200,204,404]", expression)
 	}
@@ -43,7 +44,7 @@ func TestPatchPropertyDerivesFromProfile(t *testing.T) {
 		ID: "patch-1", ResourceType: "Patient", ProfileURL: "http://example.org/StructureDefinition/patient",
 		Domain: coverage.CoverageDomainOperation, Variant: coverage.CoverageVariantOperationPatch,
 	}
-	prop, value := patchProperty(req, BuildOptions{Registry: r})
+	prop, value := patchProperty(req, coregen.BuildOptions{Builder: NewBuilder(r, false)})
 	if prop == "status" {
 		t.Fatalf("patchProperty returned hard-coded %q, want a property derived from the profile", prop)
 	}

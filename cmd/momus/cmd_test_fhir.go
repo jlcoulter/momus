@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	coregeneration "github.com/jlcoulter/momus/internal/core/generation"
+	testgeneration "github.com/jlcoulter/momus/internal/fhir/generation"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	"github.com/jlcoulter/momus/internal/mock"
-	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 	"github.com/spf13/cobra"
 )
 
@@ -75,7 +76,7 @@ func newTestFhirCmd(cfg *config) *cobra.Command {
 				return err
 			}
 			setupDataset := testgeneration.FromCoreDataset(astPlan.Dataset)
-			fmt.Printf("Generated test plan with %d requirement cases and %d seed resources\n", testgeneration.RequirementCount(astPlan), len(setupDataset.Resources))
+			fmt.Printf("Generated test plan with %d requirement cases and %d seed resources\n", coregeneration.RequirementCount(astPlan), len(setupDataset.Resources))
 
 			// Feed the generated plan's reject routes into the mock so it rejects
 			// the requests the plan expects to be rejected.

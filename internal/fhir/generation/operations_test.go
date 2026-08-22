@@ -6,6 +6,7 @@ import (
 
 	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/core/coverage"
+	coregen "github.com/jlcoulter/momus/internal/core/generation"
 )
 
 func TestGenerateRoutesWriteAndReadRequestsToSeparateBaseURLs(t *testing.T) {
@@ -41,10 +42,10 @@ func TestGenerateRoutesWriteAndReadRequestsToSeparateBaseURLs(t *testing.T) {
 	}
 	walk(plan.Root)
 
-	if got["op-read"] != "GET http://read.example/fhir/Organization/"+requirementResourceID(reqs[0]) {
+	if got["op-read"] != "GET http://read.example/fhir/Organization/"+coregen.RequirementResourceID(reqs[0]) {
 		t.Fatalf("read request = %q, want read base URL", got["op-read"])
 	}
-	if got["op-update"] != "PUT http://write.example/fhir/Organization/"+requirementResourceID(reqs[1]) {
+	if got["op-update"] != "PUT http://write.example/fhir/Organization/"+coregen.RequirementResourceID(reqs[1]) {
 		t.Fatalf("write request = %q, want write base URL", got["op-update"])
 	}
 	if got["search-1"] != "GET http://read.example/fhir/Organization?_id=momus-search" {
@@ -90,10 +91,10 @@ func TestGenerateOperationCasesEmitCorrectRequests(t *testing.T) {
 
 	base := "http://localhost:8080/fhir/Organization"
 	want := map[string]string{
-		"op-1": "GET " + base + "/" + requirementResourceID(reqs[0]),
-		"op-2": "DELETE " + base + "/" + requirementResourceID(reqs[1]),
-		"op-3": "PUT " + base + "/" + requirementResourceID(reqs[2]),
-		"op-4": "GET " + base + "/" + requirementResourceID(reqs[3]) + "/_history",
+		"op-1": "GET " + base + "/" + coregen.RequirementResourceID(reqs[0]),
+		"op-2": "DELETE " + base + "/" + coregen.RequirementResourceID(reqs[1]),
+		"op-3": "PUT " + base + "/" + coregen.RequirementResourceID(reqs[2]),
+		"op-4": "GET " + base + "/" + coregen.RequirementResourceID(reqs[3]) + "/_history",
 		"st-1": "GET " + base + "/momus-missing",
 		"st-2": "DELETE " + base + "/momus-missing",
 	}
@@ -241,7 +242,7 @@ func TestOperationDeleteTargetsDedicatedInstanceNotSeed(t *testing.T) {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
 	}
 
-	dedicated := "Organization/" + requirementResourceID(req)
+	dedicated := "Organization/" + coregen.RequirementResourceID(req)
 	var sawCreate, sawDelete bool
 	var walk func(ast.Node)
 	walk = func(node ast.Node) {

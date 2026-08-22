@@ -3,8 +3,9 @@ package main
 import (
 	"fmt"
 
+	coregeneration "github.com/jlcoulter/momus/internal/core/generation"
+	testgeneration "github.com/jlcoulter/momus/internal/fhir/generation"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
-	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 	"github.com/spf13/cobra"
 )
 
@@ -66,7 +67,7 @@ func newAstCmd(cfg *config) *cobra.Command {
 				}
 			}
 
-			fmt.Printf("Generated test plan with %d requirement cases and %d seed resources from %d resolved packages\n", testgeneration.RequirementCount(astPlan), len(setupDataset.Resources), len(graph.Packages))
+			fmt.Printf("Generated test plan with %d requirement cases and %d seed resources from %d resolved packages\n", coregeneration.RequirementCount(astPlan), len(setupDataset.Resources), len(graph.Packages))
 			if cfg.outputPath != "" {
 				fmt.Printf("Test plan written to %s\n", cfg.outputPath)
 			}

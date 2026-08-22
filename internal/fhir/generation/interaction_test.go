@@ -6,6 +6,7 @@ import (
 
 	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/core/coverage"
+	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	fhircoverage "github.com/jlcoulter/momus/internal/fhir/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
@@ -65,7 +66,7 @@ func TestGenerateFromCoveragePlanStrengthTwoGroupsAccepts(t *testing.T) {
 
 	// Requirement case count must equal the total plan obligations (4 base + 3
 	// interactions), one assert per obligation.
-	if got := RequirementCount(plan); got != 7 {
+	if got := coregen.RequirementCount(plan); got != 7 {
 		t.Fatalf("RequirementCount = %d, want 7", got)
 	}
 
@@ -80,7 +81,7 @@ func TestGenerateFromCoveragePlanStrengthTwoGroupsAccepts(t *testing.T) {
 	if !ok {
 		t.Fatalf("group first step is %T, want *ast.Request", group.Steps[0])
 	}
-	if groupReq.URL != "http://localhost:8080/fhir/Patient/"+requirementResourceID(interactionPlan().Requirements[0]) {
+	if groupReq.URL != "http://localhost:8080/fhir/Patient/"+coregen.RequirementResourceID(interactionPlan().Requirements[0]) {
 		t.Fatalf("group request URL = %q", groupReq.URL)
 	}
 	// Group shares a single request, so its asserts start at index 1.
@@ -232,7 +233,7 @@ func TestGenerateFromCoveragePlanStrengthTwoEndToEnd(t *testing.T) {
 	}
 
 	expect := len(plan.Requirements)
-	if got := RequirementCount(astPlan); got != expect {
+	if got := coregen.RequirementCount(astPlan); got != expect {
 		t.Fatalf("requirement cases = %d, plan total obligations = %d (base + %d interactions); run-summary warning would fire", got, expect, len(plan.Interactions))
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/jlcoulter/momus/internal/core/coverage"
+	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -73,16 +74,17 @@ func buildSearchSeedInstances(req coverage.CoverageRequirement, count int, optio
 	// (e.g. a string `name` and a boolean `active`) gets a type-appropriate value
 	// for each parameter instead of reusing one value for both.
 	values := make(map[string]string, len(codes))
+	builder := NewBuilder(options.Registry, options.Exhaustive)
 	for _, code := range codes {
-		values[code] = searchQueryValue(req, code, options)
+		values[code] = SearchQueryValue(req, code, builder)
 	}
-	resourceProfiles := uniqueProfileURLs(byResource[req.ResourceType])
+	resourceProfiles := coregen.UniqueProfileURLs(byResource[req.ResourceType])
 	setupProfileURL := ""
 	if len(resourceProfiles) > 0 {
 		setupProfileURL = resourceProfiles[0]
 	}
-	setupProfiles := orderedProfilesForResource(req.ResourceType, setupProfileURL, options.PreferredProfileURLsByResource)
-	setupPrimaryProfile := firstProfileURL(setupProfiles)
+	setupProfiles := coregen.OrderedProfilesForResource(req.ResourceType, setupProfileURL, options.PreferredProfileURLsByResource)
+	setupPrimaryProfile := coregen.FirstProfileURL(setupProfiles)
 
 	out := make([]*model.ResourceInstance, 0, count)
 	for i := 0; i < count; i++ {
@@ -114,9 +116,9 @@ func buildSearchSeedInstances(req coverage.CoverageRequirement, count int, optio
 }
 
 func searchSeedID(req coverage.CoverageRequirement, index int) string {
-	base := sanitizeFHIRID(req.ID)
+	base := coregen.SanitizeFHIRID(req.ID)
 	if base == "" {
-		base = sanitizeFHIRID(req.ResourceType)
+		base = coregen.SanitizeFHIRID(req.ResourceType)
 	}
 	const prefix = "momus-search-"
 	suffix := ""

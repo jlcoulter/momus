@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/core/ast"
+	testgeneration "github.com/jlcoulter/momus/internal/fhir/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
-	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 )
 
 // TestProvisionCmdUploadsDatasetFromTestPlan verifies that "coverage provision"

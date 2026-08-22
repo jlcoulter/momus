@@ -7,6 +7,7 @@ import (
 
 	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/core/coverage"
+	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -31,16 +32,16 @@ func TestBuildSetupDatasetProducesSeedResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildSetupDataset returned error: %v", err)
 	}
-	inst, ok := ds.Resources[setupResourceID("Patient")]
+	inst, ok := ds.Resources[coregen.SetupResourceID("Patient")]
 	if !ok {
-		t.Fatalf("expected setup resource %s in dataset", setupResourceID("Patient"))
+		t.Fatalf("expected setup resource %s in dataset", coregen.SetupResourceID("Patient"))
 	}
 	if inst.ResourceType != "Patient" {
 		t.Fatalf("got resource type %q, want Patient", inst.ResourceType)
 	}
 	body := inst.Resource
-	if body["id"] != setupResourceID("Patient") {
-		t.Fatalf("got dataset id %v, want %s", body["id"], setupResourceID("Patient"))
+	if body["id"] != coregen.SetupResourceID("Patient") {
+		t.Fatalf("got dataset id %v, want %s", body["id"], coregen.SetupResourceID("Patient"))
 	}
 	meta := body["meta"].(map[string]any)
 	profiles := meta["profile"].([]any)
@@ -89,10 +90,10 @@ func TestBuildSetupDatasetIncludesTransitiveReferenceTargets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildSetupDataset returned error: %v", err)
 	}
-	if _, ok := ds.Resources[setupResourceID("Observation")]; !ok {
+	if _, ok := ds.Resources[coregen.SetupResourceID("Observation")]; !ok {
 		t.Fatalf("expected setup Observation resource in dataset")
 	}
-	patient, ok := ds.Resources[setupResourceID("Patient")]
+	patient, ok := ds.Resources[coregen.SetupResourceID("Patient")]
 	if !ok {
 		t.Fatalf("expected setup Patient resource in dataset (transitive reference target), got %v", keysOf(ds.Resources))
 	}
@@ -101,7 +102,7 @@ func TestBuildSetupDatasetIncludesTransitiveReferenceTargets(t *testing.T) {
 	}
 	found := false
 	for _, rel := range ds.Relationships {
-		if rel.SourceID == setupResourceID("Observation") && rel.TargetID == setupResourceID("Patient") {
+		if rel.SourceID == coregen.SetupResourceID("Observation") && rel.TargetID == coregen.SetupResourceID("Patient") {
 			found = true
 		}
 	}
@@ -155,7 +156,7 @@ func TestBuildSetupDatasetExcludesAbstractReferenceTypes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildSetupDataset returned error: %v", err)
 	}
-	if _, ok := ds.Resources[setupResourceID("Resource")]; ok {
+	if _, ok := ds.Resources[coregen.SetupResourceID("Resource")]; ok {
 		t.Fatal("abstract type Resource must not be seeded as a reference target")
 	}
 }
@@ -177,7 +178,7 @@ func TestBuildSetupDatasetRespectsCapabilityProfileScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildSetupDataset returned error: %v", err)
 	}
-	if _, ok := ds.Resources[setupResourceID("Organization")]; ok {
+	if _, ok := ds.Resources[coregen.SetupResourceID("Organization")]; ok {
 		t.Fatal("Organization must not be seeded when its profile is outside the capability scope")
 	}
 }
@@ -207,10 +208,10 @@ func TestBuildSetupDatasetRespectsCapabilityScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildSetupDataset returned error: %v", err)
 	}
-	if _, ok := ds.Resources[setupResourceID("Patient")]; ok {
+	if _, ok := ds.Resources[coregen.SetupResourceID("Patient")]; ok {
 		t.Fatal("Patient must not be seeded when it is outside the capability scope")
 	}
-	if _, ok := ds.Resources[setupResourceID("Observation")]; !ok {
+	if _, ok := ds.Resources[coregen.SetupResourceID("Observation")]; !ok {
 		t.Fatal("Observation must be seeded (supported by the capability statement)")
 	}
 }
@@ -239,15 +240,15 @@ func TestBuildSetupDatasetRecordsDependencyRelationships(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildSetupDataset returned error: %v", err)
 	}
-	if _, ok := ds.Resources[setupResourceID("Patient")]; !ok {
-		t.Fatalf("expected setup resource %s in dataset", setupResourceID("Patient"))
+	if _, ok := ds.Resources[coregen.SetupResourceID("Patient")]; !ok {
+		t.Fatalf("expected setup resource %s in dataset", coregen.SetupResourceID("Patient"))
 	}
-	if _, ok := ds.Resources[setupResourceID("Observation")]; !ok {
-		t.Fatalf("expected setup resource %s in dataset", setupResourceID("Observation"))
+	if _, ok := ds.Resources[coregen.SetupResourceID("Observation")]; !ok {
+		t.Fatalf("expected setup resource %s in dataset", coregen.SetupResourceID("Observation"))
 	}
 	found := false
 	for _, rel := range ds.Relationships {
-		if rel.SourceID == setupResourceID("Observation") && rel.TargetID == setupResourceID("Patient") {
+		if rel.SourceID == coregen.SetupResourceID("Observation") && rel.TargetID == coregen.SetupResourceID("Patient") {
 			found = true
 		}
 	}
@@ -287,7 +288,7 @@ func TestBuildSetupDatasetRecordsReferencesFromResourceBody(t *testing.T) {
 	}
 
 	// The setup Endpoint is seeded because HealthcareService depends on it.
-	endpointLocalID := setupResourceID("Endpoint")
+	endpointLocalID := coregen.SetupResourceID("Endpoint")
 	if _, ok := ds.Resources[endpointLocalID]; !ok {
 		t.Fatalf("expected setup Endpoint %s in dataset, got %v", endpointLocalID, keysOf(ds.Resources))
 	}

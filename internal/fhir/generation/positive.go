@@ -9,10 +9,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode"
 
-	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/core/coverage"
+	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -52,132 +51,17 @@ func newRNG(seedString string) *rand.Rand {
 }
 
 // BuildOptions controls AST construction behavior.
-type BuildOptions struct {
-	BaseURL string
-	// WriteBaseURL, when set, is used for write requests (PUT/PATCH/POST/DELETE)
-	// instead of BaseURL, so resource creation can target a different endpoint
-	// than read/search requests. When empty, write requests use BaseURL.
-	WriteBaseURL                   string
-	Registry                       *registry.Registry
-	PreferredProfileURLsByResource map[string][]string
-	// Strength is the interaction strength used when generating. When unset (or
-	// < 2) it falls back to the coverage plan's own Strength, and finally to
-	// strength 1 (one test per requirement). Strength >= 2 groups compatible
-	// obligations into shared payloads selected by greedy set-cover.
-	Strength int
-	// Exhaustive populates optional (Min == 0) elements in addition to required
-	// ones, with randomised presence, so generated payloads are fuller and more
-	// realistic. When false, only required and contract-driven elements are
-	// populated.
-	Exhaustive bool
-	// CapabilityResourceTypes, when non-nil, restricts the seed dataset (and the
-	// transitive reference closure) to resource types the target server's
-	// CapabilityStatement declares. This makes the capability statement define the
-	// test plan: only server-supported resource types are provisioned, so we never
-	// send something the server does not advertise. When nil/empty, all registry
-	// types are allowed.
-	CapabilityResourceTypes map[string]struct{}
-	// CapabilityProfiles, when non-nil, restricts the seed dataset to resource
-	// profiles the target server's CapabilityStatement declares (via the resource
-	// entry's profile/supportedProfile). A resource type whose selected profile is
-	// not supported is skipped, so we never claim conformance to a profile the
-	// server cannot validate. When nil/empty, all profiles are allowed.
-	CapabilityProfiles map[string]struct{}
-	// Progress, when set, is invoked after each resource type's cases are
-	// generated, with the number of resource types completed so far and the
-	// total number of resource types. It is used to render a progress bar in the
-	// CLI during test-plan generation.
-	Progress func(done, total int)
-}
+// (defined in options.go)
 
 // GenerateFromCoveragePlan maps coverage requirements into a concrete AST.
-func GenerateFromCoveragePlan(plan *coverage.CoveragePlan, options BuildOptions) (*ast.Plan, error) {
-	if plan == nil {
-		return nil, errors.New("coverage plan is required")
-	}
-
-	depPlan, err := buildDependencyPlan(plan, options)
-	if err != nil {
-		return nil, err
-	}
-
-	byResource := make(map[string][]coverage.CoverageRequirement)
-	for _, req := range plan.Requirements {
-		if req.ResourceType == "" {
-			return nil, fmt.Errorf("coverage requirement %s missing resource type", req.ID)
-		}
-		byResource[req.ResourceType] = append(byResource[req.ResourceType], req)
-	}
-	for resourceType := range byResource {
-		sort.Slice(byResource[resourceType], func(i, j int) bool {
-			return byResource[resourceType][i].ID < byResource[resourceType][j].ID
-		})
-	}
-
-	root := &ast.Sequence{Steps: make([]ast.Node, 0)}
-	// Count the total requirements that will actually emit cases (those with
-	// coverage obligations) for progress reporting.
-	totalReqs := 0
-	for _, level := range depPlan.Levels {
-		for _, resourceType := range level {
-			totalReqs += len(byResource[resourceType])
-		}
-	}
-	doneReqs := 0
-	progress := func() {
-		if options.Progress == nil {
-			return
-		}
-		doneReqs++
-		options.Progress(doneReqs, totalReqs)
-	}
-	for _, level := range depPlan.Levels {
-		resourceNodes := make([]ast.Node, 0, len(level))
-		for _, resourceType := range level {
-			// Skip types present only as seed dependencies (reachable via references
-			// but with no coverage obligations of their own): they are provisioned by
-			// the seed dataset but have no test cases to emit.
-			if len(byResource[resourceType]) == 0 {
-				continue
-			}
-			resourceSeq := &ast.Sequence{Steps: make([]ast.Node, 0)}
-			deps := depPlan.Dependencies[resourceType]
-
-			// Provisioning is a separate stage (BuildSetupDataset + provisioner): the
-			// generated AST contains only test cases, which run against data already
-			// provisioned on the server. Test cases that need seed data reference it by
-			// its deterministic setup id (e.g. operations target "momus-setup-<Type>").
-			for _, caseSeq := range buildResourceCases(byResource[resourceType], plan, options, deps, progress) {
-				resourceSeq.Steps = append(resourceSeq.Steps, caseSeq)
-			}
-
-			resourceNodes = append(resourceNodes, resourceSeq)
-		}
-
-		if len(resourceNodes) == 0 {
-			continue
-		}
-		if len(resourceNodes) == 1 {
-			root.Steps = append(root.Steps, resourceNodes[0])
-			continue
-		}
-		root.Steps = append(root.Steps, &ast.Parallel{Steps: resourceNodes})
-	}
-
-	return &ast.Plan{Version: "v1", Root: root}, nil
-}
-
-// buildSetupResource builds the seed resource instance for a resource type,
-// using the same body-generation logic as the AST setup requests so provisioned
-// data matches exactly what the generated tests reference.
 func buildSetupResource(resourceType string, options BuildOptions, deps []string, byResource map[string][]coverage.CoverageRequirement) *model.ResourceInstance {
-	resourceProfiles := uniqueProfileURLs(byResource[resourceType])
+	resourceProfiles := coregen.UniqueProfileURLs(byResource[resourceType])
 	setupProfileURL := ""
 	if len(resourceProfiles) > 0 {
 		setupProfileURL = resourceProfiles[0]
 	}
-	setupProfiles := orderedProfilesForResource(resourceType, setupProfileURL, options.PreferredProfileURLsByResource)
-	setupPrimaryProfile := firstProfileURL(setupProfiles)
+	setupProfiles := coregen.OrderedProfilesForResource(resourceType, setupProfileURL, options.PreferredProfileURLsByResource)
+	setupPrimaryProfile := coregen.FirstProfileURL(setupProfiles)
 	// Capability-gated: only seed a resource whose selected profile the server
 	// declares, so we never provision something the server cannot validate.
 	if options.CapabilityProfiles != nil && setupPrimaryProfile != "" {
@@ -185,7 +69,7 @@ func buildSetupResource(resourceType string, options BuildOptions, deps []string
 			return nil
 		}
 	}
-	id := setupResourceID(resourceType)
+	id := coregen.SetupResourceID(resourceType)
 	body := buildSetupBody(resourceType, id, setupProfiles, setupPrimaryProfile, deps, options.Registry, options.Exhaustive)
 	return &model.ResourceInstance{
 		LocalID:      id,
@@ -204,7 +88,7 @@ func BuildSetupDataset(plan *coverage.CoveragePlan, options BuildOptions) (*mode
 	if plan == nil {
 		return nil, errors.New("coverage plan is required")
 	}
-	depPlan, err := buildDependencyPlan(plan, options)
+	depPlan, err := buildDependencyPlan(plan, options.CapabilityResourceTypes, options.Registry)
 	if err != nil {
 		return nil, err
 	}
@@ -363,64 +247,6 @@ func referenceTargetID(ref string) string {
 
 // RequirementCount returns the number of requirement-bound Assertions in a
 // generated plan, excluding setup scaffolding.
-func RequirementCount(plan *ast.Plan) int {
-	if plan == nil || plan.Root == nil {
-		return 0
-	}
-	count := 0
-	seen := make(map[string]struct{})
-	var walk func(ast.Node)
-	walk = func(node ast.Node) {
-		switch n := node.(type) {
-		case *ast.Sequence:
-			for _, step := range n.Steps {
-				walk(step)
-			}
-		case *ast.Parallel:
-			for _, step := range n.Steps {
-				walk(step)
-			}
-		case *ast.Assert:
-			if strings.HasPrefix(n.RequirementID, "setup:") {
-				return
-			}
-			// Count each obligation once even when its execution expands to
-			// multiple asserts (e.g. a CRUD sequence).
-			if _, ok := seen[n.RequirementID]; ok {
-				return
-			}
-			seen[n.RequirementID] = struct{}{}
-			count++
-		}
-	}
-	walk(plan.Root)
-	return count
-}
-
-func joinURL(baseURL, resourceType string) string {
-	if baseURL == "" {
-		return "/" + strings.TrimPrefix(resourceType, "/")
-	}
-	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimPrefix(resourceType, "/")
-}
-
-func joinInstanceURL(baseURL, resourceType, id string) string {
-	return joinURL(baseURL, resourceType) + "/" + strings.TrimPrefix(id, "/")
-}
-
-// baseURLForMethod returns the base URL to use for a request of the given
-// method: write methods (PUT/PATCH/POST/DELETE) use the write base URL when
-// configured, while read/search (GET) requests use the read base URL.
-func baseURLForMethod(options BuildOptions, method string) string {
-	if !ast.IsWriteMethod(method) {
-		return options.BaseURL
-	}
-	if options.WriteBaseURL != "" {
-		return options.WriteBaseURL
-	}
-	return options.BaseURL
-}
-
 func buildBodyTemplate(req coverage.CoverageRequirement, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) (map[string]any, bool) {
 	// A test payload is the same registry-driven body synthesis as every other
 	// resource, with an optional negative mutation applied only when the test
@@ -614,7 +440,7 @@ func baseBodyTemplate(resourceType, id string, profileURLs, deps []string, reg *
 		"resourceType": resourceType,
 		"id":           id,
 	}
-	if meta := buildMeta(profileURLs); meta != nil {
+	if meta := coregen.BuildMeta(profileURLs); meta != nil {
 		body["meta"] = meta
 	}
 
@@ -864,7 +690,7 @@ func generateRepeatedValue(node *model.ElementNode, reg *registry.Registry, rng 
 			}
 		}
 	}
-	for len(values) < max(node.Definition.Min, 1) {
+	for len(values) < coregen.Max(node.Definition.Min, 1) {
 		// A fallback value generated into a sliced collection must still conform to a
 		// slice, or a server flags it as matching no slice (e.g. a bare phone without
 		// the use=home the Practitioner.telecom:personalPhoneNumber slice requires).
@@ -1331,10 +1157,10 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 		applySimpleConstraints(identifier, node, reg)
 		identifier = enrichGeneratedValueWithTypeProfiles(identifier, node.Definition, reg).(map[string]any)
 		if _, ok := identifier["system"]; !ok {
-			identifier["system"] = "http://example.org/fhir/identifier/" + sanitizeFHIRID(node.Path)
+			identifier["system"] = "http://example.org/fhir/identifier/" + coregen.SanitizeFHIRID(node.Path)
 		}
 		if _, ok := identifier["value"]; !ok {
-			identifier["value"] = sanitizeFHIRID(node.Path) + "-001"
+			identifier["value"] = coregen.SanitizeFHIRID(node.Path) + "-001"
 		}
 		if _, ok := identifier["type"]; !ok {
 			identifier["type"] = map[string]any{"text": sampleStringValue(node.Path + ".type")}
@@ -2300,13 +2126,13 @@ func referencePlaceholder(def *model.ElementDefinition, reg *registry.Registry) 
 	if def != nil {
 		for _, canonical := range def.TargetProfile {
 			if resourceType := resolveTargetResourceType(canonical, reg); resourceType != "" && !isAbstractResourceType(resourceType) {
-				return resourceType + "/" + setupResourceID(resourceType)
+				return resourceType + "/" + coregen.SetupResourceID(resourceType)
 			}
 		}
 		for _, et := range def.Types {
 			for _, canonical := range et.TargetProfile {
 				if resourceType := resolveTargetResourceType(canonical, reg); resourceType != "" && !isAbstractResourceType(resourceType) {
-					return resourceType + "/" + setupResourceID(resourceType)
+					return resourceType + "/" + coregen.SetupResourceID(resourceType)
 				}
 			}
 		}
@@ -2315,7 +2141,7 @@ func referencePlaceholder(def *model.ElementDefinition, reg *registry.Registry) 
 	// rather than the abstract base "Resource" (which is never provisioned). A
 	// Reference to a real provisioned resource resolves on the server; pointing
 	// at the abstract Resource type produces a dangling reference.
-	return "Organization/" + setupResourceID("Organization")
+	return "Organization/" + coregen.SetupResourceID("Organization")
 }
 
 func normalizeReferenceType(value map[string]any, def *model.ElementDefinition, reg *registry.Registry) {
@@ -2481,7 +2307,7 @@ func appendLuhnCheckDigit(number string) string {
 // a mod-89 check digit: subtract 1 from the first digit, weight the 11 digits by
 // [10,1,3,5,7,9,11,13,15,17,19], and the sum must be divisible by 89.
 func generateABN() string {
-	seed := uint64(stableChecksum("abn"))
+	seed := uint64(coregen.StableChecksum("abn"))
 	weights := []int{10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
 	for i := uint64(0); i < 100000; i++ {
 		n := 1000000000 + (seed+i)%9000000000 // 10 digits, first digit 1-9
@@ -2497,14 +2323,14 @@ func generateABN() string {
 // uppercase letters followed by ten digits (per the au-ahpraregistrationnumber
 // inv-ahpra-0 invariant).
 func generateAHPRA() string {
-	digits := stableChecksum("ahpra") % 10000000000
+	digits := coregen.StableChecksum("ahpra") % 10000000000
 	return "MED" + fmt.Sprintf("%010d", digits)
 }
 
 // generateACN returns a valid 9-digit Australian Company Number (mod-89 check
 // digit, weights [10,1,3,5,7,9,11,13,15]).
 func generateACN() string {
-	seed := uint64(stableChecksum("acn"))
+	seed := uint64(coregen.StableChecksum("acn"))
 	weights := []int{10, 1, 3, 5, 7, 9, 11, 13, 15}
 	for i := uint64(0); i < 100000; i++ {
 		n := 10000000 + (seed+i)%90000000 // 8 digits, first digit 1-9
@@ -2831,7 +2657,7 @@ func ensureEndpointManagingOrganization(body map[string]any) {
 		return
 	}
 	body["managingOrganization"] = map[string]any{
-		"reference": "Organization/" + setupResourceID("Organization"),
+		"reference": "Organization/" + coregen.SetupResourceID("Organization"),
 		"type":      "Organization",
 		"display":   "Organization",
 	}
@@ -2916,7 +2742,7 @@ func sampleStringValue(path string) string {
 
 func sampleCodeValue(path string) string {
 	leaf := pathLeaf(path)
-	name := sanitizeFHIRID(leaf)
+	name := coregen.SanitizeFHIRID(leaf)
 	if name == "" {
 		return "momus-code"
 	}
@@ -2963,42 +2789,6 @@ func pathLeaf(path string) string {
 	return path
 }
 
-func firstProfileURL(profileURLs []string) string {
-	for _, profileURL := range profileURLs {
-		profileURL = strings.TrimSpace(profileURL)
-		if profileURL != "" {
-			return profileURL
-		}
-	}
-	return ""
-}
-
-func orderedProfilesForResource(resourceType, requestedProfileURL string, preferredByResource map[string][]string) []string {
-	profiles := make([]string, 0)
-	seen := make(map[string]struct{})
-	appendProfile := func(profileURL string) {
-		profileURL = strings.TrimSpace(profileURL)
-		if profileURL == "" {
-			return
-		}
-		if _, ok := seen[profileURL]; ok {
-			return
-		}
-		seen[profileURL] = struct{}{}
-		profiles = append(profiles, profileURL)
-	}
-
-	if len(preferredByResource) > 0 {
-		for _, key := range []string{strings.TrimSpace(resourceType), strings.ToLower(strings.TrimSpace(resourceType))} {
-			for _, profileURL := range preferredByResource[key] {
-				appendProfile(profileURL)
-			}
-		}
-	}
-	appendProfile(requestedProfileURL)
-	return profiles
-}
-
 func coverageCanonicalToResourceType(canonical string) string {
 	v := strings.TrimSpace(canonical)
 	if v == "" {
@@ -3037,115 +2827,11 @@ func normalizeCanonical(canonical string) string {
 	return strings.TrimSpace(v)
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func buildMeta(profileURLs []string) map[string]any {
-	profiles := make([]any, 0, len(profileURLs))
-	seen := make(map[string]struct{}, len(profileURLs))
-	for _, profileURL := range profileURLs {
-		profileURL = strings.TrimSpace(profileURL)
-		if profileURL == "" {
-			continue
-		}
-		if _, ok := seen[profileURL]; ok {
-			continue
-		}
-		seen[profileURL] = struct{}{}
-		profiles = append(profiles, profileURL)
-	}
-	if len(profiles) == 0 {
-		return nil
-	}
-	return map[string]any{"profile": profiles}
-}
-
-func uniqueProfileURLs(reqs []coverage.CoverageRequirement) []string {
-	profiles := make([]string, 0, len(reqs))
-	seen := make(map[string]struct{}, len(reqs))
-	for _, req := range reqs {
-		profileURL := strings.TrimSpace(req.ProfileURL)
-		if profileURL == "" {
-			continue
-		}
-		if _, ok := seen[profileURL]; ok {
-			continue
-		}
-		seen[profileURL] = struct{}{}
-		profiles = append(profiles, profileURL)
-	}
-	return profiles
-}
-
-func setupResourceID(resourceType string) string {
-	return sanitizeFHIRID("momus-setup-" + resourceType)
-}
-
-func requirementResourceID(req coverage.CoverageRequirement) string {
-	resourceType := strings.TrimSpace(req.ResourceType)
-	if resourceType == "" {
-		resourceType = "resource"
-	}
-	variant := strings.TrimSpace(string(req.Variant))
-	if variant == "" {
-		variant = "case"
-	}
-	return sanitizeFHIRID("momus-" + resourceType + "-" + variant + "-" + strconv.Itoa(stableChecksum(req.ID)))
-}
-
-func sanitizeFHIRID(value string) string {
-	if value == "" {
-		return "momus-id"
-	}
-	var b strings.Builder
-	prevHyphen := false
-	for _, r := range value {
-		switch {
-		case unicode.IsLetter(r) || unicode.IsDigit(r):
-			b.WriteRune(unicode.ToLower(r))
-			prevHyphen = false
-		case r == '-' || r == '.':
-			if !prevHyphen {
-				b.WriteRune(r)
-				prevHyphen = true
-			}
-		default:
-			if !prevHyphen {
-				b.WriteRune('-')
-				prevHyphen = true
-			}
-		}
-	}
-	out := strings.Trim(b.String(), "-.")
-	if out == "" {
-		return "momus-id"
-	}
-	if len(out) > 64 {
-		return out[:64]
-	}
-	return out
-}
-
-func stableChecksum(value string) int {
-	sum := 0
-	for _, r := range value {
-		sum = (sum*31 + int(r)) % 1000000
-	}
-	if sum < 0 {
-		return -sum
-	}
-	return sum
-}
-
 func attachDependencyReferences(body map[string]any, resourceType, primaryProfileURL string, deps []string, reg *registry.Registry) {
 	for _, dep := range deps {
 		switch dep {
 		case "Patient":
-			ref := map[string]any{"reference": dep + "/" + setupResourceID(dep)}
+			ref := map[string]any{"reference": dep + "/" + coregen.SetupResourceID(dep)}
 			switch resourceType {
 			case "AllergyIntolerance", "Immunization":
 				body["patient"] = ref
@@ -3173,9 +2859,9 @@ func attachDependencyReferences(body map[string]any, resourceType, primaryProfil
 				}
 			}
 		case "Encounter":
-			body["encounter"] = map[string]any{"reference": dep + "/" + setupResourceID(dep)}
+			body["encounter"] = map[string]any{"reference": dep + "/" + coregen.SetupResourceID(dep)}
 		case "Observation":
-			body["result"] = []map[string]any{{"reference": dep + "/" + setupResourceID(dep)}}
+			body["result"] = []map[string]any{{"reference": dep + "/" + coregen.SetupResourceID(dep)}}
 		}
 	}
 }
@@ -3219,49 +2905,3 @@ func dependencyReferenceElementName(resourceType, primaryProfileURL, dependency 
 // synthesized payload (so no concrete violation could be constructed); the
 // caller skips such cases rather than emitting a reject test a conformant
 // server would accept.
-func buildSingleRequirementCase(req coverage.CoverageRequirement, options BuildOptions, deps []string) ast.Node {
-	requestID := requirementResourceID(req)
-	caseProfiles := orderedProfilesForResource(req.ResourceType, req.ProfileURL, options.PreferredProfileURLsByResource)
-	casePrimaryProfile := firstProfileURL(caseProfiles)
-	body, applied := buildBodyTemplate(req, requestID, caseProfiles, casePrimaryProfile, deps, options.Registry, options.Exhaustive)
-	if isNegativeVariant(req.Variant) && !applied {
-		return nil
-	}
-	return &ast.Sequence{Steps: []ast.Node{
-		&ast.Request{
-			Method: "PUT",
-			URL:    joinInstanceURL(baseURLForMethod(options, "PUT"), req.ResourceType, requestID),
-			Headers: map[string]string{
-				"Content-Type":           "application/fhir+json",
-				"X-Momus-Requirement-ID": req.ID,
-			},
-			Body: body,
-		},
-		buildRequirementAssert(req),
-	}}
-}
-
-func buildRequirementAssert(req coverage.CoverageRequirement) *ast.Assert {
-	description := "server accepts generated payload"
-	expression := "status in [200,201]"
-	expected := "accept"
-	if isNegativeVariant(req.Variant) {
-		description = "server rejects violating payload"
-		expression = "status in [400,412,422]"
-		expected = "reject"
-	}
-	return &ast.Assert{
-		Description:   description,
-		RequirementID: req.ID,
-		Expression:    expression,
-		Trace: &ast.Trace{
-			ConstraintID: req.ConstraintID,
-			ProfileURL:   req.ProfileURL,
-			ResourceType: req.ResourceType,
-			ElementPath:  req.ElementPath,
-			Domain:       string(req.Domain),
-			Variant:      string(req.Variant),
-			Expected:     expected,
-		},
-	}
-}

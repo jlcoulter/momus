@@ -8,6 +8,7 @@ import (
 
 	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/core/coverage"
+	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -406,8 +407,8 @@ func TestGenerateFromCoveragePlanOmitsProvisioning(t *testing.T) {
 	if hasSetupStep(astPlan.Root) {
 		t.Fatal("expected no provisioning steps in generated AST; provisioning is a separate stage")
 	}
-	if RequirementCount(astPlan) != 1 {
-		t.Fatalf("RequirementCount = %d, want 1", RequirementCount(astPlan))
+	if coregen.RequirementCount(astPlan) != 1 {
+		t.Fatalf("RequirementCount = %d, want 1", coregen.RequirementCount(astPlan))
 	}
 }
 
@@ -1118,7 +1119,7 @@ func TestGenerateFromCoveragePlanGeneratesNegativeVariants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
 	}
-	if got := RequirementCount(plan); got != 2 {
+	if got := coregen.RequirementCount(plan); got != 2 {
 		t.Fatalf("got %d generated cases, want 2 (positive + negative)", got)
 	}
 	expressions := map[string]bool{}

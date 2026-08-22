@@ -6,6 +6,7 @@ import (
 
 	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/core/coverage"
+	coregen "github.com/jlcoulter/momus/internal/core/generation"
 )
 
 // buildResourceCases turns a resource type's obligations into a list of test
@@ -14,7 +15,7 @@ import (
 // (selected by greedy set-cover) so pairwise interaction obligations are
 // exercised together, while each reject obligation keeps its own test.
 // progress, when non-nil, is invoked after each requirement is processed.
-func buildResourceCases(reqs []coverage.CoverageRequirement, plan *coverage.CoveragePlan, options BuildOptions, deps []string, progress func()) []ast.Node {
+func buildResourceCases(reqs []coverage.CoverageRequirement, plan *coverage.CoveragePlan, options coregen.BuildOptions, deps []string, progress func()) []ast.Node {
 	// Search/operation/state obligations are separate requests (GET/DELETE/etc.)
 	// and do not participate in interaction candidate grouping.
 	searchReqs := make([]coverage.CoverageRequirement, 0)
@@ -76,7 +77,7 @@ func buildResourceCases(reqs []coverage.CoverageRequirement, plan *coverage.Cove
 // effectiveStrength returns the interaction strength to use: the explicit
 // build option if set, otherwise the coverage plan's own strength, defaulting
 // to 1.
-func effectiveStrength(plan *coverage.CoveragePlan, options BuildOptions) int {
+func effectiveStrength(plan *coverage.CoveragePlan, options coregen.BuildOptions) int {
 	if options.Strength >= 1 {
 		return options.Strength
 	}
@@ -300,17 +301,17 @@ func greedySetCover(universe map[string]struct{}, candidates []candidateTest) []
 // buildCandidateCase turns a selected candidate into a test node: one request
 // plus an assert per obligation it satisfies (accepts and interactions share
 // one valid payload; a reject asserts rejection).
-func buildCandidateCase(cand candidateTest, options BuildOptions, deps []string) ast.Node {
+func buildCandidateCase(cand candidateTest, options coregen.BuildOptions, deps []string) ast.Node {
 	var seed coverage.CoverageRequirement
 	if cand.negative != nil {
 		seed = *cand.negative
 	} else {
 		seed = cand.positives[0]
 	}
-	requestID := requirementResourceID(seed)
-	profiles := orderedProfilesForResource(seed.ResourceType, seed.ProfileURL, options.PreferredProfileURLsByResource)
-	primaryProfile := firstProfileURL(profiles)
-	body, applied := buildBodyTemplate(seed, requestID, profiles, primaryProfile, deps, options.Registry, options.Exhaustive)
+	requestID := coregen.RequirementResourceID(seed)
+	profiles := coregen.OrderedProfilesForResource(seed.ResourceType, seed.ProfileURL, options.PreferredProfileURLsByResource)
+	primaryProfile := coregen.FirstProfileURL(profiles)
+	body, applied := options.Builder.BuildBody(seed, requestID, profiles, primaryProfile, deps, options.Exhaustive)
 
 	// The shared payload must actually exercise every accept obligation the group
 	// claims to cover. Obligations that need distinct content (e.g. multiple-values)
@@ -324,7 +325,7 @@ func buildCandidateCase(cand candidateTest, options BuildOptions, deps []string)
 
 	request := &ast.Request{
 		Method: "PUT",
-		URL:    joinInstanceURL(baseURLForMethod(options, "PUT"), seed.ResourceType, requestID),
+		URL:    coregen.JoinInstanceURL(coregen.BaseURLForMethod(options, "PUT"), seed.ResourceType, requestID),
 		Headers: map[string]string{
 			"Content-Type":           "application/fhir+json",
 			"X-Momus-Requirement-ID": seed.ID,

@@ -34,7 +34,7 @@ func TestBuildDependencyPlanOrdersOptionalProfileReferences(t *testing.T) {
 		{ID: "hs1", ResourceType: "HealthcareService", ProfileURL: "http://example.org/StructureDefinition/healthcareservice"},
 	}}
 
-	depPlan, err := buildDependencyPlan(plan, BuildOptions{Registry: r})
+	depPlan, err := buildDependencyPlan(plan, nil, r)
 	if err != nil {
 		t.Fatalf("buildDependencyPlan returned error: %v", err)
 	}

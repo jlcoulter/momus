@@ -18,7 +18,7 @@ import (
 // referencing element is optional and therefore not itself a derived coverage
 // obligation, and even when a referenced type is not itself a coverage
 // obligation (e.g. Patient referenced by Observation).
-func buildDependencyPlan(plan *coverage.CoveragePlan, options BuildOptions) (*coverage.DependencyPlan, error) {
+func buildDependencyPlan(plan *coverage.CoveragePlan, capabilityResourceTypes map[string]struct{}, reg *registry.Registry) (*coverage.DependencyPlan, error) {
 	depPlan, err := coverage.PlanDependencies(plan.Requirements)
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func buildDependencyPlan(plan *coverage.CoveragePlan, options BuildOptions) (*co
 	// When a capability scope is set, only reference targets the server declares
 	// are added, so the plan never provisions a resource type the server does not
 	// support.
-	allowed := options.CapabilityResourceTypes
+	allowed := capabilityResourceTypes
 	queue := make([]string, 0, len(resourceSet))
 	for rt := range resourceSet {
 		queue = append(queue, rt)
@@ -55,8 +55,8 @@ func buildDependencyPlan(plan *coverage.CoveragePlan, options BuildOptions) (*co
 			continue
 		}
 		visited[rt] = struct{}{}
-		profileURL := primaryProfileURL(plan.Requirements, rt, options.Registry)
-		for _, target := range profileReferenceTargets(options.Registry, profileURL) {
+		profileURL := primaryProfileURL(plan.Requirements, rt, reg)
+		for _, target := range profileReferenceTargets(reg, profileURL) {
 			if target == rt {
 				continue
 			}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/core/coverage"
+	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -72,7 +73,7 @@ func TestSearchCombinationUsesPerCodeValues(t *testing.T) {
 		ID: "combo-1", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch,
 		Variant: coverage.CoverageVariantSearchCombination, SearchCode: "name", SearchCodeB: "active",
 	}
-	options := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
+	options := coregen.BuildOptions{BaseURL: "http://localhost:8080/fhir", Builder: NewBuilder(reg, false)}
 	query := searchQuery(req, options)
 	// name is a string -> "momus-search"; active is a boolean -> "true".
 	if query != "name=momus-search&active=true" {
@@ -142,7 +143,8 @@ func TestSearchInvalidValuePerType(t *testing.T) {
 	addSP("ref", "reference")
 	addSP("qty", "quantity")
 
-	options := BuildOptions{Registry: reg}
+	options := coregen.BuildOptions{Builder: NewBuilder(reg, false)}
+	builder := options.Builder
 	tests := []struct {
 		code       string
 		wantReject bool
@@ -157,7 +159,7 @@ func TestSearchInvalidValuePerType(t *testing.T) {
 	}
 	for _, tc := range tests {
 		req := coverage.CoverageRequirement{ID: "inv-" + tc.code, ResourceType: "Observation", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchInvalidValue, SearchCode: tc.code}
-		value, expectReject := searchInvalidValue(req, tc.code, options)
+		value, expectReject := searchInvalidValue(req, tc.code, builder)
 		if expectReject != tc.wantReject {
 			t.Errorf("%s: expectReject = %v, want %v", tc.code, expectReject, tc.wantReject)
 		}

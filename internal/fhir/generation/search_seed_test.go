@@ -6,6 +6,7 @@ import (
 
 	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/core/coverage"
+	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -269,7 +270,7 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildSetupDataset returned error: %v", err)
 	}
-	inst, ok := ds.Resources[setupResourceID("Organization")]
+	inst, ok := ds.Resources[coregen.SetupResourceID("Organization")]
 	if !ok {
 		t.Fatalf("missing Organization seed")
 	}

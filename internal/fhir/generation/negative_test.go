@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/core/coverage"
+	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -184,7 +185,7 @@ func TestNegativeMutationSkippedWhenElementAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
 	}
-	if got := RequirementCount(plan); got != 0 {
+	if got := coregen.RequirementCount(plan); got != 0 {
 		t.Fatalf("got %d generated cases, want 0 (negative case skipped when element absent)", got)
 	}
 	expressions := map[string]bool{}
@@ -211,7 +212,7 @@ func TestNegativeMutationSkippedWhenElementAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan (with registry) returned error: %v", err)
 	}
-	if got := RequirementCount(plan2); got != 1 {
+	if got := coregen.RequirementCount(plan2); got != 1 {
 		t.Fatalf("got %d generated cases, want 1 (negative case generated when element present)", got)
 	}
 	expressions2 := map[string]bool{}

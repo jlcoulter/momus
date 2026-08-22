@@ -18,10 +18,10 @@ import (
 	"github.com/jlcoulter/momus/internal/core/tracing"
 	testbulk "github.com/jlcoulter/momus/internal/fhir/bulk"
 	fhircoverage "github.com/jlcoulter/momus/internal/fhir/coverage"
+	testgeneration "github.com/jlcoulter/momus/internal/fhir/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	provisioning "github.com/jlcoulter/momus/internal/fhir/provisioning"
-	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 	"github.com/spf13/cobra"
 )
 
