@@ -193,14 +193,14 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 		return true
 	case "Identifier":
 		// A token search on an Identifier matches its `value` member (and a
-		// type/system search may match those). Place the value on the identifier's
-		// `value` field so the query matches.
-		setFieldLeaf(body, elementPath, "value", value)
+		// type/system search may match those). Force the value onto the first
+		// identifier so the search seed carries the query value.
+		setFieldLeafForce(body, elementPath, "value", value)
 		return true
 	case "ContactPoint":
 		// A token search on a ContactPoint matches its `value` (telecom number/
-		// address) and `system`. Place the value on the contact point's `value`.
-		setFieldLeaf(body, elementPath, "value", value)
+		// address) and `system`. Force the value onto the first contact point.
+		setFieldLeafForce(body, elementPath, "value", value)
 		return true
 	case "Address":
 		setAddressLeaf(body, elementPath, value)
@@ -235,20 +235,99 @@ func applySearchMatch(body map[string]any, resourceType string, sp *model.Search
 	}
 }
 
-// searchElementPath extracts the first simple element path (relative to the
-// resource) from a FHIRPath SearchParameter expression, e.g. "Patient.name" ->
-// "name", "Observation.code" -> "code", "Patient.name.family" -> "name.family".
-// It returns "" for expressions that cannot be reduced to a plain path.
+// searchElementPath extracts a simple element path (relative to the resource)
+// from a FHIRPath SearchParameter expression, e.g. "Patient.name" -> "name",
+// "Observation.code" -> "code", "Patient.name.family" -> "name.family". For a
+// union of alternatives it selects the branch rooted at the resource type, so a
+// Practitioner search expressed as "Patient.gender | ... | Practitioner.gender"
+// resolves to "gender" rather than the first (wrong) branch. It returns "" for
+// expressions that cannot be reduced to a plain path.
 func searchElementPath(expression, resourceType string) string {
 	expr := strings.TrimSpace(expression)
 	if expr == "" {
 		return ""
 	}
-	// Drop union alternatives and any FHIRPath function call.
-	if i := strings.IndexAny(expr, "|("); i >= 0 {
-		expr = expr[:i]
+	// Prefer a union branch whose first segment is the resource type. Otherwise
+	// fall back to the first branch that is a plain path.
+	candidates := splitUnion(expr)
+	var firstPlain string
+	for _, cand := range candidates {
+		p := plainSearchPath(cand, resourceType)
+		if p == "" {
+			continue
+		}
+		if firstPlain == "" {
+			firstPlain = p
+		}
+		// Prefer a branch rooted at the resource type itself.
+		root := strings.TrimSpace(cand)
+		if root != "" && root[0] == '(' {
+			root = strings.TrimSpace(strings.TrimPrefix(root, "("))
+		}
+		if i := strings.IndexByte(root, '.'); i >= 0 {
+			root = root[:i]
+		}
+		if root == resourceType || root == "Resource" || root == "DomainResource" {
+			return p
+		}
 	}
-	expr = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(expr), "("))
+	return firstPlain
+}
+
+// splitUnion splits a FHIRPath expression on top-level '|' union operators,
+// respecting parentheses.
+func splitUnion(expr string) []string {
+	var parts []string
+	depth := 0
+	start := 0
+	for i, r := range expr {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		case '|':
+			if depth == 0 {
+				parts = append(parts, expr[start:i])
+				start = i + 1
+			}
+		}
+	}
+	parts = append(parts, expr[start:])
+	return parts
+}
+
+// plainSearchPath reduces a single candidate to a plain dotted element path,
+// returning "" when it contains a function call, filter, or other non-path
+// construct.
+func plainSearchPath(candidate, resourceType string) string {
+	expr := strings.TrimSpace(candidate)
+	if expr == "" {
+		return ""
+	}
+	// Drop any leading "(".
+	expr = strings.TrimPrefix(expr, "(")
+	expr = strings.TrimSpace(expr)
+	// Truncate at a function call. A trailing ".name(" (e.g. ".where(",
+	// ".exists(") is a method call, not a field, so drop the incomplete segment.
+	if i := strings.IndexByte(expr, '('); i >= 0 {
+		head := expr[:i]
+		head = strings.TrimRight(head, " ")
+		if lastDot := strings.LastIndexByte(head, '.'); lastDot >= 0 {
+			method := head[lastDot+1:]
+			if method == "" || isFunctionName(method) {
+				// Strip the trailing method segment (the part after the last dot).
+				expr = head[:lastDot]
+			} else {
+				expr = head
+			}
+		} else {
+			expr = head
+		}
+	}
+	expr = strings.TrimSpace(expr)
 	if expr == "" {
 		return ""
 	}
@@ -271,11 +350,31 @@ func searchElementPath(expression, resourceType string) string {
 	return strings.Join(segs, ".")
 }
 
+// isBaseResourceTypeToken reports whether token is a leading FHIR resource or
+// base type name in a path (the resource type itself, or Resource/DomainResource
+// and kin). It is used to strip the leading type from a search element path.
 func isBaseResourceTypeToken(token, resourceType string) bool {
 	token = strings.TrimSpace(token)
 	return token == resourceType ||
 		token == "Resource" || token == "DomainResource" ||
 		token == "CanonicalResource" || token == "MetadataResource"
+}
+
+// isFunctionName reports whether name looks like a FHIRPath function call,
+// i.e. a bare identifier immediately followed by "(" in a path expression. It
+// helps strip a trailing method (e.g. ".where(") from a search element path so
+// the remaining dotted prefix is the plain element path.
+func isFunctionName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i, r := range name {
+		if r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (i > 0 && r >= '0' && r <= '9') {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // searchLeafType resolves the FHIR type code of the element a search expression
@@ -557,6 +656,35 @@ func setFieldLeaf(body map[string]any, path, leaf, value string) {
 		if _, exists := m[leaf]; !exists {
 			m[leaf] = value
 		}
+	}
+}
+
+// setFieldLeafForce sets a string leaf property on the first element of a field,
+// overwriting an existing value. Search seeds call this so the query value
+// always appears on the element the search filters, even when the generated
+// payload already populated the field with a different value.
+func setFieldLeafForce(body map[string]any, path, leaf, value string) {
+	cur, field := containerForPath(body, path)
+	raw, ok := cur[field]
+	if !ok {
+		cur[field] = []any{map[string]any{leaf: value}}
+		return
+	}
+	if arr, ok := raw.([]any); ok {
+		if len(arr) == 0 {
+			cur[field] = []any{map[string]any{leaf: value}}
+			return
+		}
+		first, ok := arr[0].(map[string]any)
+		if !ok {
+			arr[0] = map[string]any{leaf: value}
+			return
+		}
+		first[leaf] = value
+		return
+	}
+	if m, ok := raw.(map[string]any); ok {
+		m[leaf] = value
 	}
 }
 
