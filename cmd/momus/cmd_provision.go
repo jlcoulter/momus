@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	provisioning "github.com/jlcoulter/momus/internal/fhir/provisioning"
 	"github.com/spf13/cobra"
 )
 
@@ -19,24 +18,6 @@ func newProvisionCmd(cfg *config) *cobra.Command {
 		Short: "Upload the seed dataset from a test plan to the target server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cfg.baseURL == "" {
-				return fmt.Errorf("base URL is required; provide --base-url")
-			}
-			// Resolve the write base URL up front: the provisioner needs a concrete
-			// URL (it does not default internally).
-			writeBase := cfg.writeBaseURL
-			if writeBase == "" {
-				writeBase = cfg.baseURL
-			}
-			writeBasicUser := cfg.writeBasicUsername
-			if writeBasicUser == "" {
-				writeBasicUser = cfg.apiBasicUsername
-			}
-			writeBasicPass := cfg.writeBasicPassword
-			if writeBasicPass == "" {
-				writeBasicPass = cfg.apiBasicPassword
-			}
-
 			planPath := args[0]
 			raw, err := os.ReadFile(planPath)
 			if err != nil {
@@ -46,38 +27,7 @@ func newProvisionCmd(cfg *config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if dataset == nil || len(dataset.Resources) == 0 {
-				fmt.Printf("Provisioning skipped: test plan carries no seed resources\n")
-				return nil
-			}
-
-			provisioner := provisioning.New(writeBase, &provisioning.Options{
-				BearerToken:   cfg.apiBearerToken,
-				BasicUsername: writeBasicUser,
-				BasicPassword: writeBasicPass,
-				Tracer:        newDebugTracer(cfg.debug),
-			})
-			fmt.Printf("Provisioning phase: uploading %d seed resources to %s\n", len(dataset.Resources), writeBase)
-			seed := provisioner.ProvisionAll(cmd.Context(), dataset)
-			if !seed.Complete() {
-				fmt.Printf("WARNING: dataset seeding incomplete — %d of %d resources uploaded. Data seeding is essential to achieve full coverage success. Fix the failing resources and re-run.\n", seed.Provisioned, seed.Provisioned+seed.Failed)
-				for _, failure := range seed.Failures {
-					fmt.Printf("  - %s\n", failure.Describe())
-				}
-				if !cfg.debug {
-					fmt.Printf("Run with --debug to write the rejected payloads and full server responses to %s for inspection.\n", debugOutputDir)
-				}
-				if err := writeDebugProvisionFailures(cfg.debug, seed.Failures); err != nil {
-					return err
-				}
-				// Incomplete provisioning is a warning, not a failure: the run can still
-				// proceed (and other commands rely on this command exiting successfully
-				// when run as part of a pipeline). Failures are reported above so the
-				// operator can fix and re-run.
-				return nil
-			}
-			fmt.Printf("Provisioning complete: %d resources uploaded\n", seed.Provisioned)
-			return nil
+			return provisionDataset(cfg, cmd.Context(), dataset)
 		},
 	}
 	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target FHIR base URL for resource creation")

@@ -1,13 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 
-	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
-	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
-	testrunner "github.com/jlcoulter/momus/internal/test/runner"
 	"github.com/spf13/cobra"
 )
 
@@ -36,117 +32,16 @@ func newRunCmd(cfg *config) *cobra.Command {
 				return err
 			}
 
-			// Seed resources are provisioned ahead of execution (a separate stage).
-			// The test plan carries the seed dataset; mark those resources as
-			// already-created so the runner's setup-reference validation passes
-			// without re-provisioning them during execution.
-			preCreated := datasetResourceKeys(setupDataset)
-
-			// Resolve the write base URL up front so write-specific basic auth
-			// credentials are applied even when the user relies on the documented
-			// "defaults to --base-url" behavior (mirrors cmd_provision.go).
-			writeBase := cfg.writeBaseURL
-			if writeBase == "" {
-				writeBase = cfg.baseURL
-			}
-
-			fmt.Printf("Testing phase: executing %d test cases\n", testgeneration.RequirementCount(astPlan))
-			report, err := testrunner.Execute(cmd.Context(), astPlan.Root, testrunner.ExecuteOptions{
-				BaseURL:            cfg.baseURL,
-				WriteBaseURL:       writeBase,
-				BearerToken:        cfg.apiBearerToken,
-				BasicUsername:      cfg.apiBasicUsername,
-				BasicPassword:      cfg.apiBasicPassword,
-				WriteBasicUsername: cfg.writeBasicUsername,
-				WriteBasicPassword: cfg.writeBasicPassword,
-				// Capture request/response detail whenever an HTML report is
-				// requested, so failed cases can drill down into them.
-				IncludeDebug: cfg.debug || cfg.htmlReport != "",
-				Tracer:       newDebugTracer(cfg.debug),
-				PreCreated:   preCreated,
-			})
+			coveragePlan, err := loadCoveragePlanFromFile(cfg.coveragePlanPath)
 			if err != nil {
 				return err
 			}
 
-			// Coverage evaluation needs the coverage plan that defined the
-			// obligations. When --coverage-plan is supplied, evaluate against it;
-			// otherwise report execution results only.
-			var coverageEvaluation testcoverage.EvaluationReport
-			if cfg.coveragePlanPath != "" {
-				planRaw, err := os.ReadFile(cfg.coveragePlanPath)
-				if err != nil {
-					return fmt.Errorf("read coverage plan %s: %w", cfg.coveragePlanPath, err)
-				}
-				var coveragePlan testcoverage.CoveragePlan
-				if err := json.Unmarshal(planRaw, &coveragePlan); err != nil {
-					return fmt.Errorf("parse coverage plan %s: %w", cfg.coveragePlanPath, err)
-				}
-				executed := make([]testcoverage.ExecutedRequirementResult, 0, len(report.Cases))
-				for _, c := range report.Cases {
-					executed = append(executed, testcoverage.ExecutedRequirementResult{
-						RequirementID: c.RequirementID,
-						Passed:        c.Passed,
-					})
-				}
-				coverageEvaluation = testcoverage.EvaluateCoverage(&coveragePlan, executed)
-			}
-
-			if cfg.htmlReport != "" {
-				html, err := testcoverage.RenderHTML(coverageEvaluation, htmlItems(report.Cases))
-				if err != nil {
-					return fmt.Errorf("render html report: %w", err)
-				}
-				if err := writeOutputFile(cfg.htmlReport, html); err != nil {
-					return fmt.Errorf("write html report to %s: %w", cfg.htmlReport, err)
-				}
-				fmt.Printf("HTML report written to %s\n", cfg.htmlReport)
-			}
-
-			out, err := marshalCoverageRunOutput(report, coverageEvaluation, cfg.includeCases)
+			report, coverageEvaluation, err := executePlan(cfg, cmd.Context(), astPlan, datasetResourceKeys(setupDataset), coveragePlan)
 			if err != nil {
-				return fmt.Errorf("marshal test report: %w", err)
-			}
-			if err := writeDebugOutput(cfg.debug, "test-report.json", append(out, '\n')); err != nil {
 				return err
 			}
-
-			if cfg.outputPath == "" {
-				fmt.Println(string(out))
-			} else {
-				if err := writeOutputFile(cfg.outputPath, append(out, '\n')); err != nil {
-					return fmt.Errorf("write test report to %s: %w", cfg.outputPath, err)
-				}
-			}
-
-			requirementCases, setupCases := countRequirementAndSetupCases(report.Cases)
-			fmt.Printf("Executed %d cases: %d passed, %d failed (%d requirement cases + %d setup cases)\n",
-				report.Total, report.Passed, report.Failed, requirementCases, setupCases)
-			if coverageEvaluation.TotalRequirements > 0 {
-				fmt.Printf("Contractual coverage: %.1f%% (%d/%d)\n", coverageEvaluation.CoveragePercent, coverageEvaluation.CoveredRequirements, coverageEvaluation.TotalRequirements)
-				if requirementCases != coverageEvaluation.TotalRequirements {
-					fmt.Printf("WARNING: generated %d requirement cases but the plan defines %d obligations; check for duplicate or missing requirements\n", requirementCases, coverageEvaluation.TotalRequirements)
-				}
-				if coverageEvaluation.UncoveredRequirements > 0 {
-					fmt.Printf("Uncovered contractual obligations: %d\n", coverageEvaluation.UncoveredRequirements)
-					printCoverageGapSummary(coverageEvaluation)
-					for idx, req := range coverageEvaluation.Uncovered {
-						if idx >= 10 {
-							break
-						}
-						fmt.Printf("  - %s\n", req.ID)
-					}
-				}
-			} else if cfg.coveragePlanPath == "" {
-				fmt.Printf("Coverage evaluation skipped: pass --coverage-plan to evaluate contractual coverage\n")
-			}
-			if cfg.outputPath != "" {
-				fmt.Printf("Test report written to %s\n", cfg.outputPath)
-			}
-			if cfg.failOnUncovered && coverageEvaluation.UncoveredRequirements > 0 {
-				return fmt.Errorf("coverage incomplete: %d uncovered obligations", coverageEvaluation.UncoveredRequirements)
-			}
-			return nil
+			return writeRunReport(cfg, report, coverageEvaluation, coveragePlan != nil)
 		},
 	}
 	cmd.Flags().StringVar(&cfg.coveragePlanPath, "coverage-plan", "", "path to a coverage plan JSON (from 'coverage derive') used to evaluate contractual coverage")

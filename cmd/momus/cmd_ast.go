@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
-	testcoverage "github.com/jlcoulter/momus/internal/test/coverage"
 	testgeneration "github.com/jlcoulter/momus/internal/test/generation"
 	"github.com/spf13/cobra"
 )
@@ -18,29 +16,7 @@ func newAstCmd(cfg *config) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rootPath := args[0]
-			searchDir := cfg.depsDir
-			if searchDir == "" {
-				searchDir = filepath.Dir(rootPath)
-			}
-			cacheDir := cfg.downloadDir
-			if cacheDir == "" {
-				cacheDir = filepath.Join(searchDir, ".momus", "packages")
-			}
-
-			graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
-				DepsDir:        searchDir,
-				DownloadDir:    cacheDir,
-				ConflictPolicy: fhirpackage.ConflictPolicy(cfg.conflictPolicy),
-			})
-			if err != nil {
-				return err
-			}
-			if err := writeDebugGraph(cfg.debug, graph); err != nil {
-				return err
-			}
-
-			builder := fhirpackage.NewRegistryBuilder()
-			reg, err := builder.BuildFromPackagesScoped(graph.Packages, graph.Root)
+			graph, reg, err := resolvePackageGraph(cfg, rootPath)
 			if err != nil {
 				return err
 			}
@@ -57,49 +33,12 @@ func newAstCmd(cfg *config) *cobra.Command {
 				return err
 			}
 
-			coveragePlan, err := testcoverage.DerivePlan(reg, testcoverage.DeriveOptions{
-				IncludeResourceTypes:         coverageResourceTypes,
-				IncludeProfileURLs:           coverageProfileURLs,
-				ExcludePathPrefixes:          cfg.excludePathPrefixes,
-				MustSupportOnly:              cfg.mustSupportOnly,
-				IncludeOptional:              cfg.includeOptional,
-				IncludeLowValuePaths:         cfg.includeLowValuePaths,
-				Strength:                     cfg.interactionStrength,
-				CapabilitySearchCodes:        coverageSearchCodes,
-				IncludeUniversalSearchParams: cfg.includeUniversalSearch,
-			})
+			coveragePlan, err := deriveCoveragePlan(cfg, reg, coverageResourceTypes, coverageProfileURLs, coverageSearchCodes)
 			if err != nil {
 				return err
 			}
 
-			// The server's CapabilityStatement defines the test plan: derivation is
-			// scoped to the resource types/profiles it declares, and the seed dataset
-			// is restricted to those resource types so we only provision what the
-			// server advertises. When the capability is unreachable or declares
-			// nothing, no restriction is applied.
-			buildOpts := testgeneration.BuildOptions{BaseURL: cfg.baseURL, WriteBaseURL: cfg.writeBaseURL, Registry: reg, PreferredProfileURLsByResource: preferredProfilesByResource, Strength: cfg.interactionStrength, Exhaustive: cfg.exhaustive}
-			if len(coverageResourceTypes) > 0 {
-				buildOpts.CapabilityResourceTypes = make(map[string]struct{}, len(coverageResourceTypes))
-				for _, t := range coverageResourceTypes {
-					buildOpts.CapabilityResourceTypes[t] = struct{}{}
-				}
-			}
-			if len(coverageProfileURLs) > 0 {
-				buildOpts.CapabilityProfiles = make(map[string]struct{}, len(coverageProfileURLs))
-				for _, p := range coverageProfileURLs {
-					buildOpts.CapabilityProfiles[p] = struct{}{}
-				}
-			}
-
-			astPlan, err := testgeneration.GenerateFromCoveragePlan(coveragePlan, buildOpts)
-			if err != nil {
-				return err
-			}
-			// Build the seed dataset with the same generation logic so the plan
-			// carries the exact resources the test cases reference. The dataset is
-			// provisioned separately by "coverage provision"; carrying it in the
-			// plan lets provisioning and execution work from the plan alone.
-			setupDataset, err := testgeneration.BuildSetupDataset(coveragePlan, buildOpts)
+			astPlan, setupDataset, err := buildTestPlan(cfg, reg, coveragePlan, preferredProfilesByResource, coverageResourceTypes, coverageProfileURLs)
 			if err != nil {
 				return err
 			}
