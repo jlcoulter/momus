@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/jlcoulter/momus/compare/v1.5.0...v1.6.0) (2026-08-22)
+
+
+### Features
+
+* self conformance harness ([#21](https://github.com/jlcoulter/momus/issues/21)) ([3ff7642](https://github.com/jlcoulter/momus/commit/3ff7642871fa0edab761370b1fbcaaf691f4ea74))
+
 ## [1.5.0](https://github.com/jlcoulter/momus/compare/v1.4.0...v1.5.0) (2026-08-22)
 
 
