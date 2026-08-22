@@ -95,6 +95,34 @@ func TestEvalUnknownFunctionReturnsUnknown(t *testing.T) {
 	}
 }
 
+func TestEvalChainedPath(t *testing.T) {
+	ctx := map[string]any{
+		"qualification": []any{map[string]any{
+			"identifier": []any{map[string]any{
+				"type": map[string]any{"coding": []any{map[string]any{"code": "AHPRA"}}},
+			}},
+		}},
+	}
+	// A multi-segment path must resolve each segment against the previous one,
+	// not drop the earlier segments against the root context.
+	res, err := evalStr(t, "qualification.identifier.type.coding.code.exists()", ctx)
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if !resTruthyBool(res) {
+		t.Fatalf("qualification.identifier.type.coding.code.exists() = false, want true")
+	}
+
+	// A full nested-where invariant (the Practitioner qualification form).
+	res2, err := evalStr(t, "qualification.identifier.where(type.coding.where(code = 'AHPRA').exists()).exists()", ctx)
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if !resTruthyBool(res2) {
+		t.Fatalf("qualification.where(...) invariant = false, want true")
+	}
+}
+
 func TestEvalStringLiteral(t *testing.T) {
 	res, err := evalStr(t, "'hello' = 'hello'", map[string]any{})
 	if err != nil {

@@ -22,13 +22,25 @@ func (e *literalExpr) eval(ctx context.Context, _ any) (Result, error) {
 
 // pathExpr navigates a property (or descends into children with '..') from a
 // context value. When the context is a collection, the property is resolved
-// against every element and the results are flattened.
+// against every element and the results are flattened. A path may be chained
+// (base set) so "a.b" resolves "b" against the result of "a" rather than the
+// root context.
 type pathExpr struct {
 	name string // property name; empty means "self"
 	deep bool   // true for '..' descent
+	base expr   // prior path segment; when nil the context value is the root
 }
 
 func (e *pathExpr) eval(ctx context.Context, contextValue any) (Result, error) {
+	// Evaluate the base (prior segment) first so a multi-segment path such as
+	// "a.b" resolves "b" against the result of "a".
+	if e.base != nil {
+		base, err := e.base.eval(ctx, contextValue)
+		if err != nil {
+			return Result{}, err
+		}
+		contextValue = base.value
+	}
 	// Normalise context to a collection.
 	coll := toCollection(contextValue)
 	if isUnknownResult(contextValue) {
