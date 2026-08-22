@@ -160,7 +160,9 @@ func anyValueMatches(v any, want string) bool {
 // nearMatches reports whether a Location resource's position coordinates match
 // a near search value "lat|long" (optionally "lat|long|distance"). It compares
 // latitude and longitude exactly, which is sufficient for the deterministic
-// golden harness coordinates.
+// golden harness coordinates. Note: the "|" separator matches nearSearchValue's
+// output; real FHIR URLs use a comma separator, so this is specific to the
+// self-conformance harness (the mock is both producer and consumer).
 func nearMatches(res map[string]any, want string) bool {
 	parts := strings.Split(want, "|")
 	if len(parts) < 2 {
@@ -245,6 +247,7 @@ func valueMatches(val any, want string) bool {
 				return true
 			}
 		}
+		return false
 	}
 	switch v := val.(type) {
 	case string:
