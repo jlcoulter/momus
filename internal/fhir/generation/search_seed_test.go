@@ -734,6 +734,33 @@ func TestSetSearchCodeValueBranches(t *testing.T) {
 	}
 }
 
+func TestSetFieldLeafAndForceBranches(t *testing.T) {
+	// setFieldLeaf: missing field -> array.
+	body := map[string]any{}
+	setFieldLeaf(body, "contact", "city", "Sydney")
+	if body["contact"].([]any)[0].(map[string]any)["city"] != "Sydney" {
+		t.Fatalf("setFieldLeaf(missing) = %v", body)
+	}
+	// Empty array -> replaced.
+	body = map[string]any{"contact": []any{}}
+	setFieldLeaf(body, "contact", "city", "Sydney")
+	if body["contact"].([]any)[0].(map[string]any)["city"] != "Sydney" {
+		t.Fatalf("setFieldLeaf(empty array) = %v", body)
+	}
+	// Non-map first array element -> replaced.
+	body = map[string]any{"contact": []any{"str"}}
+	setFieldLeaf(body, "contact", "city", "Sydney")
+	if body["contact"].([]any)[0].(map[string]any)["city"] != "Sydney" {
+		t.Fatalf("setFieldLeaf(non-map array) = %v", body)
+	}
+	// Existing map field.
+	body = map[string]any{"addr": map[string]any{}}
+	setFieldLeaf(body, "addr", "city", "Sydney")
+	if body["addr"].(map[string]any)["city"] != "Sydney" {
+		t.Fatalf("setFieldLeaf(map) = %v", body)
+	}
+}
+
 func TestSetFieldLeafAndForce(t *testing.T) {
 	// setFieldLeaf with existing array preserves first element's leaf if present.
 	body := map[string]any{"contact": []any{map[string]any{"city": "X"}}}
