@@ -290,6 +290,43 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 // TestSearchSeedSkipsNonMatchableSearch verifies that a composite/special
 // search (with no single leaf a search value can be placed on) produces no
 // matching seed; the search remains status-only.
+func TestSetNameLeafBranches(t *testing.T) {
+	// Missing field -> creates array.
+	body := map[string]any{}
+	setNameLeaf(body, "name", "momus-search")
+	if body["name"].([]any)[0].(map[string]any)["family"] != "momus-search" {
+		t.Fatalf("setNameLeaf(missing) = %v", body)
+	}
+	// Non-map first element -> replaced.
+	body = map[string]any{"name": []any{"str"}}
+	setNameLeaf(body, "name", "momus-search")
+	if body["name"].([]any)[0].(map[string]any)["family"] != "momus-search" {
+		t.Fatalf("setNameLeaf(non-map) = %v", body)
+	}
+	// Existing map -> forced.
+	body = map[string]any{"name": []any{map[string]any{"family": "old", "text": "old"}}}
+	setNameLeaf(body, "name", "momus-search")
+	first := body["name"].([]any)[0].(map[string]any)
+	if first["family"] != "momus-search" || first["text"] != "momus-search" {
+		t.Fatalf("setNameLeaf(existing) = %v", first)
+	}
+}
+
+func TestSetDateLeafPeriodElement(t *testing.T) {
+	reg := registry.New()
+	// A Period-typed element (no dateTime choice) sets the start member.
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitionerrole", Type: "PractitionerRole", Elements: []model.ElementDefinition{
+		{Path: "PractitionerRole", Min: 0, Max: "*"},
+		{Path: "PractitionerRole.period", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Period"}}},
+	}})
+	body := map[string]any{}
+	setDateLeaf(body, "period", "2024-01-01", reg, "PractitionerRole")
+	period := body["period"].(map[string]any)
+	if period["start"] != "2024-01-01" {
+		t.Fatalf("setDateLeaf(Period) = %v", period)
+	}
+}
+
 func TestSearchSeedSetsIdentifierValue(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
