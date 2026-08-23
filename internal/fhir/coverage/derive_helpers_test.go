@@ -162,6 +162,28 @@ func TestToSet(t *testing.T) {
 	}
 }
 
+func TestCollectDependencyTargets(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Patient", Type: "Patient", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Patient", Min: 0, Max: "*"}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Organization", Type: "Organization", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: "*"}}})
+	// Element-level TargetProfile.
+	el := model.ElementDefinition{TargetProfile: []string{"http://example.org/StructureDefinition/Patient", "http://example.org/StructureDefinition/Patient"}}
+	got := collectDependencyTargets(reg, el)
+	if len(got) != 1 || got[0] != "Patient" {
+		t.Fatalf("collectDependencyTargets = %v", got)
+	}
+	// Type-level TargetProfile.
+	el = model.ElementDefinition{Types: []model.ElementType{{TargetProfile: []string{"http://example.org/StructureDefinition/Organization"}}}}
+	got = collectDependencyTargets(reg, el)
+	if len(got) != 1 || got[0] != "Organization" {
+		t.Fatalf("collectDependencyTargets(type) = %v", got)
+	}
+	// No targets.
+	if got := collectDependencyTargets(reg, model.ElementDefinition{}); len(got) != 0 {
+		t.Fatalf("collectDependencyTargets(none) = %v", got)
+	}
+}
+
 func TestTrackPruned(t *testing.T) {
 	plan := &coverage.CoveragePlan{Summary: coverage.CoverageSummary{PrunedByReason: map[coverage.PruneReason]int{}}}
 	trackPruned(plan, coverage.PruneReasonLowValuePath)
