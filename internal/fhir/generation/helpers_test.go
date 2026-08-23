@@ -207,6 +207,25 @@ func TestCodingToMapGeneration(t *testing.T) {
 // TestGenerateMatchingCollectionCandidate verifies the collection-candidate
 // helper: a nil node yields not-found, and a node that cannot produce a
 // candidate matching the wanted field value yields not-found without panicking.
+func TestGenerateMatchingCollectionCandidateMatched(t *testing.T) {
+	reg := registry.New()
+	// A slice whose value carries the wanted field.
+	node := &model.ElementNode{Slices: map[string]*model.SliceNode{
+		"system-phone": {Name: "system-phone", Definition: &model.ElementDefinition{
+			Path:  "ContactPoint",
+			Types: []model.ElementType{{Code: "ContactPoint"}},
+			Fixed: map[string]any{"system": "phone"},
+		}},
+	}}
+	c, ok := generateMatchingCollectionCandidate(node, "system", []string{"phone"}, reg)
+	if !ok || c == nil {
+		t.Fatalf("generateMatchingCollectionCandidate(match) = %v, %v", c, ok)
+	}
+	if m := c.(map[string]any); m["system"] != "phone" {
+		t.Fatalf("matched candidate = %v", m)
+	}
+}
+
 func TestGenerateMatchingCollectionCandidate(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{
