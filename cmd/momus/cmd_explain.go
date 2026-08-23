@@ -21,7 +21,7 @@ func newExplainCmd(cfg *config) *cobra.Command {
 		Short: "Render one case in full depth from an output directory",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dir := cfg.outputDir
+			dir := cfg.OutputDir
 			if dir == "" {
 				dir = ".momus/output"
 			}
@@ -48,7 +48,7 @@ func newExplainCmd(cfg *config) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&cfg.outputDir, "dir", ".momus/output", "output directory to read cases from")
+	cmd.Flags().StringVar(&cfg.OutputDir, "dir", ".momus/output", "output directory to read cases from")
 	return cmd
 }
 

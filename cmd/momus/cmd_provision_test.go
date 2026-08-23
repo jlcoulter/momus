@@ -45,7 +45,7 @@ func TestProvisionCmdUploadsDatasetFromTestPlan(t *testing.T) {
 
 	cfg := &config{}
 	cmd := newProvisionCmd(cfg)
-	cfg.baseURL = server.URL
+	cfg.BaseURL = server.URL
 	cmd.SetContext(context.Background())
 	if err := cmd.RunE(cmd, []string{planPath}); err != nil {
 		t.Fatalf("provision command failed: %v", err)
@@ -80,7 +80,7 @@ func TestProvisionCmdSkipsWhenPlanHasNoSeedResources(t *testing.T) {
 
 	cfg := &config{}
 	cmd := newProvisionCmd(cfg)
-	cfg.baseURL = server.URL
+	cfg.BaseURL = server.URL
 	cmd.SetContext(context.Background())
 	if err := cmd.RunE(cmd, []string{planPath}); err != nil {
 		t.Fatalf("provision command failed: %v", err)

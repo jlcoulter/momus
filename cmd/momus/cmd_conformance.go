@@ -26,7 +26,7 @@ func newConformanceSelfTestCmd(cfg *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Locate the repo testdata/golden dir relative to the working dir,
 			// with a fallback search upward from CWD.
-			dir := cfg.goldenDir
+			dir := cfg.GoldenDir
 			if dir == "" {
 				dir = findGoldenDir()
 			}
@@ -50,10 +50,10 @@ func newConformanceSelfTestCmd(cfg *config) *cobra.Command {
 
 			var out io.Writer = os.Stdout
 			var outFile *os.File
-			if cfg.conformanceOut != "" {
-				outFile, err = os.Create(cfg.conformanceOut)
+			if cfg.ConformanceOut != "" {
+				outFile, err = os.Create(cfg.ConformanceOut)
 				if err != nil {
-					return fmt.Errorf("create output file %s: %w", cfg.conformanceOut, err)
+					return fmt.Errorf("create output file %s: %w", cfg.ConformanceOut, err)
 				}
 				defer outFile.Close()
 				out = outFile
@@ -63,7 +63,7 @@ func newConformanceSelfTestCmd(cfg *config) *cobra.Command {
 			// case, written to the output file so a run can be inspected. With
 			// --output-format json it emits one structured JSON record per line.
 			var tracer *tracing.Tracer
-			if cfg.conformanceJSON {
+			if cfg.ConformanceJSON {
 				tracer = tracing.NewJSON(out)
 			} else {
 				tracer = tracing.New(out)
@@ -76,7 +76,7 @@ func newConformanceSelfTestCmd(cfg *config) *cobra.Command {
 					failed++
 					continue
 				}
-				if !cfg.conformanceJSON {
+				if !cfg.ConformanceJSON {
 					fmt.Fprintf(out, "\n==== fixture %s ====\n", name)
 				}
 				res, err := golden.Run(ctx, name, fx, tracer)
@@ -94,9 +94,9 @@ func newConformanceSelfTestCmd(cfg *config) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&cfg.goldenDir, "fixtures", "", "path to the golden fixtures directory (default: repo testdata/golden)")
-	cmd.Flags().StringVar(&cfg.conformanceOut, "output", "", "write the HTTP request/response trace to this file (method, URL, status, headers, body)")
-	cmd.Flags().BoolVar(&cfg.conformanceJSON, "output-format", false, "write the trace as JSON Lines (one structured record per request/response)")
+	cmd.Flags().StringVar(&cfg.GoldenDir, "fixtures", "", "path to the golden fixtures directory (default: repo testdata/golden)")
+	cmd.Flags().StringVar(&cfg.ConformanceOut, "output", "", "write the HTTP request/response trace to this file (method, URL, status, headers, body)")
+	cmd.Flags().BoolVar(&cfg.ConformanceJSON, "output-format", false, "write the trace as JSON Lines (one structured record per request/response)")
 	return cmd
 }
 

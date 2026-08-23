@@ -85,9 +85,9 @@ func TestRunCmdConsumesTestPlanAndEvaluatesCoverage(t *testing.T) {
 	outPath := filepath.Join(t.TempDir(), "results.json")
 	cfg := &config{}
 	cmd := newRunCmd(cfg)
-	cfg.baseURL = server.URL
-	cfg.coveragePlanPath = planPath2
-	cfg.outputPath = outPath
+	cfg.BaseURL = server.URL
+	cfg.CoveragePlanPath = planPath2
+	cfg.OutputPath = outPath
 	cmd.SetContext(context.Background())
 	if err := cmd.RunE(cmd, []string{planPath}); err != nil {
 		t.Fatalf("run command failed: %v", err)
@@ -149,8 +149,8 @@ func TestRunCmdUsesDatasetForPreCreated(t *testing.T) {
 	outPath := filepath.Join(t.TempDir(), "results.json")
 	cfg := &config{}
 	cmd := newRunCmd(cfg)
-	cfg.baseURL = server.URL
-	cfg.outputPath = outPath
+	cfg.BaseURL = server.URL
+	cfg.OutputPath = outPath
 	cmd.SetContext(context.Background())
 	if err := cmd.RunE(cmd, []string{planPath}); err != nil {
 		t.Fatalf("run command failed (seed reference should be treated as pre-provisioned): %v", err)
@@ -177,7 +177,7 @@ func TestRunCmdUsesDatasetForPreCreated(t *testing.T) {
 func TestRunCmdFailOnUncoveredRequiresCoveragePlan(t *testing.T) {
 	cfg := &config{}
 	cmd := newRunCmd(cfg)
-	cfg.failOnUncovered = true
+	cfg.FailOnUncovered = true
 	cmd.SetContext(context.Background())
 	// The plan path is never read because the guard runs before plan loading;
 	// any path exercises the error branch.
@@ -225,12 +225,12 @@ func TestRunCmdWriteBasicAuthDefaultsToBaseURL(t *testing.T) {
 	outPath := filepath.Join(t.TempDir(), "results.json")
 	cfg := &config{}
 	cmd := newRunCmd(cfg)
-	cfg.baseURL = server.URL
-	// Deliberately do NOT set cfg.writeBaseURL: the write credentials must still
+	cfg.BaseURL = server.URL
+	// Deliberately do NOT set cfg.WriteBaseURL: the write credentials must still
 	// be applied because the write base URL defaults to --base-url.
-	cfg.writeBasicUsername = "write-user"
-	cfg.writeBasicPassword = "write-pass"
-	cfg.outputPath = outPath
+	cfg.WriteBasicUsername = "write-user"
+	cfg.WriteBasicPassword = "write-pass"
+	cfg.OutputPath = outPath
 	cmd.SetContext(context.Background())
 	if err := cmd.RunE(cmd, []string{planPath}); err != nil {
 		t.Fatalf("run command failed: %v", err)

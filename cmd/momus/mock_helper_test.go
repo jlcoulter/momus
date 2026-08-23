@@ -25,7 +25,7 @@ func TestTestOpenapiCmdMockFlags(t *testing.T) {
 }
 
 func TestStartMock(t *testing.T) {
-	cfg := &config{mock: true}
+	cfg := &config{Mock: true}
 	s, baseURL, err := startMock(cfg, "/fhir")
 	if err != nil {
 		t.Fatalf("startMock: %v", err)

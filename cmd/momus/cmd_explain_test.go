@@ -31,7 +31,7 @@ func TestExplainCmdRendersCase(t *testing.T) {
 
 	cfg := &config{}
 	cmd := newExplainCmd(cfg)
-	cfg.outputDir = dir
+	cfg.OutputDir = dir
 	cmd.SetContext(context.Background())
 	if err := cmd.RunE(cmd, []string{"search|Patient|name"}); err != nil {
 		t.Fatalf("explain failed: %v", err)
@@ -42,7 +42,7 @@ func TestExplainCmdMissingCase(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &config{}
 	cmd := newExplainCmd(cfg)
-	cfg.outputDir = dir
+	cfg.OutputDir = dir
 	cmd.SetContext(context.Background())
 	if err := cmd.RunE(cmd, []string{"nonexistent"}); err == nil {
 		t.Fatal("expected error for missing case, got nil")

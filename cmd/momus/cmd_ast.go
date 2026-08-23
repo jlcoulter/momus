@@ -29,7 +29,7 @@ func newAstCmd(cfg *config) *cobra.Command {
 			// the package's declared scope even when no server is reachable.
 			reg.OverlayCapabilityScope()
 
-			coverageResourceTypes, coverageProfileURLs, preferredProfilesByResource, coverageSearchCodes, err := resourceScopeForRun(cmd, cfg, newDebugTracer(cfg.debug))
+			coverageResourceTypes, coverageProfileURLs, preferredProfilesByResource, coverageSearchCodes, err := resourceScopeForRun(cmd, cfg, newDebugTracer(cfg.Debug))
 			if err != nil {
 				return err
 			}
@@ -49,47 +49,47 @@ func newAstCmd(cfg *config) *cobra.Command {
 			// scoped to the resource types/profiles it declares. Surface hard evidence
 			// that the plan we are about to write only sends server-supported things.
 			ev := verifyPlanAgainstCapability(cmd.Context(), cfg, reg, setupDataset)
-			reportCapabilityEvidence(ev, cfg.baseURL)
+			reportCapabilityEvidence(ev, cfg.BaseURL)
 
 			out, err := encodeTestPlan(astPlan)
 			if err != nil {
 				return fmt.Errorf("encode test plan: %w", err)
 			}
-			if err := writeDebugOutput(cfg.debug, "test-plan.json", append(out, '\n')); err != nil {
+			if err := writeDebugOutput(cfg.Debug, "test-plan.json", append(out, '\n')); err != nil {
 				return err
 			}
 
-			if cfg.outputPath == "" {
+			if cfg.OutputPath == "" {
 				fmt.Println(string(out))
 			} else {
-				if err := writeOutputFile(cfg.outputPath, append(out, '\n')); err != nil {
-					return fmt.Errorf("write test plan to %s: %w", cfg.outputPath, err)
+				if err := writeOutputFile(cfg.OutputPath, append(out, '\n')); err != nil {
+					return fmt.Errorf("write test plan to %s: %w", cfg.OutputPath, err)
 				}
 			}
 
 			fmt.Printf("Generated test plan with %d requirement cases and %d seed resources from %d resolved packages\n", coregeneration.RequirementCount(astPlan), len(setupDataset.Resources), len(graph.Packages))
-			if cfg.outputPath != "" {
-				fmt.Printf("Test plan written to %s\n", cfg.outputPath)
+			if cfg.OutputPath != "" {
+				fmt.Printf("Test plan written to %s\n", cfg.OutputPath)
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&cfg.depsDir, "deps-dir", "", "directory to search for dependency package archives (.tgz/.tar.gz)")
-	cmd.Flags().StringVar(&cfg.downloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
-	cmd.Flags().StringVar(&cfg.conflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
-	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write generated AST plan JSON to a file")
-	cmd.Flags().StringSliceVar(&cfg.includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable)")
-	cmd.Flags().StringSliceVar(&cfg.includeProfileURLs, "include-profile-url", nil, "include only these profile canonical URLs (repeatable)")
-	cmd.Flags().StringSliceVar(&cfg.excludePathPrefixes, "exclude-path-prefix", nil, "exclude element paths by prefix (repeatable)")
-	cmd.Flags().BoolVar(&cfg.mustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
-	cmd.Flags().BoolVar(&cfg.includeOptional, "include-optional", false, "include optional non-mustSupport elements")
-	cmd.Flags().BoolVar(&cfg.includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
-	cmd.Flags().BoolVar(&cfg.includeUniversalSearch, "include-universal-search", false, "include universal FHIR search parameters (_id, _count, _sort, _include, _summary, _filter) for every resource type even when the server's CapabilityStatement does not declare them")
-	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target FHIR base URL for request nodes")
-	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate FHIR base URL for resource creation (write) request nodes; defaults to --base-url")
-	cmd.Flags().StringVar(&cfg.capabilityBaseURL, "capability-base-url", "", "optional alternate FHIR base URL to fetch CapabilityStatement metadata for scope/profile selection")
-	cmd.Flags().StringVar(&cfg.metadataFile, "metadata", "", "path to a local CapabilityStatement JSON file to use for scope/profile selection and capability evidence instead of fetching /metadata")
-	cmd.Flags().IntVar(&cfg.interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
-	cmd.Flags().BoolVar(&cfg.exhaustive, "exhaustive", true, "populate optional elements to produce fuller, more realistic payloads")
+	cmd.Flags().StringVar(&cfg.DepsDir, "deps-dir", "", "directory to search for dependency package archives (.tgz/.tar.gz)")
+	cmd.Flags().StringVar(&cfg.DownloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
+	cmd.Flags().StringVar(&cfg.ConflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
+	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "write generated AST plan JSON to a file")
+	cmd.Flags().StringSliceVar(&cfg.IncludeResourceTypes, "include-resource", nil, "include only these resource types (repeatable)")
+	cmd.Flags().StringSliceVar(&cfg.IncludeProfileURLs, "include-profile-url", nil, "include only these profile canonical URLs (repeatable)")
+	cmd.Flags().StringSliceVar(&cfg.ExcludePathPrefixes, "exclude-path-prefix", nil, "exclude element paths by prefix (repeatable)")
+	cmd.Flags().BoolVar(&cfg.MustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
+	cmd.Flags().BoolVar(&cfg.IncludeOptional, "include-optional", false, "include optional non-mustSupport elements")
+	cmd.Flags().BoolVar(&cfg.IncludeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
+	cmd.Flags().BoolVar(&cfg.IncludeUniversalSearch, "include-universal-search", false, "include universal FHIR search parameters (_id, _count, _sort, _include, _summary, _filter) for every resource type even when the server's CapabilityStatement does not declare them")
+	cmd.Flags().StringVar(&cfg.BaseURL, "base-url", "", "target FHIR base URL for request nodes")
+	cmd.Flags().StringVar(&cfg.WriteBaseURL, "write-base-url", "", "alternate FHIR base URL for resource creation (write) request nodes; defaults to --base-url")
+	cmd.Flags().StringVar(&cfg.CapabilityBaseURL, "capability-base-url", "", "optional alternate FHIR base URL to fetch CapabilityStatement metadata for scope/profile selection")
+	cmd.Flags().StringVar(&cfg.MetadataFile, "metadata", "", "path to a local CapabilityStatement JSON file to use for scope/profile selection and capability evidence instead of fetching /metadata")
+	cmd.Flags().IntVar(&cfg.InteractionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
+	cmd.Flags().BoolVar(&cfg.Exhaustive, "exhaustive", true, "populate optional elements to produce fuller, more realistic payloads")
 	return cmd
 }

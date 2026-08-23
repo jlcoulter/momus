@@ -84,9 +84,9 @@ func TestTestFhirCmdMockEndToEnd(t *testing.T) {
 	cmd := newTestFhirCmd(cfg)
 	// Set mock/exhaustive AFTER newTestFhirCmd registers flags, because flag
 	// registration resets the bound field to the flag's default (false).
-	cfg.mock = true
-	cfg.exhaustive = true
-	cfg.outputPath = outPath
+	cfg.Mock = true
+	cfg.Exhaustive = true
+	cfg.OutputPath = outPath
 	cmd.SetContext(context.Background())
 
 	if err := cmd.RunE(cmd, []string{pkgPath}); err != nil {

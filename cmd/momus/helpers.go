@@ -34,24 +34,24 @@ import (
 // the server is unreachable or no CapabilityStatement is available, the
 // caller-provided scope (or the loaded package) is used as the source of truth.
 func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer) ([]string, []string, map[string][]string, map[string][]string, error) {
-	metadataBaseURL := strings.TrimSpace(cfg.capabilityBaseURL)
+	metadataBaseURL := strings.TrimSpace(cfg.CapabilityBaseURL)
 	if metadataBaseURL == "" {
-		metadataBaseURL = cfg.baseURL
+		metadataBaseURL = cfg.BaseURL
 	}
 
 	var capabilityStatement *model.CapabilityStatement
 	var fetchErr error
-	if cfg.metadataFile != "" {
-		loaded, loadErr := loadMetadataFile(cfg.metadataFile)
+	if cfg.MetadataFile != "" {
+		loaded, loadErr := loadMetadataFile(cfg.MetadataFile)
 		if loadErr != nil {
 			return nil, nil, nil, nil, loadErr
 		}
 		capabilityStatement = loaded
 	} else if metadataBaseURL != "" {
 		capabilityStatement, fetchErr = fhircoverage.FetchCapabilityStatement(cmd.Context(), metadataBaseURL, fhircoverage.CapabilityFetchOptions{
-			BearerToken:   cfg.apiBearerToken,
-			BasicUsername: cfg.apiBasicUsername,
-			BasicPassword: cfg.apiBasicPassword,
+			BearerToken:   cfg.ApiBearerToken,
+			BasicUsername: cfg.ApiBasicUsername,
+			BasicPassword: cfg.ApiBasicPassword,
 			Tracer:        tracer,
 		})
 	}
@@ -68,7 +68,7 @@ func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer
 
 	// When no CapabilityStatement is available, return the caller-provided scope.
 	if capabilityStatement == nil {
-		return cfg.includeResourceTypes, cfg.includeProfileURLs, nil, nil, nil
+		return cfg.IncludeResourceTypes, cfg.IncludeProfileURLs, nil, nil, nil
 	}
 
 	// The CapabilityStatement always defines the test plan: extract resource
@@ -85,24 +85,24 @@ func resourceScopeForRun(cmd *cobra.Command, cfg *config, tracer *tracing.Tracer
 		capabilityProfilesByResource = fhircoverage.SupportedProfileURLsByResourceFromCapabilityStatement(capabilityStatement, false)
 	}
 	if len(capabilityProfiles) > 0 {
-		types, err := intersectCaseInsensitive(cfg.includeResourceTypes, capabilityTypes)
+		types, err := intersectCaseInsensitive(cfg.IncludeResourceTypes, capabilityTypes)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
-		profiles, err := intersectCaseInsensitive(cfg.includeProfileURLs, capabilityProfiles)
+		profiles, err := intersectCaseInsensitive(cfg.IncludeProfileURLs, capabilityProfiles)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
 		return types, profiles, capabilityProfilesByResource, capabilitySearchCodes, nil
 	}
 	if len(capabilityTypes) == 0 {
-		return cfg.includeResourceTypes, cfg.includeProfileURLs, capabilityProfilesByResource, capabilitySearchCodes, nil
+		return cfg.IncludeResourceTypes, cfg.IncludeProfileURLs, capabilityProfilesByResource, capabilitySearchCodes, nil
 	}
-	types, err := intersectCaseInsensitive(cfg.includeResourceTypes, capabilityTypes)
+	types, err := intersectCaseInsensitive(cfg.IncludeResourceTypes, capabilityTypes)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	return types, cfg.includeProfileURLs, capabilityProfilesByResource, capabilitySearchCodes, nil
+	return types, cfg.IncludeProfileURLs, capabilityProfilesByResource, capabilitySearchCodes, nil
 }
 
 // isServerUnavailable reports whether a fetch error means the target server

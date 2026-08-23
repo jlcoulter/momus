@@ -20,7 +20,7 @@ func newRunCmd(cfg *config) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			planPath := args[0]
-			if cfg.failOnUncovered && cfg.coveragePlanPath == "" {
+			if cfg.FailOnUncovered && cfg.CoveragePlanPath == "" {
 				return fmt.Errorf("--fail-on-uncovered requires --coverage-plan; provide the plan to evaluate contractual coverage against")
 			}
 			raw, err := os.ReadFile(planPath)
@@ -32,7 +32,7 @@ func newRunCmd(cfg *config) *cobra.Command {
 				return err
 			}
 
-			coveragePlan, err := loadCoveragePlanFromFile(cfg.coveragePlanPath)
+			coveragePlan, err := loadCoveragePlanFromFile(cfg.CoveragePlanPath)
 			if err != nil {
 				return err
 			}
@@ -44,18 +44,18 @@ func newRunCmd(cfg *config) *cobra.Command {
 			return writeRunReport(cfg, report, coverageEvaluation, coveragePlan != nil)
 		},
 	}
-	cmd.Flags().StringVar(&cfg.coveragePlanPath, "coverage-plan", "", "path to a coverage plan JSON (from 'coverage derive') used to evaluate contractual coverage")
-	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write test result report JSON to a file")
-	cmd.Flags().StringVar(&cfg.outputDir, "output-dir", ".momus/output", "write the navigable output directory to this path (use '-' to disable)")
-	cmd.Flags().StringVar(&cfg.htmlReport, "html", "", "write an HTML coverage report with drill-down to a file")
-	cmd.Flags().BoolVar(&cfg.failOnUncovered, "fail-on-uncovered", false, "return non-zero exit code when contractual coverage has uncovered obligations")
-	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target FHIR base URL for relative request URLs (the AST usually carries absolute URLs)")
-	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate FHIR base URL for write (PUT/PATCH/POST/DELETE) request URLs; defaults to --base-url")
-	cmd.Flags().StringVar(&cfg.apiBearerToken, "api-bearer-token", "", "bearer token used for API requests during execution")
-	cmd.Flags().StringVar(&cfg.apiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during execution")
-	cmd.Flags().StringVar(&cfg.apiBasicPassword, "api-basic-password", "", "basic auth password used for API requests during execution")
-	cmd.Flags().StringVar(&cfg.writeBasicUsername, "write-basic-username", "", "basic auth username used for write requests to --write-base-url; defaults to --api-basic-username")
-	cmd.Flags().StringVar(&cfg.writeBasicPassword, "write-basic-password", "", "basic auth password used for write requests to --write-base-url; defaults to --api-basic-password")
-	cmd.Flags().BoolVar(&cfg.includeCases, "include-cases", false, "include the full per-case result array in the JSON report (large runs produce very large output)")
+	cmd.Flags().StringVar(&cfg.CoveragePlanPath, "coverage-plan", "", "path to a coverage plan JSON (from 'coverage derive') used to evaluate contractual coverage")
+	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "write test result report JSON to a file")
+	cmd.Flags().StringVar(&cfg.OutputDir, "output-dir", ".momus/output", "write the navigable output directory to this path (use '-' to disable)")
+	cmd.Flags().StringVar(&cfg.HtmlReport, "html", "", "write an HTML coverage report with drill-down to a file")
+	cmd.Flags().BoolVar(&cfg.FailOnUncovered, "fail-on-uncovered", false, "return non-zero exit code when contractual coverage has uncovered obligations")
+	cmd.Flags().StringVar(&cfg.BaseURL, "base-url", "", "target FHIR base URL for relative request URLs (the AST usually carries absolute URLs)")
+	cmd.Flags().StringVar(&cfg.WriteBaseURL, "write-base-url", "", "alternate FHIR base URL for write (PUT/PATCH/POST/DELETE) request URLs; defaults to --base-url")
+	cmd.Flags().StringVar(&cfg.ApiBearerToken, "api-bearer-token", "", "bearer token used for API requests during execution")
+	cmd.Flags().StringVar(&cfg.ApiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during execution")
+	cmd.Flags().StringVar(&cfg.ApiBasicPassword, "api-basic-password", "", "basic auth password used for API requests during execution")
+	cmd.Flags().StringVar(&cfg.WriteBasicUsername, "write-basic-username", "", "basic auth username used for write requests to --write-base-url; defaults to --api-basic-username")
+	cmd.Flags().StringVar(&cfg.WriteBasicPassword, "write-basic-password", "", "basic auth password used for write requests to --write-base-url; defaults to --api-basic-password")
+	cmd.Flags().BoolVar(&cfg.IncludeCases, "include-cases", false, "include the full per-case result array in the JSON report (large runs produce very large output)")
 	return cmd
 }
