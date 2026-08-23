@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/jlcoulter/momus/compare/v1.6.0...v1.6.1) (2026-08-23)
+
+
+### Bug Fixes
+
+* self conformance failures and update golden fixtures ([#23](https://github.com/jlcoulter/momus/issues/23)) ([e091bf8](https://github.com/jlcoulter/momus/commit/e091bf8d53e230ba25a0741e3318cf7c898d42f5))
+
 ## [1.6.0](https://github.com/jlcoulter/momus/compare/v1.5.0...v1.6.0) (2026-08-22)
 
 
