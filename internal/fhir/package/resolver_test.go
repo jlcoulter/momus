@@ -357,6 +357,62 @@ func TestResolveRequestedVersionEmptyPrefersRootPreferred(t *testing.T) {
 	}
 }
 
+func TestResolveRequestedVersionBranches(t *testing.T) {
+	// Empty version, no root preferred, uses selected.
+	got, overridden, err := resolveRequestedVersion("a.pkg", "", map[string]string{"a.pkg": "1.0.0"}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "1.0.0" || overridden {
+		t.Fatalf("empty->selected = %q, %v, %v", got, overridden, err)
+	}
+	// Empty version, no selection -> empty.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "", map[string]string{}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "" || overridden {
+		t.Fatalf("empty->none = %q, %v, %v", got, overridden, err)
+	}
+	// Floating with a selected concrete version -> uses selected.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "latest", map[string]string{"a.pkg": "1.0.0"}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "1.0.0" || !overridden {
+		t.Fatalf("floating->selected = %q, %v, %v", got, overridden, err)
+	}
+	// Floating with root preferred -> uses it.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "latest", map[string]string{}, map[string]string{"a.pkg": "2.0.0"}, ConflictPolicyRootWins)
+	if err != nil || got != "2.0.0" || !overridden {
+		t.Fatalf("floating->root = %q, %v, %v", got, overridden, err)
+	}
+	// Floating, nothing -> empty overridden.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "latest", map[string]string{}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "" || !overridden {
+		t.Fatalf("floating->none = %q, %v, %v", got, overridden, err)
+	}
+	// Exact selected match.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "1.0.0", map[string]string{"a.pkg": "1.0.0"}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "1.0.0" || overridden {
+		t.Fatalf("exact match = %q, %v, %v", got, overridden, err)
+	}
+	// Conflict root-wins.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "1.0.0", map[string]string{"a.pkg": "2.0.0"}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "2.0.0" || !overridden {
+		t.Fatalf("conflict root-wins = %q, %v, %v", got, overridden, err)
+	}
+	// Conflict strict -> error.
+	if _, _, err := resolveRequestedVersion("a.pkg", "1.0.0", map[string]string{"a.pkg": "2.0.0"}, nil, ConflictPolicyStrict); err == nil {
+		t.Fatal("expected strict conflict error")
+	}
+	// Unsupported policy.
+	if _, _, err := resolveRequestedVersion("a.pkg", "1.0.0", map[string]string{"a.pkg": "2.0.0"}, nil, ConflictPolicy("weird")); err == nil {
+		t.Fatal("expected unsupported policy error")
+	}
+	// Root preferred conflict.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "1.0.0", map[string]string{}, map[string]string{"a.pkg": "2.0.0"}, ConflictPolicyRootWins)
+	if err != nil || got != "2.0.0" || !overridden {
+		t.Fatalf("root conflict = %q, %v, %v", got, overridden, err)
+	}
+	// New version selected.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "1.0.0", map[string]string{}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "1.0.0" || overridden {
+		t.Fatalf("new version = %q, %v, %v", got, overridden, err)
+	}
+}
+
 func TestFindDependencyArchivePrefersExactLocalVersion(t *testing.T) {
 	index := map[string]string{
 		"b.pkg@latest": "/path/b.pkg-latest.tgz",
