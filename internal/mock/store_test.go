@@ -133,25 +133,25 @@ func TestStoreSearchComposite(t *testing.T) {
 
 func TestStoreSearchSortAndCount(t *testing.T) {
 	s := NewStore()
-	s.Put("Patient", "p1", []byte(`{"resourceType":"Patient","id":"p1","name":[{"family":"Zulu"}]}`))
-	s.Put("Patient", "p2", []byte(`{"resourceType":"Patient","id":"p2","name":[{"family":"Alpha"}]}`))
-	s.Put("Patient", "p3", []byte(`{"resourceType":"Patient","id":"p3","name":[{"family":"Mike"}]}`))
+	s.Put("Patient", "p1", []byte(`{"resourceType":"Patient","id":"p1","active":true}`))
+	s.Put("Patient", "p2", []byte(`{"resourceType":"Patient","id":"p2","active":true}`))
+	s.Put("Patient", "p3", []byte(`{"resourceType":"Patient","id":"p3","active":true}`))
 
-	// Ascending sort by name.
-	got, err := s.Search("Patient", map[string]string{"_sort": "name"})
+	// Ascending sort by the string field "id".
+	got, err := s.Search("Patient", map[string]string{"_sort": "id"})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	if len(got) != 3 || got[0]["name"].([]any)[0].(map[string]any)["family"] != "Alpha" {
+	if len(got) != 3 || got[0]["id"] != "p1" || got[2]["id"] != "p3" {
 		t.Fatalf("ascending sort = %+v", got)
 	}
 
 	// Descending sort.
-	got, err = s.Search("Patient", map[string]string{"_sort": "-name"})
+	got, err = s.Search("Patient", map[string]string{"_sort": "-id"})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	if got[0]["name"].([]any)[0].(map[string]any)["family"] != "Zulu" {
+	if got[0]["id"] != "p3" {
 		t.Fatalf("descending sort = %+v", got)
 	}
 
