@@ -163,6 +163,80 @@ func TestReferenceID(t *testing.T) {
 	}
 }
 
+func TestDescendParent(t *testing.T) {
+	// Single segment -> returns body and the leaf key.
+	body := map[string]any{"active": true}
+	parent, key, ok := descendParent(body, []string{"active"})
+	if !ok || parent == nil || key != "active" {
+		t.Fatalf("descendParent(single) = %v, %q, %v", parent, key, ok)
+	}
+	// Missing intermediate.
+	if _, _, ok := descendParent(body, []string{"missing", "x"}); ok {
+		t.Fatal("descendParent(missing) should be false")
+	}
+	// Descends into a map.
+	body = map[string]any{"name": map[string]any{"family": "x"}}
+	parent, key, ok = descendParent(body, []string{"name", "family"})
+	if !ok || parent["family"] != "x" || key != "family" {
+		t.Fatalf("descendParent(map) = %v, %q, %v", parent, key, ok)
+	}
+	// Descends into first element of an array.
+	body = map[string]any{"name": []any{map[string]any{"family": "x"}}}
+	parent, key, ok = descendParent(body, []string{"name", "family"})
+	if !ok || key != "family" {
+		t.Fatalf("descendParent(array) = %v, %q, %v", parent, key, ok)
+	}
+	// Empty array -> false.
+	if _, _, ok := descendParent(map[string]any{"name": []any{}}, []string{"name", "family"}); ok {
+		t.Fatal("descendParent(empty array) should be false")
+	}
+	// Non-map array element -> false.
+	if _, _, ok := descendParent(map[string]any{"name": []any{"str"}}, []string{"name", "family"}); ok {
+		t.Fatal("descendParent(non-map array) should be false")
+	}
+	// Scalar intermediate -> false.
+	if _, _, ok := descendParent(map[string]any{"name": "scalar"}, []string{"name", "family"}); ok {
+		t.Fatal("descendParent(scalar) should be false")
+	}
+	// Empty segments -> false.
+	if _, _, ok := descendParent(body, nil); ok {
+		t.Fatal("descendParent(empty segments) should be false")
+	}
+}
+
+func TestWrongDatatypeValueAdditional(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://example.org/StructureDefinition/patient", Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 0, Max: "*", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Patient.score", Min: 0, Max: "1", Types: []model.ElementType{{Code: "integer"}}},
+			{Path: "Patient.uri", Min: 0, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
+		},
+	})
+	// Invalid lexical for integer.
+	v := wrongDatatypeValue(coverage.CoverageRequirement{Variant: coverage.CoverageVariantDatatypeInvalidLexical, ProfileURL: "http://example.org/StructureDefinition/patient", ElementPath: "Patient.score"}, reg)
+	if v != "12abc" {
+		t.Fatalf("integer invalid lexical = %v", v)
+	}
+	// Invalid lexical for uri.
+	v = wrongDatatypeValue(coverage.CoverageRequirement{Variant: coverage.CoverageVariantDatatypeInvalidLexical, ProfileURL: "http://example.org/StructureDefinition/patient", ElementPath: "Patient.uri"}, reg)
+	if v != "not a uri" {
+		t.Fatalf("uri invalid lexical = %v", v)
+	}
+	// Wrong JSON type for a string.
+	v = wrongDatatypeValue(coverage.CoverageRequirement{Variant: coverage.CoverageVariantDatatypeWrongJSONType, ProfileURL: "http://example.org/StructureDefinition/patient", ElementPath: "Patient.name"}, reg)
+	if v != 42 {
+		t.Fatalf("string wrong json = %v", v)
+	}
+	// Wrong JSON type for an unknown type -> true.
+	v = wrongDatatypeValue(coverage.CoverageRequirement{Variant: coverage.CoverageVariantDatatypeWrongJSONType, ProfileURL: "http://example.org/StructureDefinition/patient", ElementPath: "Patient.nope"}, reg)
+	if v != true {
+		t.Fatalf("unknown wrong json = %v", v)
+	}
+}
+
 func TestElementDefinitionOfAndTypeOf(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{
