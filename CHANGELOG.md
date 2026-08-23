@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/jlcoulter/momus/compare/v1.6.1...v1.7.0) (2026-08-23)
+
+
+### Features
+
+* Move persistent data under $HOME/.momus ([#26](https://github.com/jlcoulter/momus/issues/26)) ([ce6a1f3](https://github.com/jlcoulter/momus/commit/ce6a1f30bd71817548e6761beac43ec54785d09e))
+
 ## [1.6.1](https://github.com/jlcoulter/momus/compare/v1.6.0...v1.6.1) (2026-08-23)
 
 
