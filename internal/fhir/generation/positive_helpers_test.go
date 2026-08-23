@@ -671,6 +671,38 @@ func TestSliceExtensionRootAndFindSliceValueXBranches(t *testing.T) {
 	}
 }
 
+func TestMergeSlicePatternRecursive(t *testing.T) {
+	// A nested pattern where the existing value has a matching nested map.
+	value := map[string]any{"coding": map[string]any{"system": "http://old"}}
+	mergeSlicePattern(value, "coding", map[string]any{"code": "new", "system": "http://new"})
+	coding := value["coding"].(map[string]any)
+	if coding["code"] != "new" || coding["system"] != "http://new" {
+		t.Fatalf("recursive merge = %v", coding)
+	}
+	// A nested pattern where the existing value is a map.
+	value = map[string]any{"coding": map[string]any{"code": "keep"}}
+	mergeSlicePattern(value, "coding", map[string]any{"system": "http://new"})
+	coding = value["coding"].(map[string]any)
+	if coding["code"] != "keep" || coding["system"] != "http://new" {
+		t.Fatalf("partial merge = %v", coding)
+	}
+}
+
+func TestApplySliceNodeChildren(t *testing.T) {
+	// Nil guards.
+	applySliceNodeChildren(nil, &model.ElementNode{}, nil)
+	applySliceNodeChildren(map[string]any{}, nil, nil)
+	// A node with children that have fixed/pattern constraints.
+	value := map[string]any{}
+	node := &model.ElementNode{Children: map[string]*model.ElementNode{
+		"type": {Name: "type", Definition: &model.ElementDefinition{Fixed: "physical"}},
+	}}
+	applySliceNodeChildren(value, node, nil)
+	if value["type"] != "physical" {
+		t.Fatalf("applySliceNodeChildren = %v", value)
+	}
+}
+
 func TestIsEmptyExtensionBranches(t *testing.T) {
 	// Extension with value.
 	if isEmptyExtension(map[string]any{"url": "http://x", "valueString": "v"}) {
