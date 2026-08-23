@@ -91,3 +91,12 @@ func TestValidateInvariantSatisfied(t *testing.T) {
 		}
 	}
 }
+
+func TestInvariantMessage(t *testing.T) {
+	if got := invariantMessage(model.ElementConstraint{Key: "k1", Human: "human text"}); got != "invariant k1: human text" {
+		t.Fatalf("invariantMessage(human) = %q", got)
+	}
+	if got := invariantMessage(model.ElementConstraint{Key: "k2"}); got != "invariant k2 is not satisfied" {
+		t.Fatalf("invariantMessage(no human) = %q", got)
+	}
+}
