@@ -130,3 +130,94 @@ func TestStoreSearchComposite(t *testing.T) {
 		t.Fatalf("expected 0 matches for partial composite, got %d", len(got))
 	}
 }
+
+func TestStoreSearchSortAndCount(t *testing.T) {
+	s := NewStore()
+	s.Put("Patient", "p1", []byte(`{"resourceType":"Patient","id":"p1","name":[{"family":"Zulu"}]}`))
+	s.Put("Patient", "p2", []byte(`{"resourceType":"Patient","id":"p2","name":[{"family":"Alpha"}]}`))
+	s.Put("Patient", "p3", []byte(`{"resourceType":"Patient","id":"p3","name":[{"family":"Mike"}]}`))
+
+	// Ascending sort by name.
+	got, err := s.Search("Patient", map[string]string{"_sort": "name"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 3 || got[0]["name"].([]any)[0].(map[string]any)["family"] != "Alpha" {
+		t.Fatalf("ascending sort = %+v", got)
+	}
+
+	// Descending sort.
+	got, err = s.Search("Patient", map[string]string{"_sort": "-name"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if got[0]["name"].([]any)[0].(map[string]any)["family"] != "Zulu" {
+		t.Fatalf("descending sort = %+v", got)
+	}
+
+	// _count limits results.
+	got, err = s.Search("Patient", map[string]string{"_count": "2"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("_count=2 returned %d results", len(got))
+	}
+
+	// _count larger than the result set leaves it unchanged.
+	got, err = s.Search("Patient", map[string]string{"_count": "99"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("_count=99 returned %d results, want 3", len(got))
+	}
+
+	// _count non-numeric is ignored.
+	got, err = s.Search("Patient", map[string]string{"_count": "abc"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("_count=abc returned %d results, want 3", len(got))
+	}
+
+	// A universal param (e.g. _summary) is ignored as a filter.
+	got, err = s.Search("Patient", map[string]string{"_summary": "true"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("_summary filter returned %d results, want all 3", len(got))
+	}
+}
+
+func TestToFloat(t *testing.T) {
+	if _, ok := toFloat(float64(1.5)); !ok {
+		t.Fatal("toFloat(float64) should succeed")
+	}
+	if _, ok := toFloat(3); !ok {
+		t.Fatal("toFloat(int) should succeed")
+	}
+	if _, ok := toFloat(int64(7)); !ok {
+		t.Fatal("toFloat(int64) should succeed")
+	}
+	if _, ok := toFloat("x"); ok {
+		t.Fatal("toFloat(string) should fail")
+	}
+}
+
+func TestFindNearPosition(t *testing.T) {
+	// Direct match.
+	loc := map[string]any{"position": map[string]any{"latitude": 10.0, "longitude": 20.0}}
+	if !findNearPosition(loc, 10.0, 20.0) {
+		t.Fatal("findNearPosition should match")
+	}
+	if findNearPosition(loc, 0.0, 0.0) {
+		t.Fatal("findNearPosition should not match distant coordinates")
+	}
+	// Nested in array.
+	if !findNearPosition([]any{map[string]any{"latitude": 1.0, "longitude": 2.0}}, 1.0, 2.0) {
+		t.Fatal("findNearPosition(array) should match")
+	}
+}
