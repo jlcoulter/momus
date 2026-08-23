@@ -611,6 +611,102 @@ func TestElementAllowsMultiple(t *testing.T) {
 	}
 }
 
+func TestSliceExtensionRootAndFindSliceValueXBranches(t *testing.T) {
+	reg := registry.New()
+	// A simple extension profile.
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://example.org/StructureDefinition/simple-ext", Type: "Extension",
+		Elements: []model.ElementDefinition{
+			{Path: "Extension", Min: 0, Max: "1"},
+			{Path: "Extension.url", Min: 1, Max: "1"},
+			{Path: "Extension.value[x]", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+	// A complex extension (value[x] is Max 0, has sub-extensions).
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://example.org/StructureDefinition/complex-ext", Type: "Extension",
+		Elements: []model.ElementDefinition{
+			{Path: "Extension", Min: 0, Max: "1"},
+			{Path: "Extension.url", Min: 1, Max: "1"},
+			{Path: "Extension.extension", Min: 1, Max: "*"},
+			{Path: "Extension.value[x]", Min: 0, Max: "0"},
+		},
+	})
+
+	// A slice whose definition carries its own value[x] child uses a synthetic root.
+	slice := &model.SliceNode{
+		Name:       "own",
+		Definition: &model.ElementDefinition{Path: "x.extension", Name: "ext"},
+		Children: map[string]*model.ElementNode{
+			"value[x]": {Definition: &model.ElementDefinition{Path: "x.value[x]", Max: "1"}},
+		},
+	}
+	root := sliceExtensionRoot(slice, reg)
+	if root == nil {
+		t.Fatal("sliceExtensionRoot(own children) should return a synthetic root")
+	}
+	// Complex extension: findSliceValueX returns false.
+	complexSlice := &model.SliceNode{Definition: &model.ElementDefinition{
+		Types: []model.ElementType{{Code: "Extension", Profile: []string{"http://example.org/StructureDefinition/complex-ext"}}},
+	}}
+	if _, ok := findSliceValueX(complexSlice, reg); ok {
+		t.Fatal("findSliceValueX(complex) should be false")
+	}
+	// Nil-definition slice.
+	if _, ok := findSliceValueX(&model.SliceNode{}, reg); ok {
+		t.Fatal("findSliceValueX(no def) should be false")
+	}
+	// sliceExtensionRoot with a definition but no profile match.
+	noProfile := &model.SliceNode{Definition: &model.ElementDefinition{Types: []model.ElementType{{Code: "Extension"}}}}
+	if root := sliceExtensionRoot(noProfile, reg); root != nil {
+		t.Fatalf("sliceExtensionRoot(no profile) = %v, want nil", root)
+	}
+}
+
+func TestIsEmptyExtensionBranches(t *testing.T) {
+	// Extension with value.
+	if isEmptyExtension(map[string]any{"url": "http://x", "valueString": "v"}) {
+		t.Fatal("extension with value should not be empty")
+	}
+	// Extension with sub-extension.
+	if isEmptyExtension(map[string]any{"url": "http://x", "extension": []any{map[string]any{"url": "sub"}}}) {
+		t.Fatal("extension with sub-extension should not be empty")
+	}
+	// Empty extension (only url).
+	if !isEmptyExtension(map[string]any{"url": "http://x"}) {
+		t.Fatal("extension with only url should be empty")
+	}
+}
+
+func TestEnsureSimpleExtensionValue(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://example.org/StructureDefinition/simple-ext", Type: "Extension",
+		Elements: []model.ElementDefinition{
+			{Path: "Extension", Min: 0, Max: "1"},
+			{Path: "Extension.url", Min: 1, Max: "1"},
+			{Path: "Extension.value[x]", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+	slice := &model.SliceNode{Definition: &model.ElementDefinition{
+		Types: []model.ElementType{{Code: "Extension", Profile: []string{"http://example.org/StructureDefinition/simple-ext"}}},
+	}}
+	// Nil guards.
+	ensureSimpleExtensionValue(nil, slice, reg)
+	// No url -> no-op.
+	ensureSimpleExtensionValue(map[string]any{}, slice, reg)
+	// Existing extension sub-array -> no-op.
+	ensureSimpleExtensionValue(map[string]any{"url": "u", "extension": []any{}}, slice, reg)
+	// Existing value -> no-op.
+	ensureSimpleExtensionValue(map[string]any{"url": "u", "valueString": "x"}, slice, reg)
+	// Missing value -> sets one.
+	value := map[string]any{"url": "u"}
+	ensureSimpleExtensionValue(value, slice, reg)
+	if _, ok := value["valueString"]; !ok {
+		t.Fatalf("ensureSimpleExtensionValue did not add valueString: %v", value)
+	}
+}
+
 func TestFindExtensionValueCoding(t *testing.T) {
 	if _, ok := findExtensionValueCoding(nil, "http://x"); ok {
 		t.Fatal("findExtensionValueCoding(nil) should be false")
