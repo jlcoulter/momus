@@ -605,6 +605,16 @@ func TestChoiceKeyMatches(t *testing.T) {
 	}
 }
 
+func TestEvalParseError(t *testing.T) {
+	if _, err := Eval(context.Background(), "(", map[string]any{}); err == nil {
+		t.Fatal("Eval should propagate a parse error")
+	}
+	// EvalBool propagates parse errors too.
+	if _, _, err := EvalBool(context.Background(), "(", map[string]any{}); err == nil {
+		t.Fatal("EvalBool should propagate a parse error")
+	}
+}
+
 func TestCompileMatchesCache(t *testing.T) {
 	re, err := compileMatches("^a+$")
 	if err != nil {
