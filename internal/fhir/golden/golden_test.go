@@ -2,11 +2,18 @@ package golden
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/core/ast"
+	"github.com/jlcoulter/momus/internal/core/coverage"
+	fhircoverage "github.com/jlcoulter/momus/internal/fhir/coverage"
+	fhirgeneration "github.com/jlcoulter/momus/internal/fhir/generation"
+	"github.com/jlcoulter/momus/internal/fhir/model"
+	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
 
 // TestGoldenAll runs the golden-matrix self-test against every reference
@@ -57,6 +64,29 @@ func TestRewriteBase(t *testing.T) {
 	}
 	if par.Steps[1].(*ast.Request).URL != "http://new/fhir/Patient/1" {
 		t.Fatalf("second request URL not rewritten: %q", par.Steps[1].(*ast.Request).URL)
+	}
+}
+
+func TestProvisionSeedNon2xx(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"resourceType":"OperationOutcome"}`))
+	}))
+	defer server.Close()
+
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+	}})
+	plan, err := fhircoverage.DerivePlan(reg, coverage.DeriveOptions{})
+	if err != nil {
+		t.Fatalf("DerivePlan: %v", err)
+	}
+	opts := fhirgeneration.BuildOptions{Registry: reg}
+	err = provisionSeed(context.Background(), opts, plan, server.URL, nil)
+	if err == nil {
+		t.Fatal("expected provisionSeed error for non-2xx response")
 	}
 }
 
