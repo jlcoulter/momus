@@ -2,6 +2,7 @@ package golden
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -56,5 +57,20 @@ func TestRewriteBase(t *testing.T) {
 	}
 	if par.Steps[1].(*ast.Request).URL != "http://new/fhir/Patient/1" {
 		t.Fatalf("second request URL not rewritten: %q", par.Steps[1].(*ast.Request).URL)
+	}
+}
+
+func TestLoadFixtureErrors(t *testing.T) {
+	// Non-existent file.
+	if _, err := LoadFixture(filepath.Join(t.TempDir(), "missing.json")); err == nil {
+		t.Fatal("expected error for missing fixture")
+	}
+	// Invalid JSON.
+	bad := filepath.Join(t.TempDir(), "bad.json")
+	if err := os.WriteFile(bad, []byte("not-json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadFixture(bad); err == nil {
+		t.Fatal("expected error for invalid fixture JSON")
 	}
 }
