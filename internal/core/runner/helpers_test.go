@@ -58,6 +58,10 @@ func TestReplaceTemplateString(t *testing.T) {
 	if got := replaceTemplateString("{{a}}", map[string]any{"a": 5}); got != "5" {
 		t.Fatalf("replaceTemplateString numeric = %q", got)
 	}
+	// An unresolved variable is left as-is.
+	if got := replaceTemplateString("{{missing}}", map[string]any{"a": 1}); got != "{{missing}}" {
+		t.Fatalf("replaceTemplateString(missing) = %q", got)
+	}
 }
 
 func TestTruncateDebugBody(t *testing.T) {
