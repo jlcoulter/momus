@@ -1,6 +1,7 @@
 package generation
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -767,6 +768,18 @@ func TestNormalizePractitionerFieldsMissingName(t *testing.T) {
 	names = body["name"].([]any)
 	if len(names) != 3 {
 		t.Fatalf("name count = %d, want 3", len(names))
+	}
+}
+
+func TestDerivedURIValueAndSampleCodeValue(t *testing.T) {
+	// derivedURIValue returns a uuid.
+	u := derivedURIValue("patient-id")
+	if !strings.HasPrefix(u, "urn:uuid:") || len(u) != len("urn:uuid:")+36 {
+		t.Fatalf("derivedURIValue = %q", u)
+	}
+	// sampleCodeValue with a leaf.
+	if got := sampleCodeValue("Patient.status"); got != "status" {
+		t.Fatalf("sampleCodeValue = %q", got)
 	}
 }
 
