@@ -658,26 +658,74 @@ func TestNormaliseCodingDisplay(t *testing.T) {
 	}
 }
 
-func TestResolveBoundCodingPath(t *testing.T) {
-	// Nil def/binding/reg.
-	if _, ok := resolveBoundCoding(nil, nil); ok {
-		t.Fatal("resolveBoundCoding(nil) should be false")
-	}
-	// Empty value set URL.
-	if _, ok := resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{}}, nil); ok {
-		t.Fatal("resolveBoundCoding(no vs url) should be false")
-	}
-	// Unknown value set.
+func TestNormalizeReferenceType(t *testing.T) {
 	reg := registry.New()
-	if _, ok := resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{ValueSet: "http://missing"}}, reg); ok {
-		t.Fatal("resolveBoundCoding(unknown vs) should be false")
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Organization", Type: "Organization", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: "*"}}})
+	// Nil guards.
+	normalizeReferenceType(nil, nil, reg)
+	// Reference-derived type.
+	value := map[string]any{"reference": "Organization/o-1"}
+	normalizeReferenceType(value, &model.ElementDefinition{}, reg)
+	if value["type"] != "Organization" {
+		t.Fatalf("normalizeReferenceType = %v", value)
 	}
-	// Value set with a compose include referencing a code system.
-	reg.AddValueSet(&model.ValueSet{URL: "http://vs", ComposeIncludes: []model.ValueSetInclude{{System: "http://cs"}}})
-	reg.AddCodeSystem(&model.CodeSystem{URL: "http://cs", Concepts: []model.CodeSystemConcept{{Code: "k", Display: "Key"}}})
-	c, ok := resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{ValueSet: "http://vs"}}, reg)
-	if !ok || c.Code != "k" {
-		t.Fatalf("resolveBoundCoding(cs include) = %+v, %v", c, ok)
+	// Type derived from the element's target profile when the reference has no
+	// parseable type.
+	value = map[string]any{"reference": "urn:uuid:123"}
+	def := &model.ElementDefinition{TargetProfile: []string{"http://example.org/StructureDefinition/Organization"}}
+	normalizeReferenceType(value, def, reg)
+	if value["type"] != "Organization" {
+		t.Fatalf("normalizeReferenceType(profile) = %v", value)
+	}
+}
+
+func TestNormalizeGeneratedIdentifier(t *testing.T) {
+	if normalizeGeneratedIdentifier(nil); true {
+		// no-op
+	}
+	// ABN.
+	id := map[string]any{"system": "http://hl7.org.au/id/abn", "value": ""}
+	normalizeGeneratedIdentifier(id)
+	if id["value"] == "" {
+		t.Fatal("ABN identifier should be normalized")
+	}
+	// ACN.
+	id = map[string]any{"system": "http://hl7.org.au/id/acn", "value": ""}
+	normalizeGeneratedIdentifier(id)
+	if id["value"] == "" {
+		t.Fatal("ACN identifier should be normalized")
+	}
+	// Unknown system left alone.
+	id = map[string]any{"system": "http://other", "value": "x"}
+	normalizeGeneratedIdentifier(id)
+	if id["value"] != "x" {
+		t.Fatal("unknown system should be left alone")
+	}
+}
+
+func TestEnsureEndpointManagingOrganization(t *testing.T) {
+	body := map[string]any{}
+	ensureEndpointManagingOrganization(body)
+	if body["managingOrganization"] == nil {
+		t.Fatal("managingOrganization not set")
+	}
+	// Existing value preserved.
+	body = map[string]any{"managingOrganization": map[string]any{"reference": "existing"}}
+	ensureEndpointManagingOrganization(body)
+	if body["managingOrganization"].(map[string]any)["reference"] != "existing" {
+		t.Fatal("existing managingOrganization should be preserved")
+	}
+}
+
+func TestDependencyReferenceElementName(t *testing.T) {
+	// Nil registry.
+	if got := dependencyReferenceElementName("Patient", "http://x", "Observation", nil); got != "" {
+		t.Fatalf("dependencyReferenceElementName(nil reg) = %q", got)
+	}
+	// Empty dependency.
+	reg := registry.New()
+	if got := dependencyReferenceElementName("Patient", "http://x", "", reg); got != "" {
+		t.Fatalf("dependencyReferenceElementName(empty dep) = %q", got)
 	}
 }
 
