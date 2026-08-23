@@ -92,6 +92,33 @@ func TestValidateInvariantSatisfied(t *testing.T) {
 	}
 }
 
+func TestValidateInvariantSkipsWarningAndUnknown(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/warn-inv",
+		Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}},
+				Constraints: []model.ElementConstraint{
+					{Key: "warn-1", Severity: "warning", Expression: "false", Human: "warning only"},
+					{Key: "err-1", Severity: "error", Expression: "unsupportedFn()", Human: "out of scope"},
+				}},
+		},
+	})
+	v := New(r)
+	res := map[string]any{"value": "x"}
+	issues, err := v.Validate(context.Background(), "http://example.org/StructureDefinition/warn-inv", res)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	for _, iss := range issues {
+		if iss.Kind == "invariant" {
+			t.Fatalf("warning or unknown invariant should not produce an issue: %+v", iss)
+		}
+	}
+}
+
 func TestInvariantMessage(t *testing.T) {
 	if got := invariantMessage(model.ElementConstraint{Key: "k1", Human: "human text"}); got != "invariant k1: human text" {
 		t.Fatalf("invariantMessage(human) = %q", got)
