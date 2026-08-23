@@ -308,3 +308,33 @@ func TestFetchCapabilityStatementLimitsResponseBody(t *testing.T) {
 		t.Fatal("expected error when /metadata body exceeds size limit")
 	}
 }
+
+func TestFetchCapabilityStatementErrorPaths(t *testing.T) {
+	if _, err := FetchCapabilityStatement(context.Background(), "  ", CapabilityFetchOptions{}); err == nil {
+		t.Fatal("expected error for empty base URL")
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("denied"))
+	}))
+	defer server.Close()
+	if _, err := FetchCapabilityStatement(context.Background(), server.URL, CapabilityFetchOptions{HTTPClient: server.Client()}); err == nil {
+		t.Fatal("expected error for non-2xx status")
+	}
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("not-json"))
+	}))
+	defer server.Close()
+	if _, err := FetchCapabilityStatement(context.Background(), server.URL, CapabilityFetchOptions{HTTPClient: server.Client()}); err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"resourceType":"Patient"}`))
+	}))
+	defer server.Close()
+	if _, err := FetchCapabilityStatement(context.Background(), server.URL, CapabilityFetchOptions{HTTPClient: server.Client()}); err == nil {
+		t.Fatal("expected error for wrong resource type")
+	}
+}
