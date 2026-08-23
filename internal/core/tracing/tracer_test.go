@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -220,6 +221,22 @@ func TestTracerColorWhenForced(t *testing.T) {
 	}
 	if !strings.Contains(out, "\x1b[32m") {
 		t.Errorf("expected green response header for 2xx when colour forced:\n%q", out)
+	}
+}
+
+func TestIsTerminal(t *testing.T) {
+	// A bytes.Buffer is not a terminal.
+	if isTerminal(&bytes.Buffer{}) {
+		t.Fatal("bytes.Buffer should not be a terminal")
+	}
+	// A regular file is not a terminal.
+	f, err := os.CreateTemp(t.TempDir(), "trace")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if isTerminal(f) {
+		t.Fatal("regular file should not be a terminal")
 	}
 }
 
