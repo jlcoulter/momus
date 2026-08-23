@@ -372,6 +372,60 @@ func TestFindDependencyArchivePrefersExactLocalVersion(t *testing.T) {
 	}
 }
 
+func TestFindDependencyArchiveEdgeCases(t *testing.T) {
+	// Empty name.
+	if _, err := findDependencyArchive(map[string]string{}, Dependency{Name: ""}); err == nil {
+		t.Fatal("expected error for empty name")
+	}
+	// Missing exact version.
+	if _, err := findDependencyArchive(map[string]string{"a.pkg@2.0.0": "/x"}, Dependency{Name: "a.pkg", Version: "1.0.0"}); err == nil {
+		t.Fatal("expected error for missing exact version")
+	}
+	// No matches.
+	if _, err := findDependencyArchive(map[string]string{}, Dependency{Name: "a.pkg", Version: "latest"}); err == nil {
+		t.Fatal("expected error when no matches")
+	}
+	// Ambiguous (multiple versions).
+	index := map[string]string{
+		"a.pkg@1.0.0": "/a-1.0.tgz",
+		"a.pkg@2.0.0": "/a-2.0.tgz",
+	}
+	if _, err := findDependencyArchive(index, Dependency{Name: "a.pkg", Version: "latest"}); err == nil {
+		t.Fatal("expected error for ambiguous versions")
+	}
+	// Single match resolves.
+	index = map[string]string{"a.pkg@1.0.0": "/a-1.0.tgz"}
+	p, err := findDependencyArchive(index, Dependency{Name: "a.pkg", Version: "latest"})
+	if err != nil || p != "/a-1.0.tgz" {
+		t.Fatalf("findDependencyArchive(single) = %q, %v", p, err)
+	}
+}
+
+func TestIndexLocalPackageArchives(t *testing.T) {
+	// Empty dir -> no-op.
+	if idx, err := IndexLocalPackageArchives(""); err == nil {
+		t.Fatalf("expected error for empty dir, got %v", idx)
+	}
+	// Non-existent dir -> empty index.
+	idx, err := IndexLocalPackageArchives(filepath.Join(t.TempDir(), "missing"))
+	if err != nil {
+		t.Fatalf("IndexLocalPackageArchives(missing): %v", err)
+	}
+	if len(idx) != 0 {
+		t.Fatalf("missing dir index = %v, want empty", idx)
+	}
+	// A directory with a valid package archive.
+	dir := t.TempDir()
+	writePackageArchive(t, dir, "a.pkg", "1.0.0", nil)
+	idx, err = IndexLocalPackageArchives(dir)
+	if err != nil {
+		t.Fatalf("IndexLocalPackageArchives: %v", err)
+	}
+	if _, ok := idx["a.pkg@1.0.0"]; !ok {
+		t.Fatalf("index = %v, want a.pkg@1.0.0", idx)
+	}
+}
+
 func writePackageArchive(t *testing.T, dir, name, version string, deps map[string]string) string {
 	t.Helper()
 	archivePath := filepath.Join(dir, name+"-"+version+".tgz")
