@@ -147,6 +147,20 @@ func TestElementSearchValue(t *testing.T) {
 	if got := elementSearchValue(def, reg); got != "momus-search" {
 		t.Fatalf("unknown elementSearchValue = %q", got)
 	}
+	// A code element with a bound coding resolves to the bound code.
+	boundReg := registry.New()
+	boundReg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/gender", ComposeIncludes: []model.ValueSetInclude{{
+		System: "http://hl7.org/fhir/administrative-gender", Concepts: []model.ConceptReference{{Code: "male"}},
+	}}})
+	def = &model.ElementDefinition{Path: "Patient.gender", Types: []model.ElementType{{Code: "code"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/gender"}}
+	if got := elementSearchValue(def, boundReg); got != "male" {
+		t.Fatalf("bound code elementSearchValue = %q, want male", got)
+	}
+	// A code type without a resolvable binding falls back.
+	def = &model.ElementDefinition{Path: "x.y", Types: []model.ElementType{{Code: "code"}}}
+	if got := elementSearchValue(def, reg); got != "momus-search" {
+		t.Fatalf("unbound code elementSearchValue = %q", got)
+	}
 }
 
 func TestSearchValidNonMatchValue(t *testing.T) {
