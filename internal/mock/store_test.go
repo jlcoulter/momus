@@ -87,6 +87,22 @@ func TestStoreSearchDatePrefix(t *testing.T) {
 	}
 }
 
+func TestNearMatches(t *testing.T) {
+	// Fewer than 2 parts.
+	if nearMatches(map[string]any{}, "only-one") {
+		t.Fatal("nearMatches(single part) should be false")
+	}
+	// Non-numeric coordinates.
+	if nearMatches(map[string]any{}, "abc|def") {
+		t.Fatal("nearMatches(non-numeric) should be false")
+	}
+	// Matching coordinates.
+	loc := map[string]any{"position": map[string]any{"latitude": 10.0, "longitude": 20.0}}
+	if !nearMatches(loc, "10.0|20.0") {
+		t.Fatal("nearMatches(match) should be true")
+	}
+}
+
 func TestStoreSearchNear(t *testing.T) {
 	s := NewStore()
 	s.Put("Location", "l1", []byte(`{"resourceType":"Location","id":"l1","position":{"latitude":-33.8688,"longitude":151.2093}}`))
