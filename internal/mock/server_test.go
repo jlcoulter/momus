@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -93,6 +94,35 @@ func TestWithLoggerOption(t *testing.T) {
 	s2 := New(http.StatusOK, "ok", WithLogger(true))
 	if !s2.logger {
 		t.Fatal("WithLogger(true) did not enable logging")
+	}
+}
+
+func TestReadBodyAndClose(t *testing.T) {
+	// Empty body.
+	req, _ := http.NewRequest("POST", "http://x", strings.NewReader(""))
+	body, err := readBody(req)
+	if err == nil || body != nil {
+		t.Fatalf("readBody(empty) = %q, %v; want error", body, err)
+	}
+	// Non-empty body.
+	req, _ = http.NewRequest("POST", "http://x", strings.NewReader("data"))
+	body, err = readBody(req)
+	if err != nil || string(body) != "data" {
+		t.Fatalf("readBody = %q, %v", body, err)
+	}
+	// Close on a server that was never started returns nil.
+	if err := (&Server{}).Close(); err != nil {
+		t.Fatalf("Close(unstarted) = %v, want nil", err)
+	}
+	// Close on a started server succeeds.
+	s := New(http.StatusOK, "ok", WithPlanAware())
+	addr, err := s.Start()
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	_ = addr
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close(started) = %v", err)
 	}
 }
 
