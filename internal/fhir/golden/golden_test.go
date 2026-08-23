@@ -4,6 +4,8 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+
+	"github.com/jlcoulter/momus/internal/core/ast"
 )
 
 // TestGoldenAll runs the golden-matrix self-test against every reference
@@ -27,5 +29,32 @@ func TestGoldenAll(t *testing.T) {
 				t.Fatalf("golden run had %d failed cases: %v", res.Failed, res.FailedReqs)
 			}
 		})
+	}
+}
+
+func TestMarshalDeterministic(t *testing.T) {
+	plan := &ast.Plan{Version: "v1", Root: &ast.Request{Method: "GET", URL: "/Patient"}}
+	got := string(marshalDeterministic(plan))
+	if got == "" || got[len(got)-1] != '\n' {
+		t.Fatalf("marshalDeterministic = %q", got)
+	}
+}
+
+func TestRewriteBase(t *testing.T) {
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Parallel{Steps: []ast.Node{
+			&ast.Request{Method: "GET", URL: "http://old/fhir/Patient"},
+			&ast.Request{Method: "PUT", URL: "http://old/fhir/Patient/1"},
+		}},
+		&ast.Capture{Name: "id", Path: "id"},
+	}}
+	rewriteBase(plan, "http://old/fhir", "http://new/fhir")
+	par := plan.Steps[0].(*ast.Parallel)
+	req := par.Steps[0].(*ast.Request)
+	if req.URL != "http://new/fhir/Patient" {
+		t.Fatalf("request URL not rewritten: %q", req.URL)
+	}
+	if par.Steps[1].(*ast.Request).URL != "http://new/fhir/Patient/1" {
+		t.Fatalf("second request URL not rewritten: %q", par.Steps[1].(*ast.Request).URL)
 	}
 }
