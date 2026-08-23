@@ -3,6 +3,9 @@ package generation
 import (
 	"reflect"
 	"testing"
+
+	"github.com/jlcoulter/momus/internal/fhir/model"
+	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
 
 func TestIsFunctionName(t *testing.T) {
@@ -212,5 +215,40 @@ func TestDescendContainer(t *testing.T) {
 	body = map[string]any{"a": []any{"str"}}
 	if got := descendContainer(body, "a"); !reflect.DeepEqual(got, map[string]any{}) {
 		t.Fatalf("descend replaced array element = %v", got)
+	}
+}
+
+func TestResolveNestedLeafTypeFailures(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Identifier", Type: "Identifier", Elements: []model.ElementDefinition{
+		{Path: "Identifier", Min: 0, Max: "*"},
+		{Path: "Identifier.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+	}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.identifier", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Identifier"}}},
+	}})
+	resolved, err := reg.ResolveProfile("http://example.org/StructureDefinition/patient")
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+
+	// Single-segment path -> not found.
+	if _, _, found := resolveNestedLeafType(resolved, "Patient", "id", reg); found {
+		t.Fatal("single-segment path should not resolve")
+	}
+	// Missing intermediate key.
+	if _, _, found := resolveNestedLeafType(resolved, "Patient", "identifier.nope", reg); found {
+		t.Fatal("missing key should not resolve")
+	}
+	// Unknown top-level container.
+	reg2 := registry.New()
+	reg2.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.id", Min: 0, Max: "1", Types: []model.ElementType{{Code: "id"}}},
+	}})
+	resolved2, _ := reg2.ResolveProfile("http://example.org/StructureDefinition/patient")
+	if _, _, found := resolveNestedLeafType(resolved2, "Patient", "id.value", reg2); found {
+		t.Fatal("non-complex container should not resolve nested type")
 	}
 }
