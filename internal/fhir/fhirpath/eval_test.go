@@ -676,3 +676,71 @@ func TestParsePostfixFunctionOnPath(t *testing.T) {
 		t.Fatalf("3 * 4 = %v, want 12", got)
 	}
 }
+
+func TestEvalFunctionEdgeBranches(t *testing.T) {
+	ef := func(name string, ctx any, args ...Result) Result {
+		r, _ := evalFunction(context.Background(), name, ctx, args)
+		return r
+	}
+	// exists()/empty() on unknown return unknown.
+	if _, known := resTruthy(ef("exists", unknownSentinel)); known {
+		t.Fatal("exists(unknown) should be unknown")
+	}
+	if _, known := resTruthy(ef("empty", unknownSentinel)); known {
+		t.Fatal("empty(unknown) should be unknown")
+	}
+	// count(unknown) => unknown.
+	if _, known := resTruthy(ef("count", unknownSentinel)); known {
+		t.Fatal("count(unknown) should be unknown")
+	}
+	// toString(unknown) => unknown.
+	if _, known := resTruthy(ef("toString", unknownSentinel)); known {
+		t.Fatal("toString(unknown) should be unknown")
+	}
+	// not(unknown) => unknown.
+	if _, known := resTruthy(ef("not", unknownSentinel)); known {
+		t.Fatal("not(unknown) should be unknown")
+	}
+	// first()/last() on an empty collection => nil.
+	if got := ef("first", []any{}); got.value != nil {
+		t.Fatalf("first(empty) = %v, want nil", got.value)
+	}
+	if got := ef("last", []any{}); got.value != nil {
+		t.Fatalf("last(empty) = %v, want nil", got.value)
+	}
+	// length() on a non-string => 0.
+	if got := ef("length", 42); got.value.(float64) != 0 {
+		t.Fatalf("length(non-string) = %v", got.value)
+	}
+	// startsWith with non-string context or too few args => false.
+	if resTruthyBool(ef("startsWith", 42)) {
+		t.Fatal("startsWith(non-string) should be false")
+	}
+	if resTruthyBool(ef("startsWith", "abc")) {
+		t.Fatal("startsWith(no args) should be false")
+	}
+	// matches with invalid regex => unknown.
+	if _, known := resTruthy(ef("matches", "abc", asResult("["))); known {
+		t.Fatal("matches(invalid regex) should be unknown")
+	}
+	// matches with non-string arg => false.
+	if resTruthyBool(ef("matches", "abc", asResult(42))) {
+		t.Fatal("matches(non-string arg) should be false")
+	}
+	// toInteger with non-numeric string => null.
+	if got := ef("toInteger", "abc"); got.value != nil {
+		t.Fatalf("toInteger(abc) = %v, want nil", got.value)
+	}
+	// toInteger with an int.
+	if got := ef("toInteger", 5); got.value.(float64) != 5 {
+		t.Fatalf("toInteger(int) = %v", got.value)
+	}
+	// iif with too few args => unknown.
+	if _, known := resTruthy(ef("iif", nil)); known {
+		t.Fatal("iif(no args) should be unknown")
+	}
+	// iif with unknown condition => unknown.
+	if _, known := resTruthy(ef("iif", nil, unknownResult(), asResult("x"), asResult("y"))); known {
+		t.Fatal("iif(unknown cond) should be unknown")
+	}
+}
