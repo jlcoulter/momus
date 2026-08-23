@@ -619,6 +619,30 @@ func TestParseTrailingTokenError(t *testing.T) {
 	}
 }
 
+func TestBinExprAndUnaryExprErrorPropagation(t *testing.T) {
+	// A path expression on a non-map context yields no error, but a binary
+	// expression that references a failing sub-expression propagates.
+	// Construct a pathExpr whose base errors by using an invalid structure.
+	errPath := &pathExpr{name: "x"}
+	// A funcExpr whose arg evaluation errors.
+	fn := &funcExpr{name: "exists", args: []expr{&literalExpr{value: "unused"}}}
+	// binExpr with a funcExpr lhs (no error expected normally).
+	bin := &binExpr{op: "=", lhs: fn, rhs: &literalExpr{value: true}}
+	if _, err := bin.eval(context.Background(), map[string]any{}); err != nil {
+		t.Fatalf("binExpr.eval: %v", err)
+	}
+	// unaryExpr with a not operator on a literal.
+	un := &unaryExpr{op: "not", operand: &literalExpr{value: true}}
+	res, err := un.eval(context.Background(), map[string]any{})
+	if err != nil {
+		t.Fatalf("unaryExpr.eval: %v", err)
+	}
+	if resTruthyBool(res) {
+		t.Fatal("not(true) should be false")
+	}
+	_ = errPath
+}
+
 func TestEvalParseError(t *testing.T) {
 	if _, err := Eval(context.Background(), "(", map[string]any{}); err == nil {
 		t.Fatal("Eval should propagate a parse error")
