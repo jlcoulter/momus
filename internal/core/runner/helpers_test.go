@@ -194,6 +194,40 @@ func TestTruncateText(t *testing.T) {
 	}
 }
 
+func TestApplyRequestAuth(t *testing.T) {
+	// Existing auth preserved.
+	e := &executor{bearerToken: "tok"}
+	req, _ := http.NewRequest("GET", "http://x", nil)
+	req.Header.Set("Authorization", "Existing")
+	e.applyRequestAuth(req, "GET")
+	if req.Header.Get("Authorization") != "Existing" {
+		t.Fatal("existing auth overwritten")
+	}
+	// Nil request is a no-op.
+	e.applyRequestAuth(nil, "GET")
+	// Write method with write base URL and write basic creds.
+	e = &executor{writeBaseURL: "http://write", writeBasicUsername: "wu", writeBasicPassword: "wp"}
+	req, _ = http.NewRequest("POST", "http://x", nil)
+	e.applyRequestAuth(req, "POST")
+	if _, _, ok := req.BasicAuth(); !ok {
+		t.Fatal("write basic auth not applied")
+	}
+	// Bearer token.
+	e = &executor{bearerToken: "tok"}
+	req, _ = http.NewRequest("GET", "http://x", nil)
+	e.applyRequestAuth(req, "GET")
+	if req.Header.Get("Authorization") != "Bearer tok" {
+		t.Fatal("bearer token not applied")
+	}
+	// Basic auth.
+	e = &executor{basicUsername: "u", basicPassword: "p"}
+	req, _ = http.NewRequest("GET", "http://x", nil)
+	e.applyRequestAuth(req, "GET")
+	if _, _, ok := req.BasicAuth(); !ok {
+		t.Fatal("basic auth not applied")
+	}
+}
+
 func TestSetupResourceTypeFromRequirementID(t *testing.T) {
 	if _, ok := setupResourceTypeFromRequirementID("req-1"); ok {
 		t.Fatal("non-setup id should not match")
