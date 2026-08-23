@@ -457,8 +457,23 @@ func TestFindDependencyArchiveEdgeCases(t *testing.T) {
 	}
 }
 
+func TestIndexLocalPackageArchivesFileAsDir(t *testing.T) {
+	// A path that is a file (not a directory) yields an empty index.
+	file := filepath.Join(t.TempDir(), "afile.json")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := IndexLocalPackageArchives(file)
+	if err != nil {
+		t.Fatalf("IndexLocalPackageArchives(file): %v", err)
+	}
+	if len(idx) != 0 {
+		t.Fatalf("file-as-dir index = %v, want empty", idx)
+	}
+}
+
 func TestIndexLocalPackageArchives(t *testing.T) {
-	// Empty dir -> no-op.
+	// Empty dir -> error.
 	if idx, err := IndexLocalPackageArchives(""); err == nil {
 		t.Fatalf("expected error for empty dir, got %v", idx)
 	}
