@@ -760,6 +760,21 @@ func TestNormalizeGeneratedAddress(t *testing.T) {
 	}
 }
 
+func TestResolveBoundCodingFromExtensionValueGuards(t *testing.T) {
+	if _, ok := resolveBoundCodingFromExtensionValue("", nil); ok {
+		t.Fatal("resolveBoundCodingFromExtensionValue(empty) should be false")
+	}
+	reg := registry.New()
+	if _, ok := resolveBoundCodingFromExtensionValue("http://x", reg); ok {
+		t.Fatal("resolveBoundCodingFromExtensionValue(no resources) should be false")
+	}
+	// A nil instance is skipped.
+	reg.AddResource(nil)
+	if _, ok := resolveBoundCodingFromExtensionValue("http://x", reg); ok {
+		t.Fatal("resolveBoundCodingFromExtensionValue(nil instances) should be false")
+	}
+}
+
 func TestFindExtensionValueCoding(t *testing.T) {
 	if _, ok := findExtensionValueCoding(nil, "http://x"); ok {
 		t.Fatal("findExtensionValueCoding(nil) should be false")
