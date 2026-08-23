@@ -281,6 +281,16 @@ func TestEvaluateAssertAttributesRecordedError(t *testing.T) {
 	}
 }
 
+func TestExtractMissingResourceKeyEdge(t *testing.T) {
+	// A match with empty type or id is rejected.
+	if _, ok := extractMissingResourceKey("Resource /x not found"); ok {
+		t.Fatal("empty type should not match")
+	}
+	if _, ok := extractMissingResourceKey("Resource Patient/ not found"); ok {
+		t.Fatal("empty id should not match")
+	}
+}
+
 func TestSetupResourceTypeFromRequirementID(t *testing.T) {
 	if _, ok := setupResourceTypeFromRequirementID("req-1"); ok {
 		t.Fatal("non-setup id should not match")
