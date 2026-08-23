@@ -707,6 +707,51 @@ func TestEnsureSimpleExtensionValue(t *testing.T) {
 	}
 }
 
+func TestNormalizeGeneratedPayloadAndCodeableConceptMap(t *testing.T) {
+	// All-fixed codings: text dropped, no display added.
+	value := map[string]any{"coding": []any{map[string]any{fixedCodingKey: true, "code": "c"}}}
+	normalizeCodeableConceptMap(value)
+	if _, ok := value["text"]; ok {
+		t.Fatal("all-fixed coding should drop text")
+	}
+	// Non-fixed coding with a missing display gets a sample display.
+	value = map[string]any{"coding": []any{map[string]any{"code": "status"}}}
+	normalizeCodeableConceptMap(value)
+	if value["coding"].([]any)[0].(map[string]any)["display"] == "" {
+		t.Fatal("non-fixed coding should get a display")
+	}
+	if value["text"] == "" {
+		t.Fatal("concept should get a text from the first label")
+	}
+	// nil guard.
+	normalizeCodeableConceptMap(nil)
+	// A codeable concept with no coding array.
+	normalizeCodeableConceptMap(map[string]any{})
+	// normalizeGeneratedPayload with an address (AU state dropped).
+	payload := map[string]any{"address": map[string]any{"line": "x", "city": "Sydney", "country": "AU", "state": "NSW"}, "name": []any{map[string]any{"text": "x"}}}
+	normalizeGeneratedPayload(payload)
+	addr := payload["address"].(map[string]any)
+	if _, ok := addr["state"]; ok {
+		t.Fatal("AU state should be dropped")
+	}
+}
+
+func TestNormalizeGeneratedAddress(t *testing.T) {
+	normalizeGeneratedAddress(nil)
+	// Non-AU preserved.
+	addr := map[string]any{"country": "US", "state": "CA"}
+	normalizeGeneratedAddress(addr)
+	if addr["state"] != "CA" {
+		t.Fatalf("non-AU state = %v", addr["state"])
+	}
+	// AU dropped.
+	addr = map[string]any{"country": "au", "state": "NSW"}
+	normalizeGeneratedAddress(addr)
+	if _, ok := addr["state"]; ok {
+		t.Fatal("AU state should be dropped")
+	}
+}
+
 func TestFindExtensionValueCoding(t *testing.T) {
 	if _, ok := findExtensionValueCoding(nil, "http://x"); ok {
 		t.Fatal("findExtensionValueCoding(nil) should be false")
