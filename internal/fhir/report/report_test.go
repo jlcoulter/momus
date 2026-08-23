@@ -211,3 +211,34 @@ func TestWriteDirInvalidPathError(t *testing.T) {
 		t.Fatal("expected error for unwritable output directory")
 	}
 }
+
+func TestReportSubWriters(t *testing.T) {
+	dir := t.TempDir()
+	cases := sampleReport().Cases
+
+	// writeCases creates case files.
+	if err := writeCases(dir, cases); err != nil {
+		t.Fatalf("writeCases: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "cases", "search_Patient_name.json")); err != nil {
+		t.Fatalf("case file missing: %v", err)
+	}
+	// writeFailedIndex.
+	if err := writeFailedIndex(dir, cases); err != nil {
+		t.Fatalf("writeFailedIndex: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "failed-index.json")); err != nil {
+		t.Fatalf("failed-index missing: %v", err)
+	}
+	// writeMatrices.
+	if err := writeMatrices(dir, cases); err != nil {
+		t.Fatalf("writeMatrices: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "by-resource", "Patient.json")); err != nil {
+		t.Fatalf("by-resource missing: %v", err)
+	}
+	// writeJSON on an unwritable path.
+	if err := writeJSON("/proc/definitely-not-writable/x.json", "x"); err == nil {
+		t.Fatal("expected writeJSON error for unwritable path")
+	}
+}
