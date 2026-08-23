@@ -2,6 +2,48 @@ package mock
 
 import "testing"
 
+func TestValueMatches(t *testing.T) {
+	// Boolean.
+	if !valueMatches(true, "true") || valueMatches(false, "true") {
+		t.Fatal("valueMatches(bool) failed")
+	}
+	// Number.
+	if !valueMatches(float64(5), "5") {
+		t.Fatal("valueMatches(number) failed")
+	}
+	// String equality.
+	if !valueMatches("x", "x") || valueMatches("x", "y") {
+		t.Fatal("valueMatches(string) failed")
+	}
+	// Date prefix.
+	if !valueMatches("2024-01-01T10:00:00Z", "2024-01-01") {
+		t.Fatal("valueMatches(date prefix) failed")
+	}
+	// Array recursion.
+	if !valueMatches([]any{float64(1), "two"}, "two") {
+		t.Fatal("valueMatches(array) failed")
+	}
+	// Nested map.
+	if !valueMatches(map[string]any{"a": []any{map[string]any{"b": "hit"}}}, "hit") {
+		t.Fatal("valueMatches(nested) failed")
+	}
+	// Unknown type.
+	if valueMatches(struct{}{}, "x") {
+		t.Fatal("valueMatches(unknown) should be false")
+	}
+	// Composite ($): all parts must match.
+	if !valueMatches("glucose", "glucose$glucose") {
+		t.Fatal("valueMatches(composite) failed")
+	}
+	if valueMatches("glucose", "glucose$nope") {
+		t.Fatal("valueMatches(composite partial) should be false")
+	}
+	// Pipe (|): any part matches.
+	if !valueMatches("glucose", "nope|glucose") {
+		t.Fatal("valueMatches(pipe) failed")
+	}
+}
+
 func TestGetFieldString(t *testing.T) {
 	tests := []struct {
 		name  string
