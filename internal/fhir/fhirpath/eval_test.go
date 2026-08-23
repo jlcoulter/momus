@@ -605,6 +605,20 @@ func TestChoiceKeyMatches(t *testing.T) {
 	}
 }
 
+func TestParseTrailingTokenError(t *testing.T) {
+	// A trailing token after a valid expression is an error.
+	if _, err := Parse("name name"); err == nil {
+		t.Fatal("expected error for trailing token")
+	}
+	// peek() returns EOF at the end.
+	p := &parser{toks: []token{{kind: tokNumber, text: "1"}}}
+	_ = p.peek()
+	_ = p.advance()
+	if got := p.peek(); got.kind != tokEOF {
+		t.Fatalf("peek at end = %+v, want tokEOF", got)
+	}
+}
+
 func TestEvalParseError(t *testing.T) {
 	if _, err := Eval(context.Background(), "(", map[string]any{}); err == nil {
 		t.Fatal("Eval should propagate a parse error")
