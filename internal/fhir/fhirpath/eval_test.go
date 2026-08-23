@@ -569,6 +569,42 @@ func TestEqualValues(t *testing.T) {
 	}
 }
 
+func TestResolvePathDirect(t *testing.T) {
+	// Unknown item.
+	if got := resolvePath(unknownSentinel, "x", false); len(got) != 1 || !isUnknown(Result{value: got[0]}) {
+		t.Fatalf("resolvePath(unknown) = %v", got)
+	}
+	// Non-map item.
+	if got := resolvePath("scalar", "x", false); got != nil {
+		t.Fatalf("resolvePath(non-map) = %v", got)
+	}
+	// Map with direct key.
+	if got := resolvePath(map[string]any{"name": "x"}, "name", false); len(got) != 1 || got[0] != "x" {
+		t.Fatalf("resolvePath(direct) = %v", got)
+	}
+	// Map with a choice key.
+	if got := resolvePath(map[string]any{"valueString": "x"}, "value", false); len(got) != 1 || got[0] != "x" {
+		t.Fatalf("resolvePath(choice) = %v", got)
+	}
+	// Missing key.
+	if got := resolvePath(map[string]any{}, "missing", false); got != nil {
+		t.Fatalf("resolvePath(missing) = %v", got)
+	}
+	// Deep descent.
+	if got := resolvePath(map[string]any{"a": map[string]any{"code": "x"}, "b": []any{map[string]any{"code": "y"}}}, "code", true); len(got) != 2 {
+		t.Fatalf("resolvePath(deep) = %v", got)
+	}
+}
+
+func TestChoiceKeyMatches(t *testing.T) {
+	if !choiceKeyMatches("valueString", "value") {
+		t.Fatal("valueString should match value")
+	}
+	if choiceKeyMatches("value", "value") || choiceKeyMatches("value2", "value") {
+		t.Fatal("non-choice keys should not match")
+	}
+}
+
 func TestCompileMatchesCache(t *testing.T) {
 	re, err := compileMatches("^a+$")
 	if err != nil {
