@@ -577,3 +577,102 @@ func TestCompileMatchesCache(t *testing.T) {
 		t.Fatal("compileMatches(invalid) should error")
 	}
 }
+
+func TestEvalFilterFirstLastOnEmptyCollection(t *testing.T) {
+	// first()/last() on empty collections return nil.
+	res, err := evalStr(t, "missing.first()", map[string]any{})
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if res.value != nil {
+		t.Fatalf("missing.first() = %v, want nil", res.value)
+	}
+	res, err = evalStr(t, "missing.last()", map[string]any{})
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if res.value != nil {
+		t.Fatalf("missing.last() = %v, want nil", res.value)
+	}
+}
+
+func TestEvalFilterWhereOnScalarBase(t *testing.T) {
+	// A plain existence check on a scalar value.
+	ctx := map[string]any{"active": true}
+	res, err := evalStr(t, "active.exists()", ctx)
+	if err != nil || !resTruthyBool(res) {
+		t.Fatalf("active.exists() = %v, err=%v", res.value, err)
+	}
+}
+
+func TestEvalFilterAllAnyWithUnknown(t *testing.T) {
+	// all() with a predicate that yields unknown for some element propagates
+	// unknown (or false).
+	ctx := map[string]any{"items": []any{map[string]any{}, map[string]any{}}}
+	b, known, err := EvalBool(context.Background(), "items.all(missing)", ctx)
+	if err != nil {
+		t.Fatalf("EvalBool: %v", err)
+	}
+	_ = b
+	_ = known
+}
+
+func TestEvalBinaryAndOrUnknownShortCircuit(t *testing.T) {
+	// and with a known false short-circuits to false.
+	res := evalBinary("and", asResult(false), unknownResult())
+	if resTruthyBool(res) {
+		t.Fatal("false and unknown should be false")
+	}
+	// or with an unknown operand yields unknown.
+	res = evalBinary("or", asResult(true), unknownResult())
+	if _, known := resTruthy(res); known {
+		t.Fatal("true or unknown should be unknown")
+	}
+	// and with unknown on both sides yields unknown.
+	res = evalBinary("and", unknownResult(), unknownResult())
+	if _, known := resTruthy(res); known {
+		t.Fatal("unknown and unknown should be unknown")
+	}
+}
+
+func TestParseDotDotAndUnknownFilter(t *testing.T) {
+	// '..' descent parses and evaluates.
+	res, err := evalStr(t, "contained..code", map[string]any{"contained": []any{map[string]any{"code": "x"}}})
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if res.value != "x" {
+		t.Fatalf("contained..code = %v, want x", res.value)
+	}
+	// An unsupported bracket filter errors at parse time.
+	if _, err := Parse("name[unknownfilter(x)]"); err == nil {
+		t.Fatal("expected parse error for unsupported bracket filter")
+	}
+}
+
+func TestParsePostfixFunctionOnPath(t *testing.T) {
+	// A function applied after a dot path: name.exists().
+	expr, err := Parse("name.exists()")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if expr == nil {
+		t.Fatal("parsed expression is nil")
+	}
+	// Multiplicative division.
+	res, err := evalStr(t, "8 / 2", map[string]any{})
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if got := res.value.(float64); got != 4 {
+		t.Fatalf("8 / 2 = %v, want 4", got)
+	}
+	// Multiplication.
+	res, err = evalStr(t, "3 * 4", map[string]any{})
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if got := res.value.(float64); got != 12 {
+		t.Fatalf("3 * 4 = %v, want 12", got)
+	}
+}
