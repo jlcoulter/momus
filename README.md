@@ -377,6 +377,11 @@ application supports, with one fixture per search-parameter family:
 - `observation-value` — `quantity` and `reference` search with `Quantity`
 - `location-near` — `special` (`near`) geographic search with coordinates
 - `observation-composite` — `composite` search (`part1$part2`)
+- `patient-search` — union search expressions, `Identifier`/`ContactPoint`
+  token seeds, choice `deceased[x]` date search, and `dateTime` partial-prefix
+  matching
+- `practitioner-role` — `date` search on a pure `Period` element (seeded via
+  its `start` member)
 
 Each fixture asserts the positive, negative, and edge cases for its search
 parameters (valid, no-results, invalid-value, invalid-modifier,

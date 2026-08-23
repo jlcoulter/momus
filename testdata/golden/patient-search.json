@@ -1,0 +1,49 @@
+{
+  "structureDefinitions": [
+    {
+      "url": "http://example.org/StructureDefinition/patient",
+      "type": "Patient",
+      "elements": [
+        { "path": "Patient", "min": 0, "max": "*" },
+        { "path": "Patient.name", "min": 1, "max": "*", "types": [{ "code": "HumanName" }] },
+        { "path": "Patient.gender", "min": 0, "max": "1", "types": [{ "code": "code" }], "binding": { "strength": "required", "valueSet": "http://example.org/ValueSet/gender" } },
+        { "path": "Patient.birthDate", "min": 0, "max": "1", "types": [{ "code": "date" }] },
+        { "path": "Patient.deceased[x]", "min": 0, "max": "1", "types": [{ "code": "dateTime" }, { "code": "boolean" }] },
+        { "path": "Patient.identifier", "min": 0, "max": "*", "types": [{ "code": "Identifier" }] },
+        { "path": "Patient.telecom", "min": 0, "max": "*", "types": [{ "code": "ContactPoint" }] }
+      ]
+    }
+  ],
+  "searchParameters": [
+    { "code": "name", "base": ["Patient"], "type": "string", "expression": "Patient.name" },
+    { "code": "gender", "base": ["Patient"], "type": "token", "expression": "Patient.gender | Person.gender | Practitioner.gender | RelatedPerson.gender" },
+    { "code": "birthdate", "base": ["Patient"], "type": "date", "expression": "Patient.birthDate" },
+    { "code": "deceased", "base": ["Patient"], "type": "date", "expression": "Patient.deceased" },
+    { "code": "identifier", "base": ["Patient"], "type": "token", "expression": "Patient.identifier" },
+    { "code": "telecom", "base": ["Patient"], "type": "token", "expression": "Patient.telecom" }
+  ],
+  "valueSets": [
+    {
+      "url": "http://example.org/ValueSet/gender",
+      "composeIncludes": [
+        { "system": "http://hl7.org/fhir/administrative-gender", "concepts": [{ "code": "male" }, { "code": "female" }] }
+      ]
+    }
+  ],
+  "codeSystems": [],
+  "resources": [
+    {
+      "profileUrl": "http://example.org/StructureDefinition/patient",
+      "resource": {
+        "resourceType": "Patient",
+        "id": "patient-search-sample-1",
+        "name": [{ "family": "Doe", "given": ["Jane"] }],
+        "gender": "female",
+        "birthDate": "1990-05-15",
+        "deceasedDateTime": "2024-01-01T00:00:00Z",
+        "identifier": [{ "system": "http://example.org/fhir/identifier/patient-search-sample", "value": "P12345" }],
+        "telecom": [{ "system": "phone", "value": "0299999999", "use": "home" }]
+      }
+    }
+  ]
+}
