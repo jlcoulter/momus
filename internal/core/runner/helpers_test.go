@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -225,6 +226,37 @@ func TestApplyRequestAuth(t *testing.T) {
 	e.applyRequestAuth(req, "GET")
 	if _, _, ok := req.BasicAuth(); !ok {
 		t.Fatal("basic auth not applied")
+	}
+}
+
+func TestChildCopiesExecutorState(t *testing.T) {
+	parent := &executor{
+		ctx:           context.Background(),
+		baseURL:       "http://base",
+		writeBaseURL:  "http://write",
+		bearerToken:   "tok",
+		includeDebug:  true,
+		variables:     map[string]any{"Patient.id": "p-1"},
+		created:       map[string]struct{}{"Patient/p-1": {}},
+		failuresBySig: map[string]*FailureSignature{"sig": {Signature: "s"}},
+	}
+	child := parent.child()
+	if child.baseURL != "http://base" || child.writeBaseURL != "http://write" {
+		t.Fatalf("child base urls = %q, %q", child.baseURL, child.writeBaseURL)
+	}
+	if child.variables["Patient.id"] != "p-1" {
+		t.Fatalf("child variables = %v", child.variables)
+	}
+	if _, ok := child.created["Patient/p-1"]; !ok {
+		t.Fatalf("child created = %v", child.created)
+	}
+	if child.report == nil || child.failuresBySig == nil {
+		t.Fatal("child report/failures should be initialized")
+	}
+	// Mutating the child must not affect the parent's maps.
+	child.variables["new"] = "x"
+	if _, ok := parent.variables["new"]; ok {
+		t.Fatal("child should not share the parent's variables map")
 	}
 }
 
