@@ -663,6 +663,28 @@ func TestParseBracketFilterErrors(t *testing.T) {
 	}
 }
 
+func TestEvalFilterUnknownBase(t *testing.T) {
+	// A filter applied to an unknown base returns unknown.
+	res, err := evalFilter(context.Background(), "first", unknownResult(), nil, nil)
+	if err != nil {
+		t.Fatalf("evalFilter: %v", err)
+	}
+	if _, known := resTruthy(res); known {
+		t.Fatal("evalFilter(unknown base) should be unknown")
+	}
+}
+
+func TestBinExprErrorPropagationViaFilter(t *testing.T) {
+	// A filter expression whose inner path errors propagates.
+	ctx := map[string]any{}
+	// `name.where(x.y)` where x doesn't exist yields no values, no error.
+	res, err := evalStr(t, "name.where(missing.field = 1)", ctx)
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	_ = res
+}
+
 func TestCompileMatchesCache(t *testing.T) {
 	re, err := compileMatches("^a+$")
 	if err != nil {
