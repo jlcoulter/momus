@@ -188,3 +188,108 @@ func TestCompareValuesNumericAndString(t *testing.T) {
 		t.Fatal("expected error ordering non-numeric strings")
 	}
 }
+
+func TestParseExpressionEmpty(t *testing.T) {
+	if _, err := ParseExpression("  "); err == nil {
+		t.Fatal("expected error for empty expression")
+	}
+	if _, err := ParseExpression(""); err == nil {
+		t.Fatal("expected error for empty expression")
+	}
+}
+
+func TestParseStatusInErrors(t *testing.T) {
+	// Empty list.
+	if _, err := ParseExpression("status in []"); err == nil {
+		t.Fatal("expected error for empty status list")
+	}
+	// Invalid code.
+	if _, err := ParseExpression("status in [abc]"); err == nil {
+		t.Fatal("expected error for non-numeric status code")
+	}
+}
+
+func TestExtractValueErrorPaths(t *testing.T) {
+	// Invalid body JSON.
+	sel, err := parseSelector("body.total")
+	if err != nil {
+		t.Fatalf("parseSelector: %v", err)
+	}
+	if _, err := extractValue(sel, Result{Body: []byte("not-json")}); err == nil {
+		t.Fatal("expected error for invalid body JSON")
+	}
+	// Path through a non-map.
+	sel = selector{kind: selectorBody, steps: []pathStep{{key: "a"}, {key: "b"}}}
+	if _, err := extractValue(sel, Result{Body: []byte(`{"a": 1}`)}); err == nil {
+		t.Fatal("expected error for path through non-map")
+	}
+	// Index out of range.
+	sel = selector{kind: selectorBody, steps: []pathStep{{key: "a"}, {index: 5}}}
+	if _, err := extractValue(sel, Result{Body: []byte(`{"a":[1,2]}`)}); err == nil {
+		t.Fatal("expected error for out-of-range index")
+	}
+	// No headers.
+	sel = selector{kind: selectorHeader, name: "ETag"}
+	if _, err := extractValue(sel, Result{}); err == nil {
+		t.Fatal("expected error for nil headers")
+	}
+	// Missing header.
+	sel = selector{kind: selectorHeader, name: "Missing"}
+	if _, err := extractValue(sel, Result{Headers: http.Header{}}); err == nil {
+		t.Fatal("expected error for missing header")
+	}
+	// Missing variable.
+	sel = selector{kind: selectorVariable, name: "x"}
+	if _, err := extractValue(sel, Result{Variables: map[string]any{}}); err == nil {
+		t.Fatal("expected error for missing variable")
+	}
+	// Unsupported selector.
+	sel = selector{kind: selectorKind(99)}
+	if _, err := extractValue(sel, Result{}); err == nil {
+		t.Fatal("expected error for unsupported selector")
+	}
+}
+
+func TestParseSelectorErrors(t *testing.T) {
+	if _, err := parseSelector("header."); err == nil {
+		t.Fatal("expected error for empty header name")
+	}
+	if _, err := parseSelector("variable."); err == nil {
+		t.Fatal("expected error for empty variable name")
+	}
+	if _, err := parseSelector("unsupported"); err == nil {
+		t.Fatal("expected error for unsupported selector")
+	}
+}
+
+func TestParseValueNonFiniteAndInvalid(t *testing.T) {
+	if _, err := parseValue("1e999"); err == nil {
+		t.Fatal("expected error for 1e999 (infinite)")
+	}
+	if _, err := parseValue("not-a-value"); err == nil {
+		t.Fatal("expected error for invalid value")
+	}
+}
+
+func TestParsePathInvalidIndex(t *testing.T) {
+	// An invalid index is treated as -1 and skipped; the key is retained.
+	steps := parsePath("issue[abc]")
+	found := false
+	for _, s := range steps {
+		if s.key == "issue" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("parsePath(invalid index) = %v", steps)
+	}
+}
+
+func TestCompareValuesStringInequality(t *testing.T) {
+	if ok, err := compareValues("a", "==", "b"); err != nil || ok {
+		t.Fatalf("compareValues(a,==,b) = %v, %v; want false", ok, err)
+	}
+	if ok, err := compareValues(1, "!=", 2); err != nil || !ok {
+		t.Fatalf("compareValues(1,!=,2) = %v, %v; want true", ok, err)
+	}
+}

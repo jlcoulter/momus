@@ -357,6 +357,62 @@ func TestResolveRequestedVersionEmptyPrefersRootPreferred(t *testing.T) {
 	}
 }
 
+func TestResolveRequestedVersionBranches(t *testing.T) {
+	// Empty version, no root preferred, uses selected.
+	got, overridden, err := resolveRequestedVersion("a.pkg", "", map[string]string{"a.pkg": "1.0.0"}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "1.0.0" || overridden {
+		t.Fatalf("empty->selected = %q, %v, %v", got, overridden, err)
+	}
+	// Empty version, no selection -> empty.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "", map[string]string{}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "" || overridden {
+		t.Fatalf("empty->none = %q, %v, %v", got, overridden, err)
+	}
+	// Floating with a selected concrete version -> uses selected.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "latest", map[string]string{"a.pkg": "1.0.0"}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "1.0.0" || !overridden {
+		t.Fatalf("floating->selected = %q, %v, %v", got, overridden, err)
+	}
+	// Floating with root preferred -> uses it.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "latest", map[string]string{}, map[string]string{"a.pkg": "2.0.0"}, ConflictPolicyRootWins)
+	if err != nil || got != "2.0.0" || !overridden {
+		t.Fatalf("floating->root = %q, %v, %v", got, overridden, err)
+	}
+	// Floating, nothing -> empty overridden.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "latest", map[string]string{}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "" || !overridden {
+		t.Fatalf("floating->none = %q, %v, %v", got, overridden, err)
+	}
+	// Exact selected match.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "1.0.0", map[string]string{"a.pkg": "1.0.0"}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "1.0.0" || overridden {
+		t.Fatalf("exact match = %q, %v, %v", got, overridden, err)
+	}
+	// Conflict root-wins.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "1.0.0", map[string]string{"a.pkg": "2.0.0"}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "2.0.0" || !overridden {
+		t.Fatalf("conflict root-wins = %q, %v, %v", got, overridden, err)
+	}
+	// Conflict strict -> error.
+	if _, _, err := resolveRequestedVersion("a.pkg", "1.0.0", map[string]string{"a.pkg": "2.0.0"}, nil, ConflictPolicyStrict); err == nil {
+		t.Fatal("expected strict conflict error")
+	}
+	// Unsupported policy.
+	if _, _, err := resolveRequestedVersion("a.pkg", "1.0.0", map[string]string{"a.pkg": "2.0.0"}, nil, ConflictPolicy("weird")); err == nil {
+		t.Fatal("expected unsupported policy error")
+	}
+	// Root preferred conflict.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "1.0.0", map[string]string{}, map[string]string{"a.pkg": "2.0.0"}, ConflictPolicyRootWins)
+	if err != nil || got != "2.0.0" || !overridden {
+		t.Fatalf("root conflict = %q, %v, %v", got, overridden, err)
+	}
+	// New version selected.
+	got, overridden, err = resolveRequestedVersion("a.pkg", "1.0.0", map[string]string{}, nil, ConflictPolicyRootWins)
+	if err != nil || got != "1.0.0" || overridden {
+		t.Fatalf("new version = %q, %v, %v", got, overridden, err)
+	}
+}
+
 func TestFindDependencyArchivePrefersExactLocalVersion(t *testing.T) {
 	index := map[string]string{
 		"b.pkg@latest": "/path/b.pkg-latest.tgz",
@@ -369,6 +425,88 @@ func TestFindDependencyArchivePrefersExactLocalVersion(t *testing.T) {
 	}
 	if p != "/path/b.pkg-latest.tgz" {
 		t.Fatalf("got %q, want exact local match /path/b.pkg-latest.tgz", p)
+	}
+}
+
+func TestFindDependencyArchiveEdgeCases(t *testing.T) {
+	// Empty name.
+	if _, err := findDependencyArchive(map[string]string{}, Dependency{Name: ""}); err == nil {
+		t.Fatal("expected error for empty name")
+	}
+	// Missing exact version.
+	if _, err := findDependencyArchive(map[string]string{"a.pkg@2.0.0": "/x"}, Dependency{Name: "a.pkg", Version: "1.0.0"}); err == nil {
+		t.Fatal("expected error for missing exact version")
+	}
+	// No matches.
+	if _, err := findDependencyArchive(map[string]string{}, Dependency{Name: "a.pkg", Version: "latest"}); err == nil {
+		t.Fatal("expected error when no matches")
+	}
+	// Ambiguous (multiple versions).
+	index := map[string]string{
+		"a.pkg@1.0.0": "/a-1.0.tgz",
+		"a.pkg@2.0.0": "/a-2.0.tgz",
+	}
+	if _, err := findDependencyArchive(index, Dependency{Name: "a.pkg", Version: "latest"}); err == nil {
+		t.Fatal("expected error for ambiguous versions")
+	}
+	// Single match resolves.
+	index = map[string]string{"a.pkg@1.0.0": "/a-1.0.tgz"}
+	p, err := findDependencyArchive(index, Dependency{Name: "a.pkg", Version: "latest"})
+	if err != nil || p != "/a-1.0.tgz" {
+		t.Fatalf("findDependencyArchive(single) = %q, %v", p, err)
+	}
+}
+
+func TestIndexLocalPackageArchivesFileAsDir(t *testing.T) {
+	// A path that is a file (not a directory) yields an empty index.
+	file := filepath.Join(t.TempDir(), "afile.json")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := IndexLocalPackageArchives(file)
+	if err != nil {
+		t.Fatalf("IndexLocalPackageArchives(file): %v", err)
+	}
+	if len(idx) != 0 {
+		t.Fatalf("file-as-dir index = %v, want empty", idx)
+	}
+}
+
+func TestIndexLocalPackageArchives(t *testing.T) {
+	// Empty dir -> error.
+	if idx, err := IndexLocalPackageArchives(""); err == nil {
+		t.Fatalf("expected error for empty dir, got %v", idx)
+	}
+	// Non-existent dir -> empty index.
+	idx, err := IndexLocalPackageArchives(filepath.Join(t.TempDir(), "missing"))
+	if err != nil {
+		t.Fatalf("IndexLocalPackageArchives(missing): %v", err)
+	}
+	if len(idx) != 0 {
+		t.Fatalf("missing dir index = %v, want empty", idx)
+	}
+	// A directory with a valid package archive.
+	dir := t.TempDir()
+	writePackageArchive(t, dir, "a.pkg", "1.0.0", nil)
+	idx, err = IndexLocalPackageArchives(dir)
+	if err != nil {
+		t.Fatalf("IndexLocalPackageArchives: %v", err)
+	}
+	if _, ok := idx["a.pkg@1.0.0"]; !ok {
+		t.Fatalf("index = %v, want a.pkg@1.0.0", idx)
+	}
+	// Archives without a readable manifest are skipped (not an error).
+	bad := filepath.Join(dir, "bad.tgz")
+	if err := os.WriteFile(bad, []byte("not-gzip"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err = IndexLocalPackageArchives(dir)
+	if err != nil {
+		t.Fatalf("IndexLocalPackageArchives(with bad): %v", err)
+	}
+	// The valid archive is still indexed.
+	if _, ok := idx["a.pkg@1.0.0"]; !ok {
+		t.Fatalf("index after bad archive = %v, want a.pkg@1.0.0", idx)
 	}
 }
 

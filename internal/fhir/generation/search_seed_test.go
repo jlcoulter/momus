@@ -290,6 +290,43 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 // TestSearchSeedSkipsNonMatchableSearch verifies that a composite/special
 // search (with no single leaf a search value can be placed on) produces no
 // matching seed; the search remains status-only.
+func TestSetNameLeafBranches(t *testing.T) {
+	// Missing field -> creates array.
+	body := map[string]any{}
+	setNameLeaf(body, "name", "momus-search")
+	if body["name"].([]any)[0].(map[string]any)["family"] != "momus-search" {
+		t.Fatalf("setNameLeaf(missing) = %v", body)
+	}
+	// Non-map first element -> replaced.
+	body = map[string]any{"name": []any{"str"}}
+	setNameLeaf(body, "name", "momus-search")
+	if body["name"].([]any)[0].(map[string]any)["family"] != "momus-search" {
+		t.Fatalf("setNameLeaf(non-map) = %v", body)
+	}
+	// Existing map -> forced.
+	body = map[string]any{"name": []any{map[string]any{"family": "old", "text": "old"}}}
+	setNameLeaf(body, "name", "momus-search")
+	first := body["name"].([]any)[0].(map[string]any)
+	if first["family"] != "momus-search" || first["text"] != "momus-search" {
+		t.Fatalf("setNameLeaf(existing) = %v", first)
+	}
+}
+
+func TestSetDateLeafPeriodElement(t *testing.T) {
+	reg := registry.New()
+	// A Period-typed element (no dateTime choice) sets the start member.
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitionerrole", Type: "PractitionerRole", Elements: []model.ElementDefinition{
+		{Path: "PractitionerRole", Min: 0, Max: "*"},
+		{Path: "PractitionerRole.period", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Period"}}},
+	}})
+	body := map[string]any{}
+	setDateLeaf(body, "period", "2024-01-01", reg, "PractitionerRole")
+	period := body["period"].(map[string]any)
+	if period["start"] != "2024-01-01" {
+		t.Fatalf("setDateLeaf(Period) = %v", period)
+	}
+}
+
 func TestSearchSeedSetsIdentifierValue(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
@@ -323,6 +360,164 @@ func TestSearchSeedSetsIdentifierValue(t *testing.T) {
 	}
 	if seeds != 2 {
 		t.Fatalf("expected 2 identifier-matching seeds, got %d", seeds)
+	}
+}
+
+func TestSplitUnion(t *testing.T) {
+	got := splitUnion("Patient.gender | Patient.deceasedBoolean")
+	if len(got) != 2 {
+		t.Fatalf("splitUnion = %v", got)
+	}
+	// Union inside parentheses is preserved.
+	got = splitUnion("a | (b | c)")
+	if len(got) != 2 {
+		t.Fatalf("splitUnion(paren) = %v", got)
+	}
+}
+
+func TestPlainSearchPath(t *testing.T) {
+	cases := []struct{ in, rt, want string }{
+		{"Patient.name", "Patient", "name"},
+		{"Patient.name.family", "Patient", "name.family"},
+		{"name", "Patient", "name"},
+		{"Patient.code as CodeableConcept", "Patient", "code"},
+		{"Patient.communication.where(language.exists())", "Patient", "communication"},
+		{"Resource.gender", "Patient", "gender"},
+		{"DomainResource.meta", "Patient", "meta"},
+		{"", "Patient", ""},
+		{"Patient.", "Patient", ""},
+		{"a[b]", "Patient", ""},
+	}
+	for _, c := range cases {
+		if got := plainSearchPath(c.in, c.rt); got != c.want {
+			t.Errorf("plainSearchPath(%q, %q) = %q, want %q", c.in, c.rt, got, c.want)
+		}
+	}
+}
+
+func TestResolveNestedLeafType(t *testing.T) {
+	reg := registry.New()
+	// An Identifier complex datatype definition.
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Identifier", Type: "Identifier", Elements: []model.ElementDefinition{
+		{Path: "Identifier", Min: 0, Max: "*"},
+		{Path: "Identifier.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+	}})
+	// A Patient with an identifier element typed as Identifier.
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.identifier", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Identifier"}}},
+	}})
+	resolved, err := reg.ResolveProfile("http://example.org/StructureDefinition/patient")
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	typeCode, repeatable, found := resolveNestedLeafType(resolved, "Patient", "identifier.value", reg)
+	if !found || typeCode != "string" || repeatable {
+		t.Fatalf("resolveNestedLeafType = %q, %v, %v; want string, false, true", typeCode, repeatable, found)
+	}
+	// A single-segment path returns not-found.
+	if _, _, found := resolveNestedLeafType(resolved, "Patient", "identifier", reg); found {
+		t.Fatal("single-segment path should not resolve via nested type")
+	}
+}
+
+func TestSearchElementPath(t *testing.T) {
+	// Empty.
+	if got := searchElementPath("", "Patient"); got != "" {
+		t.Fatalf("searchElementPath(empty) = %q", got)
+	}
+	// Plain path.
+	if got := searchElementPath("Patient.name", "Patient"); got != "name" {
+		t.Fatalf("searchElementPath(plain) = %q", got)
+	}
+	// Union prefers the resource-type branch.
+	if got := searchElementPath("Patient.gender | Practitioner.gender", "Patient"); got != "gender" {
+		t.Fatalf("searchElementPath(union) = %q", got)
+	}
+	// A bare function call is stripped to the identifier.
+	if got := searchElementPath("something()", "Patient"); got != "something" {
+		t.Fatalf("searchElementPath(no path) = %q", got)
+	}
+}
+
+func TestSearchLeafType(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+		{Path: "Patient.deceased", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+	}})
+	// Exact key.
+	tc, rep := searchLeafType("Patient", "active", reg)
+	if tc != "boolean" || rep {
+		t.Fatalf("searchLeafType(active) = %q, %v", tc, rep)
+	}
+	// Choice form.
+	tc, rep = searchLeafType("Patient", "deceased", reg)
+	if tc != "boolean" {
+		t.Fatalf("searchLeafType(deceased) = %q", tc)
+	}
+	// Unknown element.
+	if tc, _ := searchLeafType("Patient", "nope", reg); tc != "" {
+		t.Fatalf("searchLeafType(nope) = %q", tc)
+	}
+}
+
+func TestApplySearchMatchBranchCoverage(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.name", Min: 0, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		{Path: "Patient.address", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Address"}}},
+		{Path: "Patient.telecom", Min: 0, Max: "*", Types: []model.ElementType{{Code: "ContactPoint"}}},
+		{Path: "Patient.generalPractitioner", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference"}}},
+		{Path: "Patient.valueQuantity", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Quantity"}}},
+		{Path: "Patient.score", Min: 0, Max: "1", Types: []model.ElementType{{Code: "integer"}}},
+	}})
+	cases := []struct {
+		code, typ, expr, want string
+		check                 func(map[string]any) bool
+	}{
+		{"name", "string", "Patient.name", "momus-search", func(b map[string]any) bool { return b["name"] != nil }},
+		{"address", "string", "Patient.address", "momus-search", func(b map[string]any) bool { return b["address"] != nil }},
+		{"telecom", "token", "Patient.telecom", "momus-search", func(b map[string]any) bool { return b["telecom"] != nil }},
+		{"general-practitioner", "reference", "Patient.generalPractitioner", "Patient/x", func(b map[string]any) bool { return b["generalPractitioner"] != nil }},
+		{"value-quantity", "quantity", "Patient.valueQuantity", "5.4|http://sys|mg", func(b map[string]any) bool { return b["valueQuantity"] != nil }},
+		{"score", "number", "Patient.score", "10", func(b map[string]any) bool { return b["score"] != nil }},
+	}
+	for _, c := range cases {
+		sp := &model.SearchParameter{Code: c.code, Type: c.typ, Expression: c.expr}
+		body := map[string]any{}
+		if ok := applySearchMatch(body, "Patient", sp, c.want, reg); !ok {
+			t.Errorf("applySearchMatch(%s) = false, want true", c.code)
+			continue
+		}
+		if !c.check(body) {
+			t.Errorf("applySearchMatch(%s) body = %v, did not set element", c.code, body)
+		}
+	}
+}
+
+func TestApplySearchMatchSpecialDateComposite(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/location", Type: "Location", Elements: []model.ElementDefinition{
+		{Path: "Location", Min: 0, Max: "*"},
+		{Path: "Location.position", Min: 0, Max: "1", Types: []model.ElementType{{Code: "BackboneElement"}}},
+		{Path: "Location.position.latitude", Min: 1, Max: "1", Types: []model.ElementType{{Code: "decimal"}}},
+		{Path: "Location.position.longitude", Min: 1, Max: "1", Types: []model.ElementType{{Code: "decimal"}}},
+		{Path: "Location.recorded", Min: 0, Max: "1", Types: []model.ElementType{{Code: "instant"}}},
+	}})
+	// Special (near) search.
+	body := map[string]any{}
+	ok := applySearchMatch(body, "Location", &model.SearchParameter{Code: "near", Type: "special", Expression: "position.longitude"}, "-33.8688|151.2093", reg)
+	if !ok || body["position"] == nil {
+		t.Fatalf("applySearchMatch(special) = %v, body=%v", ok, body)
+	}
+	// Date search.
+	body = map[string]any{}
+	ok = applySearchMatch(body, "Location", &model.SearchParameter{Code: "recorded", Type: "date", Expression: "Location.recorded"}, "2024-01-01", reg)
+	if !ok {
+		t.Fatalf("applySearchMatch(date) = %v", ok)
 	}
 }
 
@@ -420,6 +615,79 @@ func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
 // code system is known it is applied to the coding, so a required value-set
 // binding (e.g. HealthcareService.serviceProvisionCode) is not shipped with a
 // system-less coding the server rejects.
+func TestSetSearchCodeValueCodingArrayNonMap(t *testing.T) {
+	// A map with a coding array whose first element is not a map.
+	body := map[string]any{"type": map[string]any{"coding": []any{"not-a-map"}}}
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	codings := body["type"].(map[string]any)["coding"].([]any)
+	if codings[0].(map[string]any)["code"] != "new" {
+		t.Fatalf("non-map coding array = %v", codings[0])
+	}
+	// An array whose first element is not a map.
+	body = map[string]any{"type": []any{"not-a-map"}}
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	if body["type"].([]any)[0].(map[string]any)["code"] != "new" {
+		t.Fatalf("non-map array element = %v", body["type"])
+	}
+	// An array of codings where the first coding is not a map.
+	body = map[string]any{"type": []any{map[string]any{"coding": []any{"not-a-map"}}}}
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	inner := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
+	if inner[0].(map[string]any)["code"] != "new" {
+		t.Fatalf("array non-map coding = %v", inner[0])
+	}
+}
+
+func TestSetSearchCodeValueDefaultBranches(t *testing.T) {
+	// An existing array whose first element has a coding array of maps.
+	body := map[string]any{"type": []any{map[string]any{"coding": []any{map[string]any{"code": "old", "system": "old"}}}}}
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	codings := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
+	first := codings[0].(map[string]any)
+	if first["code"] != "new" {
+		t.Fatalf("resetCodingForSearchValue code = %v", first["code"])
+	}
+	// An existing map with a coding array whose first element is not a map.
+	body = map[string]any{"type": map[string]any{"coding": []any{"not-a-map"}}}
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	codings = body["type"].(map[string]any)["coding"].([]any)
+	if codings[0].(map[string]any)["code"] != "new" {
+		t.Fatalf("non-map coding replaced = %v", codings[0])
+	}
+	// An existing string field.
+	body = map[string]any{"status": "old"}
+	setSearchCodeValue(body, "status", "new", "code", false, "")
+	if body["status"] != "new" {
+		t.Fatalf("string field = %v", body["status"])
+	}
+	// A non-map, non-string default (e.g. a number) is replaced with a coding map.
+	body = map[string]any{"status": float64(5)}
+	setSearchCodeValue(body, "status", "new", "Coding", false, "")
+	if body["status"].(map[string]any)["code"] != "new" {
+		t.Fatalf("default branch = %v", body["status"])
+	}
+}
+
+func TestApplyCompositeMatchTypeBranches(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/observation", Type: "Observation", Elements: []model.ElementDefinition{
+		{Path: "Observation", Min: 0, Max: "*"},
+		{Path: "Observation.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+		{Path: "Observation.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Quantity"}}},
+	}})
+	// Boolean component.
+	body := map[string]any{}
+	if !applyCompositeMatch(body, "active | value", "Observation", "true$5.4", reg) {
+		t.Fatal("applyCompositeMatch(boolean+quantity) returned false")
+	}
+	if body["active"] != true {
+		t.Fatalf("active = %v, want true", body["active"])
+	}
+	if _, ok := body["value"]; !ok {
+		t.Fatal("value not set")
+	}
+}
+
 func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
 	body := map[string]any{}
 	// New CodeableConcept: system applied alongside the search code.
@@ -448,5 +716,144 @@ func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
 	}
 	if _, has := ct["display"]; has {
 		t.Fatalf("stale display should be cleared, got %v", ct["display"])
+	}
+}
+
+func TestSetSearchCodeValueBranches(t *testing.T) {
+	// Primitive repeatable code, absent.
+	body := map[string]any{}
+	setSearchCodeValue(body, "status", "active", "code", true, "")
+	if got := body["status"].([]any)[0]; got != "active" {
+		t.Fatalf("repeatable code = %v", got)
+	}
+	// Primitive non-repeatable code.
+	body = map[string]any{}
+	setSearchCodeValue(body, "status", "active", "code", false, "")
+	if body["status"] != "active" {
+		t.Fatalf("non-repeatable code = %v", body["status"])
+	}
+	// Existing primitive array (repeatable).
+	body = map[string]any{"status": []any{"old"}}
+	setSearchCodeValue(body, "status", "new", "code", true, "")
+	if body["status"].([]any)[0] != "new" {
+		t.Fatalf("existing repeatable code = %v", body["status"])
+	}
+	// Coding type, absent -> coding map.
+	body = map[string]any{}
+	setSearchCodeValue(body, "connectionType", "dicom-wado-rs", "Coding", false, "http://sys")
+	if body["connectionType"].(map[string]any)["code"] != "dicom-wado-rs" {
+		t.Fatalf("Coding = %v", body["connectionType"])
+	}
+	// CodeableConcept repeatable absent.
+	body = map[string]any{}
+	setSearchCodeValue(body, "type", "x", "CodeableConcept", true, "")
+	if body["type"].([]any)[0].(map[string]any)["coding"] == nil {
+		t.Fatalf("CodeableConcept repeatable = %v", body["type"])
+	}
+	// Empty array case.
+	body = map[string]any{"status": []any{}}
+	setSearchCodeValue(body, "status", "active", "code", true, "")
+	if body["status"].([]any)[0] != "active" {
+		t.Fatalf("empty array code = %v", body["status"])
+	}
+	// Existing string field.
+	body = map[string]any{"status": "old"}
+	setSearchCodeValue(body, "status", "new", "code", false, "")
+	if body["status"] != "new" {
+		t.Fatalf("existing string = %v", body["status"])
+	}
+	// Existing array of codings.
+	body = map[string]any{"type": []any{map[string]any{"coding": []any{map[string]any{"code": "old"}}}}}
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	codings := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
+	if codings[0].(map[string]any)["code"] != "new" {
+		t.Fatalf("array of codings = %v", codings)
+	}
+	// Existing map with a "code" field directly (bare coding).
+	body = map[string]any{"type": map[string]any{"code": "old"}}
+	setSearchCodeValue(body, "type", "new", "Coding", false, "")
+	if body["type"].(map[string]any)["code"] != "new" {
+		t.Fatalf("bare coding = %v", body["type"])
+	}
+}
+
+func TestSetFieldLeafAndForceBranches(t *testing.T) {
+	// setFieldLeaf: missing field -> array.
+	body := map[string]any{}
+	setFieldLeaf(body, "contact", "city", "Sydney")
+	if body["contact"].([]any)[0].(map[string]any)["city"] != "Sydney" {
+		t.Fatalf("setFieldLeaf(missing) = %v", body)
+	}
+	// Empty array -> replaced.
+	body = map[string]any{"contact": []any{}}
+	setFieldLeaf(body, "contact", "city", "Sydney")
+	if body["contact"].([]any)[0].(map[string]any)["city"] != "Sydney" {
+		t.Fatalf("setFieldLeaf(empty array) = %v", body)
+	}
+	// Non-map first array element -> replaced.
+	body = map[string]any{"contact": []any{"str"}}
+	setFieldLeaf(body, "contact", "city", "Sydney")
+	if body["contact"].([]any)[0].(map[string]any)["city"] != "Sydney" {
+		t.Fatalf("setFieldLeaf(non-map array) = %v", body)
+	}
+	// Existing map field.
+	body = map[string]any{"addr": map[string]any{}}
+	setFieldLeaf(body, "addr", "city", "Sydney")
+	if body["addr"].(map[string]any)["city"] != "Sydney" {
+		t.Fatalf("setFieldLeaf(map) = %v", body)
+	}
+}
+
+func TestSetFieldLeafForceBranches(t *testing.T) {
+	// Missing field -> array.
+	body := map[string]any{}
+	setFieldLeafForce(body, "identifier", "value", "x")
+	if body["identifier"].([]any)[0].(map[string]any)["value"] != "x" {
+		t.Fatalf("setFieldLeafForce(missing) = %v", body)
+	}
+	// Empty array -> replaced.
+	body = map[string]any{"identifier": []any{}}
+	setFieldLeafForce(body, "identifier", "value", "x")
+	if body["identifier"].([]any)[0].(map[string]any)["value"] != "x" {
+		t.Fatalf("setFieldLeafForce(empty array) = %v", body)
+	}
+	// Non-map array element -> replaced.
+	body = map[string]any{"identifier": []any{"str"}}
+	setFieldLeafForce(body, "identifier", "value", "x")
+	if body["identifier"].([]any)[0].(map[string]any)["value"] != "x" {
+		t.Fatalf("setFieldLeafForce(non-map) = %v", body)
+	}
+	// Existing map field with existing value -> forced.
+	body = map[string]any{"addr": map[string]any{"value": "old"}}
+	setFieldLeafForce(body, "addr", "value", "new")
+	if body["addr"].(map[string]any)["value"] != "new" {
+		t.Fatalf("setFieldLeafForce(map) = %v", body)
+	}
+}
+
+func TestSetFieldLeafAndForce(t *testing.T) {
+	// setFieldLeaf with existing array preserves first element's leaf if present.
+	body := map[string]any{"contact": []any{map[string]any{"city": "X"}}}
+	setFieldLeaf(body, "contact", "city", "Y")
+	if body["contact"].([]any)[0].(map[string]any)["city"] != "X" {
+		t.Fatalf("setFieldLeaf preserved = %v", body["contact"])
+	}
+	// setFieldLeaf with missing leaf.
+	body = map[string]any{"contact": []any{map[string]any{"phone": "1"}}}
+	setFieldLeaf(body, "contact", "city", "Y")
+	if body["contact"].([]any)[0].(map[string]any)["city"] != "Y" {
+		t.Fatalf("setFieldLeaf added = %v", body["contact"])
+	}
+	// setFieldLeafForce overwrites.
+	body = map[string]any{"contact": []any{map[string]any{"city": "X"}}}
+	setFieldLeafForce(body, "contact", "city", "Y")
+	if body["contact"].([]any)[0].(map[string]any)["city"] != "Y" {
+		t.Fatalf("setFieldLeafForce = %v", body["contact"])
+	}
+	// setFieldLeafForce with a scalar map field.
+	body = map[string]any{"addr": map[string]any{"city": "X"}}
+	setFieldLeafForce(body, "addr", "city", "Y")
+	if body["addr"].(map[string]any)["city"] != "Y" {
+		t.Fatalf("setFieldLeafForce(map) = %v", body["addr"])
 	}
 }

@@ -2,6 +2,71 @@ package mock
 
 import "testing"
 
+func TestValueMatches(t *testing.T) {
+	// Boolean.
+	if !valueMatches(true, "true") || valueMatches(false, "true") {
+		t.Fatal("valueMatches(bool) failed")
+	}
+	// Number.
+	if !valueMatches(float64(5), "5") {
+		t.Fatal("valueMatches(number) failed")
+	}
+	// String equality.
+	if !valueMatches("x", "x") || valueMatches("x", "y") {
+		t.Fatal("valueMatches(string) failed")
+	}
+	// Date prefix.
+	if !valueMatches("2024-01-01T10:00:00Z", "2024-01-01") {
+		t.Fatal("valueMatches(date prefix) failed")
+	}
+	// Array recursion.
+	if !valueMatches([]any{float64(1), "two"}, "two") {
+		t.Fatal("valueMatches(array) failed")
+	}
+	// Nested map.
+	if !valueMatches(map[string]any{"a": []any{map[string]any{"b": "hit"}}}, "hit") {
+		t.Fatal("valueMatches(nested) failed")
+	}
+	// Unknown type.
+	if valueMatches(struct{}{}, "x") {
+		t.Fatal("valueMatches(unknown) should be false")
+	}
+	// Composite ($): all parts must match.
+	if !valueMatches("glucose", "glucose$glucose") {
+		t.Fatal("valueMatches(composite) failed")
+	}
+	if valueMatches("glucose", "glucose$nope") {
+		t.Fatal("valueMatches(composite partial) should be false")
+	}
+	// Pipe (|): any part matches.
+	if !valueMatches("glucose", "nope|glucose") {
+		t.Fatal("valueMatches(pipe) failed")
+	}
+}
+
+func TestGetFieldString(t *testing.T) {
+	tests := []struct {
+		name  string
+		res   map[string]any
+		field string
+		want  string
+	}{
+		{"missing field", map[string]any{}, "name", ""},
+		{"string field", map[string]any{"name": "value"}, "name", "value"},
+		{"first element of string array", map[string]any{"name": []any{"a", "b"}}, "name", "a"},
+		{"first element of mixed array", map[string]any{"name": []any{float64(1), "b"}}, "name", ""},
+		{"empty array", map[string]any{"name": []any{}}, "name", ""},
+		{"non-string scalar", map[string]any{"active": true}, "active", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := getFieldString(tc.res, tc.field); got != tc.want {
+				t.Fatalf("getFieldString(%v, %q) = %q, want %q", tc.res, tc.field, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestStoreSearchQuantityMatchesParts(t *testing.T) {
 	s := NewStore()
 	s.Put("Observation", "o1", []byte(`{"resourceType":"Observation","id":"o1","status":"final","valueQuantity":{"value":180.5,"unit":"cm","system":"http://unitsofmeasure.org","code":"cm"}}`))
@@ -64,6 +129,22 @@ func TestStoreSearchDatePrefix(t *testing.T) {
 	}
 }
 
+func TestNearMatches(t *testing.T) {
+	// Fewer than 2 parts.
+	if nearMatches(map[string]any{}, "only-one") {
+		t.Fatal("nearMatches(single part) should be false")
+	}
+	// Non-numeric coordinates.
+	if nearMatches(map[string]any{}, "abc|def") {
+		t.Fatal("nearMatches(non-numeric) should be false")
+	}
+	// Matching coordinates.
+	loc := map[string]any{"position": map[string]any{"latitude": 10.0, "longitude": 20.0}}
+	if !nearMatches(loc, "10.0|20.0") {
+		t.Fatal("nearMatches(match) should be true")
+	}
+}
+
 func TestStoreSearchNear(t *testing.T) {
 	s := NewStore()
 	s.Put("Location", "l1", []byte(`{"resourceType":"Location","id":"l1","position":{"latitude":-33.8688,"longitude":151.2093}}`))
@@ -105,5 +186,96 @@ func TestStoreSearchComposite(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("expected 0 matches for partial composite, got %d", len(got))
+	}
+}
+
+func TestStoreSearchSortAndCount(t *testing.T) {
+	s := NewStore()
+	s.Put("Patient", "p1", []byte(`{"resourceType":"Patient","id":"p1","active":true}`))
+	s.Put("Patient", "p2", []byte(`{"resourceType":"Patient","id":"p2","active":true}`))
+	s.Put("Patient", "p3", []byte(`{"resourceType":"Patient","id":"p3","active":true}`))
+
+	// Ascending sort by the string field "id".
+	got, err := s.Search("Patient", map[string]string{"_sort": "id"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 3 || got[0]["id"] != "p1" || got[2]["id"] != "p3" {
+		t.Fatalf("ascending sort = %+v", got)
+	}
+
+	// Descending sort.
+	got, err = s.Search("Patient", map[string]string{"_sort": "-id"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if got[0]["id"] != "p3" {
+		t.Fatalf("descending sort = %+v", got)
+	}
+
+	// _count limits results.
+	got, err = s.Search("Patient", map[string]string{"_count": "2"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("_count=2 returned %d results", len(got))
+	}
+
+	// _count larger than the result set leaves it unchanged.
+	got, err = s.Search("Patient", map[string]string{"_count": "99"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("_count=99 returned %d results, want 3", len(got))
+	}
+
+	// _count non-numeric is ignored.
+	got, err = s.Search("Patient", map[string]string{"_count": "abc"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("_count=abc returned %d results, want 3", len(got))
+	}
+
+	// A universal param (e.g. _summary) is ignored as a filter.
+	got, err = s.Search("Patient", map[string]string{"_summary": "true"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("_summary filter returned %d results, want all 3", len(got))
+	}
+}
+
+func TestToFloat(t *testing.T) {
+	if _, ok := toFloat(float64(1.5)); !ok {
+		t.Fatal("toFloat(float64) should succeed")
+	}
+	if _, ok := toFloat(3); !ok {
+		t.Fatal("toFloat(int) should succeed")
+	}
+	if _, ok := toFloat(int64(7)); !ok {
+		t.Fatal("toFloat(int64) should succeed")
+	}
+	if _, ok := toFloat("x"); ok {
+		t.Fatal("toFloat(string) should fail")
+	}
+}
+
+func TestFindNearPosition(t *testing.T) {
+	// Direct match.
+	loc := map[string]any{"position": map[string]any{"latitude": 10.0, "longitude": 20.0}}
+	if !findNearPosition(loc, 10.0, 20.0) {
+		t.Fatal("findNearPosition should match")
+	}
+	if findNearPosition(loc, 0.0, 0.0) {
+		t.Fatal("findNearPosition should not match distant coordinates")
+	}
+	// Nested in array.
+	if !findNearPosition([]any{map[string]any{"latitude": 1.0, "longitude": 2.0}}, 1.0, 2.0) {
+		t.Fatal("findNearPosition(array) should match")
 	}
 }

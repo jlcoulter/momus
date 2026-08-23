@@ -222,6 +222,186 @@ func TestDecodeNodeMissingType(t *testing.T) {
 	if err == nil {
 		t.Fatal("unknown type: expected error, got nil")
 	}
+
+	_, err = DecodeNode(map[string]any{"type": 42})
+	if err == nil {
+		t.Fatal("non-string type: expected error, got nil")
+	}
+}
+
+func TestDecodeNodeCaptureMissingFields(t *testing.T) {
+	node, err := DecodeNode(map[string]any{"type": "capture"})
+	if err != nil {
+		t.Fatalf("DecodeNode: %v", err)
+	}
+	cap, ok := node.(*Capture)
+	if !ok {
+		t.Fatalf("want *Capture, got %T", node)
+	}
+	if cap.Name != "" || cap.Path != "" {
+		t.Fatalf("capture = %+v, want empty fields", cap)
+	}
+}
+
+func TestDecodeStepsErrors(t *testing.T) {
+	// Missing steps.
+	if _, err := DecodeNode(map[string]any{"type": "sequence"}); err == nil {
+		t.Fatal("missing steps: expected error")
+	}
+	// Steps not an array.
+	if _, err := DecodeNode(map[string]any{"type": "sequence", "steps": "nope"}); err == nil {
+		t.Fatal("steps not array: expected error")
+	}
+	// Step not an object.
+	if _, err := DecodeNode(map[string]any{"type": "sequence", "steps": []any{"nope"}}); err == nil {
+		t.Fatal("step not object: expected error")
+	}
+	// Step with bad type propagates.
+	if _, err := DecodeNode(map[string]any{"type": "sequence", "steps": []any{map[string]any{"type": "bogus"}}}); err == nil {
+		t.Fatal("bad step type: expected error")
+	}
+}
+
+func TestDecodeRequestHeaderVariants(t *testing.T) {
+	// headers as map[string]string.
+	req, err := DecodeNode(map[string]any{
+		"type":    "request",
+		"method":  "GET",
+		"url":     "/x",
+		"headers": map[string]string{"Accept": "application/json"},
+	})
+	if err != nil {
+		t.Fatalf("DecodeNode: %v", err)
+	}
+	if h := req.(*Request).Headers; h["Accept"] != "application/json" {
+		t.Fatalf("headers = %v", h)
+	}
+
+	// headers as map[string]any with non-string values coerced to strings.
+	req, err = DecodeNode(map[string]any{
+		"type":    "request",
+		"method":  "GET",
+		"url":     "/x",
+		"headers": map[string]any{"X-Count": 42},
+	})
+	if err != nil {
+		t.Fatalf("DecodeNode: %v", err)
+	}
+	if h := req.(*Request).Headers; h["X-Count"] != "42" {
+		t.Fatalf("headers = %v, want X-Count=42", h)
+	}
+
+	// No body -> nil body.
+	req, err = DecodeNode(map[string]any{"type": "request", "method": "GET", "url": "/x"})
+	if err != nil {
+		t.Fatalf("DecodeNode: %v", err)
+	}
+	if req.(*Request).Body != nil {
+		t.Fatalf("body = %v, want nil", req.(*Request).Body)
+	}
+}
+
+func TestDecodeAssertRequirementTypeError(t *testing.T) {
+	if _, err := DecodeNode(map[string]any{"type": "assert", "requirement": "not-a-map"}); err == nil {
+		t.Fatal("expected error for non-map requirement")
+	}
+}
+
+func TestDecodeTraceNil(t *testing.T) {
+	if _, err := decodeTrace(nil); err == nil {
+		t.Fatal("decodeTrace(nil) should error")
+	}
+}
+
+func TestNormalizeJSONValue(t *testing.T) {
+	// int and int64 and int32 to json.Number.
+	if v, ok := normalizeJSONValue(int(5)).(json.Number); !ok || v.String() != "5" {
+		t.Fatalf("int normalize = %#v", normalizeJSONValue(int(5)))
+	}
+	if v, ok := normalizeJSONValue(int64(7)).(json.Number); !ok || v.String() != "7" {
+		t.Fatalf("int64 normalize = %#v", normalizeJSONValue(int64(7)))
+	}
+	if v, ok := normalizeJSONValue(int32(3)).(json.Number); !ok || v.String() != "3" {
+		t.Fatalf("int32 normalize = %#v", normalizeJSONValue(int32(3)))
+	}
+	// json.Number passthrough.
+	num := json.Number("9")
+	if normalizeJSONValue(num) != num {
+		t.Fatal("json.Number should pass through")
+	}
+	// Fractional float64 preserved as float64.
+	if normalizeJSONValue(1.5) != 1.5 {
+		t.Fatal("fractional float64 should be preserved")
+	}
+	// Other types unchanged.
+	if normalizeJSONValue("s") != "s" || normalizeJSONValue(true) != true {
+		t.Fatal("other types should be unchanged")
+	}
+}
+
+func TestDecodePlanErrors(t *testing.T) {
+	if _, err := DecodePlan(nil); err == nil {
+		t.Fatal("DecodePlan(nil) should error")
+	}
+	if _, err := DecodePlan(map[string]any{}); err == nil {
+		t.Fatal("DecodePlan missing root should error")
+	}
+	if _, err := DecodePlan(map[string]any{"root": "nope"}); err == nil {
+		t.Fatal("DecodePlan root not object should error")
+	}
+	// Root decode error propagates.
+	if _, err := DecodePlan(map[string]any{"root": map[string]any{"type": "bogus"}}); err == nil {
+		t.Fatal("DecodePlan bad root should error")
+	}
+	// dataset not object.
+	if _, err := DecodePlan(map[string]any{"root": map[string]any{"type": "capture"}, "dataset": "nope"}); err == nil {
+		t.Fatal("DecodePlan dataset not object should error")
+	}
+}
+
+func TestDecodePlanWithDataset(t *testing.T) {
+	plan, err := DecodePlan(map[string]any{
+		"version": "1",
+		"root":    map[string]any{"type": "capture", "name": "a", "path": "b"},
+		"dataset": map[string]any{
+			"resources": map[string]any{
+				"p1": map[string]any{"localId": "p1", "resourceType": "Patient", "resource": map[string]any{"id": "p1"}},
+			},
+			"relationships": []any{map[string]any{"sourceId": "o1", "path": "subject", "targetId": "p1"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("DecodePlan: %v", err)
+	}
+	if plan.Dataset == nil || plan.Dataset.Resources["p1"] == nil {
+		t.Fatal("expected decoded dataset with resource p1")
+	}
+	inst := plan.Dataset.Resources["p1"]
+	if inst.LocalID != "p1" || inst.ResourceType != "Patient" {
+		t.Fatalf("instance = %+v", inst)
+	}
+	if len(plan.Dataset.Relationships) != 1 || plan.Dataset.Relationships[0].SourceID != "o1" {
+		t.Fatalf("relationships = %+v", plan.Dataset.Relationships)
+	}
+}
+
+func TestDecodeDatasetErrors(t *testing.T) {
+	// resources not object.
+	if _, err := decodeDataset(map[string]any{"resources": "nope"}); err == nil {
+		t.Fatal("resources not object should error")
+	}
+	// resource value not object.
+	if _, err := decodeDataset(map[string]any{"resources": map[string]any{"p1": "nope"}}); err == nil {
+		t.Fatal("resource value not object should error")
+	}
+	// relationships not array.
+	if _, err := decodeDataset(map[string]any{"relationships": "nope"}); err == nil {
+		t.Fatal("relationships not array should error")
+	}
+	// relationship not object.
+	if _, err := decodeDataset(map[string]any{"relationships": []any{"nope"}}); err == nil {
+		t.Fatal("relationship not object should error")
+	}
 }
 
 func TestDecodePlanParallel(t *testing.T) {

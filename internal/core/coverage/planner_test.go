@@ -40,6 +40,24 @@ func TestTopologicalLevelsEmitsEachNodeExactlyOnce(t *testing.T) {
 	}
 }
 
+func TestPlanDependenciesEmptyRequirements(t *testing.T) {
+	plan, err := PlanDependencies(nil)
+	if err != nil {
+		t.Fatalf("PlanDependencies(nil): %v", err)
+	}
+	if len(plan.Levels) != 0 || len(plan.Dependencies) != 0 {
+		t.Fatalf("empty plan = %+v", plan)
+	}
+	// Requirements with no resource types.
+	plan, err = PlanDependencies([]CoverageRequirement{{ID: "r1"}})
+	if err != nil {
+		t.Fatalf("PlanDependencies(no types): %v", err)
+	}
+	if len(plan.Levels) != 0 {
+		t.Fatalf("no-type plan levels = %+v", plan.Levels)
+	}
+}
+
 func TestPlanDependenciesReturnsTopologicalLevels(t *testing.T) {
 	reqs := []CoverageRequirement{
 		{ID: "p1", ResourceType: "Patient", ElementPath: "Patient.name"},

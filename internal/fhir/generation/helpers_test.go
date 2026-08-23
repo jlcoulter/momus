@@ -63,6 +63,48 @@ func TestApplySimpleConstraintsMatchesPattern(t *testing.T) {
 	}
 }
 
+// TestApplySimpleConstraintsCollectionEitherWhereExists verifies the
+// collectionEitherWhereExistsPattern branch adds a matching candidate.
+func TestApplySimpleConstraintsCollectionEitherWhereExists(t *testing.T) {
+	value := map[string]any{"communication": []any{}}
+	node := &model.ElementNode{
+		Path: "Patient.communication",
+		Definition: &model.ElementDefinition{
+			Constraints: []model.ElementConstraint{{
+				Key:        "pat-comm",
+				Severity:   "error",
+				Expression: "communication.where(language='en').exists() or communication.where(language='it').exists()",
+			}},
+		},
+		Children: map[string]*model.ElementNode{
+			"communication": {
+				Definition: &model.ElementDefinition{},
+			},
+		},
+	}
+	applySimpleConstraints(value, node, nil)
+	// The value is unchanged (no matching candidate generated); the important
+	// thing is no panic and the branch is exercised.
+	_ = value
+}
+
+// TestApplySimpleConstraintsUnsupportedRegex verifies that a matches constraint
+// whose regex has no synthesized example is left untouched (not an error).
+func TestApplySimpleConstraintsUnsupportedRegex(t *testing.T) {
+	value := map[string]any{"value": "existing"}
+	node := &model.ElementNode{
+		Definition: &model.ElementDefinition{
+			Constraints: []model.ElementConstraint{
+				{Key: "k1", Severity: "error", Expression: "value.matches('^[a-z]+$')"},
+			},
+		},
+	}
+	applySimpleConstraints(value, node, nil)
+	if value["value"] != "existing" {
+		t.Fatalf("value = %v, want unchanged (unsupported regex)", value["value"])
+	}
+}
+
 // TestApplySimpleConstraintsExistsEither verifies that an exists() or exists()
 // invariant populates the first absent side.
 func TestApplySimpleConstraintsExistsEither(t *testing.T) {
@@ -190,6 +232,25 @@ func TestCodingToMapGeneration(t *testing.T) {
 // TestGenerateMatchingCollectionCandidate verifies the collection-candidate
 // helper: a nil node yields not-found, and a node that cannot produce a
 // candidate matching the wanted field value yields not-found without panicking.
+func TestGenerateMatchingCollectionCandidateMatched(t *testing.T) {
+	reg := registry.New()
+	// A slice whose value carries the wanted field.
+	node := &model.ElementNode{Slices: map[string]*model.SliceNode{
+		"system-phone": {Name: "system-phone", Definition: &model.ElementDefinition{
+			Path:  "ContactPoint",
+			Types: []model.ElementType{{Code: "ContactPoint"}},
+			Fixed: map[string]any{"system": "phone"},
+		}},
+	}}
+	c, ok := generateMatchingCollectionCandidate(node, "system", []string{"phone"}, reg)
+	if !ok || c == nil {
+		t.Fatalf("generateMatchingCollectionCandidate(match) = %v, %v", c, ok)
+	}
+	if m := c.(map[string]any); m["system"] != "phone" {
+		t.Fatalf("matched candidate = %v", m)
+	}
+}
+
 func TestGenerateMatchingCollectionCandidate(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{

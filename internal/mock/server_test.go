@@ -1,10 +1,12 @@
 package mock
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -60,6 +62,71 @@ func TestServerEmptyBody(t *testing.T) {
 	}
 }
 
+func TestWithBasePathOption(t *testing.T) {
+	s := New(http.StatusOK, "ok", WithBasePath("/fhir/"))
+	if s.basePath != "/fhir" {
+		t.Fatalf("WithBasePath did not trim trailing slash: got %q, want %q", s.basePath, "/fhir")
+	}
+
+	// With the base path set, a request under /fhir is routed to the plan
+	// handler with the prefix stripped. Use plan-aware mode so routing occurs.
+	plan := New(http.StatusOK, "ok", WithBasePath("/fhir"), WithPlanAware())
+	addr, err := plan.Start()
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer plan.Close()
+
+	resp, err := http.Get("http://" + addr + "/fhir/metadata")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestWithLoggerOption(t *testing.T) {
+	s := New(http.StatusOK, "ok", WithLogger(false))
+	if s.logger {
+		t.Fatal("WithLogger(false) did not disable logging")
+	}
+	s2 := New(http.StatusOK, "ok", WithLogger(true))
+	if !s2.logger {
+		t.Fatal("WithLogger(true) did not enable logging")
+	}
+}
+
+func TestReadBodyAndClose(t *testing.T) {
+	// Empty body.
+	req, _ := http.NewRequest("POST", "http://x", strings.NewReader(""))
+	body, err := readBody(req)
+	if err == nil || body != nil {
+		t.Fatalf("readBody(empty) = %q, %v; want error", body, err)
+	}
+	// Non-empty body.
+	req, _ = http.NewRequest("POST", "http://x", strings.NewReader("data"))
+	body, err = readBody(req)
+	if err != nil || string(body) != "data" {
+		t.Fatalf("readBody = %q, %v", body, err)
+	}
+	// Close on a server that was never started returns nil.
+	if err := (&Server{}).Close(); err != nil {
+		t.Fatalf("Close(unstarted) = %v, want nil", err)
+	}
+	// Close on a started server succeeds.
+	s := New(http.StatusOK, "ok", WithPlanAware())
+	addr, err := s.Start()
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	_ = addr
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close(started) = %v", err)
+	}
+}
+
 func TestServerWithPort(t *testing.T) {
 	// Pick a free port, then release it so the server can bind to it.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -87,5 +154,33 @@ func TestServerWithPort(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestPlanAwareServerHistory(t *testing.T) {
+	s := New(http.StatusOK, "", WithPlanAware())
+	addr, err := s.Start()
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer s.Close()
+
+	resp, err := http.Get("http://" + addr + "/Patient/p1/_history")
+	if err != nil {
+		t.Fatalf("GET history: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("history status = %d, want 200", resp.StatusCode)
+	}
+	var bundle struct {
+		ResourceType string `json:"resourceType"`
+		Type         string `json:"type"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&bundle); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if bundle.ResourceType != "Bundle" || bundle.Type != "searchset" {
+		t.Fatalf("history = %+v", bundle)
 	}
 }

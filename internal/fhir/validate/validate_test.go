@@ -170,6 +170,45 @@ func TestValidateFixedMatch(t *testing.T) {
 	}
 }
 
+func TestValidatePatternMatchAndMismatch(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/pattern-profile",
+		Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation.code", Min: 0, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}, Pattern: map[string]any{"coding": []any{map[string]any{"system": "http://example.org/sys"}}}},
+		},
+	})
+	v := New(r)
+	// A value that contains the pattern's fields passes.
+	res := map[string]any{"code": map[string]any{"coding": []any{map[string]any{"system": "http://example.org/sys", "code": "x"}}}}
+	issues, err := v.Validate(context.Background(), "http://example.org/StructureDefinition/pattern-profile", res)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	for _, iss := range issues {
+		if iss.Kind == "pattern" {
+			t.Fatalf("unexpected pattern issue: %+v", iss)
+		}
+	}
+	// A value missing the pattern's system fails.
+	res = map[string]any{"code": map[string]any{"coding": []any{map[string]any{"code": "x"}}}}
+	issues, err = v.Validate(context.Background(), "http://example.org/StructureDefinition/pattern-profile", res)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	var found bool
+	for _, iss := range issues {
+		if iss.Kind == "pattern" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected pattern issue, got %+v", issues)
+	}
+}
+
 func TestValidateMaxCardinalityExceeded(t *testing.T) {
 	r := buildPatientRegistry()
 	// birthDate is Max "1"; providing two values exceeds the bound.
@@ -261,5 +300,55 @@ func TestParseMax(t *testing.T) {
 		if bounded != c.bounded || (bounded && got != c.want) {
 			t.Errorf("parseMax(%q) = (%d, %v), want (%d, %v)", c.max, got, bounded, c.want, c.bounded)
 		}
+	}
+}
+
+func TestValidateNilResource(t *testing.T) {
+	r := buildPatientRegistry()
+	v := New(r)
+	if _, err := v.Validate(context.Background(), patientProfile, nil); err == nil {
+		t.Fatal("expected error for nil resource, got nil")
+	}
+}
+
+func TestValidateUnknownProfile(t *testing.T) {
+	r := buildPatientRegistry()
+	v := New(r)
+	_, err := v.Validate(context.Background(), "http://example.org/StructureDefinition/missing", map[string]any{"resourceType": "Patient"})
+	if err == nil {
+		t.Fatal("expected error for unknown profile, got nil")
+	}
+}
+
+func TestNewMockAdapter(t *testing.T) {
+	r := buildPatientRegistry()
+	adapter := NewMockAdapter(r)
+	if adapter == nil {
+		t.Fatal("NewMockAdapter returned nil")
+	}
+	// Valid resource -> no issues.
+	issues, err := adapter.Validate(context.Background(), patientProfile, map[string]any{
+		"name":   []any{map[string]any{"family": "Smith"}},
+		"status": "active",
+	})
+	if err != nil {
+		t.Fatalf("MockAdapter.Validate: %v", err)
+	}
+	for _, iss := range issues {
+		if iss.Kind == "cardinality" && iss.Path == "Patient.name" {
+			t.Fatalf("unexpected cardinality issue: %+v", iss)
+		}
+	}
+	// Unknown profile propagates the error.
+	if _, err := adapter.Validate(context.Background(), "http://missing", map[string]any{"resourceType": "Patient"}); err == nil {
+		t.Fatal("expected error for unknown profile through mock adapter")
+	}
+	// An invalid resource produces converted mock.Issue values.
+	issues, err = adapter.Validate(context.Background(), patientProfile, map[string]any{})
+	if err != nil {
+		t.Fatalf("MockAdapter.Validate(invalid): %v", err)
+	}
+	if len(issues) == 0 {
+		t.Fatal("expected issues for an invalid resource")
 	}
 }
