@@ -2,6 +2,29 @@ package mock
 
 import "testing"
 
+func TestGetFieldString(t *testing.T) {
+	tests := []struct {
+		name  string
+		res   map[string]any
+		field string
+		want  string
+	}{
+		{"missing field", map[string]any{}, "name", ""},
+		{"string field", map[string]any{"name": "value"}, "name", "value"},
+		{"first element of string array", map[string]any{"name": []any{"a", "b"}}, "name", "a"},
+		{"first element of mixed array", map[string]any{"name": []any{float64(1), "b"}}, "name", ""},
+		{"empty array", map[string]any{"name": []any{}}, "name", ""},
+		{"non-string scalar", map[string]any{"active": true}, "active", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := getFieldString(tc.res, tc.field); got != tc.want {
+				t.Fatalf("getFieldString(%v, %q) = %q, want %q", tc.res, tc.field, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestStoreSearchQuantityMatchesParts(t *testing.T) {
 	s := NewStore()
 	s.Put("Observation", "o1", []byte(`{"resourceType":"Observation","id":"o1","status":"final","valueQuantity":{"value":180.5,"unit":"cm","system":"http://unitsofmeasure.org","code":"cm"}}`))
