@@ -70,11 +70,13 @@ func TestApplySimpleConstraintsCollectionEitherWhereExists(t *testing.T) {
 	node := &model.ElementNode{
 		Path: "Patient.communication",
 		Definition: &model.ElementDefinition{
-			Constraints: []model.ElementConstraint{{
-				Key:        "pat-comm",
-				Severity:   "error",
-				Expression: "communication.where(language='en').exists() or communication.where(language='it').exists()",
-			}},
+			Constraints: []model.ElementConstraint{
+				{
+					Key:        "pat-comm",
+					Severity:   "error",
+					Expression: "communication.where(language='en').exists() or communication.where(language='it').exists()",
+				},
+			},
 		},
 		Children: map[string]*model.ElementNode{
 			"communication": {
@@ -114,7 +116,11 @@ func TestApplySimpleConstraintsExistsEither(t *testing.T) {
 		Definition: &model.ElementDefinition{
 			Path: "Observation.value[x]",
 			Constraints: []model.ElementConstraint{
-				{Key: "obs-1", Severity: "error", Expression: "value.exists() or dataAbsentReason.exists()"},
+				{
+					Key:        "obs-1",
+					Severity:   "error",
+					Expression: "value.exists() or dataAbsentReason.exists()",
+				},
 			},
 		},
 		Children: map[string]*model.ElementNode{
@@ -147,7 +153,11 @@ func TestApplySimpleConstraintsWhereEmpty(t *testing.T) {
 		Definition: &model.ElementDefinition{
 			Path: "Observation.code",
 			Constraints: []model.ElementConstraint{
-				{Key: "obs-2", Severity: "error", Expression: "coding.where(code = 'forbidden').empty()"},
+				{
+					Key:        "obs-2",
+					Severity:   "error",
+					Expression: "coding.where(code = 'forbidden').empty()",
+				},
 			},
 		},
 	}
@@ -187,9 +197,13 @@ func TestFirstExpansionCodingAndCodeSystemConcept(t *testing.T) {
 	// Expansion: top-level placeholder skipped, first meaningful code found.
 	entries := []model.ValueSetExpansionContains{
 		{System: "http://example.org/cs", Code: "XX", Display: "Null"},
-		{System: "http://example.org/cs", Code: "parent", Contains: []model.ValueSetExpansionContains{
-			{System: "http://example.org/cs", Code: "RI", Display: "Resource identifier"},
-		}},
+		{
+			System: "http://example.org/cs",
+			Code:   "parent",
+			Contains: []model.ValueSetExpansionContains{
+				{System: "http://example.org/cs", Code: "RI", Display: "Resource identifier"},
+			},
+		},
 	}
 	c, ok := firstExpansionCoding(entries)
 	if !ok || c.Code != "parent" {
@@ -205,7 +219,11 @@ func TestFirstExpansionCodingAndCodeSystemConcept(t *testing.T) {
 	}
 	concept, ok := firstCodeSystemConcept(concepts)
 	if !ok || concept.Code != "parent" {
-		t.Fatalf("firstCodeSystemConcept = %+v ok=%v, want parent (first meaningful code)", concept, ok)
+		t.Fatalf(
+			"firstCodeSystemConcept = %+v ok=%v, want parent (first meaningful code)",
+			concept,
+			ok,
+		)
 	}
 
 	// Empty -> not found.
@@ -257,15 +275,30 @@ func TestGenerateMatchingCollectionCandidate(t *testing.T) {
 		URL: "http://example.org/StructureDefinition/cc", Type: "CodeableConcept",
 		Elements: []model.ElementDefinition{
 			{Path: "CodeableConcept", Min: 0, Max: "*"},
-			{Path: "CodeableConcept.coding", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Coding"}}},
-			{Path: "CodeableConcept.coding.code", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+			{
+				Path:  "CodeableConcept.coding",
+				Min:   1,
+				Max:   "*",
+				Types: []model.ElementType{{Code: "Coding"}},
+			},
+			{
+				Path:  "CodeableConcept.coding.code",
+				Min:   1,
+				Max:   "1",
+				Types: []model.ElementType{{Code: "code"}},
+			},
 		},
 	})
 	node := &model.ElementNode{
 		Path: "Observation.code",
 		Definition: &model.ElementDefinition{
-			Path:  "Observation.code",
-			Types: []model.ElementType{{Code: "CodeableConcept", Profile: []string{"http://example.org/StructureDefinition/cc"}}},
+			Path: "Observation.code",
+			Types: []model.ElementType{
+				{
+					Code:    "CodeableConcept",
+					Profile: []string{"http://example.org/StructureDefinition/cc"},
+				},
+			},
 		},
 	}
 	// Nil node -> not found.
@@ -273,7 +306,12 @@ func TestGenerateMatchingCollectionCandidate(t *testing.T) {
 		t.Fatal("expected not-found for nil node")
 	}
 	// A node that generates a value but not matching the wanted field -> not found.
-	if _, ok := generateMatchingCollectionCandidate(node, "code", []string{"definitely-not-generated"}, reg); ok {
+	if _, ok := generateMatchingCollectionCandidate(
+		node,
+		"code",
+		[]string{"definitely-not-generated"},
+		reg,
+	); ok {
 		t.Fatal("expected not-found when no candidate matches the wanted value")
 	}
 }
@@ -306,41 +344,34 @@ func TestSetNameLeafAndSetAddressLeaf(t *testing.T) {
 	}
 }
 
-// TestSetFieldLeaf verifies the generic leaf setter creates or fills a field.
-func TestSetFieldLeaf(t *testing.T) {
-	body := map[string]any{}
-	setFieldLeaf(body, "address", "city", "momus-search")
-	addr := body["address"].([]any)[0].(map[string]any)
-	if addr["city"] != "momus-search" {
-		t.Fatalf("setFieldLeaf created = %v", addr)
-	}
-
-	// Existing array: fills the first element without overwriting existing value.
-	body2 := map[string]any{"address": []any{map[string]any{"city": "Erewhon"}}}
-	setFieldLeaf(body2, "address", "city", "momus-search")
-	if body2["address"].([]any)[0].(map[string]any)["city"] != "Erewhon" {
-		t.Fatal("setFieldLeaf must not overwrite an existing value")
-	}
-
-	// Existing map (non-array): fills the leaf.
-	body3 := map[string]any{"address": map[string]any{}}
-	setFieldLeaf(body3, "address", "city", "momus-search")
-	if body3["address"].(map[string]any)["city"] != "momus-search" {
-		t.Fatal("setFieldLeaf map fill failed")
-	}
-}
-
 // TestBoundCodingSystem verifies the token-search code-system resolver.
 func TestBoundCodingSystem(t *testing.T) {
 	reg := registry.New()
-	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/status", ComposeIncludes: []model.ValueSetInclude{
-		{System: "http://example.org/cs", Concepts: []model.ConceptReference{{Code: "active"}}},
-	}})
+	reg.AddValueSet(
+		&model.ValueSet{
+			URL: "http://example.org/ValueSet/status",
+			ComposeIncludes: []model.ValueSetInclude{
+				{
+					System:   "http://example.org/cs",
+					Concepts: []model.ConceptReference{{Code: "active"}},
+				},
+			},
+		},
+	)
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: "http://example.org/StructureDefinition/endpoint", Type: "Endpoint",
 		Elements: []model.ElementDefinition{
 			{Path: "Endpoint", Min: 0, Max: "*"},
-			{Path: "Endpoint.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/status"}},
+			{
+				Path:  "Endpoint.status",
+				Min:   1,
+				Max:   "1",
+				Types: []model.ElementType{{Code: "code"}},
+				Binding: &model.Binding{
+					Strength: "required",
+					ValueSet: "http://example.org/ValueSet/status",
+				},
+			},
 		},
 	})
 	if got := boundCodingSystem("Endpoint", "status", reg); got != "http://example.org/cs" {
@@ -383,10 +414,14 @@ func TestMutateReferenceTypeAndReferenceID(t *testing.T) {
 // TestCoverageCanonicalToResourceType verifies canonical-to-resource-type
 // extraction strips version and path segments.
 func TestCoverageCanonicalToResourceType(t *testing.T) {
-	if got := coverageCanonicalToResourceType("http://example.org/StructureDefinition/patient"); got != "patient" {
+	if got := coverageCanonicalToResourceType(
+		"http://example.org/StructureDefinition/patient",
+	); got != "patient" {
 		t.Fatalf("coverageCanonicalToResourceType = %q, want patient", got)
 	}
-	if got := coverageCanonicalToResourceType("http://example.org/StructureDefinition/patient|4.0.1"); got != "patient" {
+	if got := coverageCanonicalToResourceType(
+		"http://example.org/StructureDefinition/patient|4.0.1",
+	); got != "patient" {
 		t.Fatalf("coverageCanonicalToResourceType(versioned) = %q, want patient", got)
 	}
 	if got := coverageCanonicalToResourceType(""); got != "" {

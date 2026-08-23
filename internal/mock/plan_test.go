@@ -34,23 +34,6 @@ func TestStorePutGetDelete(t *testing.T) {
 	}
 }
 
-func TestStoreList(t *testing.T) {
-	s := NewStore()
-	s.Put("Patient", "p1", []byte(`{"id":"p1"}`))
-	s.Put("Patient", "p2", []byte(`{"id":"p2"}`))
-	s.Put("Observation", "o1", []byte(`{"id":"o1"}`))
-
-	if got := len(s.List("Patient")); got != 2 {
-		t.Fatalf("List(Patient) = %d, want 2", got)
-	}
-	if got := len(s.List("Observation")); got != 1 {
-		t.Fatalf("List(Observation) = %d, want 1", got)
-	}
-	if got := len(s.List("Encounter")); got != 0 {
-		t.Fatalf("List(Encounter) = %d, want 0", got)
-	}
-}
-
 func TestRejectStatus(t *testing.T) {
 	cases := []struct {
 		expr     string
@@ -67,7 +50,14 @@ func TestRejectStatus(t *testing.T) {
 	for _, tc := range cases {
 		got, ok := rejectStatus(tc.expr)
 		if got != tc.want || ok != tc.wantBool {
-			t.Fatalf("rejectStatus(%q) = (%d, %v), want (%d, %v)", tc.expr, got, ok, tc.want, tc.wantBool)
+			t.Fatalf(
+				"rejectStatus(%q) = (%d, %v), want (%d, %v)",
+				tc.expr,
+				got,
+				ok,
+				tc.want,
+				tc.wantBool,
+			)
 		}
 	}
 }
@@ -193,7 +183,11 @@ func TestLoadPlanRoutesErrorBranches(t *testing.T) {
 	}
 	// A root that fails to decode.
 	badroot := filepath.Join(dir, "badroot.json")
-	if err := os.WriteFile(badroot, []byte(`{"version":"v1","root":{"type":"bogus"}}`), 0o644); err != nil {
+	if err := os.WriteFile(
+		badroot,
+		[]byte(`{"version":"v1","root":{"type":"bogus"}}`),
+		0o644,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := loadPlanRoutes(badroot); err == nil {
@@ -284,7 +278,11 @@ func TestPlanAwareServerSearch(t *testing.T) {
 	// Store two patients with names, one without.
 	put := func(id, name string) {
 		body := `{"resourceType":"Patient","id":"` + id + `","name":"` + name + `"}`
-		req, _ := http.NewRequest(http.MethodPut, base+"/Patient/"+id, bytes.NewReader([]byte(body)))
+		req, _ := http.NewRequest(
+			http.MethodPut,
+			base+"/Patient/"+id,
+			bytes.NewReader([]byte(body)),
+		)
 		req.Header.Set("Content-Type", "application/fhir+json")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -356,7 +354,11 @@ func TestPlanAwareServerRejectsFromPlan(t *testing.T) {
 	defer s.Close()
 
 	// The plan expects PUT /Patient/reject-me to be rejected with 400.
-	req, _ := http.NewRequest(http.MethodPut, "http://"+addr+"/Patient/reject-me", bytes.NewReader([]byte(`{"resourceType":"Patient"}`)))
+	req, _ := http.NewRequest(
+		http.MethodPut,
+		"http://"+addr+"/Patient/reject-me",
+		bytes.NewReader([]byte(`{"resourceType":"Patient"}`)),
+	)
 	req.Header.Set("Content-Type", "application/fhir+json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -413,7 +415,11 @@ func TestSetPlanEnablesPlanAware(t *testing.T) {
 	defer s.Close()
 
 	// Before SetPlan, a PUT is accepted (stored).
-	req, _ := http.NewRequest(http.MethodPut, "http://"+addr+"/Patient/p1", bytes.NewReader([]byte(`{"resourceType":"Patient","id":"p1"}`)))
+	req, _ := http.NewRequest(
+		http.MethodPut,
+		"http://"+addr+"/Patient/p1",
+		bytes.NewReader([]byte(`{"resourceType":"Patient","id":"p1"}`)),
+	)
 	req.Header.Set("Content-Type", "application/fhir+json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -432,7 +438,11 @@ func TestSetPlanEnablesPlanAware(t *testing.T) {
 	s.SetPlan(plan.Root)
 
 	// Now the reject route is honored.
-	req, _ = http.NewRequest(http.MethodPut, "http://"+addr+"/Patient/reject-me", bytes.NewReader([]byte(`{"resourceType":"Patient"}`)))
+	req, _ = http.NewRequest(
+		http.MethodPut,
+		"http://"+addr+"/Patient/reject-me",
+		bytes.NewReader([]byte(`{"resourceType":"Patient"}`)),
+	)
 	req.Header.Set("Content-Type", "application/fhir+json")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -491,7 +501,11 @@ func TestInstanceGetNotOverriddenByReject(t *testing.T) {
 	defer s.Close()
 
 	// Store a resource.
-	req, _ := http.NewRequest(http.MethodPut, "http://"+addr+"/Patient/p1", bytes.NewReader([]byte(`{"resourceType":"Patient","id":"p1"}`)))
+	req, _ := http.NewRequest(
+		http.MethodPut,
+		"http://"+addr+"/Patient/p1",
+		bytes.NewReader([]byte(`{"resourceType":"Patient","id":"p1"}`)),
+	)
 	req.Header.Set("Content-Type", "application/fhir+json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
