@@ -60,6 +60,28 @@ func TestRewriteBase(t *testing.T) {
 	}
 }
 
+func TestSnapshotWriteMatchMismatch(t *testing.T) {
+	orig := goldenDir
+	goldenDir = t.TempDir()
+	defer func() { goldenDir = orig }()
+
+	plan := &ast.Plan{Version: "v1", Root: &ast.Request{Method: "GET", URL: "/Patient"}}
+
+	// First call writes the snapshot.
+	if err := snapshot("test-snap", plan); err != nil {
+		t.Fatalf("snapshot(write): %v", err)
+	}
+	// Identical plan matches.
+	if err := snapshot("test-snap", plan); err != nil {
+		t.Fatalf("snapshot(match): %v", err)
+	}
+	// A changed plan mismatches.
+	changed := &ast.Plan{Version: "v2", Root: &ast.Request{Method: "GET", URL: "/Patient"}}
+	if err := snapshot("test-snap", changed); err == nil {
+		t.Fatal("expected mismatch error for a changed plan")
+	}
+}
+
 func TestLoadFixtureErrors(t *testing.T) {
 	// Non-existent file.
 	if _, err := LoadFixture(filepath.Join(t.TempDir(), "missing.json")); err == nil {
