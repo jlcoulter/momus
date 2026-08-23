@@ -857,6 +857,43 @@ func TestDependencyReferenceElementName(t *testing.T) {
 	if got := dependencyReferenceElementName("Patient", "http://x", "", reg); got != "" {
 		t.Fatalf("dependencyReferenceElementName(empty dep) = %q", got)
 	}
+	// Unknown profile.
+	if got := dependencyReferenceElementName("Patient", "http://missing", "Observation", reg); got != "" {
+		t.Fatalf("dependencyReferenceElementName(missing) = %q", got)
+	}
+	// A profile that references the dependency via a Reference element.
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.generalPractitioner", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
+	}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: "*"}}})
+	if got := dependencyReferenceElementName("Patient", "http://example.org/StructureDefinition/patient", "Practitioner", reg); got != "generalPractitioner" {
+		t.Fatalf("dependencyReferenceElementName = %q, want generalPractitioner", got)
+	}
+	// A dependency with no matching reference element.
+	if got := dependencyReferenceElementName("Patient", "http://example.org/StructureDefinition/patient", "Observation", reg); got != "" {
+		t.Fatalf("dependencyReferenceElementName(no match) = %q", got)
+	}
+}
+
+func TestGenerateDatatypeValueFromProfile(t *testing.T) {
+	// Nil reg / empty URL.
+	if _, ok := generateDatatypeValueFromProfile("", nil); ok {
+		t.Fatal("generateDatatypeValueFromProfile(nil) should be false")
+	}
+	reg := registry.New()
+	if _, ok := generateDatatypeValueFromProfile("http://missing", reg); ok {
+		t.Fatal("generateDatatypeValueFromProfile(unknown) should be false")
+	}
+	// A profile that generates a value.
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/identifier", Type: "Identifier", Elements: []model.ElementDefinition{
+		{Path: "Identifier", Min: 0, Max: "*"},
+		{Path: "Identifier.system", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
+	}})
+	v, ok := generateDatatypeValueFromProfile("http://example.org/StructureDefinition/identifier", reg)
+	if !ok || v == nil {
+		t.Fatal("generateDatatypeValueFromProfile(valid) should succeed")
+	}
 }
 
 func TestReferenceTargetID(t *testing.T) {
