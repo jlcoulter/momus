@@ -41,6 +41,29 @@ func TestStoreSearchFallsBackToNestedField(t *testing.T) {
 	}
 }
 
+func TestStoreSearchDatePrefix(t *testing.T) {
+	s := NewStore()
+	s.Put("Provenance", "p1", []byte(`{"resourceType":"Provenance","id":"p1","recorded":"2024-01-01T00:00:00Z"}`))
+
+	// A partial date must match a stored dateTime sharing the prefix.
+	got, err := s.Search("Provenance", map[string]string{"recorded": "2024-01-01"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 match for recorded=2024-01-01, got %d", len(got))
+	}
+
+	// A non-matching date must not match.
+	got, err = s.Search("Provenance", map[string]string{"recorded": "1999-01-01"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected 0 matches for recorded=1999-01-01, got %d", len(got))
+	}
+}
+
 func TestStoreSearchNear(t *testing.T) {
 	s := NewStore()
 	s.Put("Location", "l1", []byte(`{"resourceType":"Location","id":"l1","position":{"latitude":-33.8688,"longitude":151.2093}}`))

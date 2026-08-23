@@ -290,6 +290,42 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 // TestSearchSeedSkipsNonMatchableSearch verifies that a composite/special
 // search (with no single leaf a search value can be placed on) produces no
 // matching seed; the search remains status-only.
+func TestSearchSeedSetsIdentifierValue(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.identifier", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Identifier"}}},
+	}})
+	reg.AddSearchParameter(&model.SearchParameter{URL: "http://example.org/SearchParameter/Patient-identifier", Name: "identifier", Code: "identifier", Base: []string{"Patient"}, Type: "token", Expression: "Patient.identifier"})
+
+	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
+		{ID: "search|Patient|identifier|multiple", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchMultipleResults, SearchCode: "identifier"},
+	}}
+	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
+
+	ds, err := BuildSetupDataset(plan, opts)
+	if err != nil {
+		t.Fatalf("BuildSetupDataset returned error: %v", err)
+	}
+	var seeds int
+	for _, inst := range ds.Resources {
+		if !strings.HasPrefix(inst.LocalID, "momus-search-") {
+			continue
+		}
+		seeds++
+		ids, _ := inst.Resource["identifier"].([]any)
+		if len(ids) == 0 {
+			t.Fatalf("seed %s has no identifier", inst.LocalID)
+		}
+		if ids[0].(map[string]any)["value"] != "momus-search" {
+			t.Fatalf("seed %s identifier.value not set to search value: %+v", inst.LocalID, ids[0])
+		}
+	}
+	if seeds != 2 {
+		t.Fatalf("expected 2 identifier-matching seeds, got %d", seeds)
+	}
+}
+
 func TestSearchSeedSkipsNonMatchableSearch(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{

@@ -151,6 +151,30 @@ func matchesFilters(res map[string]any, params map[string]string) bool {
 	return true
 }
 
+// isDatePrefix reports whether want is a FHIR date/dateTime prefix (a value
+// that looks like a partial ISO-8601 date or timestamp), so a stored dateTime
+// can match a shorter query date by prefix.
+func isDatePrefix(want string) bool {
+	if len(want) < 4 || len(want) > 20 {
+		return false
+	}
+	// Must look like a date: digits with '-' or ':' separators, or a bare year.
+	for i, r := range want {
+		switch r {
+		case '-', ':', 'T', '+', 'Z', '.':
+		default:
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
+		_ = i
+	}
+	// Require at least a 4-digit year.
+	return len(want) >= 4 && isDigit(want[0]) && isDigit(want[1]) && isDigit(want[2]) && isDigit(want[3])
+}
+
+func isDigit(c byte) bool { return c >= '0' && c <= '9' }
+
 // anyValueMatches reports whether want equals any scalar value anywhere in v
 // (including Quantity number|system|code formats).
 func anyValueMatches(v any, want string) bool {
@@ -251,6 +275,11 @@ func valueMatches(val any, want string) bool {
 	}
 	switch v := val.(type) {
 	case string:
+		// FHIR date search is prefix-based: a partial date (e.g. "2024-01-01")
+		// matches a stored dateTime with the same prefix ("2024-01-01T00:00:00Z").
+		if isDatePrefix(want) && strings.HasPrefix(v, want) {
+			return true
+		}
 		return v == want
 	case float64:
 		return fmt.Sprintf("%g", v) == want

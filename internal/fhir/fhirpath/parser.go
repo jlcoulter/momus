@@ -202,7 +202,7 @@ func (p *parser) parsePostfixTail(left expr) (expr, error) {
 			if !ok {
 				if p.peek().kind == tokStar {
 					p.advance()
-					left = &pathExpr{name: "*", deep: false}
+					left = &pathExpr{name: "*", deep: false, base: left}
 					continue
 				}
 				return nil, fmt.Errorf("fhirpath: expected identifier after '.' at position %d", p.peek().pos)
@@ -215,7 +215,7 @@ func (p *parser) parsePostfixTail(left expr) (expr, error) {
 				}
 				left = &funcExpr{name: nameTok.text, args: args, base: left}
 			} else {
-				left = &pathExpr{name: nameTok.text}
+				left = &pathExpr{name: nameTok.text, base: left}
 			}
 		case tokDotDot:
 			p.advance()
@@ -223,7 +223,7 @@ func (p *parser) parsePostfixTail(left expr) (expr, error) {
 			if !ok {
 				return nil, fmt.Errorf("fhirpath: expected identifier after '..'")
 			}
-			left = &pathExpr{name: nameTok.text, deep: true}
+			left = &pathExpr{name: nameTok.text, deep: true, base: left}
 		case tokLBracket:
 			p.advance()
 			// [index] or [where(...)]/[all(...)]/[first()]/[last()]

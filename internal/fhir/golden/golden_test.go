@@ -12,7 +12,7 @@ import (
 // the .plan.json snapshot on first run and fails on any mismatch or failing
 // case.
 func TestGoldenAll(t *testing.T) {
-	fixtures := []string{"patient", "observation-slice", "search-operations", "observation-invariant", "patient-date", "observation-value", "location-near", "observation-composite"}
+	fixtures := []string{"patient", "observation-slice", "search-operations", "observation-invariant", "patient-date", "patient-search", "observation-value", "location-near", "observation-composite", "practitioner-role"}
 	for _, name := range fixtures {
 		t.Run(name, func(t *testing.T) {
 			fx, err := LoadFixture(filepath.Join(goldenDir, name+".json"))

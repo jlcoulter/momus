@@ -1,0 +1,29 @@
+{
+  "structureDefinitions": [
+    {
+      "url": "http://example.org/StructureDefinition/practitioner-role",
+      "type": "PractitionerRole",
+      "elements": [
+        { "path": "PractitionerRole", "min": 0, "max": "*" },
+        { "path": "PractitionerRole.active", "min": 1, "max": "1", "types": [{ "code": "boolean" }] },
+        { "path": "PractitionerRole.period", "min": 0, "max": "1", "types": [{ "code": "Period" }] }
+      ]
+    }
+  ],
+  "searchParameters": [
+    { "code": "date", "base": ["PractitionerRole"], "type": "date", "expression": "PractitionerRole.period" }
+  ],
+  "valueSets": [],
+  "codeSystems": [],
+  "resources": [
+    {
+      "profileUrl": "http://example.org/StructureDefinition/practitioner-role",
+      "resource": {
+        "resourceType": "PractitionerRole",
+        "id": "practitioner-role-search-sample-1",
+        "active": true,
+        "period": { "start": "2024-01-01", "end": "2024-12-31" }
+      }
+    }
+  ]
+}

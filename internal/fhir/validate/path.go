@@ -26,7 +26,15 @@ func elementSegments(path string) []string {
 // (e.g. "value" matches "valueString", "valueQuantity"). FHIR choice
 // properties carry no separator, so a plain prefix match on name + "." would
 // miss them.
+// choiceKeyMatches reports whether key is the concrete serialization of the
+// choice element name, i.e. name followed by a capitalized datatype suffix
+// (e.g. "value" matches "valueString", "valueQuantity"). FHIR choice
+// properties carry no separator, so a plain prefix match on name + "." would
+// miss them. The name may carry the FHIR choice placeholder suffix "[x]"
+// (e.g. "value[x]"), which is stripped before matching so "value[x]" matches
+// "valueString" and "valueQuantity" too.
 func choiceKeyMatches(key, name string) bool {
+	name = strings.TrimSuffix(name, "[x]")
 	if len(key) <= len(name) || !strings.HasPrefix(key, name) {
 		return false
 	}

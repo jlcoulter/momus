@@ -1,0 +1,1144 @@
+{
+  "version": "v1",
+  "root": {
+    "Steps": [
+      {
+        "Steps": [
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole?date:zzz=2024-01-01",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|PractitionerRole|date|search-invalid-modifier"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "search|PractitionerRole|date|search-invalid-modifier",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "search|PractitionerRole|date",
+                  "ProfileURL": "",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-invalid-modifier",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole?date=not-a-date",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|PractitionerRole|date|search-invalid-value"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "search|PractitionerRole|date|search-invalid-value",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "search|PractitionerRole|date",
+                  "ProfileURL": "",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-invalid-value",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole?date=2024-01-01",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|PractitionerRole|date|search-multiple-results"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server returns multiple search results",
+                "RequirementID": "search|PractitionerRole|date|search-multiple-results",
+                "Expression": "body.total \u003e= 2",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-multiple-results",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole?date=1900-01-01",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|PractitionerRole|date|search-no-results"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "search|PractitionerRole|date|search-no-results",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "search|PractitionerRole|date",
+                  "ProfileURL": "",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-no-results",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole?date=2024-01-01",
+                "Headers": {
+                  "X-Momus-Requirement-ID": "search|PractitionerRole|date|search-valid"
+                },
+                "Body": null
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "search|PractitionerRole|date|search-valid",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "search|PractitionerRole|date",
+                  "ProfileURL": "",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "search",
+                  "Variant": "search-valid",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-operation-delete-1784496385",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|PractitionerRole|operation-delete"
+                },
+                "Body": {
+                  "active": true,
+                  "id": "momus-practitionerrole-operation-delete-1784496385",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "period": {
+                    "end": "2024-12-31T23:59:59Z",
+                    "start": "2024-01-01T00:00:00Z"
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "exercise operation-delete",
+                "RequirementID": "operation|PractitionerRole|operation-delete",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-delete",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "DELETE",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-operation-delete-1784496385",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|PractitionerRole|operation-delete"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise operation-delete",
+                "RequirementID": "operation|PractitionerRole|operation-delete",
+                "Expression": "status in [200,204]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-delete",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-operation-history-425353966",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|PractitionerRole|operation-history"
+                },
+                "Body": {
+                  "active": true,
+                  "id": "momus-practitionerrole-operation-history-425353966",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "exercise operation-history",
+                "RequirementID": "operation|PractitionerRole|operation-history",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-history",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-operation-history-425353966/_history",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|PractitionerRole|operation-history"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise operation-history",
+                "RequirementID": "operation|PractitionerRole|operation-history",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-history",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-operation-patch-1686559324",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|PractitionerRole|operation-patch"
+                },
+                "Body": {
+                  "active": true,
+                  "id": "momus-practitionerrole-operation-patch-1686559324",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "period": {
+                    "end": "2024-12-31T23:59:59Z",
+                    "start": "2024-01-01T00:00:00Z"
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "exercise operation-patch",
+                "RequirementID": "operation|PractitionerRole|operation-patch",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-patch",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "PATCH",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-operation-patch-1686559324",
+                "Headers": {
+                  "Content-Type": "application/json-patch+json",
+                  "X-Momus-Requirement-ID": "operation|PractitionerRole|operation-patch"
+                },
+                "Body": [
+                  {
+                    "op": "add",
+                    "path": "/",
+                    "value": {
+                      "active": true
+                    }
+                  }
+                ]
+              },
+              {
+                "Description": "exercise operation-patch",
+                "RequirementID": "operation|PractitionerRole|operation-patch",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-patch",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-operation-read-505672958",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|PractitionerRole|operation-read"
+                },
+                "Body": {
+                  "active": true,
+                  "id": "momus-practitionerrole-operation-read-505672958",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "exercise operation-read",
+                "RequirementID": "operation|PractitionerRole|operation-read",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-read",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-operation-read-505672958",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|PractitionerRole|operation-read"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise operation-read",
+                "RequirementID": "operation|PractitionerRole|operation-read",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-read",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-operation-update-1423607151",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|PractitionerRole|operation-update"
+                },
+                "Body": {
+                  "active": true,
+                  "id": "momus-practitionerrole-operation-update-1423607151",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "period": {
+                    "end": "2024-12-31T23:59:59Z",
+                    "start": "2024-01-01T00:00:00Z"
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "exercise operation-update",
+                "RequirementID": "operation|PractitionerRole|operation-update",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-update",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-operation-update-1423607151",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "operation|PractitionerRole|operation-update"
+                },
+                "Body": {
+                  "active": true,
+                  "id": "momus-practitionerrole-operation-update-1423607151",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "period": {
+                    "end": "2024-12-31T23:59:59Z",
+                    "start": "2024-01-01T00:00:00Z"
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "exercise operation-update",
+                "RequirementID": "operation|PractitionerRole|operation-update",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "operation",
+                  "Variant": "operation-update",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-crud-practitionerrole",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|PractitionerRole|state-crud-sequence"
+                },
+                "Body": {
+                  "active": true,
+                  "id": "momus-crud-practitionerrole",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "period": {
+                    "end": "2024-12-31T23:59:59Z",
+                    "start": "2024-01-01T00:00:00Z"
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|PractitionerRole|state-crud-sequence",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-crud-practitionerrole",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|PractitionerRole|state-crud-sequence"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|PractitionerRole|state-crud-sequence",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-crud-practitionerrole",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|PractitionerRole|state-crud-sequence"
+                },
+                "Body": {
+                  "active": true,
+                  "id": "momus-crud-practitionerrole",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "period": {
+                    "end": "2024-12-31T23:59:59Z",
+                    "start": "2024-01-01T00:00:00Z"
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|PractitionerRole|state-crud-sequence",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-crud-practitionerrole",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|PractitionerRole|state-crud-sequence"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|PractitionerRole|state-crud-sequence",
+                "Expression": "status in [200]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "DELETE",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-crud-practitionerrole",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|PractitionerRole|state-crud-sequence"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|PractitionerRole|state-crud-sequence",
+                "Expression": "status in [200,204]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "accept"
+                }
+              },
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-crud-practitionerrole",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|PractitionerRole|state-crud-sequence"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-crud-sequence",
+                "RequirementID": "state|PractitionerRole|state-crud-sequence",
+                "Expression": "status in [404]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-crud-sequence",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "DELETE",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-missing",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|PractitionerRole|state-delete-nonexistent"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-delete-nonexistent",
+                "RequirementID": "state|PractitionerRole|state-delete-nonexistent",
+                "Expression": "status in [200,204,404]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-delete-nonexistent",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "GET",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-missing",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "state|PractitionerRole|state-read-nonexistent"
+                },
+                "Body": null
+              },
+              {
+                "Description": "exercise state-read-nonexistent",
+                "RequirementID": "state|PractitionerRole|state-read-nonexistent",
+                "Expression": "status in [404]",
+                "Trace": {
+                  "ConstraintID": "",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "",
+                  "Domain": "state",
+                  "Variant": "state-read-nonexistent",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-datatype-invalid-lexical-1837934391",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|boolean|datatype-invalid-lexical"
+                },
+                "Body": {
+                  "active": "not-a-boolean",
+                  "id": "momus-practitionerrole-datatype-invalid-lexical-1837934391",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|boolean|datatype-invalid-lexical",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|datatype|boolean",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "PractitionerRole.active",
+                  "Domain": "datatype",
+                  "Variant": "datatype-invalid-lexical",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-datatype-null-1477092446",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|boolean|datatype-null"
+                },
+                "Body": {
+                  "active": null,
+                  "id": "momus-practitionerrole-datatype-null-1477092446",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|boolean|datatype-null",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|datatype|boolean",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "PractitionerRole.active",
+                  "Domain": "datatype",
+                  "Variant": "datatype-null",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-datatype-valid-2019286791",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|boolean|datatype-valid"
+                },
+                "Body": {
+                  "active": true,
+                  "id": "momus-practitionerrole-datatype-valid-2019286791",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|boolean|datatype-valid",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|datatype|boolean",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "PractitionerRole.active",
+                  "Domain": "datatype",
+                  "Variant": "datatype-valid",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-datatype-wrong-json-type-1582449588",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|boolean|datatype-wrong-json-type"
+                },
+                "Body": {
+                  "active": "not-a-boolean",
+                  "id": "momus-practitionerrole-datatype-wrong-json-type-1582449588",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|boolean|datatype-wrong-json-type",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|datatype|boolean",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "PractitionerRole.active",
+                  "Domain": "datatype",
+                  "Variant": "datatype-wrong-json-type",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-missing-required-1060068054",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|missing-required"
+                },
+                "Body": {
+                  "id": "momus-practitionerrole-missing-required-1060068054",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "server rejects violating payload",
+                "RequirementID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|missing-required",
+                "Expression": "status in [400,412,422]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "PractitionerRole.active",
+                  "Domain": "cardinality",
+                  "Variant": "missing-required",
+                  "Expected": "reject"
+                }
+              }
+            ]
+          },
+          {
+            "Steps": [
+              {
+                "Method": "PUT",
+                "URL": "http://momus-golden.invalid/fhir/PractitionerRole/momus-practitionerrole-valid-min-187129883",
+                "Headers": {
+                  "Content-Type": "application/fhir+json",
+                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|valid-min"
+                },
+                "Body": {
+                  "active": true,
+                  "id": "momus-practitionerrole-valid-min-187129883",
+                  "identifier": [
+                    {
+                      "system": "http://ns.electronichealth.net.au/id/medicare-provider-number",
+                      "type": {
+                        "coding": [
+                          {
+                            "code": "UPIN",
+                            "display": "Medicare Provider Number",
+                            "system": "http://terminology.hl7.org.au/CodeSystem/v2-0203"
+                          }
+                        ],
+                        "text": "Medicare Provider Number"
+                      },
+                      "use": "usual",
+                      "value": "UPIN-123456"
+                    }
+                  ],
+                  "meta": {
+                    "profile": [
+                      "http://example.org/StructureDefinition/practitioner-role"
+                    ]
+                  },
+                  "resourceType": "PractitionerRole"
+                }
+              },
+              {
+                "Description": "server accepts generated payload",
+                "RequirementID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|valid-min",
+                "Expression": "status in [200,201]",
+                "Trace": {
+                  "ConstraintID": "http://example.org/StructureDefinition/practitioner-role|PractitionerRole.active|cardinality",
+                  "ProfileURL": "http://example.org/StructureDefinition/practitioner-role",
+                  "ResourceType": "PractitionerRole",
+                  "ElementPath": "PractitionerRole.active",
+                  "Domain": "cardinality",
+                  "Variant": "valid-min",
+                  "Expected": "accept"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

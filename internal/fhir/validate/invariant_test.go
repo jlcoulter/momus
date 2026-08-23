@@ -23,8 +23,8 @@ func TestValidateInvariantViolated(t *testing.T) {
 	})
 	v := New(r)
 
-	// name absent -> context nil -> family.exists() false -> invariant violation
-	res := map[string]any{"resourceType": "Patient"}
+	// name present but without a family -> family.exists() false -> invariant violation
+	res := map[string]any{"resourceType": "Patient", "name": []any{map[string]any{"given": []any{"Alice"}}}}
 	issues, err := v.Validate(context.Background(), invProfile, res)
 	if err != nil {
 		t.Fatalf("Validate: %v", err)
@@ -37,6 +37,33 @@ func TestValidateInvariantViolated(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected an invariant issue, got %+v", issues)
+	}
+}
+
+func TestValidateInvariantAbsentElementDoesNotFire(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/ext-sd",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.contact", Min: 0, Max: "*", Types: []model.ElementType{{Code: "BackboneElement"}}},
+			{Path: "Organization.contact.extension", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Extension"}},
+				Constraints: []model.ElementConstraint{{Key: "ext-1", Severity: "error", Human: "Must have either extensions or value[x]", Expression: "extension.exists() != value.exists()"}}},
+		},
+	})
+	v := New(r)
+	// contact present but with no extension field: the ext-1 invariant must not fire
+	// on an absent element (it is vacuously satisfied).
+	res := map[string]any{"resourceType": "Organization", "contact": []any{map[string]any{"name": "Acme"}}}
+	issues, err := v.Validate(context.Background(), "http://example.org/StructureDefinition/ext-sd", res)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	for _, iss := range issues {
+		if iss.Kind == "invariant" {
+			t.Fatalf("absent element must not fire its invariant: %+v", iss)
+		}
 	}
 }
 

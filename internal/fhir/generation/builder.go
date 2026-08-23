@@ -72,6 +72,8 @@ func (b *fhirBuilder) SearchAcceptValue(req coverage.CoverageRequirement, code s
 		return nearSearchValue(b, req, code)
 	case "composite":
 		return compositeAcceptValue(b, req, code)
+	case "date", "dateTime", "instant", "time":
+		return "2024-01-01"
 	}
 	def, ok := searchElementDefinition(req.ResourceType, elementPath, b.reg)
 	if !ok || def == nil {
@@ -213,8 +215,16 @@ func searchElementDefinition(resourceType, elementPath string, reg *registry.Reg
 		if err != nil || resolved == nil {
 			continue
 		}
-		if node, ok := resolved.Elements[resourceType+"."+elementPath]; ok && node != nil && node.Definition != nil {
-			return node.Definition, true
+		// Try the exact key, then the choice-type "[x]" form (e.g. "occurred" ->
+		// "occurred[x]").
+		keys := []string{resourceType + "." + elementPath}
+		if !strings.HasSuffix(elementPath, "[x]") {
+			keys = append(keys, resourceType+"."+elementPath+"[x]")
+		}
+		for _, key := range keys {
+			if node, ok := resolved.Elements[key]; ok && node != nil && node.Definition != nil {
+				return node.Definition, true
+			}
 		}
 	}
 	return nil, false
