@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
+	"github.com/jlcoulter/momus/internal/home"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +23,7 @@ func newResolveCmd(cfg *config) *cobra.Command {
 			}
 			cacheDir := cfg.DownloadDir
 			if cacheDir == "" {
-				cacheDir = filepath.Join(searchDir, ".momus", "packages")
+				cacheDir = home.PackageCacheDir()
 			}
 
 			graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{

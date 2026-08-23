@@ -22,6 +22,7 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	provisioning "github.com/jlcoulter/momus/internal/fhir/provisioning"
+	"github.com/jlcoulter/momus/internal/home"
 	"github.com/spf13/cobra"
 )
 
@@ -349,8 +350,9 @@ func writeOutputFile(path string, data []byte) error {
 
 // writeDebugOutput writes stage data to the debug output directory when debug
 // debugOutputDir is the default directory where per-stage JSON artifacts are
-// written when --debug is enabled.
-var debugOutputDir = ".momus/output"
+// written when --debug is enabled. It defaults to $HOME/.momus/output and may
+// be overridden by tests.
+var debugOutputDir = home.OutputDir()
 
 // newDebugTracer returns a request/response tracer writing to stderr when debug
 // mode is enabled, or nil otherwise. It is used to surface every HTTP request a

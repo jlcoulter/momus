@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/jlcoulter/momus/internal/home"
 )
 
 // ResolvedGraph is the resolved dependency closure for a root package.
@@ -82,7 +84,7 @@ func ResolveLocalPackageGraphWithOptions(rootArchivePath string, options Resolve
 
 	downloadDir := options.DownloadDir
 	if downloadDir == "" {
-		downloadDir = filepath.Join(depsDir, ".momus", "packages")
+		downloadDir = home.PackageCacheDir()
 	}
 
 	policy := options.ConflictPolicy

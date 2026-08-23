@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	reportwriter "github.com/jlcoulter/momus/internal/fhir/report"
+	"github.com/jlcoulter/momus/internal/home"
 
 	testast "github.com/jlcoulter/momus/internal/core/ast"
 	testcoverage "github.com/jlcoulter/momus/internal/core/coverage"
@@ -102,16 +103,18 @@ func writeRunReport(cfg *config, report *testrunner.Report, coverageEvaluation t
 		}
 	}
 
-	// The navigable output directory (default .momus/output) is always written
-	// unless the user opted out with "-". It slices the run into small,
+	// The navigable output directory (default $MOMUS_HOME/output) is always
+	// written unless the user opted out with "-". It slices the run into small,
 	// navigable files (index, per-case, by-resource, by-parameter) instead of
-	// one monolith.
+	// one monolith. Existing output is rotated to a timestamped backup.
 	outputDir := cfg.OutputDir
 	if outputDir == "" {
-		outputDir = ".momus/output"
+		outputDir = home.OutputDir()
 	}
 	if outputDir != "-" {
-		if err := reportwriter.WriteDir(outputDir, report, coverageEvaluation, coverageEvaluated, reportwriter.Options{WriteFull: cfg.IncludeCases}); err != nil {
+		if err := writeVersionedDir(outputDir, func() error {
+			return reportwriter.WriteDir(outputDir, report, coverageEvaluation, coverageEvaluated, reportwriter.Options{WriteFull: cfg.IncludeCases})
+		}); err != nil {
 			return fmt.Errorf("write output directory %s: %w", outputDir, err)
 		}
 		fmt.Printf("Output directory written to %s\n", outputDir)

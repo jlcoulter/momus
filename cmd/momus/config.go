@@ -29,7 +29,7 @@ type config struct {
 	// Output
 	OutputPath string `mapstructure:"output_path" flag:"output"`
 	HtmlReport string `mapstructure:"html_report" flag:"html"`
-	OutputDir  string `mapstructure:"output_dir" flag:"output-dir,dir"` // default ".momus/output"; navigable directory report
+	OutputDir  string `mapstructure:"output_dir" flag:"output-dir,dir"` // default "$HOME/.momus/output"; navigable directory report
 
 	// Derivation scoping
 	IncludeResourceTypes   []string `mapstructure:"include_resource_types" flag:"include-resource"`

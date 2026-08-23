@@ -88,6 +88,7 @@ func TestRunCmdConsumesTestPlanAndEvaluatesCoverage(t *testing.T) {
 	cfg.BaseURL = server.URL
 	cfg.CoveragePlanPath = planPath2
 	cfg.OutputPath = outPath
+	cfg.OutputDir = filepath.Join(t.TempDir(), "output")
 	cmd.SetContext(context.Background())
 	if err := cmd.RunE(cmd, []string{planPath}); err != nil {
 		t.Fatalf("run command failed: %v", err)
@@ -151,6 +152,7 @@ func TestRunCmdUsesDatasetForPreCreated(t *testing.T) {
 	cmd := newRunCmd(cfg)
 	cfg.BaseURL = server.URL
 	cfg.OutputPath = outPath
+	cfg.OutputDir = filepath.Join(t.TempDir(), "output")
 	cmd.SetContext(context.Background())
 	if err := cmd.RunE(cmd, []string{planPath}); err != nil {
 		t.Fatalf("run command failed (seed reference should be treated as pre-provisioned): %v", err)
@@ -231,6 +233,7 @@ func TestRunCmdWriteBasicAuthDefaultsToBaseURL(t *testing.T) {
 	cfg.WriteBasicUsername = "write-user"
 	cfg.WriteBasicPassword = "write-pass"
 	cfg.OutputPath = outPath
+	cfg.OutputDir = filepath.Join(t.TempDir(), "output")
 	cmd.SetContext(context.Background())
 	if err := cmd.RunE(cmd, []string{planPath}); err != nil {
 		t.Fatalf("run command failed: %v", err)
