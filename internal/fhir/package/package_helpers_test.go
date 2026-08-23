@@ -13,6 +13,57 @@ func TestSetDebug(t *testing.T) {
 	SetDebug(false)
 }
 
+func TestDecodeResourceValueSetAndCodeSystem(t *testing.T) {
+	// ValueSet with compose includes and expansion.
+	vsData, _ := json.Marshal(map[string]any{
+		"resourceType": "ValueSet",
+		"url":          "http://example.org/ValueSet/x",
+		"version":      "1.0.0",
+		"name":         "X",
+		"status":       "active",
+		"compose": map[string]any{"include": []map[string]any{{
+			"system":  "http://example.org/cs",
+			"concept": []map[string]any{{"code": "c1", "display": "C1"}},
+		}}},
+		"expansion": map[string]any{"contains": []map[string]any{{"system": "http://example.org/cs", "code": "e1", "display": "E1"}}},
+	})
+	res, err := decodeResource(vsData)
+	if err != nil {
+		t.Fatalf("decodeResource(ValueSet): %v", err)
+	}
+	vs, ok := res.(*model.ValueSet)
+	if !ok {
+		t.Fatalf("expected ValueSet, got %T", res)
+	}
+	if len(vs.ComposeIncludes) != 1 || vs.ComposeIncludes[0].System != "http://example.org/cs" {
+		t.Fatalf("value set includes = %+v", vs.ComposeIncludes)
+	}
+	if len(vs.ExpansionContains) != 1 || vs.ExpansionContains[0].Code != "e1" {
+		t.Fatalf("value set expansion = %+v", vs.ExpansionContains)
+	}
+
+	// CodeSystem with concepts.
+	csData, _ := json.Marshal(map[string]any{
+		"resourceType": "CodeSystem",
+		"url":          "http://example.org/CodeSystem/x",
+		"version":      "1.0.0",
+		"name":         "X",
+		"status":       "active",
+		"concept":      []map[string]any{{"code": "c1", "display": "C1"}},
+	})
+	res, err = decodeResource(csData)
+	if err != nil {
+		t.Fatalf("decodeResource(CodeSystem): %v", err)
+	}
+	cs, ok := res.(*model.CodeSystem)
+	if !ok {
+		t.Fatalf("expected CodeSystem, got %T", res)
+	}
+	if len(cs.Concepts) != 1 || cs.Concepts[0].Code != "c1" {
+		t.Fatalf("code system concepts = %+v", cs.Concepts)
+	}
+}
+
 func TestDecodeResourceCapabilityStatementAndSearchParameter(t *testing.T) {
 	capData, _ := json.Marshal(map[string]any{
 		"resourceType": "CapabilityStatement",
