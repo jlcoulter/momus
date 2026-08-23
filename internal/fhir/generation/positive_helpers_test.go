@@ -577,6 +577,67 @@ func TestElementAllowsMultiple(t *testing.T) {
 	}
 }
 
+func TestReferenceTargetID(t *testing.T) {
+	if got := referenceTargetID("Patient/p1"); got != "p1" {
+		t.Fatalf("referenceTargetID = %q", got)
+	}
+	if got := referenceTargetID("Patient/momus-setup-patient"); got != "momus-setup-patient" {
+		t.Fatalf("referenceTargetID(setup) = %q", got)
+	}
+	if got := referenceTargetID(""); got != "" {
+		t.Fatalf("referenceTargetID(empty) = %q", got)
+	}
+	if got := referenceTargetID("no-slash"); got != "" {
+		t.Fatalf("referenceTargetID(no-slash) = %q", got)
+	}
+	if got := referenceTargetID("Patient/"); got != "" {
+		t.Fatalf("referenceTargetID(trailing) = %q", got)
+	}
+	if got := referenceTargetID("Patient/p1?x=1"); got != "" {
+		t.Fatalf("referenceTargetID(query) = %q", got)
+	}
+}
+
+func TestFirstSliceNode(t *testing.T) {
+	if firstSliceNode(nil) != nil {
+		t.Fatal("firstSliceNode(nil) should be nil")
+	}
+	if firstSliceNode(&model.ElementNode{}) != nil {
+		t.Fatal("firstSliceNode(no slices) should be nil")
+	}
+	node := &model.ElementNode{Slices: map[string]*model.SliceNode{"a": {Name: "a", Definition: &model.ElementDefinition{Min: 1}}}}
+	if got := firstSliceNode(node); got == nil || got.Name != "a" {
+		t.Fatalf("firstSliceNode = %+v", got)
+	}
+	// Slice with no definition.
+	if got := firstSliceNode(&model.ElementNode{Slices: map[string]*model.SliceNode{"a": {}}}); got != nil {
+		t.Fatalf("firstSliceNode(no def) = %+v", got)
+	}
+}
+
+func TestMatchingSlice(t *testing.T) {
+	// Nil / non-map generic.
+	if matchingSlice(nil, nil) != nil {
+		t.Fatal("matchingSlice(nil) should be nil")
+	}
+	if matchingSlice(&model.ElementNode{}, "not-a-map") != nil {
+		t.Fatal("matchingSlice(non-map) should be nil")
+	}
+	// A slice whose child fixed value matches the generic value.
+	node := &model.ElementNode{Slices: map[string]*model.SliceNode{
+		"phone": {Name: "phone", Definition: &model.ElementDefinition{Min: 1}, Children: map[string]*model.ElementNode{
+			"system": {Definition: &model.ElementDefinition{Fixed: "phone"}},
+		}},
+	}}
+	if got := matchingSlice(node, map[string]any{"system": "phone"}); got == nil || got.Name != "phone" {
+		t.Fatalf("matchingSlice = %+v", got)
+	}
+	// No matching slice.
+	if got := matchingSlice(node, map[string]any{"system": "email"}); got != nil {
+		t.Fatalf("matchingSlice(no match) = %+v", got)
+	}
+}
+
 func TestNewRNGDeterministic(t *testing.T) {
 	if newRNG("seed").Intn(1000) != newRNG("seed").Intn(1000) {
 		t.Fatal("newRNG should be deterministic for the same seed")
