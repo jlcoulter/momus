@@ -8,6 +8,55 @@ import (
 	"testing"
 )
 
+func TestReadPackageManifestFromArchiveErrors(t *testing.T) {
+	// Missing file.
+	if _, err := readPackageManifestFromArchive(filepath.Join(t.TempDir(), "missing.tgz")); err == nil {
+		t.Fatal("expected error for missing archive")
+	}
+	// A non-gzip file.
+	bad := filepath.Join(t.TempDir(), "bad.tgz")
+	if err := os.WriteFile(bad, []byte("not-gzip"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readPackageManifestFromArchive(bad); err == nil {
+		t.Fatal("expected error for invalid gzip")
+	}
+}
+
+func TestFetchRegistryPackageMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/bad" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.URL.Path == "/invalid" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("not-json"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"dist-tags":{"latest":"1.0.0"}}`))
+	}))
+	defer server.Close()
+
+	// Valid metadata.
+	meta, err := fetchRegistryPackageMetadata(server.URL + "/good")
+	if err != nil {
+		t.Fatalf("fetchRegistryPackageMetadata: %v", err)
+	}
+	if meta.DistTags["latest"] != "1.0.0" {
+		t.Fatalf("metadata = %+v", meta)
+	}
+	// Non-200.
+	if _, err := fetchRegistryPackageMetadata(server.URL + "/bad"); err == nil {
+		t.Fatal("expected error for non-200 status")
+	}
+	// Invalid JSON.
+	if _, err := fetchRegistryPackageMetadata(server.URL + "/invalid"); err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
 func TestResolveVersionFromMetadata(t *testing.T) {
 	// Nil metadata.
 	if _, _, err := resolveVersionFromMetadata(Dependency{Name: "a", Version: "1.0.0"}, nil); err == nil {
