@@ -144,6 +144,11 @@ func TestParamOf(t *testing.T) {
 	if got := paramOf(c); got != "Patient" {
 		t.Fatalf("paramOf(non-search) = %q, want Patient", got)
 	}
+	// Trace without resource type -> empty.
+	c = runner.CaseResult{Trace: &ast.Trace{ConstraintID: "operation|x"}}
+	if got := paramOf(c); got != "" {
+		t.Fatalf("paramOf(no resource type) = %q, want empty", got)
+	}
 	// Nil trace -> empty.
 	if got := paramOf(runner.CaseResult{}); got != "" {
 		t.Fatalf("paramOf(no trace) = %q, want empty", got)
