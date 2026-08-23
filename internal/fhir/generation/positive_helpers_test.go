@@ -421,3 +421,56 @@ func TestEnsureEndpointKnownIdentifier(t *testing.T) {
 		t.Fatalf("endpoint identifier count = %d, want 2", len(ids))
 	}
 }
+
+func TestReferenceIs(t *testing.T) {
+	if !referenceIs(map[string]any{"reference": "Patient/p1"}, "Patient/p1") {
+		t.Fatal("referenceIs should match")
+	}
+	if referenceIs(nil, "x") || referenceIs(map[string]any{}, "x") {
+		t.Fatal("referenceIs should be false for nil/empty")
+	}
+	if referenceIs(map[string]any{"reference": "Patient/p1"}, "Patient/p2") {
+		t.Fatal("referenceIs should not match different ref")
+	}
+}
+
+func TestStripSelfReferences(t *testing.T) {
+	// Object-valued self reference removed.
+	body := map[string]any{"subject": map[string]any{"reference": "Patient/p1"}}
+	stripSelfReferences(body, "Patient/p1")
+	if _, ok := body["subject"]; ok {
+		t.Fatalf("self-referencing object not removed: %v", body)
+	}
+	// Array self reference filtered.
+	body = map[string]any{"author": []any{map[string]any{"reference": "Patient/p1"}, map[string]any{"reference": "Practitioner/p2"}}}
+	stripSelfReferences(body, "Patient/p1")
+	if len(body["author"].([]any)) != 1 {
+		t.Fatalf("self-referencing array element not removed: %v", body["author"])
+	}
+	// Empty selfRef is a no-op.
+	body = map[string]any{"subject": map[string]any{"reference": "x"}}
+	stripSelfReferences(body, "")
+	if body["subject"] == nil {
+		t.Fatal("empty selfRef should not strip")
+	}
+}
+
+func TestFilterSelfReferences(t *testing.T) {
+	arr := []any{map[string]any{"reference": "Patient/p1"}, "not-a-ref", map[string]any{"reference": "Patient/p2"}}
+	out := filterSelfReferences(arr, "Patient/p1")
+	if len(out) != 2 {
+		t.Fatalf("filterSelfReferences = %v", out)
+	}
+}
+
+func TestUpperCamelTypeName(t *testing.T) {
+	if got := upperCamelTypeName("dateTime"); got != "DateTime" {
+		t.Fatalf("upperCamelTypeName(dateTime) = %q", got)
+	}
+	if got := upperCamelTypeName("HumanName"); got != "HumanName" {
+		t.Fatalf("upperCamelTypeName(HumanName) = %q", got)
+	}
+	if got := upperCamelTypeName(""); got != "" {
+		t.Fatalf("upperCamelTypeName(empty) = %q", got)
+	}
+}
