@@ -703,6 +703,23 @@ func TestApplySliceNodeChildren(t *testing.T) {
 	}
 }
 
+func TestMod89Valid(t *testing.T) {
+	// Wrong length.
+	if mod89Valid("123", []int{1, 2, 3, 4}, false) {
+		t.Fatal("wrong length should be invalid")
+	}
+	// Non-digit.
+	if mod89Valid("12a", []int{1, 2, 3}, false) {
+		t.Fatal("non-digit should be invalid")
+	}
+	// Valid ABN.
+	abnWeights := []int{10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
+	abn := generateABN()
+	if !mod89Valid(abn, abnWeights, true) {
+		t.Fatalf("generated ABN %q is not valid", abn)
+	}
+}
+
 func TestIsEmptyExtensionBranches(t *testing.T) {
 	// Extension with value.
 	if isEmptyExtension(map[string]any{"url": "http://x", "valueString": "v"}) {
