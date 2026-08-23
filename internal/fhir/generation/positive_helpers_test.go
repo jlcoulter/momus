@@ -638,6 +638,47 @@ func TestMatchingSlice(t *testing.T) {
 	}
 }
 
+func TestSliceHelperFunctions(t *testing.T) {
+	// sortedNodeChildren sorts.
+	if got := sortedNodeChildren(&model.ElementNode{Children: map[string]*model.ElementNode{"b": {}, "a": {}, "c": {}}}); len(got) != 3 || got[0] != "a" {
+		t.Fatalf("sortedNodeChildren = %v", got)
+	}
+	// sortedSliceChildren sorts.
+	slice := &model.SliceNode{Children: map[string]*model.ElementNode{"b": {}, "a": {}}}
+	if got := sortedSliceChildren(slice); len(got) != 2 || got[0] != "a" {
+		t.Fatalf("sortedSliceChildren = %v", got)
+	}
+	// wrapFixedSlice: current array -> wraps.
+	if got := wrapFixedSlice([]any{}, &model.ElementDefinition{}, "x"); got.([]any)[0] != "x" {
+		t.Fatalf("wrapFixedSlice(array) = %v", got)
+	}
+	// wrapFixedSlice: repeatable element -> wraps.
+	if got := wrapFixedSlice(nil, &model.ElementDefinition{Max: "*"}, "x"); got.([]any)[0] != "x" {
+		t.Fatalf("wrapFixedSlice(repeatable) = %v", got)
+	}
+	// wrapFixedSlice: scalar element -> returns scalar.
+	if got := wrapFixedSlice(nil, &model.ElementDefinition{Max: "1"}, "x"); got != "x" {
+		t.Fatalf("wrapFixedSlice(scalar) = %v", got)
+	}
+	// mergeSlicePattern: no existing value -> clone pattern.
+	value := map[string]any{}
+	mergeSlicePattern(value, "coding", map[string]any{"code": "c", "system": "s"})
+	if value["coding"].(map[string]any)["code"] != "c" {
+		t.Fatalf("mergeSlicePattern(new) = %v", value)
+	}
+	// mergeSlicePattern: existing nested map -> recurse.
+	value = map[string]any{"coding": map[string]any{"code": "old"}}
+	mergeSlicePattern(value, "coding", map[string]any{"system": "s"})
+	if value["coding"].(map[string]any)["system"] != "s" || value["coding"].(map[string]any)["code"] != "old" {
+		t.Fatalf("mergeSlicePattern(existing) = %v", value)
+	}
+	// applySliceConstractions with nil guards.
+	applySliceConstractions(nil, nil, nil)
+	// applySliceChildConstraints with a child that has no fixed/pattern -> recurse.
+	child := &model.ElementNode{Name: "coding", Definition: &model.ElementDefinition{}}
+	applySliceChildConstraints(map[string]any{}, child, nil) // no value[prop], no-op
+}
+
 func TestNewRNGDeterministic(t *testing.T) {
 	if newRNG("seed").Intn(1000) != newRNG("seed").Intn(1000) {
 		t.Fatal("newRNG should be deterministic for the same seed")
