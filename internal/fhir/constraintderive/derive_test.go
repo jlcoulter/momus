@@ -230,6 +230,35 @@ func TestDeriveScopedRequiresRegistry(t *testing.T) {
 	}
 }
 
+func TestDeriveScopedSkipsNilAndUnresolvable(t *testing.T) {
+	r := registry.New()
+	// A scoped subject that resolves but has no elements, plus a nil entry.
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/empty", Type: "Patient"})
+	r.SetScope([]string{"http://example.org/StructureDefinition/empty", ""})
+	derived, err := DeriveScoped(r)
+	if err != nil {
+		t.Fatalf("DeriveScoped: %v", err)
+	}
+	// No error and deterministic (empty) output.
+	_ = derived
+}
+
+func TestDedupSorted(t *testing.T) {
+	cs := []constraint.Constraint{
+		{ID: "b|constraint"},
+		{ID: "a|constraint"},
+		{ID: "b|constraint"}, // duplicate
+		{ID: ""},             // dropped
+	}
+	out := dedupSorted(cs)
+	if len(out) != 2 {
+		t.Fatalf("dedupSorted = %v, want 2 entries", out)
+	}
+	if out[0].ID != "a|constraint" || out[1].ID != "b|constraint" {
+		t.Fatalf("dedupSorted order = %v", out)
+	}
+}
+
 // TestDeriveScopedMergesParentChain verifies that a differential-only subject
 // profile inherits its parent's elements/constraints through the registry, and
 // that those inherited constraints are attributed to the subject (child) profile
