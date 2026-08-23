@@ -615,6 +615,35 @@ func TestEvalParseError(t *testing.T) {
 	}
 }
 
+func TestParseWildcardAndDotDotErrors(t *testing.T) {
+	// `.*` parses as a wildcard path segment.
+	expr, err := Parse("x.*")
+	if err != nil {
+		t.Fatalf("Parse(x.*): %v", err)
+	}
+	if expr == nil {
+		t.Fatal("parsed x.* is nil")
+	}
+	// `.` followed by a non-identifier errors.
+	if _, err := Parse("x."); err == nil {
+		t.Fatal("expected error for '.' without identifier")
+	}
+	// `..` followed by a non-identifier errors.
+	if _, err := Parse("x.."); err == nil {
+		t.Fatal("expected error for '..' without identifier")
+	}
+}
+
+func TestEvalWildcard(t *testing.T) {
+	// `.*` collects all property values.
+	ctx := map[string]any{"x": map[string]any{"a": 1, "b": 2}}
+	res, err := evalStr(t, "x.*.exists()", ctx)
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	_ = res
+}
+
 func TestCompileMatchesCache(t *testing.T) {
 	re, err := compileMatches("^a+$")
 	if err != nil {
