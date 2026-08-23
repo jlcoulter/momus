@@ -1,6 +1,7 @@
 package bulk
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -116,6 +117,34 @@ func TestSetReferenceLeaf(t *testing.T) {
 	setReferenceLeaf(obj, "subject", target)
 	if obj["subject"].(map[string]any)["reference"] != "Patient/p-1" {
 		t.Fatalf("setReferenceLeaf(scalar) = %v", obj)
+	}
+}
+
+func TestHashCorpus(t *testing.T) {
+	if hashCorpus("a") == hashCorpus("b") {
+		t.Fatal("hashCorpus should distinguish inputs")
+	}
+	if hashCorpus("a") != hashCorpus("a") {
+		t.Fatal("hashCorpus should be deterministic")
+	}
+}
+
+func TestWireCorpusReferences(t *testing.T) {
+	// Nil / empty resource is a no-op.
+	wireCorpusReferences(nil, map[string]string{}, nil)
+	wireCorpusReferences(&model.ResourceInstance{}, map[string]string{}, nil)
+	// A ref field with an empty pool is skipped.
+	inst := &model.ResourceInstance{LocalID: "o1", Resource: map[string]any{}}
+	wireCorpusReferences(inst, map[string]string{"Observation.subject": "Patient"}, map[string][]string{"Patient": {}})
+	if len(inst.Resource) != 0 {
+		t.Fatalf("empty pool should not wire: %v", inst.Resource)
+	}
+	// A ref field with a non-empty pool wires the reference.
+	inst = &model.ResourceInstance{LocalID: "o1", Resource: map[string]any{}}
+	wireCorpusReferences(inst, map[string]string{"Observation.subject": "Patient"}, map[string][]string{"Patient": {"p1", "p2"}})
+	subject := inst.Resource["subject"].(map[string]any)
+	if !strings.HasPrefix(subject["reference"].(string), "Patient/") {
+		t.Fatalf("wired reference = %v", subject["reference"])
 	}
 }
 
