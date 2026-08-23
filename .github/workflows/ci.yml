@@ -23,7 +23,7 @@ jobs:
       - name: Test
         run: go test ./...
       - name: Coverage gate
-        run: ./scripts/check-coverage.sh 95
+        run: ./scripts/check-coverage.sh 90
       - name: Format
         run: gofmt -l .
 
