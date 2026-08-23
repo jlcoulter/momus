@@ -839,3 +839,46 @@ func TestNewRNGDeterministic(t *testing.T) {
 		t.Log("seeds may rarely collide; not asserted")
 	}
 }
+
+func TestResolveBoundCodingPath(t *testing.T) {
+	if _, ok := resolveBoundCoding(nil, nil); ok {
+		t.Fatal("resolveBoundCoding(nil) should be false")
+	}
+	if _, ok := resolveBoundCoding(&model.ElementDefinition{}, nil); ok {
+		t.Fatal("resolveBoundCoding(no binding) should be false")
+	}
+	if _, ok := resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{}}, nil); ok {
+		t.Fatal("resolveBoundCoding(no vs url) should be false")
+	}
+	reg := registry.New()
+	if _, ok := resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{ValueSet: "http://missing"}}, reg); ok {
+		t.Fatal("resolveBoundCoding(unknown vs) should be false")
+	}
+	// Compose include referencing a code system.
+	reg.AddValueSet(&model.ValueSet{URL: "http://vs", ComposeIncludes: []model.ValueSetInclude{{System: "http://cs"}}})
+	reg.AddCodeSystem(&model.CodeSystem{URL: "http://cs", Concepts: []model.CodeSystemConcept{{Code: "k", Display: "Key"}}})
+	c, ok := resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{ValueSet: "http://vs"}}, reg)
+	if !ok || c.Code != "k" {
+		t.Fatalf("resolveBoundCoding(cs include) = %+v, %v", c, ok)
+	}
+	// Expansion contains.
+	reg2 := registry.New()
+	reg2.AddValueSet(&model.ValueSet{URL: "http://expanded", ExpansionContains: []model.ValueSetExpansionContains{{Code: "XX"}, {Code: "real", Display: "Real"}}})
+	c, ok = resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{ValueSet: "http://expanded"}}, reg2)
+	if !ok || c.Code != "real" {
+		t.Fatalf("resolveBoundCoding(expansion) = %+v, %v", c, ok)
+	}
+	// Compose concepts.
+	reg3 := registry.New()
+	reg3.AddValueSet(&model.ValueSet{URL: "http://composed", ComposeIncludes: []model.ValueSetInclude{{System: "http://sys", Concepts: []model.ConceptReference{{Code: "direct", Display: "Direct"}}}}})
+	c, ok = resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{ValueSet: "http://composed"}}, reg3)
+	if !ok || c.Code != "direct" {
+		t.Fatalf("resolveBoundCoding(composed) = %+v, %v", c, ok)
+	}
+	// Only placeholder codes -> not found.
+	reg4 := registry.New()
+	reg4.AddValueSet(&model.ValueSet{URL: "http://placeholders", ComposeIncludes: []model.ValueSetInclude{{System: "http://sys", Concepts: []model.ConceptReference{{Code: "XX"}}}}})
+	if _, ok := resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{ValueSet: "http://placeholders"}}, reg4); ok {
+		t.Fatal("resolveBoundCoding(placeholders) should be false")
+	}
+}
