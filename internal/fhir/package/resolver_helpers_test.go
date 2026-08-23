@@ -2,8 +2,78 @@ package fhirpackage
 
 import (
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 )
+
+func TestResolveVersionFromMetadata(t *testing.T) {
+	// Nil metadata.
+	if _, _, err := resolveVersionFromMetadata(Dependency{Name: "a", Version: "1.0.0"}, nil); err == nil {
+		t.Fatal("expected error for nil metadata")
+	}
+	meta := &registryPackageMetadata{
+		DistTags: map[string]string{"latest": "2.0.0"},
+		Versions: map[string]registryPackageVersionMeta{
+			"1.0.0": {Version: "1.0.0", Dist: struct {
+				Tarball string `json:"tarball"`
+			}{Tarball: "http://x/1.0.0.tgz"}},
+			"2.0.0": {Version: "2.0.0", Dist: struct {
+				Tarball string `json:"tarball"`
+			}{Tarball: "http://x/2.0.0.tgz"}},
+		},
+	}
+	// Exact version.
+	ver, tarball, err := resolveVersionFromMetadata(Dependency{Version: "1.0.0"}, meta)
+	if err != nil || ver != "1.0.0" || tarball != "http://x/1.0.0.tgz" {
+		t.Fatalf("exact = %q, %q, %v", ver, tarball, err)
+	}
+	// Floating "latest" resolves via dist-tags.
+	ver, _, err = resolveVersionFromMetadata(Dependency{Version: "latest"}, meta)
+	if err != nil || ver != "2.0.0" {
+		t.Fatalf("latest = %q, %v", ver, err)
+	}
+	// Version not in metadata.
+	if _, _, err := resolveVersionFromMetadata(Dependency{Version: "3.0.0"}, meta); err == nil {
+		t.Fatal("expected error for missing version")
+	}
+	// Version with missing tarball.
+	meta2 := &registryPackageVersionMeta{}
+	metaNoTarball := &registryPackageMetadata{Versions: map[string]registryPackageVersionMeta{"1.0.0": *meta2}}
+	if _, _, err := resolveVersionFromMetadata(Dependency{Version: "1.0.0"}, metaNoTarball); err == nil {
+		t.Fatal("expected error for missing tarball")
+	}
+}
+
+func TestDownloadFile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/missing" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("content"))
+	}))
+	defer server.Close()
+
+	dest := filepath.Join(t.TempDir(), "file.tgz")
+	if err := downloadFile(server.URL+"/file", dest); err != nil {
+		t.Fatalf("downloadFile: %v", err)
+	}
+	data, err := os.ReadFile(dest)
+	if err != nil || string(data) != "content" {
+		t.Fatalf("downloaded content = %q, %v", data, err)
+	}
+	// Non-2xx status.
+	if err := downloadFile(server.URL+"/missing", filepath.Join(t.TempDir(), "x.tgz")); err == nil {
+		t.Fatal("expected error for non-2xx status")
+	}
+	// Invalid URL.
+	if err := downloadFile("://invalid", filepath.Join(t.TempDir(), "y.tgz")); err == nil {
+		t.Fatal("expected error for invalid URL")
+	}
+}
 
 func TestPackageKey(t *testing.T) {
 	if got := packageKey("a.pkg", "1.0.0"); got != "a.pkg@1.0.0" {
