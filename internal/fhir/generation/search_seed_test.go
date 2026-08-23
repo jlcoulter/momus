@@ -581,6 +581,25 @@ func TestSetSearchCodeValueBranches(t *testing.T) {
 	if body["status"].([]any)[0] != "active" {
 		t.Fatalf("empty array code = %v", body["status"])
 	}
+	// Existing string field.
+	body = map[string]any{"status": "old"}
+	setSearchCodeValue(body, "status", "new", "code", false, "")
+	if body["status"] != "new" {
+		t.Fatalf("existing string = %v", body["status"])
+	}
+	// Existing array of codings.
+	body = map[string]any{"type": []any{map[string]any{"coding": []any{map[string]any{"code": "old"}}}}}
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	codings := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
+	if codings[0].(map[string]any)["code"] != "new" {
+		t.Fatalf("array of codings = %v", codings)
+	}
+	// Existing map with a "code" field directly (bare coding).
+	body = map[string]any{"type": map[string]any{"code": "old"}}
+	setSearchCodeValue(body, "type", "new", "Coding", false, "")
+	if body["type"].(map[string]any)["code"] != "new" {
+		t.Fatalf("bare coding = %v", body["type"])
+	}
 }
 
 func TestSetFieldLeafAndForce(t *testing.T) {
