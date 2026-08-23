@@ -639,6 +639,49 @@ func TestReadPackageDecodesStringSliceAndIntFields(t *testing.T) {
 	}
 }
 
+func TestDecodeElementDefinitionsFixedPatternMustSupport(t *testing.T) {
+	raw := []map[string]any{
+		{
+			"id": "Observation.status", "path": "Observation.status",
+			"min": 1, "max": "1", "mustSupport": true, "sliceName": "status:active",
+			"type":      []any{map[string]any{"code": "code", "profile": []any{"http://p"}}},
+			"fixedCode": "final",
+			"binding":   map[string]any{"strength": "required", "valueSet": "http://vs"},
+		},
+		{
+			"id": "Observation.value[x]", "path": "Observation.value[x]",
+			"patternString": "pattern-value",
+		},
+		{
+			"id": "Observation.code", "path": "Observation.code",
+			"type": []any{"not-a-map"},
+		},
+	}
+	defs := decodeElementDefinitions(raw)
+	if len(defs) != 3 {
+		t.Fatalf("got %d defs, want 3", len(defs))
+	}
+	d := defs[0]
+	if d.Min != 1 || d.Max != "1" || !d.MustSupport || d.SliceName != "status:active" {
+		t.Fatalf("def0 = %+v", d)
+	}
+	if len(d.Types) != 1 || d.Types[0].Code != "code" || len(d.Types[0].Profile) != 1 {
+		t.Fatalf("def0 types = %+v", d.Types)
+	}
+	if d.Fixed != "final" {
+		t.Fatalf("def0 fixed = %v", d.Fixed)
+	}
+	if d.Binding == nil || d.Binding.Strength != "required" || d.Binding.ValueSet != "http://vs" {
+		t.Fatalf("def0 binding = %+v", d.Binding)
+	}
+	if defs[1].Pattern != "pattern-value" {
+		t.Fatalf("def1 pattern = %v", defs[1].Pattern)
+	}
+	if len(defs[2].Types) != 0 {
+		t.Fatalf("def2 should skip non-map type, got %+v", defs[2].Types)
+	}
+}
+
 func TestReadPackageDecodesElementIntField(t *testing.T) {
 	archivePath := buildTestPackageArchive(t, map[string]any{
 		"package/package.json": map[string]any{
