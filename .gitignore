@@ -22,4 +22,3 @@ vendor/
 # FHIR
 package.tgz
 .momus/
-docs/design-self-conformance-harness.md

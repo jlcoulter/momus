@@ -7,8 +7,4 @@ coverage.*
 *.test
 *.out
 package.tgz
-data.ndjson
-test-plan.json
-provision-failures.json
-test-results.json
 *.json.tmp
