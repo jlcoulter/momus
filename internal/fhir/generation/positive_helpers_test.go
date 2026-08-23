@@ -577,6 +577,110 @@ func TestElementAllowsMultiple(t *testing.T) {
 	}
 }
 
+func TestFindExtensionValueCoding(t *testing.T) {
+	if _, ok := findExtensionValueCoding(nil, "http://x"); ok {
+		t.Fatal("findExtensionValueCoding(nil) should be false")
+	}
+	if _, ok := findExtensionValueCoding(map[string]any{}, ""); ok {
+		t.Fatal("findExtensionValueCoding(empty url) should be false")
+	}
+	raw := map[string]any{"extension": []any{map[string]any{
+		"url":                  "http://example.org/ext",
+		"valueCodeableConcept": map[string]any{"coding": []any{map[string]any{"code": "c", "system": "s"}}},
+	}}}
+	c, ok := findExtensionValueCoding(raw, "http://example.org/ext")
+	if !ok || c.Code != "c" {
+		t.Fatalf("findExtensionValueCoding = %+v, %v", c, ok)
+	}
+	if _, ok := findExtensionValueCoding(raw, "http://other"); ok {
+		t.Fatal("findExtensionValueCoding(missing) should be false")
+	}
+}
+
+func TestIsFixedCodingAndMarkFixedCoding(t *testing.T) {
+	if isFixedCoding(nil) {
+		t.Fatal("isFixedCoding(nil) should be false")
+	}
+	// Marking a CodeableConcept map strips display/text and marks the coding.
+	m := map[string]any{"coding": []any{map[string]any{"code": "c", "system": "s", "display": "D"}}, "text": "T"}
+	markFixedCoding(m)
+	if _, ok := m["text"]; ok {
+		t.Fatal("markFixedCoding should strip CodeableConcept text")
+	}
+	coding := m["coding"].([]any)[0].(map[string]any)
+	if _, ok := coding["display"]; ok {
+		t.Fatal("markFixedCoding should strip coding display")
+	}
+	if !isFixedCoding(coding) {
+		t.Fatal("marked coding should be fixed")
+	}
+	// Marking a bare coding map.
+	bare := map[string]any{"code": "c"}
+	markFixedCoding(bare)
+	if !isFixedCoding(bare) {
+		t.Fatal("bare coding should be marked fixed")
+	}
+	// Array of codings.
+	arr := []any{map[string]any{"code": "a"}, map[string]any{"code": "b"}}
+	markFixedCoding(arr)
+	for _, el := range arr {
+		if !isFixedCoding(el.(map[string]any)) {
+			t.Fatal("array coding should be marked fixed")
+		}
+	}
+}
+
+func TestStripFixedCodingMarkers(t *testing.T) {
+	m := map[string]any{"coding": []any{map[string]any{fixedCodingKey: true}}, fixedCodingKey: true}
+	stripFixedCodingMarkers(m)
+	if _, ok := m[fixedCodingKey]; ok {
+		t.Fatal("top-level marker not stripped")
+	}
+	if _, ok := m["coding"].([]any)[0].(map[string]any)[fixedCodingKey]; ok {
+		t.Fatal("nested marker not stripped")
+	}
+}
+
+func TestNormaliseCodingDisplay(t *testing.T) {
+	reg := registry.New()
+	reg.AddCodeSystem(&model.CodeSystem{URL: "http://cs", Concepts: []model.CodeSystemConcept{{Code: "C", Display: "Canonical"}}})
+	// Map with a coding array.
+	m := map[string]any{"coding": []any{map[string]any{"system": "http://cs", "code": "C", "display": "C"}}}
+	normaliseCodingDisplay(m, reg)
+	if m["coding"].([]any)[0].(map[string]any)["display"] != "Canonical" {
+		t.Fatalf("normaliseCodingDisplay(map) = %v", m)
+	}
+	// Array of codings.
+	arr := []any{map[string]any{"system": "http://cs", "code": "C", "display": "C"}}
+	normaliseCodingDisplay(arr, reg)
+	if arr[0].(map[string]any)["display"] != "Canonical" {
+		t.Fatalf("normaliseCodingDisplay(array) = %v", arr)
+	}
+}
+
+func TestResolveBoundCodingPath(t *testing.T) {
+	// Nil def/binding/reg.
+	if _, ok := resolveBoundCoding(nil, nil); ok {
+		t.Fatal("resolveBoundCoding(nil) should be false")
+	}
+	// Empty value set URL.
+	if _, ok := resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{}}, nil); ok {
+		t.Fatal("resolveBoundCoding(no vs url) should be false")
+	}
+	// Unknown value set.
+	reg := registry.New()
+	if _, ok := resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{ValueSet: "http://missing"}}, reg); ok {
+		t.Fatal("resolveBoundCoding(unknown vs) should be false")
+	}
+	// Value set with a compose include referencing a code system.
+	reg.AddValueSet(&model.ValueSet{URL: "http://vs", ComposeIncludes: []model.ValueSetInclude{{System: "http://cs"}}})
+	reg.AddCodeSystem(&model.CodeSystem{URL: "http://cs", Concepts: []model.CodeSystemConcept{{Code: "k", Display: "Key"}}})
+	c, ok := resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{ValueSet: "http://vs"}}, reg)
+	if !ok || c.Code != "k" {
+		t.Fatalf("resolveBoundCoding(cs include) = %+v, %v", c, ok)
+	}
+}
+
 func TestReferenceTargetID(t *testing.T) {
 	if got := referenceTargetID("Patient/p1"); got != "p1" {
 		t.Fatalf("referenceTargetID = %q", got)
