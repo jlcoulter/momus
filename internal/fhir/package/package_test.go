@@ -639,6 +639,27 @@ func TestReadPackageDecodesStringSliceAndIntFields(t *testing.T) {
 	}
 }
 
+func TestDecodeConstraintsAndExamplesEdgeCases(t *testing.T) {
+	// A non-map constraint is skipped.
+	cs := decodeConstraints([]any{"not-a-map"})
+	if len(cs) != 0 {
+		t.Fatalf("decodeConstraints(non-map) = %v", cs)
+	}
+	cs = decodeConstraints([]any{map[string]any{"key": "k1", "severity": "error", "human": "h", "expression": "e", "source": "s"}})
+	if len(cs) != 1 || cs[0].Key != "k1" || cs[0].Severity != "error" || cs[0].Source != "s" {
+		t.Fatalf("decodeConstraints = %v", cs)
+	}
+	// A non-map example is skipped.
+	if got := decodeExamples([]any{"not-a-map"}); len(got) != 0 {
+		t.Fatalf("decodeExamples(non-map) = %v", got)
+	}
+	// An example map with a value key.
+	ex := decodeExamples([]any{map[string]any{"label": "General", "valueString": "hello"}})
+	if len(ex) != 1 || ex[0] != "hello" {
+		t.Fatalf("decodeExamples = %v", ex)
+	}
+}
+
 func TestDecodeElementDefinitionsFixedPatternMustSupport(t *testing.T) {
 	raw := []map[string]any{
 		{
