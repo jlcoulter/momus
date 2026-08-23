@@ -596,6 +596,36 @@ func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
 // code system is known it is applied to the coding, so a required value-set
 // binding (e.g. HealthcareService.serviceProvisionCode) is not shipped with a
 // system-less coding the server rejects.
+func TestSetSearchCodeValueDefaultBranches(t *testing.T) {
+	// An existing array whose first element has a coding array of maps.
+	body := map[string]any{"type": []any{map[string]any{"coding": []any{map[string]any{"code": "old", "system": "old"}}}}}
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	codings := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
+	first := codings[0].(map[string]any)
+	if first["code"] != "new" {
+		t.Fatalf("resetCodingForSearchValue code = %v", first["code"])
+	}
+	// An existing map with a coding array whose first element is not a map.
+	body = map[string]any{"type": map[string]any{"coding": []any{"not-a-map"}}}
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	codings = body["type"].(map[string]any)["coding"].([]any)
+	if codings[0].(map[string]any)["code"] != "new" {
+		t.Fatalf("non-map coding replaced = %v", codings[0])
+	}
+	// An existing string field.
+	body = map[string]any{"status": "old"}
+	setSearchCodeValue(body, "status", "new", "code", false, "")
+	if body["status"] != "new" {
+		t.Fatalf("string field = %v", body["status"])
+	}
+	// A non-map, non-string default (e.g. a number) is replaced with a coding map.
+	body = map[string]any{"status": float64(5)}
+	setSearchCodeValue(body, "status", "new", "Coding", false, "")
+	if body["status"].(map[string]any)["code"] != "new" {
+		t.Fatalf("default branch = %v", body["status"])
+	}
+}
+
 func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
 	body := map[string]any{}
 	// New CodeableConcept: system applied alongside the search code.
