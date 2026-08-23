@@ -474,3 +474,86 @@ func TestUpperCamelTypeName(t *testing.T) {
 		t.Fatalf("upperCamelTypeName(empty) = %q", got)
 	}
 }
+
+func TestHasRequiredSlices(t *testing.T) {
+	if hasRequiredSlices(nil) {
+		t.Fatal("hasRequiredSlices(nil) should be false")
+	}
+	node := &model.ElementNode{Slices: map[string]*model.SliceNode{
+		"s": {Definition: &model.ElementDefinition{Min: 1}},
+	}}
+	if !hasRequiredSlices(node) {
+		t.Fatal("hasRequiredSlices should detect required slice")
+	}
+	if hasRequiredSlices(&model.ElementNode{Slices: map[string]*model.SliceNode{"s": {Definition: &model.ElementDefinition{Min: 0}}}}) {
+		t.Fatal("optional slice should not be required")
+	}
+}
+
+func TestPrefersContractValueAndHasContractSignal(t *testing.T) {
+	// Nil.
+	if prefersContractValue(nil) || hasContractSignal(nil) {
+		t.Fatal("nil node should have no contract signal")
+	}
+	// Fixed value.
+	node := &model.ElementNode{Definition: &model.ElementDefinition{Fixed: "x"}}
+	if !hasContractSignal(node) || !prefersContractValue(node) {
+		t.Fatal("fixed value should signal contract")
+	}
+	// Binding.
+	node = &model.ElementNode{Definition: &model.ElementDefinition{Binding: &model.Binding{}}}
+	if !hasContractSignal(node) {
+		t.Fatal("binding should signal contract")
+	}
+	// Example.
+	node = &model.ElementNode{Definition: &model.ElementDefinition{Examples: []any{"x"}}}
+	if !hasContractSignal(node) {
+		t.Fatal("example should signal contract")
+	}
+	// No signal.
+	node = &model.ElementNode{Definition: &model.ElementDefinition{}}
+	if hasContractSignal(node) {
+		t.Fatal("empty definition should have no contract signal")
+	}
+}
+
+func TestHasProfileTypes(t *testing.T) {
+	if !hasProfileTypes(&model.ElementDefinition{Types: []model.ElementType{{Profile: []string{"http://x"}}}}) {
+		t.Fatal("profile types should be detected")
+	}
+	if hasProfileTypes(nil) || hasProfileTypes(&model.ElementDefinition{Types: []model.ElementType{{Code: "string"}}}) {
+		t.Fatal("no profile types should be false")
+	}
+}
+
+func TestPropertyNameForNode(t *testing.T) {
+	// Non-choice name.
+	node := &model.ElementNode{Name: "subject", Definition: &model.ElementDefinition{Types: []model.ElementType{{Code: "Reference"}}}}
+	if got := propertyNameForNode(node); got != "subject" {
+		t.Fatalf("propertyNameForNode = %q", got)
+	}
+	// Choice name with a type.
+	node = &model.ElementNode{Name: "value[x]", Definition: &model.ElementDefinition{Types: []model.ElementType{{Code: "Coding"}}}}
+	if got := propertyNameForNode(node); got != "valueCoding" {
+		t.Fatalf("propertyNameForNode(choice) = %q", got)
+	}
+	// Choice name with Element type falls back to slices.
+	node = &model.ElementNode{Name: "value[x]", Definition: &model.ElementDefinition{Types: []model.ElementType{{Code: "Element"}}}, Slices: map[string]*model.SliceNode{"v": {Definition: &model.ElementDefinition{Types: []model.ElementType{{Code: "string"}}, Min: 1}}}}
+	if got := propertyNameForNode(node); got != "valueString" {
+		t.Fatalf("propertyNameForNode(slice) = %q", got)
+	}
+	// Choice with no resolvable type.
+	node = &model.ElementNode{Name: "value[x]", Definition: &model.ElementDefinition{}}
+	if got := propertyNameForNode(node); got != "value" {
+		t.Fatalf("propertyNameForNode(no type) = %q", got)
+	}
+}
+
+func TestChoiceTypeFromSlices(t *testing.T) {
+	if got := choiceTypeFromSlices(map[string]*model.SliceNode{"a": {Definition: &model.ElementDefinition{Types: []model.ElementType{{Code: "string"}}, Min: 1}}}); got != "string" {
+		t.Fatalf("choiceTypeFromSlices = %q", got)
+	}
+	if got := choiceTypeFromSlices(map[string]*model.SliceNode{"a": {Definition: &model.ElementDefinition{Min: 1}}}); got != "" {
+		t.Fatalf("choiceTypeFromSlices(no type) = %q", got)
+	}
+}
