@@ -1,6 +1,7 @@
 package mock
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -153,5 +154,33 @@ func TestServerWithPort(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestPlanAwareServerHistory(t *testing.T) {
+	s := New(http.StatusOK, "", WithPlanAware())
+	addr, err := s.Start()
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer s.Close()
+
+	resp, err := http.Get("http://" + addr + "/Patient/p1/_history")
+	if err != nil {
+		t.Fatalf("GET history: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("history status = %d, want 200", resp.StatusCode)
+	}
+	var bundle struct {
+		ResourceType string `json:"resourceType"`
+		Type         string `json:"type"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&bundle); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if bundle.ResourceType != "Bundle" || bundle.Type != "searchset" {
+		t.Fatalf("history = %+v", bundle)
 	}
 }
