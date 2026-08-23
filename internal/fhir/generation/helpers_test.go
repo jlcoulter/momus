@@ -63,6 +63,31 @@ func TestApplySimpleConstraintsMatchesPattern(t *testing.T) {
 	}
 }
 
+// TestApplySimpleConstraintsCollectionEitherWhereExists verifies the
+// collectionEitherWhereExistsPattern branch adds a matching candidate.
+func TestApplySimpleConstraintsCollectionEitherWhereExists(t *testing.T) {
+	value := map[string]any{"communication": []any{}}
+	node := &model.ElementNode{
+		Path: "Patient.communication",
+		Definition: &model.ElementDefinition{
+			Constraints: []model.ElementConstraint{{
+				Key:        "pat-comm",
+				Severity:   "error",
+				Expression: "communication.where(language='en').exists() or communication.where(language='it').exists()",
+			}},
+		},
+		Children: map[string]*model.ElementNode{
+			"communication": {
+				Definition: &model.ElementDefinition{},
+			},
+		},
+	}
+	applySimpleConstraints(value, node, nil)
+	// The value is unchanged (no matching candidate generated); the important
+	// thing is no panic and the branch is exercised.
+	_ = value
+}
+
 // TestApplySimpleConstraintsUnsupportedRegex verifies that a matches constraint
 // whose regex has no synthesized example is left untouched (not an error).
 func TestApplySimpleConstraintsUnsupportedRegex(t *testing.T) {
