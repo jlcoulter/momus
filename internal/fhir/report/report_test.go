@@ -217,6 +217,25 @@ func TestWriteDirInvalidPathError(t *testing.T) {
 	}
 }
 
+func TestWriteCasesWithEmptyAndFailedCases(t *testing.T) {
+	dir := t.TempDir()
+	// Cases with an empty requirement id and a failed case exercise the
+	// case-file naming and failed-index paths.
+	cases := []runner.CaseResult{
+		{RequirementID: "", Expression: "status in [200]"},
+		{RequirementID: "r2", Passed: false, Trace: &ast.Trace{Domain: "datatype", Variant: "datatype-invalid"}},
+	}
+	if err := writeCases(dir, cases); err != nil {
+		t.Fatalf("writeCases: %v", err)
+	}
+	if err := writeFailedIndex(dir, cases); err != nil {
+		t.Fatalf("writeFailedIndex: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "cases", "case.json")); err != nil {
+		t.Fatalf("empty-id case file missing: %v", err)
+	}
+}
+
 func TestReportSubWriters(t *testing.T) {
 	dir := t.TempDir()
 	cases := sampleReport().Cases
