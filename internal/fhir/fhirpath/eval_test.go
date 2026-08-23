@@ -1,6 +1,7 @@
 package fhirpath
 
 import (
+	"context"
 	"testing"
 )
 
@@ -370,5 +371,209 @@ func TestEvalNumberLiteralComparison(t *testing.T) {
 	}
 	if got := res.value.(float64); got != 1 {
 		t.Fatalf("3 - 2 = %v, want 1", got)
+	}
+}
+
+func TestLexerStringEscapes(t *testing.T) {
+	toks, err := lex(`'a\nb\tc\\d\'e'`)
+	if err != nil {
+		t.Fatalf("lex: %v", err)
+	}
+	if len(toks) != 2 || toks[0].kind != tokString {
+		t.Fatalf("tokens = %v", toks)
+	}
+	want := "a\nb\tc\\d'e"
+	if toks[0].text != want {
+		t.Fatalf("string = %q, want %q", toks[0].text, want)
+	}
+}
+
+func TestLexerUnterminatedString(t *testing.T) {
+	if _, err := lex("'abc"); err == nil {
+		t.Fatal("expected error for unterminated string")
+	}
+}
+
+func TestLexerUnexpectedCharacter(t *testing.T) {
+	if _, err := lex("!"); err == nil {
+		t.Fatal("expected error for lone '!'")
+	}
+	if _, err := lex("#"); err == nil {
+		t.Fatal("expected error for unexpected character")
+	}
+}
+
+func TestLexerPercentVariable(t *testing.T) {
+	toks, err := lex("%context")
+	if err != nil {
+		t.Fatalf("lex: %v", err)
+	}
+	if toks[0].kind != tokPercent || toks[0].text != "context" {
+		t.Fatalf("percent token = %v", toks[0])
+	}
+}
+
+func TestEvalPercentContext(t *testing.T) {
+	res, err := evalStr(t, "%context.name.exists()", map[string]any{"name": []any{map[string]any{}}})
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if !resTruthyBool(res) {
+		t.Fatal("percent-context.name.exists() should be true")
+	}
+}
+
+func TestEvalBoolKnownUnknown(t *testing.T) {
+	b, known, err := EvalBool(context.Background(), "true", map[string]any{})
+	if err != nil {
+		t.Fatalf("EvalBool: %v", err)
+	}
+	if !b || !known {
+		t.Fatalf("EvalBool(true) = %v, %v", b, known)
+	}
+}
+
+func TestAsResult(t *testing.T) {
+	if got := asResult("x"); got.value != "x" {
+		t.Fatalf("asResult = %v", got)
+	}
+	var nilResult Result
+	if nilResult.value != nil {
+		t.Fatalf("zero Result = %v", nilResult.value)
+	}
+}
+
+func TestEvalUnaryNot(t *testing.T) {
+	res := evalUnary("not", asResult(true))
+	if resTruthyBool(res) {
+		t.Fatal("not(true) should be false")
+	}
+	// Unknown propagates.
+	u := evalUnary("not", unknownResult())
+	if _, known := resTruthy(u); known {
+		t.Fatal("not(unknown) should be unknown")
+	}
+	// Unknown operator.
+	u = evalUnary("weird", asResult(true))
+	if _, known := resTruthy(u); known {
+		t.Fatal("unknown unary operator should be unknown")
+	}
+}
+
+func TestEvalFilterFirstLastWhereAnyAll(t *testing.T) {
+	ctx := map[string]any{"items": []any{1, 2, 3}}
+	// first().
+	res, err := evalStr(t, "items.first()", ctx)
+	if err != nil || res.value != 1 {
+		t.Fatalf("items.first() = %v, err=%v", res.value, err)
+	}
+	// last().
+	res, err = evalStr(t, "items.last()", ctx)
+	if err != nil || res.value != 3 {
+		t.Fatalf("items.last() = %v, err=%v", res.value, err)
+	}
+	// where() with a matching predicate on maps.
+	mctx := map[string]any{"items": []any{map[string]any{"v": 1}, map[string]any{"v": 2}, map[string]any{"v": 3}}}
+	res, err = evalStr(t, "items.where(v > 1).count()", mctx)
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if got := res.value.(float64); got != 2 {
+		t.Fatalf("items.where(v>1).count() = %v, want 2", got)
+	}
+	// all() true when every item satisfies the predicate.
+	res, err = evalStr(t, "items.all(v > 0)", mctx)
+	if err != nil || !resTruthyBool(res) {
+		t.Fatalf("items.all(v>0) = %v, err=%v", res.value, err)
+	}
+	// any() true when at least one item satisfies a numeric comparison.
+	res, err = evalStr(t, "items.any(v > 1)", mctx)
+	if err != nil || !resTruthyBool(res) {
+		t.Fatalf("items.any(v>1) = %v, err=%v", res.value, err)
+	}
+	// exists() filter on empty collection.
+	res, err = evalStr(t, "missing.exists()", map[string]any{})
+	if err != nil || resTruthyBool(res) {
+		t.Fatalf("missing.exists() = %v, err=%v", res.value, err)
+	}
+}
+
+func TestEvalFunctionExistsEmptyNotCount(t *testing.T) {
+	// exists() on present.
+	res, err := evalStr(t, "name.exists()", map[string]any{"name": []any{map[string]any{}}})
+	if err != nil || !resTruthyBool(res) {
+		t.Fatalf("exists() = %v, err=%v", res.value, err)
+	}
+	// count() as a bare function.
+	res, err = evalStr(t, "count()", map[string]any{"a": 1})
+	if err != nil {
+		t.Fatalf("count() err: %v", err)
+	}
+	// not() top-level function.
+	res, err = evalStr(t, "not(active.exists())", map[string]any{})
+	if err != nil || !resTruthyBool(res) {
+		t.Fatalf("not() = %v, err=%v", res.value, err)
+	}
+	// toString().
+	res, err = evalStr(t, "toString()", map[string]any{"x": 1})
+	if err != nil {
+		t.Fatalf("toString: %v", err)
+	}
+	// length() on non-string returns 0.
+	res, err = evalStr(t, "length()", map[string]any{"x": 1})
+	if err != nil || res.value.(float64) != 0 {
+		t.Fatalf("length(non-string) = %v, err=%v", res.value, err)
+	}
+	// distinct on a single value.
+	res, err = evalStr(t, "distinct()", map[string]any{"x": []any{"a", "a"}})
+	if err != nil {
+		t.Fatalf("distinct: %v", err)
+	}
+}
+
+func TestEvalNumericOpNonNumeric(t *testing.T) {
+	res := numericOp("x", 1, func(a, b float64) float64 { return a + b })
+	if _, known := resTruthy(res); known {
+		t.Fatal("numericOp on non-numeric should be unknown")
+	}
+}
+
+func TestToFloat(t *testing.T) {
+	if _, ok := toFloat(float64(1)); !ok {
+		t.Fatal("toFloat(float64) should succeed")
+	}
+	if _, ok := toFloat(1); !ok {
+		t.Fatal("toFloat(int) should succeed")
+	}
+	if _, ok := toFloat(int64(1)); !ok {
+		t.Fatal("toFloat(int64) should succeed")
+	}
+	if _, ok := toFloat("x"); ok {
+		t.Fatal("toFloat(string) should fail")
+	}
+}
+
+func TestEqualValues(t *testing.T) {
+	if !equalValues("a", "a") || equalValues("a", "b") {
+		t.Fatal("equalValues(string)")
+	}
+	if !equalValues(true, true) || equalValues(true, false) {
+		t.Fatal("equalValues(bool)")
+	}
+	if equalValues(1, "1") {
+		t.Fatal("equalValues should reject mixed types")
+	}
+}
+
+func TestCompileMatchesCache(t *testing.T) {
+	re, err := compileMatches("^a+$")
+	if err != nil {
+		t.Fatalf("compileMatches: %v", err)
+	}
+	if !re.MatchString("aaa") {
+		t.Fatal("compiled regex should match")
+	}
+	if _, err := compileMatches("["); err == nil {
+		t.Fatal("compileMatches(invalid) should error")
 	}
 }
