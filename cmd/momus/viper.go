@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/jlcoulter/momus/internal/home"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -70,7 +71,7 @@ func configureViper(cfg *config) error {
 	case fileExists("momus.toml"):
 		viper.SetConfigFile("momus.toml")
 	default:
-		homeConfig := filepath.Join(userHomeDir(), userConfigPath)
+		homeConfig := home.ConfigPath()
 		if err := ensureHomeConfig(homeConfig); err != nil {
 			return err
 		}
@@ -118,7 +119,7 @@ const homeConfigTemplate = `# Momus user configuration.
 # Output
 # output_path = ""
 # html_report = ""
-# output_dir = ".momus/output"
+# output_dir = "" # default: $HOME/.momus/output (versioned on replacement)
 
 # Derivation scoping
 # include_resource_types = []

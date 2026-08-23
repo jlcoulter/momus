@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jlcoulter/momus/internal/home"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +24,7 @@ func newExplainCmd(cfg *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := cfg.OutputDir
 			if dir == "" {
-				dir = ".momus/output"
+				dir = home.OutputDir()
 			}
 			id := args[0]
 			file := filepath.Join(dir, "cases", caseFileNameForID(id))
@@ -48,7 +49,7 @@ func newExplainCmd(cfg *config) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&cfg.OutputDir, "dir", ".momus/output", "output directory to read cases from")
+	cmd.Flags().StringVar(&cfg.OutputDir, "dir", "", "output directory to read cases from (default: $HOME/.momus/output)")
 	return cmd
 }
 

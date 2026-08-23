@@ -46,7 +46,7 @@ func newRunCmd(cfg *config) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&cfg.CoveragePlanPath, "coverage-plan", "", "path to a coverage plan JSON (from 'coverage derive') used to evaluate contractual coverage")
 	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "write test result report JSON to a file")
-	cmd.Flags().StringVar(&cfg.OutputDir, "output-dir", ".momus/output", "write the navigable output directory to this path (use '-' to disable)")
+	cmd.Flags().StringVar(&cfg.OutputDir, "output-dir", "", "write the navigable output directory to this path (default: $HOME/.momus/output; use '-' to disable)")
 	cmd.Flags().StringVar(&cfg.HtmlReport, "html", "", "write an HTML coverage report with drill-down to a file")
 	cmd.Flags().BoolVar(&cfg.FailOnUncovered, "fail-on-uncovered", false, "return non-zero exit code when contractual coverage has uncovered obligations")
 	cmd.Flags().StringVar(&cfg.BaseURL, "base-url", "", "target FHIR base URL for relative request URLs (the AST usually carries absolute URLs)")

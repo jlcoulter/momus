@@ -87,6 +87,7 @@ func TestTestFhirCmdMockEndToEnd(t *testing.T) {
 	cfg.Mock = true
 	cfg.Exhaustive = true
 	cfg.OutputPath = outPath
+	cfg.OutputDir = filepath.Join(t.TempDir(), "output")
 	cmd.SetContext(context.Background())
 
 	if err := cmd.RunE(cmd, []string{pkgPath}); err != nil {

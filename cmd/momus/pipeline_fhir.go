@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jlcoulter/momus/internal/home"
+
 	testast "github.com/jlcoulter/momus/internal/core/ast"
 	testcoverage "github.com/jlcoulter/momus/internal/core/coverage"
 	coregeneration "github.com/jlcoulter/momus/internal/core/generation"
@@ -34,7 +36,7 @@ func resolvePackageGraph(cfg *config, rootPath string) (*fhirpackage.ResolvedGra
 	}
 	cacheDir := cfg.DownloadDir
 	if cacheDir == "" {
-		cacheDir = filepath.Join(searchDir, ".momus", "packages")
+		cacheDir = home.PackageCacheDir()
 	}
 
 	graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
