@@ -316,3 +316,63 @@ func TestIDDropsEmptyParts(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestDeriveSearchConstraintsEdgeCases(t *testing.T) {
+	// Nil and empty-code params produce no constraints.
+	if got := deriveSearchConstraints(nil); len(got) != 0 {
+		t.Fatalf("deriveSearchConstraints(nil) = %v", got)
+	}
+	if got := deriveSearchConstraints(&model.SearchParameter{Code: "  "}); len(got) != 0 {
+		t.Fatalf("deriveSearchConstraints(empty code) = %v", got)
+	}
+	// Empty base is skipped.
+	if got := deriveSearchConstraints(&model.SearchParameter{URL: "http://x", Code: "code", Base: []string{"Observation", ""}}); len(got) != 1 {
+		t.Fatalf("deriveSearchConstraints(empty base) = %v", got)
+	}
+}
+
+func TestDeriveCapabilityConstraintsEdgeCases(t *testing.T) {
+	if got := deriveCapabilityConstraints(nil); len(got) != 0 {
+		t.Fatalf("deriveCapabilityConstraints(nil) = %v", got)
+	}
+	// Non-server mode is skipped.
+	cs := &model.CapabilityStatement{URL: "http://example.org/CapabilityStatement/client", Rest: []model.CapabilityStatementRest{{
+		Mode: "client",
+		Resource: []model.CapabilityStatementRestResource{{
+			Type:        "Patient",
+			Interaction: []model.CapabilityStatementInteraction{{Code: "read"}},
+		}},
+	}}}
+	if got := deriveCapabilityConstraints(cs); len(got) != 0 {
+		t.Fatalf("deriveCapabilityConstraints(client) = %v", got)
+	}
+	// Empty resource type and empty interaction code are skipped.
+	cs = &model.CapabilityStatement{URL: "http://example.org/CapabilityStatement/server", Rest: []model.CapabilityStatementRest{{
+		Mode: "server",
+		Resource: []model.CapabilityStatementRestResource{{
+			Type:        " ",
+			Interaction: []model.CapabilityStatementInteraction{{Code: ""}, {Code: "create"}},
+		}},
+	}}}
+	got := deriveCapabilityConstraints(cs)
+	// Only the create interaction with a blank type is produced? The blank type
+	// is skipped entirely.
+	if len(got) != 0 {
+		t.Fatalf("deriveCapabilityConstraints(blank type) = %v", got)
+	}
+	// A server-mode statement with a "$" operation name strips the prefix.
+	cs = &model.CapabilityStatement{URL: "http://example.org/CapabilityStatement/server", Rest: []model.CapabilityStatementRest{{
+		Mode: "server",
+		Resource: []model.CapabilityStatementRestResource{{
+			Type: "Observation",
+			Operation: []model.CapabilityStatementOperation{
+				{Name: "$everything"},
+				{Name: "  "},
+			},
+		}},
+	}}}
+	got = deriveCapabilityConstraints(cs)
+	if len(got) != 1 || got[0].OperationName != "everything" {
+		t.Fatalf("deriveCapabilityConstraints(operation) = %v", got)
+	}
+}
