@@ -736,6 +736,40 @@ func TestIdentifierMatchersNonMapCoding(t *testing.T) {
 	}
 }
 
+func TestEnsureRecordedSexOrGenderValue(t *testing.T) {
+	// No extension array -> no-op.
+	ensureRecordedSexOrGenderValue(map[string]any{})
+	// An extension with the recorded URL and an existing value slice -> no change.
+	existing := []any{map[string]any{"url": "value", "valueCodeableConcept": map[string]any{}}}
+	body := map[string]any{"extension": []any{map[string]any{"url": recordedSexOrGenderExtensionURL, "extension": existing}}}
+	ensureRecordedSexOrGenderValue(body)
+	if len(body["extension"].([]any)[0].(map[string]any)["extension"].([]any)) != 1 {
+		t.Fatal("existing value slice should not be duplicated")
+	}
+	// A non-matching extension URL is skipped.
+	ensureRecordedSexOrGenderValue(map[string]any{"extension": []any{map[string]any{"url": "http://other"}}})
+}
+
+func TestNormalizePractitionerFieldsMissingName(t *testing.T) {
+	// Missing name -> both official and usual slices added.
+	body := map[string]any{}
+	normalizePractitionerFields(body)
+	if body["active"] != true {
+		t.Fatal("active should be true")
+	}
+	names := body["name"].([]any)
+	if len(names) != 2 {
+		t.Fatalf("name count = %d, want 2", len(names))
+	}
+	// Names already present but missing uses -> appended.
+	body = map[string]any{"name": []any{map[string]any{"family": "X"}}}
+	normalizePractitionerFields(body)
+	names = body["name"].([]any)
+	if len(names) != 3 {
+		t.Fatalf("name count = %d, want 3", len(names))
+	}
+}
+
 func TestIsEmptyExtensionBranches(t *testing.T) {
 	// Extension with value.
 	if isEmptyExtension(map[string]any{"url": "http://x", "valueString": "v"}) {
