@@ -184,17 +184,6 @@ func bindAllEnv() error {
 	return nil
 }
 
-func userHomeDir() string {
-	if h := os.Getenv("HOME"); h != "" {
-		return h
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return home
-}
-
 // captureFlagValues records the current cfg field value for every field whose
 // CLI flag was explicitly set on the command line. These values must survive
 // viper.Unmarshal so that CLI flags take precedence over the config file.

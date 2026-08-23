@@ -48,17 +48,6 @@ func (s *Store) Delete(resourceType, id string) {
 	delete(s.items[resourceType], id)
 }
 
-// List returns every stored body for a resource type.
-func (s *Store) List(resourceType string) [][]byte {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([][]byte, 0, len(s.items[resourceType]))
-	for _, body := range s.items[resourceType] {
-		out = append(out, body)
-	}
-	return out
-}
-
 // Search returns stored resources of a type filtered by query params, with
 // optional _sort and _count. Each element of params is "name=value"; keys
 // starting with "_" other than _sort/_count are treated as universal params and
@@ -170,7 +159,8 @@ func isDatePrefix(want string) bool {
 		_ = i
 	}
 	// Require at least a 4-digit year.
-	return len(want) >= 4 && isDigit(want[0]) && isDigit(want[1]) && isDigit(want[2]) && isDigit(want[3])
+	return len(want) >= 4 && isDigit(want[0]) && isDigit(want[1]) && isDigit(want[2]) &&
+		isDigit(want[3])
 }
 
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }

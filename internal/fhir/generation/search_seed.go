@@ -19,7 +19,12 @@ import (
 // search parameter can be matched with a valid value (string/_id, or a token on
 // a code field) get a matching seed; the remaining search types are status-only
 // and need no seed data.
-func appendSearchSeedResources(ds *model.Dataset, req coverage.CoverageRequirement, options BuildOptions, byResource map[string][]coverage.CoverageRequirement) {
+func appendSearchSeedResources(
+	ds *model.Dataset,
+	req coverage.CoverageRequirement,
+	options BuildOptions,
+	byResource map[string][]coverage.CoverageRequirement,
+) {
 	var count int
 	switch req.Variant {
 	case coverage.CoverageVariantSearchValid, coverage.CoverageVariantSearchCombination:
@@ -40,7 +45,12 @@ func appendSearchSeedResources(ds *model.Dataset, req coverage.CoverageRequireme
 // buildSearchSeedInstances generates up to count matching seed resources for a
 // search-accept requirement. It returns nil when the search cannot be matched
 // with a valid value (so no seed is added and the test remains status-only).
-func buildSearchSeedInstances(req coverage.CoverageRequirement, count int, options BuildOptions, byResource map[string][]coverage.CoverageRequirement) []*model.ResourceInstance {
+func buildSearchSeedInstances(
+	req coverage.CoverageRequirement,
+	count int,
+	options BuildOptions,
+	byResource map[string][]coverage.CoverageRequirement,
+) []*model.ResourceInstance {
 	if options.Registry == nil || count < 1 {
 		return nil
 	}
@@ -84,7 +94,11 @@ func buildSearchSeedInstances(req coverage.CoverageRequirement, count int, optio
 	if len(resourceProfiles) > 0 {
 		setupProfileURL = resourceProfiles[0]
 	}
-	setupProfiles := coregen.OrderedProfilesForResource(req.ResourceType, setupProfileURL, options.PreferredProfileURLsByResource)
+	setupProfiles := coregen.OrderedProfilesForResource(
+		req.ResourceType,
+		setupProfileURL,
+		options.PreferredProfileURLsByResource,
+	)
 	setupPrimaryProfile := coregen.FirstProfileURL(setupProfiles)
 
 	out := make([]*model.ResourceInstance, 0, count)
@@ -95,7 +109,15 @@ func buildSearchSeedInstances(req coverage.CoverageRequirement, count int, optio
 		if !idSearch {
 			localID = searchSeedID(req, i)
 		}
-		body := buildSetupBody(req.ResourceType, localID, setupProfiles, setupPrimaryProfile, nil, options.Registry, options.Exhaustive)
+		body := buildSetupBody(
+			req.ResourceType,
+			localID,
+			setupProfiles,
+			setupPrimaryProfile,
+			nil,
+			options.Registry,
+			options.Exhaustive,
+		)
 		matched := true
 		for _, sp := range params {
 			if !applySearchMatch(body, req.ResourceType, sp, values[sp.Code], options.Registry) {
@@ -147,7 +169,13 @@ func searchSeedID(req coverage.CoverageRequirement, index int) string {
 
 // applySearchMatch sets the search value on the element(s) the search parameter
 // points to in body, returning false when the value cannot be placed validly.
-func applySearchMatch(body map[string]any, resourceType string, sp *model.SearchParameter, value string, reg *registry.Registry) bool {
+func applySearchMatch(
+	body map[string]any,
+	resourceType string,
+	sp *model.SearchParameter,
+	value string,
+	reg *registry.Registry,
+) bool {
 	if sp.Code == "_id" {
 		body["id"] = value
 		return true
@@ -387,7 +415,8 @@ func isFunctionName(name string) bool {
 		return false
 	}
 	for i, r := range name {
-		if r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (i > 0 && r >= '0' && r <= '9') {
+		if r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(i > 0 && r >= '0' && r <= '9') {
 			continue
 		}
 		return false
@@ -400,7 +429,10 @@ func isFunctionName(name string) bool {
 // the resource's resolved profile (with the choice "[x]" form), then falls back
 // to walking nested datatypes (e.g. Provenance.signature.type resolves through
 // the Signature datatype's own definition).
-func searchLeafType(resourceType, elementPath string, reg *registry.Registry) (typeCode string, repeatable bool) {
+func searchLeafType(
+	resourceType, elementPath string,
+	reg *registry.Registry,
+) (typeCode string, repeatable bool) {
 	profiles := reg.ProfilesForResource(resourceType)
 	for _, profile := range profiles {
 		resolved, err := reg.ResolveProfile(profile.URL)
@@ -421,7 +453,12 @@ func searchLeafType(resourceType, elementPath string, reg *registry.Registry) (t
 		}
 		// Nested datatype path: walk segments, resolving each container's type,
 		// then look up the leaf in the datatype's own definition.
-		if tc, rep, found := resolveNestedLeafType(resolved, resourceType, elementPath, reg); found {
+		if tc, rep, found := resolveNestedLeafType(
+			resolved,
+			resourceType,
+			elementPath,
+			reg,
+		); found {
 			return tc, rep
 		}
 	}
@@ -430,14 +467,19 @@ func searchLeafType(resourceType, elementPath string, reg *registry.Registry) (t
 
 // resolveNestedLeafType walks a dotted element path whose container is a complex
 // datatype, resolving the leaf's type from the datatype's own StructureDefinition.
-func resolveNestedLeafType(resolved *model.ResolvedProfile, resourceType, elementPath string, reg *registry.Registry) (string, bool, bool) {
+func resolveNestedLeafType(
+	resolved *model.ResolvedProfile,
+	resourceType, elementPath string,
+	reg *registry.Registry,
+) (string, bool, bool) {
 	segments := strings.Split(elementPath, ".")
 	if len(segments) < 2 {
 		return "", false, false
 	}
 	// Resolve the top-level container (the first segment) to its datatype.
 	container, ok := resolved.Elements[resourceType+"."+segments[0]]
-	if !ok || container == nil || container.Definition == nil || len(container.Definition.Types) == 0 {
+	if !ok || container == nil || container.Definition == nil ||
+		len(container.Definition.Types) == 0 {
 		return "", false, false
 	}
 	containerType := container.Definition.Types[0].Code
@@ -462,7 +504,9 @@ func resolveNestedLeafType(resolved *model.ResolvedProfile, resourceType, elemen
 		// Descend into the next datatype if it is complex.
 		if len(node.Definition.Types) > 0 {
 			containerType = node.Definition.Types[0].Code
-			sub, err = reg.ResolveProfile("http://hl7.org/fhir/StructureDefinition/" + containerType)
+			sub, err = reg.ResolveProfile(
+				"http://hl7.org/fhir/StructureDefinition/" + containerType,
+			)
 			if err != nil || sub == nil {
 				return "", false, false
 			}
@@ -493,7 +537,12 @@ func setPathLeaf(body map[string]any, path string, value string) {
 // (e.g. PractitionerRole.period) receives its date on the `start` member; a
 // choice element (e.g. Provenance.occurred[x]) receives it on the concrete
 // dateTime choice member so the value lands on the serialised member.
-func setDateLeaf(body map[string]any, path, value string, reg *registry.Registry, resourceType string) {
+func setDateLeaf(
+	body map[string]any,
+	path, value string,
+	reg *registry.Registry,
+	resourceType string,
+) {
 	segments := strings.Split(path, ".")
 	leaf := segments[len(segments)-1]
 	// If the leaf is a choice element (e.g. "occurred" typed Period|dateTime),
@@ -501,7 +550,8 @@ func setDateLeaf(body map[string]any, path, value string, reg *registry.Registry
 	if def, ok := searchElementDefinition(resourceType, path, reg); ok && def != nil {
 		hasPeriod := false
 		for _, et := range def.Types {
-			if et.Code == "dateTime" || et.Code == "date" || et.Code == "instant" || et.Code == "time" {
+			if et.Code == "dateTime" || et.Code == "date" || et.Code == "instant" ||
+				et.Code == "time" {
 				leaf = leaf + upperCamelTypeName(et.Code)
 				hasPeriod = false
 				break
@@ -615,7 +665,14 @@ func boundCodingSystem(resourceType, elementPath string, reg *registry.Registry)
 // illegal property such as `coding` on a Coding, and it keeps repeatable
 // elements as arrays. system (when non-empty) is applied to the coding so a
 // required-bound element keeps a valid system/code pair.
-func setSearchCodeValue(body map[string]any, path string, value string, typeCode string, repeatable bool, system string) {
+func setSearchCodeValue(
+	body map[string]any,
+	path string,
+	value string,
+	typeCode string,
+	repeatable bool,
+	system string,
+) {
 	cur, field := containerForPath(body, path)
 	if typeCode == "code" {
 		// A primitive code holds scalar strings. A repeatable code is an array of
@@ -722,7 +779,12 @@ func codingForSearchValue(value, system string) map[string]any {
 // value overwriting only the code once left a stale system+display from a
 // different concept (connectionType "dicom-wado-rs" with the smd-interfaces
 // system), which servers reject as an unknown code.
-func resetCodingForSearchValue(coding map[string]any, owner map[string]any, value string, system string) {
+func resetCodingForSearchValue(
+	coding map[string]any,
+	owner map[string]any,
+	value string,
+	system string,
+) {
 	coding["code"] = value
 	delete(coding, "display")
 	if system != "" {
@@ -732,37 +794,6 @@ func resetCodingForSearchValue(coding map[string]any, owner map[string]any, valu
 	}
 	if owner != nil {
 		delete(owner, "text")
-	}
-}
-
-// setFieldLeaf sets a string sub-field on the first element of a (possibly
-// array) field, creating it if needed.
-func setFieldLeaf(body map[string]any, path, leaf, value string) {
-	cur, field := containerForPath(body, path)
-	raw, ok := cur[field]
-	if !ok {
-		cur[field] = []any{map[string]any{leaf: value}}
-		return
-	}
-	if arr, ok := raw.([]any); ok {
-		if len(arr) == 0 {
-			cur[field] = []any{map[string]any{leaf: value}}
-			return
-		}
-		first, ok := arr[0].(map[string]any)
-		if !ok {
-			arr[0] = map[string]any{leaf: value}
-			return
-		}
-		if _, exists := first[leaf]; !exists {
-			first[leaf] = value
-		}
-		return
-	}
-	if m, ok := raw.(map[string]any); ok {
-		if _, exists := m[leaf]; !exists {
-			m[leaf] = value
-		}
 	}
 }
 
@@ -872,7 +903,11 @@ func firstNumericPart(value string) any {
 // applyCompositeMatch places each component of a composite search value
 // "part1$part2" on the corresponding element of the composite expression
 // "pathA | pathB".
-func applyCompositeMatch(body map[string]any, expression, resourceType, value string, reg *registry.Registry) bool {
+func applyCompositeMatch(
+	body map[string]any,
+	expression, resourceType, value string,
+	reg *registry.Registry,
+) bool {
 	parts := strings.Split(value, "$")
 	if len(parts) < 2 {
 		return false
