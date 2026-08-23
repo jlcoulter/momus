@@ -170,6 +170,45 @@ func TestValidateFixedMatch(t *testing.T) {
 	}
 }
 
+func TestValidatePatternMatchAndMismatch(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/pattern-profile",
+		Type: "Observation",
+		Elements: []model.ElementDefinition{
+			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation.code", Min: 0, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}, Pattern: map[string]any{"coding": []any{map[string]any{"system": "http://example.org/sys"}}}},
+		},
+	})
+	v := New(r)
+	// A value that contains the pattern's fields passes.
+	res := map[string]any{"code": map[string]any{"coding": []any{map[string]any{"system": "http://example.org/sys", "code": "x"}}}}
+	issues, err := v.Validate(context.Background(), "http://example.org/StructureDefinition/pattern-profile", res)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	for _, iss := range issues {
+		if iss.Kind == "pattern" {
+			t.Fatalf("unexpected pattern issue: %+v", iss)
+		}
+	}
+	// A value missing the pattern's system fails.
+	res = map[string]any{"code": map[string]any{"coding": []any{map[string]any{"code": "x"}}}}
+	issues, err = v.Validate(context.Background(), "http://example.org/StructureDefinition/pattern-profile", res)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	var found bool
+	for _, iss := range issues {
+		if iss.Kind == "pattern" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected pattern issue, got %+v", issues)
+	}
+}
+
 func TestValidateMaxCardinalityExceeded(t *testing.T) {
 	r := buildPatientRegistry()
 	// birthDate is Max "1"; providing two values exceeds the bound.
