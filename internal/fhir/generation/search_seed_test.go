@@ -615,6 +615,29 @@ func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
 // code system is known it is applied to the coding, so a required value-set
 // binding (e.g. HealthcareService.serviceProvisionCode) is not shipped with a
 // system-less coding the server rejects.
+func TestSetSearchCodeValueCodingArrayNonMap(t *testing.T) {
+	// A map with a coding array whose first element is not a map.
+	body := map[string]any{"type": map[string]any{"coding": []any{"not-a-map"}}}
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	codings := body["type"].(map[string]any)["coding"].([]any)
+	if codings[0].(map[string]any)["code"] != "new" {
+		t.Fatalf("non-map coding array = %v", codings[0])
+	}
+	// An array whose first element is not a map.
+	body = map[string]any{"type": []any{"not-a-map"}}
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	if body["type"].([]any)[0].(map[string]any)["code"] != "new" {
+		t.Fatalf("non-map array element = %v", body["type"])
+	}
+	// An array of codings where the first coding is not a map.
+	body = map[string]any{"type": []any{map[string]any{"coding": []any{"not-a-map"}}}}
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	inner := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
+	if inner[0].(map[string]any)["code"] != "new" {
+		t.Fatalf("array non-map coding = %v", inner[0])
+	}
+}
+
 func TestSetSearchCodeValueDefaultBranches(t *testing.T) {
 	// An existing array whose first element has a coding array of maps.
 	body := map[string]any{"type": []any{map[string]any{"coding": []any{map[string]any{"code": "old", "system": "old"}}}}}
