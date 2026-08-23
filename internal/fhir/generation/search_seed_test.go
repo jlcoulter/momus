@@ -421,6 +421,25 @@ func TestResolveNestedLeafType(t *testing.T) {
 	}
 }
 
+func TestSearchElementPath(t *testing.T) {
+	// Empty.
+	if got := searchElementPath("", "Patient"); got != "" {
+		t.Fatalf("searchElementPath(empty) = %q", got)
+	}
+	// Plain path.
+	if got := searchElementPath("Patient.name", "Patient"); got != "name" {
+		t.Fatalf("searchElementPath(plain) = %q", got)
+	}
+	// Union prefers the resource-type branch.
+	if got := searchElementPath("Patient.gender | Practitioner.gender", "Patient"); got != "gender" {
+		t.Fatalf("searchElementPath(union) = %q", got)
+	}
+	// A bare function call is stripped to the identifier.
+	if got := searchElementPath("something()", "Patient"); got != "something" {
+		t.Fatalf("searchElementPath(no path) = %q", got)
+	}
+}
+
 func TestSearchLeafType(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
