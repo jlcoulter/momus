@@ -1,6 +1,7 @@
 package generation
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/core/coverage"
@@ -184,6 +185,34 @@ func TestSearchValidNonMatchValue(t *testing.T) {
 		if got := searchValidNonMatchValue(c.paramType); got != c.want {
 			t.Errorf("searchValidNonMatchValue(%q) = %q, want %q", c.paramType, got, c.want)
 		}
+	}
+}
+
+func TestSearchAcceptValueMoreBranches(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.generalPractitioner", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
+		{Path: "Patient.photo", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Attachment"}}},
+	}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: "*"}}})
+	reg.AddSearchParameter(&model.SearchParameter{Code: "general-practitioner", Base: []string{"Patient"}, Type: "reference", Expression: "Patient.generalPractitioner"})
+	reg.AddSearchParameter(&model.SearchParameter{Code: "photo", Base: []string{"Patient"}, Type: "reference", Expression: "Patient.photo"})
+
+	b := NewBuilder(reg, false)
+	// A reference search returns Type/id for a resolvable target type.
+	req := coverage.CoverageRequirement{ID: "r", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchValid, SearchCode: "general-practitioner"}
+	if got := b.SearchAcceptValue(req, "general-practitioner"); !strings.HasPrefix(got, "Practitioner/") {
+		t.Fatalf("SearchAcceptValue(reference) = %q", got)
+	}
+	// A reference whose target cannot be resolved falls back.
+	if got := b.SearchAcceptValue(req, "photo"); got != "momus-search" {
+		t.Fatalf("SearchAcceptValue(no target) = %q", got)
+	}
+	// A search parameter with an empty element path.
+	reg.AddSearchParameter(&model.SearchParameter{Code: "bad", Base: []string{"Patient"}, Type: "token", Expression: ""})
+	if got := b.SearchAcceptValue(req, "bad"); got != "momus-search" {
+		t.Fatalf("SearchAcceptValue(bad path) = %q", got)
 	}
 }
 
