@@ -144,6 +144,34 @@ func TestLoadPlanRoutesMissingFile(t *testing.T) {
 	}
 }
 
+func TestLoadPlanRoutesErrorBranches(t *testing.T) {
+	dir := t.TempDir()
+	// Invalid JSON.
+	bad := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(bad, []byte("not-json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadPlanRoutes(bad); err == nil {
+		t.Fatal("expected error for invalid plan JSON")
+	}
+	// Valid JSON with no root.
+	noroot := filepath.Join(dir, "noroot.json")
+	if err := os.WriteFile(noroot, []byte(`{"version":"v1"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadPlanRoutes(noroot); err == nil {
+		t.Fatal("expected error for plan with no root")
+	}
+	// A root that fails to decode.
+	badroot := filepath.Join(dir, "badroot.json")
+	if err := os.WriteFile(badroot, []byte(`{"version":"v1","root":{"type":"bogus"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadPlanRoutes(badroot); err == nil {
+		t.Fatal("expected error for undecodable plan root")
+	}
+}
+
 func TestPlanAwareServerCRUD(t *testing.T) {
 	path := writePlan(t, "PUT", "http://example.org/Patient/reject-me")
 	s := New(http.StatusOK, "", WithPlan(path))
