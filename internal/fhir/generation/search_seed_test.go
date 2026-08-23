@@ -668,6 +668,26 @@ func TestSetSearchCodeValueDefaultBranches(t *testing.T) {
 	}
 }
 
+func TestApplyCompositeMatchTypeBranches(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/observation", Type: "Observation", Elements: []model.ElementDefinition{
+		{Path: "Observation", Min: 0, Max: "*"},
+		{Path: "Observation.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+		{Path: "Observation.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Quantity"}}},
+	}})
+	// Boolean component.
+	body := map[string]any{}
+	if !applyCompositeMatch(body, "active | value", "Observation", "true$5.4", reg) {
+		t.Fatal("applyCompositeMatch(boolean+quantity) returned false")
+	}
+	if body["active"] != true {
+		t.Fatalf("active = %v, want true", body["active"])
+	}
+	if _, ok := body["value"]; !ok {
+		t.Fatal("value not set")
+	}
+}
+
 func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
 	body := map[string]any{}
 	// New CodeableConcept: system applied alongside the search code.
