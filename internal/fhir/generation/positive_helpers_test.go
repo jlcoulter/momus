@@ -590,6 +590,14 @@ func TestChoiceTypeFromSlices(t *testing.T) {
 	if got := choiceTypeFromSlices(map[string]*model.SliceNode{"a": {Definition: &model.ElementDefinition{Min: 1}}}); got != "" {
 		t.Fatalf("choiceTypeFromSlices(no type) = %q", got)
 	}
+	// An empty-name slice with Min 0 is skipped.
+	if got := choiceTypeFromSlices(map[string]*model.SliceNode{"": {Definition: &model.ElementDefinition{Types: []model.ElementType{{Code: "string"}}, Min: 0}}}); got != "" {
+		t.Fatalf("choiceTypeFromSlices(empty-name optional) = %q", got)
+	}
+	// A nil slice is skipped.
+	if got := choiceTypeFromSlices(map[string]*model.SliceNode{"a": nil}); got != "" {
+		t.Fatalf("choiceTypeFromSlices(nil slice) = %q", got)
+	}
 }
 
 func TestElementAllowsMultiple(t *testing.T) {
