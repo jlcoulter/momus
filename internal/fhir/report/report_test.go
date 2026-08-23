@@ -122,3 +122,85 @@ func readJSON(t *testing.T, path string, v any) {
 		t.Fatalf("decode %s: %v", path, err)
 	}
 }
+
+func TestCoverageString(t *testing.T) {
+	if got := coverageString(coverage.EvaluationReport{}); got != "n/a" {
+		t.Fatalf("coverageString(empty) = %q, want n/a", got)
+	}
+	got := coverageString(coverage.EvaluationReport{TotalRequirements: 10, CoveredRequirements: 7, CoveragePercent: 70.0})
+	if got != "70.0% (7/10)" {
+		t.Fatalf("coverageString = %q, want 70.0%% (7/10)", got)
+	}
+}
+
+func TestParamOf(t *testing.T) {
+	// Search constraint ID -> param.
+	c := runner.CaseResult{Trace: &ast.Trace{ConstraintID: "search|Patient|name", ResourceType: "Patient"}}
+	if got := paramOf(c); got != "name" {
+		t.Fatalf("paramOf = %q, want name", got)
+	}
+	// Non-search -> resource type.
+	c = runner.CaseResult{Trace: &ast.Trace{ConstraintID: "cardinality|x", ResourceType: "Patient"}}
+	if got := paramOf(c); got != "Patient" {
+		t.Fatalf("paramOf(non-search) = %q, want Patient", got)
+	}
+	// Nil trace -> empty.
+	if got := paramOf(runner.CaseResult{}); got != "" {
+		t.Fatalf("paramOf(no trace) = %q, want empty", got)
+	}
+}
+
+func TestKindOf(t *testing.T) {
+	// With trace variant.
+	c := runner.CaseResult{Trace: &ast.Trace{Domain: "search", Variant: "search-valid"}}
+	if got := kindOf(c); got != "search|search-valid" {
+		t.Fatalf("kindOf = %q", got)
+	}
+	// With error.
+	c = runner.CaseResult{Error: "boom"}
+	if got := kindOf(c); got != "error" {
+		t.Fatalf("kindOf(error) = %q", got)
+	}
+	// Plain failure.
+	c = runner.CaseResult{}
+	if got := kindOf(c); got != "failure" {
+		t.Fatalf("kindOf(failure) = %q", got)
+	}
+}
+
+func TestSummaryWithEvaluation(t *testing.T) {
+	s := summary(sampleReport(), coverage.EvaluationReport{TotalRequirements: 2, CoveredRequirements: 1, UncoveredRequirements: 1, CoveragePercent: 50.0})
+	if s["total"].(int) != 2 || s["passed"].(int) != 1 || s["failed"].(int) != 1 {
+		t.Fatalf("summary = %v", s)
+	}
+	if s["coveragePercent"].(float64) != 50.0 || s["totalRequirements"].(int) != 2 {
+		t.Fatalf("summary coverage = %v", s)
+	}
+	// No evaluation.
+	s2 := summary(sampleReport(), coverage.EvaluationReport{})
+	if _, ok := s2["coveragePercent"]; ok {
+		t.Fatal("summary should omit coverage when unevaluated")
+	}
+}
+
+func TestCaseFileName(t *testing.T) {
+	if got := caseFileName(runner.CaseResult{RequirementID: "search|Patient|name"}); got != "search_Patient_name.json" {
+		t.Fatalf("caseFileName = %q", got)
+	}
+	if got := caseFileName(runner.CaseResult{}); got != "case.json" {
+		t.Fatalf("caseFileName(empty) = %q", got)
+	}
+}
+
+func TestSafeName(t *testing.T) {
+	if got := safeName("a|b"); got != "a_b" {
+		t.Fatalf("safeName = %q", got)
+	}
+}
+
+func TestMatrix(t *testing.T) {
+	m := matrix(sampleReport().Cases)
+	if m["total"].(int) != 2 || m["passed"].(int) != 1 || m["failed"].(int) != 1 {
+		t.Fatalf("matrix = %v", m)
+	}
+}
