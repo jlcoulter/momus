@@ -441,6 +441,10 @@ func TestAsResult(t *testing.T) {
 	if nilResult.value != nil {
 		t.Fatalf("zero Result = %v", nilResult.value)
 	}
+	// asResult of an unknownMark becomes an unknown result.
+	if r := asResult(unknownSentinel); !isUnknown(r) {
+		t.Fatalf("asResult(unknown) = %v, want unknown", r)
+	}
 }
 
 func TestEvalUnaryNot(t *testing.T) {
