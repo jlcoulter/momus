@@ -119,6 +119,56 @@ go run ./cmd/momus --help
 Momus uses a Cobra-based CLI with command groups: `package`, `coverage`,
 `api`, `mock`, `test`, `validate`, and `conformance`.
 
+### Configuration
+
+Most flags can also be set from a config file or an environment variable, so
+repeated runs don't require repeating the same flags. Values are resolved with
+the following precedence (highest first):
+
+1. Explicitly-set CLI flags
+2. Environment variables (see below)
+3. Config file
+4. Flag defaults
+
+#### Config file
+
+A TOML config file is loaded automatically, with the first existing file
+winning:
+
+1. The path given by `--config`
+2. `./momus.toml` in the working directory
+3. `$HOME/.momus/config.toml` — auto-initialised on first run with a commented
+   placeholder, so there's a discoverable starting point for per-user settings
+
+Keys use `snake_case` and map to the CLI flags (e.g. `base_url`,
+`deps_dir`, `interaction_strength`). For example:
+
+```toml
+# ./momus.toml
+base_url = "https://fhir.example.com/fhir"
+include_resource_types = ["Patient", "Observation"]
+interaction_strength = 2
+```
+
+```sh
+go run ./cmd/momus coverage run ./test-plan.json   # uses base_url from config
+go run ./cmd/momus coverage run ./test-plan.json --base-url https://other.example/fhir  # flag wins
+```
+
+A `momus.toml` is committed as a placeholder template in this repository; the
+auto-generated per-user file is `$HOME/.momus/config.toml`.
+
+#### Environment variables
+
+Each config key is also mapped to an environment variable with a `MOMUS_`
+prefix (the key uppercased, with `_` separators). `MOMUS_` variables override
+the config file but not explicitly-set CLI flags:
+
+```sh
+export MOMUS_BASE_URL=https://fhir.example.com/fhir
+export MOMUS_DEBUG=true
+```
+
 ### `package` — FHIR package operations
 
 Load a local FHIR package archive (`.tgz`):

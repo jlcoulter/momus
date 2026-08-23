@@ -35,9 +35,14 @@ func newRootCmd(cfg *config) *cobra.Command {
 		Short: "API and FHIR conformance testing framework",
 	}
 	rootCmd.Version = version
-	rootCmd.PersistentFlags().BoolVar(&cfg.debug, "debug", false, "enable verbose debug logging")
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		fhirpackage.SetDebug(cfg.debug)
+	rootCmd.PersistentFlags().StringVar(&cfg.ConfigFile, "config", "", "config file (default: ./momus.toml, else $HOME/.momus/config.toml)")
+	rootCmd.PersistentFlags().BoolVar(&cfg.Debug, "debug", false, "enable verbose debug logging")
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if err := initializeViper(cfg, cmd); err != nil {
+			return err
+		}
+		fhirpackage.SetDebug(cfg.Debug)
+		return nil
 	}
 
 	packageCmd := &cobra.Command{

@@ -16,11 +16,11 @@ func newResolveCmd(cfg *config) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rootPath := args[0]
-			searchDir := cfg.depsDir
+			searchDir := cfg.DepsDir
 			if searchDir == "" {
 				searchDir = filepath.Dir(rootPath)
 			}
-			cacheDir := cfg.downloadDir
+			cacheDir := cfg.DownloadDir
 			if cacheDir == "" {
 				cacheDir = filepath.Join(searchDir, ".momus", "packages")
 			}
@@ -28,12 +28,12 @@ func newResolveCmd(cfg *config) *cobra.Command {
 			graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
 				DepsDir:        searchDir,
 				DownloadDir:    cacheDir,
-				ConflictPolicy: fhirpackage.ConflictPolicy(cfg.conflictPolicy),
+				ConflictPolicy: fhirpackage.ConflictPolicy(cfg.ConflictPolicy),
 			})
 			if err != nil {
 				return err
 			}
-			if err := writeDebugGraph(cfg.debug, graph); err != nil {
+			if err := writeDebugGraph(cfg.Debug, graph); err != nil {
 				return err
 			}
 
@@ -49,8 +49,8 @@ func newResolveCmd(cfg *config) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&cfg.depsDir, "deps-dir", "", "directory to search for dependency package archives (.tgz/.tar.gz)")
-	cmd.Flags().StringVar(&cfg.downloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
-	cmd.Flags().StringVar(&cfg.conflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
+	cmd.Flags().StringVar(&cfg.DepsDir, "deps-dir", "", "directory to search for dependency package archives (.tgz/.tar.gz)")
+	cmd.Flags().StringVar(&cfg.DownloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
+	cmd.Flags().StringVar(&cfg.ConflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
 	return cmd
 }

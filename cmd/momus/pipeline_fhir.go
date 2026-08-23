@@ -28,11 +28,11 @@ import (
 // the scoped registry. It is the shared entry point for every command that
 // consumes a package archive.
 func resolvePackageGraph(cfg *config, rootPath string) (*fhirpackage.ResolvedGraph, *registry.Registry, error) {
-	searchDir := cfg.depsDir
+	searchDir := cfg.DepsDir
 	if searchDir == "" {
 		searchDir = filepath.Dir(rootPath)
 	}
-	cacheDir := cfg.downloadDir
+	cacheDir := cfg.DownloadDir
 	if cacheDir == "" {
 		cacheDir = filepath.Join(searchDir, ".momus", "packages")
 	}
@@ -40,12 +40,12 @@ func resolvePackageGraph(cfg *config, rootPath string) (*fhirpackage.ResolvedGra
 	graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
 		DepsDir:        searchDir,
 		DownloadDir:    cacheDir,
-		ConflictPolicy: fhirpackage.ConflictPolicy(cfg.conflictPolicy),
+		ConflictPolicy: fhirpackage.ConflictPolicy(cfg.ConflictPolicy),
 	})
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := writeDebugGraph(cfg.debug, graph); err != nil {
+	if err := writeDebugGraph(cfg.Debug, graph); err != nil {
 		return nil, nil, err
 	}
 
@@ -63,13 +63,13 @@ func deriveCoveragePlan(cfg *config, reg *registry.Registry, resourceTypes, prof
 	return fhircoverage.DerivePlan(reg, testcoverage.DeriveOptions{
 		IncludeResourceTypes:         resourceTypes,
 		IncludeProfileURLs:           profileURLs,
-		ExcludePathPrefixes:          cfg.excludePathPrefixes,
-		MustSupportOnly:              cfg.mustSupportOnly,
-		IncludeOptional:              cfg.includeOptional,
-		IncludeLowValuePaths:         cfg.includeLowValuePaths,
-		Strength:                     cfg.interactionStrength,
+		ExcludePathPrefixes:          cfg.ExcludePathPrefixes,
+		MustSupportOnly:              cfg.MustSupportOnly,
+		IncludeOptional:              cfg.IncludeOptional,
+		IncludeLowValuePaths:         cfg.IncludeLowValuePaths,
+		Strength:                     cfg.InteractionStrength,
 		CapabilitySearchCodes:        searchCodes,
-		IncludeUniversalSearchParams: cfg.includeUniversalSearch,
+		IncludeUniversalSearchParams: cfg.IncludeUniversalSearch,
 	})
 }
 
@@ -83,12 +83,12 @@ func buildTestPlan(cfg *config, reg *registry.Registry, coveragePlan *testcovera
 	// is a terminal). It is cleared before the next stage prints.
 	bar := newProgressBar(40)
 	fhirOpts := fhirgeneration.BuildOptions{
-		BaseURL:                        cfg.baseURL,
-		WriteBaseURL:                   cfg.writeBaseURL,
+		BaseURL:                        cfg.BaseURL,
+		WriteBaseURL:                   cfg.WriteBaseURL,
 		Registry:                       reg,
 		PreferredProfileURLsByResource: preferredProfilesByResource,
-		Strength:                       cfg.interactionStrength,
-		Exhaustive:                     cfg.exhaustive,
+		Strength:                       cfg.InteractionStrength,
+		Exhaustive:                     cfg.Exhaustive,
 		Progress:                       bar.render,
 	}
 	if len(capabilityResourceTypes) > 0 {
@@ -105,12 +105,12 @@ func buildTestPlan(cfg *config, reg *registry.Registry, coveragePlan *testcovera
 	}
 
 	coreOpts := coregeneration.BuildOptions{
-		BaseURL:                        cfg.baseURL,
-		WriteBaseURL:                   cfg.writeBaseURL,
-		Builder:                        fhirgeneration.NewBuilder(reg, cfg.exhaustive),
+		BaseURL:                        cfg.BaseURL,
+		WriteBaseURL:                   cfg.WriteBaseURL,
+		Builder:                        fhirgeneration.NewBuilder(reg, cfg.Exhaustive),
 		PreferredProfileURLsByResource: preferredProfilesByResource,
-		Strength:                       cfg.interactionStrength,
-		Exhaustive:                     cfg.exhaustive,
+		Strength:                       cfg.InteractionStrength,
+		Exhaustive:                     cfg.Exhaustive,
 		CapabilityResourceTypes:        fhirOpts.CapabilityResourceTypes,
 		CapabilityProfiles:             fhirOpts.CapabilityProfiles,
 		Progress:                       bar.render,
@@ -132,20 +132,20 @@ func buildTestPlan(cfg *config, reg *registry.Registry, coveragePlan *testcovera
 // provisionDataset uploads the seed dataset to the target server. It is a
 // no-op (with a notice) when the dataset carries no seed resources.
 func provisionDataset(cfg *config, ctx context.Context, dataset *model.Dataset) error {
-	if cfg.baseURL == "" {
+	if cfg.BaseURL == "" {
 		return fmt.Errorf("base URL is required; provide --base-url")
 	}
-	writeBase := cfg.writeBaseURL
+	writeBase := cfg.WriteBaseURL
 	if writeBase == "" {
-		writeBase = cfg.baseURL
+		writeBase = cfg.BaseURL
 	}
-	writeBasicUser := cfg.writeBasicUsername
+	writeBasicUser := cfg.WriteBasicUsername
 	if writeBasicUser == "" {
-		writeBasicUser = cfg.apiBasicUsername
+		writeBasicUser = cfg.ApiBasicUsername
 	}
-	writeBasicPass := cfg.writeBasicPassword
+	writeBasicPass := cfg.WriteBasicPassword
 	if writeBasicPass == "" {
-		writeBasicPass = cfg.apiBasicPassword
+		writeBasicPass = cfg.ApiBasicPassword
 	}
 
 	if dataset == nil || len(dataset.Resources) == 0 {
@@ -154,10 +154,10 @@ func provisionDataset(cfg *config, ctx context.Context, dataset *model.Dataset) 
 	}
 
 	provisioner := provisioning.New(writeBase, &provisioning.Options{
-		BearerToken:   cfg.apiBearerToken,
+		BearerToken:   cfg.ApiBearerToken,
 		BasicUsername: writeBasicUser,
 		BasicPassword: writeBasicPass,
-		Tracer:        newDebugTracer(cfg.debug),
+		Tracer:        newDebugTracer(cfg.Debug),
 	})
 	fmt.Printf("Provisioning phase: uploading %d seed resources to %s\n", len(dataset.Resources), writeBase)
 	seed := provisioner.ProvisionAll(ctx, dataset)
@@ -166,10 +166,10 @@ func provisionDataset(cfg *config, ctx context.Context, dataset *model.Dataset) 
 		for _, failure := range seed.Failures {
 			fmt.Printf("  - %s\n", failure.Describe())
 		}
-		if !cfg.debug {
+		if !cfg.Debug {
 			fmt.Printf("Run with --debug to write the rejected payloads and full server responses to %s for inspection.\n", debugOutputDir)
 		}
-		if err := writeDebugProvisionFailures(cfg.debug, seed.Failures); err != nil {
+		if err := writeDebugProvisionFailures(cfg.Debug, seed.Failures); err != nil {
 			return err
 		}
 		// Incomplete provisioning is a warning, not a failure: the run can still

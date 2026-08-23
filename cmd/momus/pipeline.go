@@ -28,9 +28,9 @@ func executePlan(cfg *config, ctx context.Context, astPlan *testast.Plan, preCre
 	// Resolve the write base URL up front so write-specific basic auth
 	// credentials are applied even when the user relies on the documented
 	// "defaults to --base-url" behavior.
-	writeBase := cfg.writeBaseURL
+	writeBase := cfg.WriteBaseURL
 	if writeBase == "" {
-		writeBase = cfg.baseURL
+		writeBase = cfg.BaseURL
 	}
 
 	fmt.Printf("Testing phase: executing %d test cases\n", coregeneration.RequirementCount(astPlan))
@@ -39,15 +39,15 @@ func executePlan(cfg *config, ctx context.Context, astPlan *testast.Plan, preCre
 	// is a terminal). It is cleared before the report is printed.
 	bar := newProgressBar(40)
 	report, err := testrunner.Execute(ctx, astPlan.Root, testrunner.ExecuteOptions{
-		BaseURL:            cfg.baseURL,
+		BaseURL:            cfg.BaseURL,
 		WriteBaseURL:       writeBase,
-		BearerToken:        cfg.apiBearerToken,
-		BasicUsername:      cfg.apiBasicUsername,
-		BasicPassword:      cfg.apiBasicPassword,
-		WriteBasicUsername: cfg.writeBasicUsername,
-		WriteBasicPassword: cfg.writeBasicPassword,
-		IncludeDebug:       cfg.debug || cfg.htmlReport != "",
-		Tracer:             newDebugTracer(cfg.debug),
+		BearerToken:        cfg.ApiBearerToken,
+		BasicUsername:      cfg.ApiBasicUsername,
+		BasicPassword:      cfg.ApiBasicPassword,
+		WriteBasicUsername: cfg.WriteBasicUsername,
+		WriteBasicPassword: cfg.WriteBasicPassword,
+		IncludeDebug:       cfg.Debug || cfg.HtmlReport != "",
+		Tracer:             newDebugTracer(cfg.Debug),
 		PreCreated:         preCreated,
 		Progress:           bar.render,
 	})
@@ -75,30 +75,30 @@ func executePlan(cfg *config, ctx context.Context, astPlan *testast.Plan, preCre
 // reports whether contractual coverage was evaluated (so the "skipped" notice is
 // only shown when it was genuinely skipped).
 func writeRunReport(cfg *config, report *testrunner.Report, coverageEvaluation testcoverage.EvaluationReport, coverageEvaluated bool) error {
-	if cfg.htmlReport != "" {
+	if cfg.HtmlReport != "" {
 		html, err := testcoverage.RenderHTML(coverageEvaluation, htmlItems(report.Cases))
 		if err != nil {
 			return fmt.Errorf("render html report: %w", err)
 		}
-		if err := writeOutputFile(cfg.htmlReport, html); err != nil {
-			return fmt.Errorf("write html report to %s: %w", cfg.htmlReport, err)
+		if err := writeOutputFile(cfg.HtmlReport, html); err != nil {
+			return fmt.Errorf("write html report to %s: %w", cfg.HtmlReport, err)
 		}
-		fmt.Printf("HTML report written to %s\n", cfg.htmlReport)
+		fmt.Printf("HTML report written to %s\n", cfg.HtmlReport)
 	}
 
-	out, err := marshalCoverageRunOutput(report, coverageEvaluation, cfg.includeCases)
+	out, err := marshalCoverageRunOutput(report, coverageEvaluation, cfg.IncludeCases)
 	if err != nil {
 		return fmt.Errorf("marshal test report: %w", err)
 	}
-	if err := writeDebugOutput(cfg.debug, "test-report.json", append(out, '\n')); err != nil {
+	if err := writeDebugOutput(cfg.Debug, "test-report.json", append(out, '\n')); err != nil {
 		return err
 	}
 
 	// The full JSON report is only written to a file via --output; it is never
 	// dumped to stdout (the concise summary below is the user-facing output).
-	if cfg.outputPath != "" {
-		if err := writeOutputFile(cfg.outputPath, append(out, '\n')); err != nil {
-			return fmt.Errorf("write test report to %s: %w", cfg.outputPath, err)
+	if cfg.OutputPath != "" {
+		if err := writeOutputFile(cfg.OutputPath, append(out, '\n')); err != nil {
+			return fmt.Errorf("write test report to %s: %w", cfg.OutputPath, err)
 		}
 	}
 
@@ -106,12 +106,12 @@ func writeRunReport(cfg *config, report *testrunner.Report, coverageEvaluation t
 	// unless the user opted out with "-". It slices the run into small,
 	// navigable files (index, per-case, by-resource, by-parameter) instead of
 	// one monolith.
-	outputDir := cfg.outputDir
+	outputDir := cfg.OutputDir
 	if outputDir == "" {
 		outputDir = ".momus/output"
 	}
 	if outputDir != "-" {
-		if err := reportwriter.WriteDir(outputDir, report, coverageEvaluation, coverageEvaluated, reportwriter.Options{WriteFull: cfg.includeCases}); err != nil {
+		if err := reportwriter.WriteDir(outputDir, report, coverageEvaluation, coverageEvaluated, reportwriter.Options{WriteFull: cfg.IncludeCases}); err != nil {
 			return fmt.Errorf("write output directory %s: %w", outputDir, err)
 		}
 		fmt.Printf("Output directory written to %s\n", outputDir)
@@ -130,7 +130,7 @@ func writeRunReport(cfg *config, report *testrunner.Report, coverageEvaluation t
 			// The detailed gap breakdown (by domain/resource/variant and the
 			// uncovered requirement IDs) is verbose; it is only printed with
 			// --debug. The full detail is always in the JSON report.
-			if cfg.debug {
+			if cfg.Debug {
 				printCoverageGapSummary(coverageEvaluation)
 				for idx, req := range coverageEvaluation.Uncovered {
 					if idx >= 10 {
@@ -143,10 +143,10 @@ func writeRunReport(cfg *config, report *testrunner.Report, coverageEvaluation t
 	} else if !coverageEvaluated {
 		fmt.Printf("Coverage evaluation skipped: pass --coverage-plan to evaluate contractual coverage\n")
 	}
-	if cfg.outputPath != "" {
-		fmt.Printf("Test report written to %s\n", cfg.outputPath)
+	if cfg.OutputPath != "" {
+		fmt.Printf("Test report written to %s\n", cfg.OutputPath)
 	}
-	if cfg.failOnUncovered && coverageEvaluation.UncoveredRequirements > 0 {
+	if cfg.FailOnUncovered && coverageEvaluation.UncoveredRequirements > 0 {
 		return fmt.Errorf("coverage incomplete: %d uncovered obligations", coverageEvaluation.UncoveredRequirements)
 	}
 	return nil

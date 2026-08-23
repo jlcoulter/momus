@@ -25,7 +25,7 @@ func newPlanCmd(cfg *config) *cobra.Command {
 				return err
 			}
 
-			coveragePlan, err := deriveCoveragePlan(cfg, reg, cfg.includeResourceTypes, cfg.includeProfileURLs, nil)
+			coveragePlan, err := deriveCoveragePlan(cfg, reg, cfg.IncludeResourceTypes, cfg.IncludeProfileURLs, nil)
 			if err != nil {
 				return err
 			}
@@ -40,35 +40,35 @@ func newPlanCmd(cfg *config) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("encode test plan: %w", err)
 			}
-			if cfg.outputPath == "" {
+			if cfg.OutputPath == "" {
 				fmt.Println(string(out))
 			} else {
-				if err := writeOutputFile(cfg.outputPath, append(out, '\n')); err != nil {
-					return fmt.Errorf("write test plan to %s: %w", cfg.outputPath, err)
+				if err := writeOutputFile(cfg.OutputPath, append(out, '\n')); err != nil {
+					return fmt.Errorf("write test plan to %s: %w", cfg.OutputPath, err)
 				}
 			}
 
 			fmt.Printf("Generated test plan with %d requirement cases and %d seed resources from %d resolved packages\n", coregeneration.RequirementCount(astPlan), len(setupDataset.Resources), len(graph.Packages))
-			if cfg.outputPath != "" {
-				fmt.Printf("Test plan written to %s\n", cfg.outputPath)
+			if cfg.OutputPath != "" {
+				fmt.Printf("Test plan written to %s\n", cfg.OutputPath)
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&cfg.depsDir, "deps-dir", "", "directory to search for dependency package archives (.tgz/.tar.gz)")
-	cmd.Flags().StringVar(&cfg.downloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
-	cmd.Flags().StringVar(&cfg.conflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
-	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write generated test plan JSON to a file")
-	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target FHIR base URL for request nodes")
-	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate FHIR base URL for resource creation (write) request nodes; defaults to --base-url")
-	cmd.Flags().StringSliceVar(&cfg.includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable)")
-	cmd.Flags().StringSliceVar(&cfg.includeProfileURLs, "include-profile-url", nil, "include only these profile canonical URLs (repeatable)")
-	cmd.Flags().StringSliceVar(&cfg.excludePathPrefixes, "exclude-path-prefix", nil, "exclude element paths by prefix (repeatable)")
-	cmd.Flags().BoolVar(&cfg.mustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
-	cmd.Flags().BoolVar(&cfg.includeOptional, "include-optional", false, "include optional non-mustSupport elements")
-	cmd.Flags().BoolVar(&cfg.includeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
-	cmd.Flags().BoolVar(&cfg.includeUniversalSearch, "include-universal-search", false, "include universal FHIR search parameters (_id, _count, _sort, _include, _summary, _filter) for every resource type even when the server's CapabilityStatement does not declare them")
-	cmd.Flags().IntVar(&cfg.interactionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
-	cmd.Flags().BoolVar(&cfg.exhaustive, "exhaustive", true, "populate optional elements to produce fuller, more realistic resources")
+	cmd.Flags().StringVar(&cfg.DepsDir, "deps-dir", "", "directory to search for dependency package archives (.tgz/.tar.gz)")
+	cmd.Flags().StringVar(&cfg.DownloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
+	cmd.Flags().StringVar(&cfg.ConflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
+	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "write generated test plan JSON to a file")
+	cmd.Flags().StringVar(&cfg.BaseURL, "base-url", "", "target FHIR base URL for request nodes")
+	cmd.Flags().StringVar(&cfg.WriteBaseURL, "write-base-url", "", "alternate FHIR base URL for resource creation (write) request nodes; defaults to --base-url")
+	cmd.Flags().StringSliceVar(&cfg.IncludeResourceTypes, "include-resource", nil, "include only these resource types (repeatable)")
+	cmd.Flags().StringSliceVar(&cfg.IncludeProfileURLs, "include-profile-url", nil, "include only these profile canonical URLs (repeatable)")
+	cmd.Flags().StringSliceVar(&cfg.ExcludePathPrefixes, "exclude-path-prefix", nil, "exclude element paths by prefix (repeatable)")
+	cmd.Flags().BoolVar(&cfg.MustSupportOnly, "must-support-only", false, "derive only elements marked mustSupport")
+	cmd.Flags().BoolVar(&cfg.IncludeOptional, "include-optional", false, "include optional non-mustSupport elements")
+	cmd.Flags().BoolVar(&cfg.IncludeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
+	cmd.Flags().BoolVar(&cfg.IncludeUniversalSearch, "include-universal-search", false, "include universal FHIR search parameters (_id, _count, _sort, _include, _summary, _filter) for every resource type even when the server's CapabilityStatement does not declare them")
+	cmd.Flags().IntVar(&cfg.InteractionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
+	cmd.Flags().BoolVar(&cfg.Exhaustive, "exhaustive", true, "populate optional elements to produce fuller, more realistic resources")
 	return cmd
 }

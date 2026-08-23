@@ -40,20 +40,20 @@ func verifyPlanAgainstCapability(ctx context.Context, cfg *config, reg *registry
 	// A local metadata file takes precedence over a live fetch: it lets the
 	// caller supply server metadata from a saved CapabilityStatement when the
 	// server is unreachable or not yet running.
-	if cfg != nil && cfg.metadataFile != "" {
-		loaded, err := loadMetadataFile(cfg.metadataFile)
+	if cfg != nil && cfg.MetadataFile != "" {
+		loaded, err := loadMetadataFile(cfg.MetadataFile)
 		if err == nil {
 			cs = loaded
 			ev.Source = "file"
 		} else {
 			ev.Error = err
 		}
-	} else if cfg != nil && cfg.baseURL != "" {
-		fetched, err := fhircoverage.FetchCapabilityStatement(ctx, cfg.baseURL, fhircoverage.CapabilityFetchOptions{
-			BearerToken:   cfg.apiBearerToken,
-			BasicUsername: cfg.apiBasicUsername,
-			BasicPassword: cfg.apiBasicPassword,
-			Tracer:        newDebugTracer(cfg.debug),
+	} else if cfg != nil && cfg.BaseURL != "" {
+		fetched, err := fhircoverage.FetchCapabilityStatement(ctx, cfg.BaseURL, fhircoverage.CapabilityFetchOptions{
+			BearerToken:   cfg.ApiBearerToken,
+			BasicUsername: cfg.ApiBasicUsername,
+			BasicPassword: cfg.ApiBasicPassword,
+			Tracer:        newDebugTracer(cfg.Debug),
 		})
 		if err == nil {
 			cs = fetched

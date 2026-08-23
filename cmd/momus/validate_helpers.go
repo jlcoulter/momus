@@ -14,16 +14,16 @@ import (
 // --package is resolved against its directory, so running validate from any
 // working directory finds a package sitting next to the resource.
 func buildRegistryForValidate(cfg *config, resourcePath string) (*registry.Registry, error) {
-	if cfg.packagePath == "" {
+	if cfg.PackagePath == "" {
 		return registry.New(), nil
 	}
-	pkgPath := cfg.packagePath
+	pkgPath := cfg.PackagePath
 	if !filepath.IsAbs(pkgPath) {
 		pkgPath = filepath.Join(filepath.Dir(resourcePath), pkgPath)
 	}
 	graph, reg, err := resolvePackageGraph(cfg, pkgPath)
 	if err != nil {
-		return nil, fmt.Errorf("resolve package %s: %w", cfg.packagePath, err)
+		return nil, fmt.Errorf("resolve package %s: %w", cfg.PackagePath, err)
 	}
 	_ = graph
 	return reg, nil
@@ -32,8 +32,8 @@ func buildRegistryForValidate(cfg *config, resourcePath string) (*registry.Regis
 // profileURLsFor returns the profile URLs to validate against: the --profile
 // flags if given, otherwise the resource's meta.profile claims.
 func profileURLsFor(cfg *config, resource map[string]any) []string {
-	if len(cfg.profileURLs) > 0 {
-		return cfg.profileURLs
+	if len(cfg.ProfileURLs) > 0 {
+		return cfg.ProfileURLs
 	}
 	meta, ok := resource["meta"].(map[string]any)
 	if !ok {

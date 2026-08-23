@@ -55,7 +55,7 @@ func newValidateCmd(cfg *config) *cobra.Command {
 			return fmt.Errorf("resource failed validation with %d issue(s)", len(allIssues))
 		},
 	}
-	cmd.Flags().StringSliceVar(&cfg.profileURLs, "profile", nil, "profile URL(s) to validate against (repeatable; when empty uses the resource's meta.profile)")
-	cmd.Flags().StringVar(&cfg.packagePath, "package", "", "FHIR package archive (.tgz) to load profiles from")
+	cmd.Flags().StringSliceVar(&cfg.ProfileURLs, "profile", nil, "profile URL(s) to validate against (repeatable; when empty uses the resource's meta.profile)")
+	cmd.Flags().StringVar(&cfg.PackagePath, "package", "", "FHIR package archive (.tgz) to load profiles from")
 	return cmd
 }

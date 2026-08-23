@@ -23,25 +23,25 @@ func newTestOpenapiCmd(cfg *config) *cobra.Command {
 			// When --mock is set, start a plan-aware mock server and target it.
 			// The mock's base URL is used unless the caller supplied --base-url.
 			var mockServer *mock.Server
-			if cfg.mock {
+			if cfg.Mock {
 				s, baseURL, err := startMock(cfg, "")
 				if err != nil {
 					return err
 				}
 				mockServer = s
 				defer s.Close()
-				if cfg.baseURL == "" {
-					cfg.baseURL = baseURL
+				if cfg.BaseURL == "" {
+					cfg.BaseURL = baseURL
 				}
 			}
-			if cfg.baseURL == "" {
+			if cfg.BaseURL == "" {
 				return fmt.Errorf("base URL is required; provide --base-url or --mock")
 			}
 			doc, err := loadOpenAPIDocument(args[0])
 			if err != nil {
 				return err
 			}
-			astPlan, err := openapi.GeneratePlan(doc, cfg.baseURL, cfg.writeBaseURL)
+			astPlan, err := openapi.GeneratePlan(doc, cfg.BaseURL, cfg.WriteBaseURL)
 			if err != nil {
 				return err
 			}
@@ -62,17 +62,17 @@ func newTestOpenapiCmd(cfg *config) *cobra.Command {
 			return writeRunReport(cfg, report, coverageEvaluation, false)
 		},
 	}
-	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write test result report JSON to a file")
-	cmd.Flags().StringVar(&cfg.htmlReport, "html", "", "write an HTML coverage report with drill-down to a file")
-	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target API base URL for the server under test (defaults to the mock server when --mock is set)")
-	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate API base URL for write (POST/PUT/PATCH) requests; defaults to --base-url")
-	cmd.Flags().BoolVar(&cfg.mock, "mock", false, "start an in-process plan-aware mock server and test against it")
-	cmd.Flags().IntVar(&cfg.mockPort, "mock-port", 0, "port for the mock server (default: ephemeral)")
-	cmd.Flags().StringVar(&cfg.apiBearerToken, "api-bearer-token", "", "bearer token used for API requests during execution")
-	cmd.Flags().StringVar(&cfg.apiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during execution")
-	cmd.Flags().StringVar(&cfg.apiBasicPassword, "api-basic-password", "", "basic auth password used for API requests during execution")
-	cmd.Flags().StringVar(&cfg.writeBasicUsername, "write-basic-username", "", "basic auth username used for write requests to --write-base-url; defaults to --api-basic-username")
-	cmd.Flags().StringVar(&cfg.writeBasicPassword, "write-basic-password", "", "basic auth password used for write requests to --write-base-url; defaults to --api-basic-password")
-	cmd.Flags().BoolVar(&cfg.includeCases, "include-cases", false, "include the full per-case result array in the JSON report (large runs produce very large output)")
+	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "write test result report JSON to a file")
+	cmd.Flags().StringVar(&cfg.HtmlReport, "html", "", "write an HTML coverage report with drill-down to a file")
+	cmd.Flags().StringVar(&cfg.BaseURL, "base-url", "", "target API base URL for the server under test (defaults to the mock server when --mock is set)")
+	cmd.Flags().StringVar(&cfg.WriteBaseURL, "write-base-url", "", "alternate API base URL for write (POST/PUT/PATCH) requests; defaults to --base-url")
+	cmd.Flags().BoolVar(&cfg.Mock, "mock", false, "start an in-process plan-aware mock server and test against it")
+	cmd.Flags().IntVar(&cfg.MockPort, "mock-port", 0, "port for the mock server (default: ephemeral)")
+	cmd.Flags().StringVar(&cfg.ApiBearerToken, "api-bearer-token", "", "bearer token used for API requests during execution")
+	cmd.Flags().StringVar(&cfg.ApiBasicUsername, "api-basic-username", "", "basic auth username used for API requests during execution")
+	cmd.Flags().StringVar(&cfg.ApiBasicPassword, "api-basic-password", "", "basic auth password used for API requests during execution")
+	cmd.Flags().StringVar(&cfg.WriteBasicUsername, "write-basic-username", "", "basic auth username used for write requests to --write-base-url; defaults to --api-basic-username")
+	cmd.Flags().StringVar(&cfg.WriteBasicPassword, "write-basic-password", "", "basic auth password used for write requests to --write-base-url; defaults to --api-basic-password")
+	cmd.Flags().BoolVar(&cfg.IncludeCases, "include-cases", false, "include the full per-case result array in the JSON report (large runs produce very large output)")
 	return cmd
 }

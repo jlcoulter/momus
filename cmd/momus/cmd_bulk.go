@@ -21,11 +21,11 @@ func newBulkCmd(cfg *config) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rootPath := args[0]
-			searchDir := cfg.depsDir
+			searchDir := cfg.DepsDir
 			if searchDir == "" {
 				searchDir = filepath.Dir(rootPath)
 			}
-			cacheDir := cfg.downloadDir
+			cacheDir := cfg.DownloadDir
 			if cacheDir == "" {
 				cacheDir = filepath.Join(searchDir, ".momus", "packages")
 			}
@@ -33,12 +33,12 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
 				DepsDir:        searchDir,
 				DownloadDir:    cacheDir,
-				ConflictPolicy: fhirpackage.ConflictPolicy(cfg.conflictPolicy),
+				ConflictPolicy: fhirpackage.ConflictPolicy(cfg.ConflictPolicy),
 			})
 			if err != nil {
 				return err
 			}
-			if err := writeDebugGraph(cfg.debug, graph); err != nil {
+			if err := writeDebugGraph(cfg.Debug, graph); err != nil {
 				return err
 			}
 
@@ -48,7 +48,7 @@ func newBulkCmd(cfg *config) *cobra.Command {
 				return err
 			}
 
-			resourceTypes := cfg.includeResourceTypes
+			resourceTypes := cfg.IncludeResourceTypes
 			if len(resourceTypes) == 0 {
 				seen := make(map[string]bool)
 				for _, sd := range reg.ScopedStructureDefinitions() {
@@ -63,27 +63,27 @@ func newBulkCmd(cfg *config) *cobra.Command {
 				sort.Strings(resourceTypes)
 			}
 
-			if cfg.bulkCount < 0 {
-				return fmt.Errorf("--count must be non-negative, got %d", cfg.bulkCount)
+			if cfg.BulkCount < 0 {
+				return fmt.Errorf("--count must be non-negative, got %d", cfg.BulkCount)
 			}
 
-			corpusGenerator := testbulk.NewCorpusGenerator(reg, cfg.exhaustive)
-			corpus, err := corpusGenerator.GenerateCorpus(cmd.Context(), resourceTypes, cfg.bulkCount, parsePerTypeCounts(cfg.bulkPerTypeCounts))
+			corpusGenerator := testbulk.NewCorpusGenerator(reg, cfg.Exhaustive)
+			corpus, err := corpusGenerator.GenerateCorpus(cmd.Context(), resourceTypes, cfg.BulkCount, parsePerTypeCounts(cfg.BulkPerTypeCounts))
 			if err != nil {
 				return err
 			}
 
 			var out io.Writer = os.Stdout
 			var f *os.File
-			if cfg.outputPath != "" {
-				if dir := filepath.Dir(cfg.outputPath); dir != "" && dir != "." {
+			if cfg.OutputPath != "" {
+				if dir := filepath.Dir(cfg.OutputPath); dir != "" && dir != "." {
 					if err := os.MkdirAll(dir, 0o755); err != nil {
 						return fmt.Errorf("create bulk output dir %s: %w", dir, err)
 					}
 				}
-				f, err = os.Create(cfg.outputPath)
+				f, err = os.Create(cfg.OutputPath)
 				if err != nil {
-					return fmt.Errorf("create bulk file %s: %w", cfg.outputPath, err)
+					return fmt.Errorf("create bulk file %s: %w", cfg.OutputPath, err)
 				}
 				defer f.Close()
 				out = f
@@ -91,7 +91,7 @@ func newBulkCmd(cfg *config) *cobra.Command {
 
 			w := testbulk.NewWriter(out)
 			instances := testbulk.Link([]*model.Dataset{corpus})
-			if err := writeDebugBulk(cfg.debug, instances); err != nil {
+			if err := writeDebugBulk(cfg.Debug, instances); err != nil {
 				return err
 			}
 			if err := w.WriteInstances(instances); err != nil {
@@ -102,19 +102,19 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			}
 
 			fmt.Printf("Generated NDJSON bulk data: %d resources across %d resource types\n", len(instances), len(resourceTypes))
-			if cfg.outputPath != "" {
-				fmt.Printf("Bulk data written to %s\n", cfg.outputPath)
+			if cfg.OutputPath != "" {
+				fmt.Printf("Bulk data written to %s\n", cfg.OutputPath)
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&cfg.depsDir, "deps-dir", "", "directory to search for dependency package archives (.tgz/.tar.gz)")
-	cmd.Flags().StringVar(&cfg.downloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
-	cmd.Flags().StringVar(&cfg.conflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
-	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write NDJSON bulk data to a file")
-	cmd.Flags().BoolVar(&cfg.exhaustive, "exhaustive", true, "populate optional elements to produce fuller, more complete resources")
-	cmd.Flags().IntVar(&cfg.bulkCount, "count", 25, "number of resources to generate per resource type")
-	cmd.Flags().StringSliceVar(&cfg.bulkPerTypeCounts, "per-type", nil, "per-type resource counts as Type=Count (repeatable); overrides --count")
-	cmd.Flags().StringSliceVar(&cfg.includeResourceTypes, "include-resource", nil, "include only these resource types (repeatable); referenced target types are added automatically")
+	cmd.Flags().StringVar(&cfg.DepsDir, "deps-dir", "", "directory to search for dependency package archives (.tgz/.tar.gz)")
+	cmd.Flags().StringVar(&cfg.DownloadDir, "download-dir", "", "directory to store downloaded dependency package archives")
+	cmd.Flags().StringVar(&cfg.ConflictPolicy, "conflict-policy", string(fhirpackage.ConflictPolicyRootWins), "dependency conflict policy: root-wins or strict")
+	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "write NDJSON bulk data to a file")
+	cmd.Flags().BoolVar(&cfg.Exhaustive, "exhaustive", true, "populate optional elements to produce fuller, more complete resources")
+	cmd.Flags().IntVar(&cfg.BulkCount, "count", 25, "number of resources to generate per resource type")
+	cmd.Flags().StringSliceVar(&cfg.BulkPerTypeCounts, "per-type", nil, "per-type resource counts as Type=Count (repeatable); overrides --count")
+	cmd.Flags().StringSliceVar(&cfg.IncludeResourceTypes, "include-resource", nil, "include only these resource types (repeatable); referenced target types are added automatically")
 	return cmd
 }

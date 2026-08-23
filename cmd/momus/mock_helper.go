@@ -13,7 +13,7 @@ import (
 // and Close when done. basePath is the path the mock serves under (e.g. "/fhir"
 // for FHIR, "" for OpenAPI).
 func startMock(cfg *config, basePath string) (*mock.Server, string, error) {
-	opts := []mock.Option{mock.WithPort(cfg.mockPort), mock.WithBasePath(basePath), mock.WithPlanAware(), mock.WithLogger(false)}
+	opts := []mock.Option{mock.WithPort(cfg.MockPort), mock.WithBasePath(basePath), mock.WithPlanAware(), mock.WithLogger(false)}
 	s := mock.New(200, "", opts...)
 	addr, err := s.Start()
 	if err != nil {

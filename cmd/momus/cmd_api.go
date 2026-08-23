@@ -40,23 +40,23 @@ func newApiConstraintsCmd(cfg *config) *cobra.Command {
 				return fmt.Errorf("marshal api constraints: %w", err)
 			}
 
-			if cfg.outputPath == "" {
+			if cfg.OutputPath == "" {
 				fmt.Println(string(out))
 			} else {
-				if err := writeOutputFile(cfg.outputPath, append(out, '\n')); err != nil {
-					return fmt.Errorf("write api constraints to %s: %w", cfg.outputPath, err)
+				if err := writeOutputFile(cfg.OutputPath, append(out, '\n')); err != nil {
+					return fmt.Errorf("write api constraints to %s: %w", cfg.OutputPath, err)
 				}
 			}
 
 			fmt.Printf("Derived %d API constraints (%d operations, %d parameters) from %s\n",
 				len(constraints), operationConstraintCount(constraints), parameterConstraintCount(constraints), args[0])
-			if cfg.outputPath != "" {
-				fmt.Printf("API constraints written to %s\n", cfg.outputPath)
+			if cfg.OutputPath != "" {
+				fmt.Printf("API constraints written to %s\n", cfg.OutputPath)
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write derived API constraints JSON to a file")
+	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "write derived API constraints JSON to a file")
 	return cmd
 }
 
@@ -71,7 +71,7 @@ func newApiAstCmd(cfg *config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			plan, err := openapi.GeneratePlan(doc, cfg.baseURL, cfg.writeBaseURL)
+			plan, err := openapi.GeneratePlan(doc, cfg.BaseURL, cfg.WriteBaseURL)
 			if err != nil {
 				return err
 			}
@@ -84,24 +84,24 @@ func newApiAstCmd(cfg *config) *cobra.Command {
 				return fmt.Errorf("marshal api ast: %w", err)
 			}
 
-			if cfg.outputPath == "" {
+			if cfg.OutputPath == "" {
 				fmt.Println(string(out))
 			} else {
-				if err := writeOutputFile(cfg.outputPath, append(out, '\n')); err != nil {
-					return fmt.Errorf("write api ast to %s: %w", cfg.outputPath, err)
+				if err := writeOutputFile(cfg.OutputPath, append(out, '\n')); err != nil {
+					return fmt.Errorf("write api ast to %s: %w", cfg.OutputPath, err)
 				}
 			}
 
 			fmt.Printf("Generated AST with %d operation cases from %s\n", len(doc.Paths), args[0])
-			if cfg.outputPath != "" {
-				fmt.Printf("API AST written to %s\n", cfg.outputPath)
+			if cfg.OutputPath != "" {
+				fmt.Printf("API AST written to %s\n", cfg.OutputPath)
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write generated API AST JSON to a file")
-	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target API base URL for request nodes")
-	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate API base URL for write (POST/PUT/PATCH) request nodes; defaults to --base-url")
+	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "write generated API AST JSON to a file")
+	cmd.Flags().StringVar(&cfg.BaseURL, "base-url", "", "target API base URL for request nodes")
+	cmd.Flags().StringVar(&cfg.WriteBaseURL, "write-base-url", "", "alternate API base URL for write (POST/PUT/PATCH) request nodes; defaults to --base-url")
 	return cmd
 }
 
@@ -112,21 +112,21 @@ func newApiRunCmd(cfg *config) *cobra.Command {
 		Short: "Generate and execute tests against an OpenAPI document",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cfg.baseURL == "" {
+			if cfg.BaseURL == "" {
 				return fmt.Errorf("base URL is required; provide --base-url")
 			}
 			doc, err := loadOpenAPIDocument(args[0])
 			if err != nil {
 				return err
 			}
-			plan, err := openapi.GeneratePlan(doc, cfg.baseURL, cfg.writeBaseURL)
+			plan, err := openapi.GeneratePlan(doc, cfg.BaseURL, cfg.WriteBaseURL)
 			if err != nil {
 				return err
 			}
 			report, err := testrunner.Execute(cmd.Context(), plan.Root, testrunner.ExecuteOptions{
-				BaseURL:      cfg.baseURL,
-				WriteBaseURL: cfg.writeBaseURL,
-				Tracer:       newDebugTracer(cfg.debug),
+				BaseURL:      cfg.BaseURL,
+				WriteBaseURL: cfg.WriteBaseURL,
+				Tracer:       newDebugTracer(cfg.Debug),
 			})
 			if err != nil {
 				return err
@@ -136,24 +136,24 @@ func newApiRunCmd(cfg *config) *cobra.Command {
 				return fmt.Errorf("marshal api report: %w", err)
 			}
 
-			if cfg.outputPath == "" {
+			if cfg.OutputPath == "" {
 				fmt.Println(string(out))
 			} else {
-				if err := writeOutputFile(cfg.outputPath, append(out, '\n')); err != nil {
-					return fmt.Errorf("write api report to %s: %w", cfg.outputPath, err)
+				if err := writeOutputFile(cfg.OutputPath, append(out, '\n')); err != nil {
+					return fmt.Errorf("write api report to %s: %w", cfg.OutputPath, err)
 				}
 			}
 
 			fmt.Printf("Executed %d API operations: %d passed, %d failed\n", report.Total, report.Passed, report.Failed)
-			if cfg.outputPath != "" {
-				fmt.Printf("API report written to %s\n", cfg.outputPath)
+			if cfg.OutputPath != "" {
+				fmt.Printf("API report written to %s\n", cfg.OutputPath)
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&cfg.outputPath, "output", "", "write API test report JSON to a file")
-	cmd.Flags().StringVar(&cfg.baseURL, "base-url", "", "target API base URL for request execution")
-	cmd.Flags().StringVar(&cfg.writeBaseURL, "write-base-url", "", "alternate API base URL for write (POST/PUT/PATCH) request execution; defaults to --base-url")
+	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "write API test report JSON to a file")
+	cmd.Flags().StringVar(&cfg.BaseURL, "base-url", "", "target API base URL for request execution")
+	cmd.Flags().StringVar(&cfg.WriteBaseURL, "write-base-url", "", "alternate API base URL for write (POST/PUT/PATCH) request execution; defaults to --base-url")
 	return cmd
 }
 

@@ -26,8 +26,8 @@ func TestValidateCmdConformantResource(t *testing.T) {
 
 	cfg := &config{}
 	cmd := newValidateCmd(cfg)
-	cfg.packagePath = ""
-	cfg.profileURLs = []string{"http://example.org/StructureDefinition/patient"}
+	cfg.PackagePath = ""
+	cfg.ProfileURLs = []string{"http://example.org/StructureDefinition/patient"}
 	// Without a package the profile cannot resolve, so validation reports a
 	// skip rather than a hard failure on a conformant resource. Assert the
 	// command completes (returns nil) with an empty issue set.
