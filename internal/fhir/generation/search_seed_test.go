@@ -384,7 +384,30 @@ func TestResolveNestedLeafType(t *testing.T) {
 	}
 }
 
-func TestApplySearchMatch(t *testing.T) {
+func TestSearchLeafType(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+		{Path: "Patient.deceased", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+	}})
+	// Exact key.
+	tc, rep := searchLeafType("Patient", "active", reg)
+	if tc != "boolean" || rep {
+		t.Fatalf("searchLeafType(active) = %q, %v", tc, rep)
+	}
+	// Choice form.
+	tc, rep = searchLeafType("Patient", "deceased", reg)
+	if tc != "boolean" {
+		t.Fatalf("searchLeafType(deceased) = %q", tc)
+	}
+	// Unknown element.
+	if tc, _ := searchLeafType("Patient", "nope", reg); tc != "" {
+		t.Fatalf("searchLeafType(nope) = %q", tc)
+	}
+}
+
+func TestApplySearchMatchBranchCoverage(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
 		{Path: "Patient", Min: 0, Max: "*"},
@@ -416,6 +439,29 @@ func TestApplySearchMatch(t *testing.T) {
 		if !c.check(body) {
 			t.Errorf("applySearchMatch(%s) body = %v, did not set element", c.code, body)
 		}
+	}
+}
+
+func TestApplySearchMatchSpecialDateComposite(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/location", Type: "Location", Elements: []model.ElementDefinition{
+		{Path: "Location", Min: 0, Max: "*"},
+		{Path: "Location.position", Min: 0, Max: "1", Types: []model.ElementType{{Code: "BackboneElement"}}},
+		{Path: "Location.position.latitude", Min: 1, Max: "1", Types: []model.ElementType{{Code: "decimal"}}},
+		{Path: "Location.position.longitude", Min: 1, Max: "1", Types: []model.ElementType{{Code: "decimal"}}},
+		{Path: "Location.recorded", Min: 0, Max: "1", Types: []model.ElementType{{Code: "instant"}}},
+	}})
+	// Special (near) search.
+	body := map[string]any{}
+	ok := applySearchMatch(body, "Location", &model.SearchParameter{Code: "near", Type: "special", Expression: "position.longitude"}, "-33.8688|151.2093", reg)
+	if !ok || body["position"] == nil {
+		t.Fatalf("applySearchMatch(special) = %v, body=%v", ok, body)
+	}
+	// Date search.
+	body = map[string]any{}
+	ok = applySearchMatch(body, "Location", &model.SearchParameter{Code: "recorded", Type: "date", Expression: "Location.recorded"}, "2024-01-01", reg)
+	if !ok {
+		t.Fatalf("applySearchMatch(date) = %v", ok)
 	}
 }
 
