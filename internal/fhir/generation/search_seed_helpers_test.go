@@ -157,6 +157,22 @@ func TestApplyCompositeMatch(t *testing.T) {
 	}
 }
 
+func TestApplyCompositeMatchPadsAndBranches(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+	}})
+	// More parts than paths -> last path is padded, so all parts land on it.
+	body := map[string]any{}
+	if !applyCompositeMatch(body, "active", "Patient", "true$extra$more", reg) {
+		t.Fatal("applyCompositeMatch(padded) should return true")
+	}
+	if body["active"] == nil {
+		t.Fatal("padded composite did not set the leaf")
+	}
+}
+
 func TestSetSpecialLeaf(t *testing.T) {
 	body := map[string]any{}
 	setSpecialLeaf(body, "position.longitude", "-33.8688|151.2093")
