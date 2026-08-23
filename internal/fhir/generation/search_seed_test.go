@@ -326,6 +326,97 @@ func TestSearchSeedSetsIdentifierValue(t *testing.T) {
 	}
 }
 
+func TestSplitUnion(t *testing.T) {
+	got := splitUnion("Patient.gender | Patient.deceasedBoolean")
+	if len(got) != 2 {
+		t.Fatalf("splitUnion = %v", got)
+	}
+	// Union inside parentheses is preserved.
+	got = splitUnion("a | (b | c)")
+	if len(got) != 2 {
+		t.Fatalf("splitUnion(paren) = %v", got)
+	}
+}
+
+func TestPlainSearchPath(t *testing.T) {
+	cases := []struct{ in, rt, want string }{
+		{"Patient.name", "Patient", "name"},
+		{"Patient.name.family", "Patient", "name.family"},
+		{"name", "Patient", "name"},
+		{"Patient.code as CodeableConcept", "Patient", "code"},
+		{"Patient.communication.where(language.exists())", "Patient", "communication"},
+		{"Resource.gender", "Patient", "gender"},
+		{"DomainResource.meta", "Patient", "meta"},
+		{"", "Patient", ""},
+		{"Patient.", "Patient", ""},
+		{"a[b]", "Patient", ""},
+	}
+	for _, c := range cases {
+		if got := plainSearchPath(c.in, c.rt); got != c.want {
+			t.Errorf("plainSearchPath(%q, %q) = %q, want %q", c.in, c.rt, got, c.want)
+		}
+	}
+}
+
+func TestResolveNestedLeafType(t *testing.T) {
+	reg := registry.New()
+	// An Identifier complex datatype definition.
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Identifier", Type: "Identifier", Elements: []model.ElementDefinition{
+		{Path: "Identifier", Min: 0, Max: "*"},
+		{Path: "Identifier.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+	}})
+	// A Patient with an identifier element typed as Identifier.
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.identifier", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Identifier"}}},
+	}})
+	resolved, err := reg.ResolveProfile("http://example.org/StructureDefinition/patient")
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	typeCode, repeatable, found := resolveNestedLeafType(resolved, "Patient", "identifier.value", reg)
+	if !found || typeCode != "string" || repeatable {
+		t.Fatalf("resolveNestedLeafType = %q, %v, %v; want string, false, true", typeCode, repeatable, found)
+	}
+	// A single-segment path returns not-found.
+	if _, _, found := resolveNestedLeafType(resolved, "Patient", "identifier", reg); found {
+		t.Fatal("single-segment path should not resolve via nested type")
+	}
+}
+
+func TestApplySearchMatch(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
+		{Path: "Patient", Min: 0, Max: "*"},
+		{Path: "Patient.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+		{Path: "Patient.gender", Min: 0, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+	}})
+	// _id search.
+	body := map[string]any{}
+	ok := applySearchMatch(body, "Patient", &model.SearchParameter{Code: "_id", Type: "token"}, "p-1", reg)
+	if !ok || body["id"] != "p-1" {
+		t.Fatalf("applySearchMatch(_id) = %v, body=%v", ok, body)
+	}
+	// Boolean search.
+	body = map[string]any{}
+	ok = applySearchMatch(body, "Patient", &model.SearchParameter{Code: "active", Type: "boolean", Expression: "Patient.active"}, "true", reg)
+	if !ok || body["active"] != true {
+		t.Fatalf("applySearchMatch(boolean) = %v, body=%v", ok, body)
+	}
+	// code token search.
+	body = map[string]any{}
+	ok = applySearchMatch(body, "Patient", &model.SearchParameter{Code: "gender", Type: "token", Expression: "Patient.gender"}, "male", reg)
+	if !ok || body["gender"] != "male" {
+		t.Fatalf("applySearchMatch(code) = %v, body=%v", ok, body)
+	}
+	// Unknown element path -> false.
+	body = map[string]any{}
+	ok = applySearchMatch(body, "Patient", &model.SearchParameter{Code: "zzz", Type: "token", Expression: "Patient.noSuch"}, "x", reg)
+	if ok {
+		t.Fatal("applySearchMatch(unknown) should be false")
+	}
+}
+
 func TestSearchSeedSkipsNonMatchableSearch(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
