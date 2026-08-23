@@ -204,3 +204,10 @@ func TestMatrix(t *testing.T) {
 		t.Fatalf("matrix = %v", m)
 	}
 }
+
+func TestWriteDirInvalidPathError(t *testing.T) {
+	// A path that cannot be created surfaces an error.
+	if err := WriteDir("/proc/definitely-not-writable/x", sampleReport(), coverage.EvaluationReport{}, false, Options{}); err == nil {
+		t.Fatal("expected error for unwritable output directory")
+	}
+}
