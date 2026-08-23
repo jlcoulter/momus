@@ -1,6 +1,9 @@
 package fhirpackage
 
 import (
+	"archive/tar"
+	"compress/gzip"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,6 +23,44 @@ func TestReadPackageManifestFromArchiveErrors(t *testing.T) {
 	}
 	if _, err := readPackageManifestFromArchive(bad); err == nil {
 		t.Fatal("expected error for invalid gzip")
+	}
+	// A gzip archive with no package.json.
+	path := filepath.Join(t.TempDir(), "no-manifest.tgz")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gzw := gzip.NewWriter(f)
+	if _, err := gzw.Write([]byte("not a tar")); err != nil {
+		t.Fatal(err)
+	}
+	gzw.Close()
+	f.Close()
+	if _, err := readPackageManifestFromArchive(path); err == nil {
+		t.Fatal("expected error for archive without package.json")
+	}
+	// A gzip archive whose tar has a non-regular entry then a package.json.
+	path2 := filepath.Join(t.TempDir(), "mixed.tgz")
+	f2, _ := os.Create(path2)
+	gzw2 := gzip.NewWriter(f2)
+	tw := tar.NewWriter(gzw2)
+	// Non-regular entry (directory).
+	hdr := &tar.Header{Name: "package/", Typeflag: tar.TypeDir}
+	tw.WriteHeader(hdr)
+	// Regular package.json entry.
+	jsonBytes, _ := json.Marshal(map[string]any{"name": "a.pkg", "version": "1.0.0"})
+	hdr2 := &tar.Header{Name: "package/package.json", Typeflag: tar.TypeReg, Size: int64(len(jsonBytes))}
+	tw.WriteHeader(hdr2)
+	tw.Write(jsonBytes)
+	tw.Close()
+	gzw2.Close()
+	f.Close()
+	manifest, err := readPackageManifestFromArchive(path2)
+	if err != nil {
+		t.Fatalf("readPackageManifestFromArchive(mixed): %v", err)
+	}
+	if manifest.Name != "a.pkg" || manifest.Version != "1.0.0" {
+		t.Fatalf("manifest = %+v", manifest)
 	}
 }
 
