@@ -480,6 +480,19 @@ func TestIndexLocalPackageArchives(t *testing.T) {
 	if _, ok := idx["a.pkg@1.0.0"]; !ok {
 		t.Fatalf("index = %v, want a.pkg@1.0.0", idx)
 	}
+	// Archives without a readable manifest are skipped (not an error).
+	bad := filepath.Join(dir, "bad.tgz")
+	if err := os.WriteFile(bad, []byte("not-gzip"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err = IndexLocalPackageArchives(dir)
+	if err != nil {
+		t.Fatalf("IndexLocalPackageArchives(with bad): %v", err)
+	}
+	// The valid archive is still indexed.
+	if _, ok := idx["a.pkg@1.0.0"]; !ok {
+		t.Fatalf("index after bad archive = %v, want a.pkg@1.0.0", idx)
+	}
 }
 
 func writePackageArchive(t *testing.T, dir, name, version string, deps map[string]string) string {
