@@ -644,6 +644,25 @@ func TestEvalWildcard(t *testing.T) {
 	_ = res
 }
 
+func TestParseBracketFilterErrors(t *testing.T) {
+	// No identifier after '['.
+	if _, err := Parse("x[]"); err == nil {
+		t.Fatal("expected error for empty bracket filter")
+	}
+	// Unsupported filter.
+	if _, err := Parse("x[bogus(y)]"); err == nil {
+		t.Fatal("expected error for unsupported bracket filter")
+	}
+	// Missing ')' for first().
+	if _, err := Parse("x[first(]"); err == nil {
+		t.Fatal("expected error for missing ')' in first()")
+	}
+	// Missing ']'.
+	if _, err := Parse("x[first()"); err == nil {
+		t.Fatal("expected error for missing ']'")
+	}
+}
+
 func TestCompileMatchesCache(t *testing.T) {
 	re, err := compileMatches("^a+$")
 	if err != nil {
