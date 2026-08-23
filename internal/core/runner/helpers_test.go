@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 
@@ -257,6 +258,26 @@ func TestChildCopiesExecutorState(t *testing.T) {
 	child.variables["new"] = "x"
 	if _, ok := parent.variables["new"]; ok {
 		t.Fatal("child should not share the parent's variables map")
+	}
+}
+
+func TestEvaluateAssertNoResult(t *testing.T) {
+	e := &executor{report: &Report{}}
+	e.evaluateAssert(&ast.Assert{RequirementID: "r1", Description: "d", Expression: "status in [200]"})
+	if e.report.Failed != 1 || e.report.Cases[0].Error != "no request result available for assertion" {
+		t.Fatalf("no-result assert = %+v", e.report)
+	}
+}
+
+func TestEvaluateAssertAttributesRecordedError(t *testing.T) {
+	// A request error already recorded; the following assert attributes metadata.
+	e := &executor{report: &Report{Cases: []CaseResult{{Passed: false, Error: "boom"}}}, errorRecorded: true, lastErr: errors.New("boom")}
+	e.evaluateAssert(&ast.Assert{RequirementID: "r2", Description: "d2", Expression: "x", Trace: &ast.Trace{}})
+	if e.report.Cases[0].RequirementID != "r2" {
+		t.Fatalf("assert not attributed to recorded error: %+v", e.report.Cases[0])
+	}
+	if e.errorRecorded {
+		t.Fatal("errorRecorded should be cleared")
 	}
 }
 
