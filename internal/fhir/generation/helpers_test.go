@@ -63,6 +63,23 @@ func TestApplySimpleConstraintsMatchesPattern(t *testing.T) {
 	}
 }
 
+// TestApplySimpleConstraintsUnsupportedRegex verifies that a matches constraint
+// whose regex has no synthesized example is left untouched (not an error).
+func TestApplySimpleConstraintsUnsupportedRegex(t *testing.T) {
+	value := map[string]any{"value": "existing"}
+	node := &model.ElementNode{
+		Definition: &model.ElementDefinition{
+			Constraints: []model.ElementConstraint{
+				{Key: "k1", Severity: "error", Expression: "value.matches('^[a-z]+$')"},
+			},
+		},
+	}
+	applySimpleConstraints(value, node, nil)
+	if value["value"] != "existing" {
+		t.Fatalf("value = %v, want unchanged (unsupported regex)", value["value"])
+	}
+}
+
 // TestApplySimpleConstraintsExistsEither verifies that an exists() or exists()
 // invariant populates the first absent side.
 func TestApplySimpleConstraintsExistsEither(t *testing.T) {
