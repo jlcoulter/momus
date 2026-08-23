@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/core/assertions"
+	"github.com/jlcoulter/momus/internal/core/ast"
 )
 
 func TestExtractResourceID(t *testing.T) {
@@ -203,5 +204,95 @@ func TestSetupResourceTypeFromRequirementID(t *testing.T) {
 	}
 	if _, ok := setupResourceTypeFromRequirementID("setup:"); ok {
 		t.Fatal("setup with empty type should not match")
+	}
+}
+
+func TestHintForOutcome(t *testing.T) {
+	if got := hintForOutcome(TriageOutcomeAcceptRejected); got == "" {
+		t.Fatal("accept-rejected hint should be non-empty")
+	}
+	if got := hintForOutcome(TriageOutcomeRejectAccepted); got == "" {
+		t.Fatal("reject-accepted hint should be non-empty")
+	}
+	if got := hintForOutcome(TriageOutcomeServerError); got == "" {
+		t.Fatal("server-error hint should be non-empty")
+	}
+	if got := hintForOutcome(TriageOutcomeAmbiguous); got == "" {
+		t.Fatal("ambiguous hint should be non-empty")
+	}
+	if got := hintForOutcome(""); got != "" {
+		t.Fatalf("unknown outcome hint = %q", got)
+	}
+}
+
+func TestSummaryHint(t *testing.T) {
+	// Empty groups -> empty.
+	if got := summaryHint(&TriageSummary{}); got != "" {
+		t.Fatalf("empty summary hint = %q", got)
+	}
+	// Interaction accept-rejected.
+	if got := summaryHint(&TriageSummary{Groups: []TriageGroup{{Outcome: TriageOutcomeAcceptRejected, Count: 2, Domain: "interaction"}}}); got == "" {
+		t.Fatal("interaction hint should be non-empty")
+	}
+	// Reject-accepted.
+	if got := summaryHint(&TriageSummary{Groups: []TriageGroup{{Outcome: TriageOutcomeRejectAccepted, Count: 2}}}); got == "" {
+		t.Fatal("reject-accepted hint should be non-empty")
+	}
+	// Server error.
+	if got := summaryHint(&TriageSummary{Groups: []TriageGroup{{Outcome: TriageOutcomeServerError, Count: 2}}}); got == "" {
+		t.Fatal("server-error hint should be non-empty")
+	}
+}
+
+func TestIsLikelyAuthFailure(t *testing.T) {
+	// Not all failures share the lead signature.
+	if isLikelyAuthFailure([]FailureSignature{{Count: 1, StatusCode: http.StatusForbidden}}, 2) {
+		t.Fatal("mismatched count should not be auth failure")
+	}
+	// Non-auth status.
+	if isLikelyAuthFailure([]FailureSignature{{Count: 2, StatusCode: http.StatusBadRequest}}, 2) {
+		t.Fatal("400 should not be auth failure")
+	}
+	// Auth status with auth token.
+	if !isLikelyAuthFailure([]FailureSignature{{Count: 2, StatusCode: http.StatusForbidden, Diagnostics: "invalid authentication"}}, 2) {
+		t.Fatal("auth token should be recognized")
+	}
+	// Auth status without auth token.
+	if isLikelyAuthFailure([]FailureSignature{{Count: 2, StatusCode: http.StatusForbidden, Diagnostics: "other error"}}, 2) {
+		t.Fatal("no auth token should not be auth failure")
+	}
+}
+
+func TestCollectFailedSetupResources(t *testing.T) {
+	cases := []CaseResult{
+		{RequirementID: "setup:Patient", Passed: false, Trace: &ast.Trace{ResourceType: "Patient"}},
+		{RequirementID: "req-1", Passed: false, Trace: &ast.Trace{ResourceType: "Observation"}},
+		{RequirementID: "setup:Organization", Passed: true},
+	}
+	got := collectFailedSetupResources(cases)
+	// The key is the lowercased resource-type/instance key for a failed setup case.
+	if _, ok := got["patient/momus-setup-patient"]; !ok {
+		t.Fatalf("collectFailedSetupResources = %v, want patient/momus-setup-patient", got)
+	}
+	if len(got) != 1 {
+		t.Fatalf("collectFailedSetupResources = %v, want exactly one entry", got)
+	}
+}
+
+func TestCapture(t *testing.T) {
+	e := &executor{variables: map[string]any{}}
+	// Nil capture -> no-op.
+	e.capture(nil)
+	// No result yet -> no-op.
+	e.capture(&ast.Capture{Name: "id", Path: "id"})
+	if len(e.variables) != 0 {
+		t.Fatalf("capture with no result set variables: %v", e.variables)
+	}
+	// With a result, extracts id.
+	e.hasResult = true
+	e.lastResult = assertions.Result{Body: []byte(`{"id":"p-1"}`)}
+	e.capture(&ast.Capture{Name: "Patient.id", Path: "id"})
+	if e.variables["Patient.id"] != "p-1" {
+		t.Fatalf("capture = %v", e.variables)
 	}
 }
