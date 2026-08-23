@@ -557,3 +557,31 @@ func TestChoiceTypeFromSlices(t *testing.T) {
 		t.Fatalf("choiceTypeFromSlices(no type) = %q", got)
 	}
 }
+
+func TestElementAllowsMultiple(t *testing.T) {
+	if elementAllowsMultiple(nil) {
+		t.Fatal("elementAllowsMultiple(nil) should be false")
+	}
+	if !elementAllowsMultiple(&model.ElementDefinition{Max: "*"}) {
+		t.Fatal("Max=* should allow multiple")
+	}
+	if !elementAllowsMultiple(&model.ElementDefinition{Max: "2"}) {
+		t.Fatal("Max=2 should allow multiple")
+	}
+	if elementAllowsMultiple(&model.ElementDefinition{Max: "1"}) {
+		t.Fatal("Max=1 should not allow multiple")
+	}
+	// Falls back to BaseMax.
+	if !elementAllowsMultiple(&model.ElementDefinition{Max: "1", BaseMax: "*"}) {
+		t.Fatal("BaseMax=* should allow multiple")
+	}
+}
+
+func TestNewRNGDeterministic(t *testing.T) {
+	if newRNG("seed").Intn(1000) != newRNG("seed").Intn(1000) {
+		t.Fatal("newRNG should be deterministic for the same seed")
+	}
+	if newRNG("a").Intn(1000) == newRNG("b").Intn(1000) {
+		t.Log("seeds may rarely collide; not asserted")
+	}
+}
