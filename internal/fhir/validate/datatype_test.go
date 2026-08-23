@@ -21,7 +21,12 @@ func TestMatchesDatatype(t *testing.T) {
 		{"date match", "2024-01-01", []model.ElementType{{Code: "date"}}, true},
 		{"date mismatch", "not-a-date", []model.ElementType{{Code: "date"}}, false},
 		{"Reference match", map[string]any{}, []model.ElementType{{Code: "Reference"}}, true},
-		{"unknown code accepts", map[string]any{}, []model.ElementType{{Code: "BackboneElement"}}, true},
+		{
+			"unknown code accepts",
+			map[string]any{},
+			[]model.ElementType{{Code: "BackboneElement"}},
+			true,
+		},
 		{"any matching type", "x", []model.ElementType{{Code: "integer"}, {Code: "string"}}, true},
 		{"no matching known type", 5, []model.ElementType{{Code: "string"}}, false},
 		{"empty types unknown", 5, nil, true},
@@ -108,20 +113,6 @@ func TestValidDateShape(t *testing.T) {
 	for _, s := range invalid {
 		if validDateShape(s) {
 			t.Errorf("validDateShape(%q) = true, want false", s)
-		}
-	}
-}
-
-func TestNormalizeTypeName(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"string", "string"},
-		{"  string  ", "string"},
-		{"", ""},
-		{"valueString", "valueString"},
-	}
-	for _, c := range cases {
-		if got := normalizeTypeName(c.in); got != c.want {
-			t.Errorf("normalizeTypeName(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

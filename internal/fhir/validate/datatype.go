@@ -1,7 +1,6 @@
 package validate
 
 import (
-	"strings"
 	"time"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -101,9 +100,4 @@ func validDateShape(s string) bool {
 		}
 	}
 	return false
-}
-
-// normalizeTypeName strips trailing datatype suffixes used by choice keys.
-func normalizeTypeName(code string) string {
-	return strings.TrimSpace(code)
 }

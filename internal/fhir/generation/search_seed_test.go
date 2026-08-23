@@ -13,14 +13,40 @@ import (
 
 func TestBuildSetupDatasetAddsSearchMatchSeed(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
-	}})
-	reg.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Patient-name", Name: "name", Code: "name", Base: []string{"Patient"}, Type: "string", Expression: "Patient.name"})
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://example.org/StructureDefinition/patient",
+			Type: "Patient",
+			Elements: []model.ElementDefinition{
+				{Path: "Patient", Min: 0, Max: "*"},
+				{
+					Path:  "Patient.name",
+					Min:   1,
+					Max:   "*",
+					Types: []model.ElementType{{Code: "HumanName"}},
+				},
+			},
+		},
+	)
+	reg.AddSearchParameter(
+		&model.SearchParameter{
+			URL:        "http://hl7.org/fhir/SearchParameter/Patient-name",
+			Name:       "name",
+			Code:       "name",
+			Base:       []string{"Patient"},
+			Type:       "string",
+			Expression: "Patient.name",
+		},
+	)
 
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
-		{ID: "search|Patient|name|search-multiple-results", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchMultipleResults, SearchCode: "name"},
+		{
+			ID:           "search|Patient|name|search-multiple-results",
+			ResourceType: "Patient",
+			Domain:       coverage.CoverageDomainSearch,
+			Variant:      coverage.CoverageVariantSearchMultipleResults,
+			SearchCode:   "name",
+		},
 	}}
 	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
 
@@ -51,14 +77,39 @@ func TestBuildSetupDatasetAddsSearchMatchSeed(t *testing.T) {
 
 func TestBuildSetupDatasetAddsIDSearchSeed(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
-	}})
-	reg.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Resource-id", Name: "_id", Code: "_id", Base: []string{"Resource"}, Type: "token"})
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://example.org/StructureDefinition/patient",
+			Type: "Patient",
+			Elements: []model.ElementDefinition{
+				{Path: "Patient", Min: 0, Max: "*"},
+				{
+					Path:  "Patient.name",
+					Min:   1,
+					Max:   "*",
+					Types: []model.ElementType{{Code: "HumanName"}},
+				},
+			},
+		},
+	)
+	reg.AddSearchParameter(
+		&model.SearchParameter{
+			URL:  "http://hl7.org/fhir/SearchParameter/Resource-id",
+			Name: "_id",
+			Code: "_id",
+			Base: []string{"Resource"},
+			Type: "token",
+		},
+	)
 
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
-		{ID: "search|Patient|_id|valid", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchValid, SearchCode: "_id"},
+		{
+			ID:           "search|Patient|_id|valid",
+			ResourceType: "Patient",
+			Domain:       coverage.CoverageDomainSearch,
+			Variant:      coverage.CoverageVariantSearchValid,
+			SearchCode:   "_id",
+		},
 	}}
 	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
 
@@ -121,16 +172,61 @@ func validFHIRID(s string) bool {
 // generic placeholder like "momus-search" would be rejected by servers.
 func TestSearchSeedUsesValidBoundCode(t *testing.T) {
 	reg := registry.New()
-	reg.AddValueSet(&model.ValueSet{URL: "http://hl7.org/fhir/ValueSet/endpoint-status", ComposeIncludes: []model.ValueSetInclude{{System: "http://hl7.org/fhir/ValueSet/endpoint-status", Concepts: []model.ConceptReference{{Code: "active"}, {Code: "off"}}}}})
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/endpoint", Type: "Endpoint", Elements: []model.ElementDefinition{
-		{Path: "Endpoint", Min: 0, Max: "*"},
-		{Path: "Endpoint.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://hl7.org/fhir/ValueSet/endpoint-status"}},
-		{Path: "Endpoint.connectionType", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Coding"}}},
-	}})
-	reg.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Endpoint-status", Name: "status", Code: "status", Base: []string{"Endpoint"}, Type: "token", Expression: "Endpoint.status"})
+	reg.AddValueSet(
+		&model.ValueSet{
+			URL: "http://hl7.org/fhir/ValueSet/endpoint-status",
+			ComposeIncludes: []model.ValueSetInclude{
+				{
+					System:   "http://hl7.org/fhir/ValueSet/endpoint-status",
+					Concepts: []model.ConceptReference{{Code: "active"}, {Code: "off"}},
+				},
+			},
+		},
+	)
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://example.org/StructureDefinition/endpoint",
+			Type: "Endpoint",
+			Elements: []model.ElementDefinition{
+				{Path: "Endpoint", Min: 0, Max: "*"},
+				{
+					Path:  "Endpoint.status",
+					Min:   1,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "code"}},
+					Binding: &model.Binding{
+						Strength: "required",
+						ValueSet: "http://hl7.org/fhir/ValueSet/endpoint-status",
+					},
+				},
+				{
+					Path:  "Endpoint.connectionType",
+					Min:   1,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "Coding"}},
+				},
+			},
+		},
+	)
+	reg.AddSearchParameter(
+		&model.SearchParameter{
+			URL:        "http://hl7.org/fhir/SearchParameter/Endpoint-status",
+			Name:       "status",
+			Code:       "status",
+			Base:       []string{"Endpoint"},
+			Type:       "token",
+			Expression: "Endpoint.status",
+		},
+	)
 
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
-		{ID: "search|Endpoint|status|search-multiple-results", ResourceType: "Endpoint", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchMultipleResults, SearchCode: "status"},
+		{
+			ID:           "search|Endpoint|status|search-multiple-results",
+			ResourceType: "Endpoint",
+			Domain:       coverage.CoverageDomainSearch,
+			Variant:      coverage.CoverageVariantSearchMultipleResults,
+			SearchCode:   "status",
+		},
 	}}
 	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
 
@@ -208,16 +304,61 @@ func TestSearchSeedKeepsRepeatableAddressArray(t *testing.T) {
 // CodeableConcept bound to a value set uses a valid code from that set.
 func TestSearchSeedUsesValidBoundCodeableConcept(t *testing.T) {
 	reg := registry.New()
-	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/spc", ComposeIncludes: []model.ValueSetInclude{{System: "http://example.org/cs/spc", Concepts: []model.ConceptReference{{Code: "spc1"}}}}})
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/hs", Type: "HealthcareService", Elements: []model.ElementDefinition{
-		{Path: "HealthcareService", Min: 0, Max: "*"},
-		{Path: "HealthcareService.active", Min: 1, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
-		{Path: "HealthcareService.serviceProvisionCode", Min: 0, Max: "*", Types: []model.ElementType{{Code: "CodeableConcept"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/spc"}},
-	}})
-	reg.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/HealthcareService-service-provision-code", Name: "service-provision-code", Code: "service-provision-code", Base: []string{"HealthcareService"}, Type: "token", Expression: "HealthcareService.serviceProvisionCode"})
+	reg.AddValueSet(
+		&model.ValueSet{
+			URL: "http://example.org/ValueSet/spc",
+			ComposeIncludes: []model.ValueSetInclude{
+				{
+					System:   "http://example.org/cs/spc",
+					Concepts: []model.ConceptReference{{Code: "spc1"}},
+				},
+			},
+		},
+	)
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://example.org/StructureDefinition/hs",
+			Type: "HealthcareService",
+			Elements: []model.ElementDefinition{
+				{Path: "HealthcareService", Min: 0, Max: "*"},
+				{
+					Path:  "HealthcareService.active",
+					Min:   1,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "boolean"}},
+				},
+				{
+					Path:  "HealthcareService.serviceProvisionCode",
+					Min:   0,
+					Max:   "*",
+					Types: []model.ElementType{{Code: "CodeableConcept"}},
+					Binding: &model.Binding{
+						Strength: "required",
+						ValueSet: "http://example.org/ValueSet/spc",
+					},
+				},
+			},
+		},
+	)
+	reg.AddSearchParameter(
+		&model.SearchParameter{
+			URL:        "http://hl7.org/fhir/SearchParameter/HealthcareService-service-provision-code",
+			Name:       "service-provision-code",
+			Code:       "service-provision-code",
+			Base:       []string{"HealthcareService"},
+			Type:       "token",
+			Expression: "HealthcareService.serviceProvisionCode",
+		},
+	)
 
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
-		{ID: "search|HealthcareService|service-provision-code|valid", ResourceType: "HealthcareService", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchValid, SearchCode: "service-provision-code"},
+		{
+			ID:           "search|HealthcareService|service-provision-code|valid",
+			ResourceType: "HealthcareService",
+			Domain:       coverage.CoverageDomainSearch,
+			Variant:      coverage.CoverageVariantSearchValid,
+			SearchCode:   "service-provision-code",
+		},
 	}}
 	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
 
@@ -254,15 +395,52 @@ func TestSearchSeedUsesValidBoundCodeableConcept(t *testing.T) {
 // element so the slice is matched.
 func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/org", Type: "Organization", Elements: []model.ElementDefinition{
-		{Path: "Organization", Min: 0, Max: "*"},
-		{Path: "Organization.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
-		{Path: "Organization.address", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Address"}}},
-		{ID: "Organization.address:physical", Path: "Organization.address", SliceName: "physical", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Address"}}},
-		{ID: "Organization.address:physical.type", Path: "Organization.address.type", SliceName: "", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}, Pattern: "physical"},
-	}})
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://example.org/StructureDefinition/org",
+			Type: "Organization",
+			Elements: []model.ElementDefinition{
+				{Path: "Organization", Min: 0, Max: "*"},
+				{
+					Path:  "Organization.name",
+					Min:   1,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "string"}},
+				},
+				{
+					Path:  "Organization.address",
+					Min:   1,
+					Max:   "*",
+					Types: []model.ElementType{{Code: "Address"}},
+				},
+				{
+					ID:        "Organization.address:physical",
+					Path:      "Organization.address",
+					SliceName: "physical",
+					Min:       1,
+					Max:       "1",
+					Types:     []model.ElementType{{Code: "Address"}},
+				},
+				{
+					ID:        "Organization.address:physical.type",
+					Path:      "Organization.address.type",
+					SliceName: "",
+					Min:       1,
+					Max:       "1",
+					Types:     []model.ElementType{{Code: "code"}},
+					Pattern:   "physical",
+				},
+			},
+		},
+	)
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
-		{ID: "c1", ProfileURL: "http://example.org/StructureDefinition/org", ResourceType: "Organization", ElementPath: "Organization.name", Variant: coverage.CoverageVariantValidMin},
+		{
+			ID:           "c1",
+			ProfileURL:   "http://example.org/StructureDefinition/org",
+			ResourceType: "Organization",
+			ElementPath:  "Organization.name",
+			Variant:      coverage.CoverageVariantValidMin,
+		},
 	}}
 	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
 
@@ -315,10 +493,21 @@ func TestSetNameLeafBranches(t *testing.T) {
 func TestSetDateLeafPeriodElement(t *testing.T) {
 	reg := registry.New()
 	// A Period-typed element (no dateTime choice) sets the start member.
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitionerrole", Type: "PractitionerRole", Elements: []model.ElementDefinition{
-		{Path: "PractitionerRole", Min: 0, Max: "*"},
-		{Path: "PractitionerRole.period", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Period"}}},
-	}})
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://example.org/StructureDefinition/practitionerrole",
+			Type: "PractitionerRole",
+			Elements: []model.ElementDefinition{
+				{Path: "PractitionerRole", Min: 0, Max: "*"},
+				{
+					Path:  "PractitionerRole.period",
+					Min:   0,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "Period"}},
+				},
+			},
+		},
+	)
 	body := map[string]any{}
 	setDateLeaf(body, "period", "2024-01-01", reg, "PractitionerRole")
 	period := body["period"].(map[string]any)
@@ -329,14 +518,40 @@ func TestSetDateLeafPeriodElement(t *testing.T) {
 
 func TestSearchSeedSetsIdentifierValue(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.identifier", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Identifier"}}},
-	}})
-	reg.AddSearchParameter(&model.SearchParameter{URL: "http://example.org/SearchParameter/Patient-identifier", Name: "identifier", Code: "identifier", Base: []string{"Patient"}, Type: "token", Expression: "Patient.identifier"})
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://example.org/StructureDefinition/patient",
+			Type: "Patient",
+			Elements: []model.ElementDefinition{
+				{Path: "Patient", Min: 0, Max: "*"},
+				{
+					Path:  "Patient.identifier",
+					Min:   0,
+					Max:   "*",
+					Types: []model.ElementType{{Code: "Identifier"}},
+				},
+			},
+		},
+	)
+	reg.AddSearchParameter(
+		&model.SearchParameter{
+			URL:        "http://example.org/SearchParameter/Patient-identifier",
+			Name:       "identifier",
+			Code:       "identifier",
+			Base:       []string{"Patient"},
+			Type:       "token",
+			Expression: "Patient.identifier",
+		},
+	)
 
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
-		{ID: "search|Patient|identifier|multiple", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchMultipleResults, SearchCode: "identifier"},
+		{
+			ID:           "search|Patient|identifier|multiple",
+			ResourceType: "Patient",
+			Domain:       coverage.CoverageDomainSearch,
+			Variant:      coverage.CoverageVariantSearchMultipleResults,
+			SearchCode:   "identifier",
+		},
 	}}
 	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
 
@@ -398,22 +613,54 @@ func TestPlainSearchPath(t *testing.T) {
 func TestResolveNestedLeafType(t *testing.T) {
 	reg := registry.New()
 	// An Identifier complex datatype definition.
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Identifier", Type: "Identifier", Elements: []model.ElementDefinition{
-		{Path: "Identifier", Min: 0, Max: "*"},
-		{Path: "Identifier.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
-	}})
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://hl7.org/fhir/StructureDefinition/Identifier",
+			Type: "Identifier",
+			Elements: []model.ElementDefinition{
+				{Path: "Identifier", Min: 0, Max: "*"},
+				{
+					Path:  "Identifier.value",
+					Min:   0,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "string"}},
+				},
+			},
+		},
+	)
 	// A Patient with an identifier element typed as Identifier.
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.identifier", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Identifier"}}},
-	}})
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://example.org/StructureDefinition/patient",
+			Type: "Patient",
+			Elements: []model.ElementDefinition{
+				{Path: "Patient", Min: 0, Max: "*"},
+				{
+					Path:  "Patient.identifier",
+					Min:   0,
+					Max:   "*",
+					Types: []model.ElementType{{Code: "Identifier"}},
+				},
+			},
+		},
+	)
 	resolved, err := reg.ResolveProfile("http://example.org/StructureDefinition/patient")
 	if err != nil {
 		t.Fatalf("ResolveProfile: %v", err)
 	}
-	typeCode, repeatable, found := resolveNestedLeafType(resolved, "Patient", "identifier.value", reg)
+	typeCode, repeatable, found := resolveNestedLeafType(
+		resolved,
+		"Patient",
+		"identifier.value",
+		reg,
+	)
 	if !found || typeCode != "string" || repeatable {
-		t.Fatalf("resolveNestedLeafType = %q, %v, %v; want string, false, true", typeCode, repeatable, found)
+		t.Fatalf(
+			"resolveNestedLeafType = %q, %v, %v; want string, false, true",
+			typeCode,
+			repeatable,
+			found,
+		)
 	}
 	// A single-segment path returns not-found.
 	if _, _, found := resolveNestedLeafType(resolved, "Patient", "identifier", reg); found {
@@ -431,7 +678,10 @@ func TestSearchElementPath(t *testing.T) {
 		t.Fatalf("searchElementPath(plain) = %q", got)
 	}
 	// Union prefers the resource-type branch.
-	if got := searchElementPath("Patient.gender | Practitioner.gender", "Patient"); got != "gender" {
+	if got := searchElementPath(
+		"Patient.gender | Practitioner.gender",
+		"Patient",
+	); got != "gender" {
 		t.Fatalf("searchElementPath(union) = %q", got)
 	}
 	// A bare function call is stripped to the identifier.
@@ -442,11 +692,27 @@ func TestSearchElementPath(t *testing.T) {
 
 func TestSearchLeafType(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
-		{Path: "Patient.deceased", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
-	}})
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://example.org/StructureDefinition/patient",
+			Type: "Patient",
+			Elements: []model.ElementDefinition{
+				{Path: "Patient", Min: 0, Max: "*"},
+				{
+					Path:  "Patient.active",
+					Min:   0,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "boolean"}},
+				},
+				{
+					Path:  "Patient.deceased",
+					Min:   0,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "boolean"}},
+				},
+			},
+		},
+	)
 	// Exact key.
 	tc, rep := searchLeafType("Patient", "active", reg)
 	if tc != "boolean" || rep {
@@ -465,25 +731,97 @@ func TestSearchLeafType(t *testing.T) {
 
 func TestApplySearchMatchBranchCoverage(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.name", Min: 0, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
-		{Path: "Patient.address", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Address"}}},
-		{Path: "Patient.telecom", Min: 0, Max: "*", Types: []model.ElementType{{Code: "ContactPoint"}}},
-		{Path: "Patient.generalPractitioner", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference"}}},
-		{Path: "Patient.valueQuantity", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Quantity"}}},
-		{Path: "Patient.score", Min: 0, Max: "1", Types: []model.ElementType{{Code: "integer"}}},
-	}})
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://example.org/StructureDefinition/patient",
+			Type: "Patient",
+			Elements: []model.ElementDefinition{
+				{Path: "Patient", Min: 0, Max: "*"},
+				{
+					Path:  "Patient.name",
+					Min:   0,
+					Max:   "*",
+					Types: []model.ElementType{{Code: "HumanName"}},
+				},
+				{
+					Path:  "Patient.address",
+					Min:   0,
+					Max:   "*",
+					Types: []model.ElementType{{Code: "Address"}},
+				},
+				{
+					Path:  "Patient.telecom",
+					Min:   0,
+					Max:   "*",
+					Types: []model.ElementType{{Code: "ContactPoint"}},
+				},
+				{
+					Path:  "Patient.generalPractitioner",
+					Min:   0,
+					Max:   "*",
+					Types: []model.ElementType{{Code: "Reference"}},
+				},
+				{
+					Path:  "Patient.valueQuantity",
+					Min:   0,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "Quantity"}},
+				},
+				{
+					Path:  "Patient.score",
+					Min:   0,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "integer"}},
+				},
+			},
+		},
+	)
 	cases := []struct {
 		code, typ, expr, want string
 		check                 func(map[string]any) bool
 	}{
-		{"name", "string", "Patient.name", "momus-search", func(b map[string]any) bool { return b["name"] != nil }},
-		{"address", "string", "Patient.address", "momus-search", func(b map[string]any) bool { return b["address"] != nil }},
-		{"telecom", "token", "Patient.telecom", "momus-search", func(b map[string]any) bool { return b["telecom"] != nil }},
-		{"general-practitioner", "reference", "Patient.generalPractitioner", "Patient/x", func(b map[string]any) bool { return b["generalPractitioner"] != nil }},
-		{"value-quantity", "quantity", "Patient.valueQuantity", "5.4|http://sys|mg", func(b map[string]any) bool { return b["valueQuantity"] != nil }},
-		{"score", "number", "Patient.score", "10", func(b map[string]any) bool { return b["score"] != nil }},
+		{
+			"name",
+			"string",
+			"Patient.name",
+			"momus-search",
+			func(b map[string]any) bool { return b["name"] != nil },
+		},
+		{
+			"address",
+			"string",
+			"Patient.address",
+			"momus-search",
+			func(b map[string]any) bool { return b["address"] != nil },
+		},
+		{
+			"telecom",
+			"token",
+			"Patient.telecom",
+			"momus-search",
+			func(b map[string]any) bool { return b["telecom"] != nil },
+		},
+		{
+			"general-practitioner",
+			"reference",
+			"Patient.generalPractitioner",
+			"Patient/x",
+			func(b map[string]any) bool { return b["generalPractitioner"] != nil },
+		},
+		{
+			"value-quantity",
+			"quantity",
+			"Patient.valueQuantity",
+			"5.4|http://sys|mg",
+			func(b map[string]any) bool { return b["valueQuantity"] != nil },
+		},
+		{
+			"score",
+			"number",
+			"Patient.score",
+			"10",
+			func(b map[string]any) bool { return b["score"] != nil },
+		},
 	}
 	for _, c := range cases {
 		sp := &model.SearchParameter{Code: c.code, Type: c.typ, Expression: c.expr}
@@ -500,22 +838,60 @@ func TestApplySearchMatchBranchCoverage(t *testing.T) {
 
 func TestApplySearchMatchSpecialDateComposite(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/location", Type: "Location", Elements: []model.ElementDefinition{
-		{Path: "Location", Min: 0, Max: "*"},
-		{Path: "Location.position", Min: 0, Max: "1", Types: []model.ElementType{{Code: "BackboneElement"}}},
-		{Path: "Location.position.latitude", Min: 1, Max: "1", Types: []model.ElementType{{Code: "decimal"}}},
-		{Path: "Location.position.longitude", Min: 1, Max: "1", Types: []model.ElementType{{Code: "decimal"}}},
-		{Path: "Location.recorded", Min: 0, Max: "1", Types: []model.ElementType{{Code: "instant"}}},
-	}})
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://example.org/StructureDefinition/location",
+			Type: "Location",
+			Elements: []model.ElementDefinition{
+				{Path: "Location", Min: 0, Max: "*"},
+				{
+					Path:  "Location.position",
+					Min:   0,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "BackboneElement"}},
+				},
+				{
+					Path:  "Location.position.latitude",
+					Min:   1,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "decimal"}},
+				},
+				{
+					Path:  "Location.position.longitude",
+					Min:   1,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "decimal"}},
+				},
+				{
+					Path:  "Location.recorded",
+					Min:   0,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "instant"}},
+				},
+			},
+		},
+	)
 	// Special (near) search.
 	body := map[string]any{}
-	ok := applySearchMatch(body, "Location", &model.SearchParameter{Code: "near", Type: "special", Expression: "position.longitude"}, "-33.8688|151.2093", reg)
+	ok := applySearchMatch(
+		body,
+		"Location",
+		&model.SearchParameter{Code: "near", Type: "special", Expression: "position.longitude"},
+		"-33.8688|151.2093",
+		reg,
+	)
 	if !ok || body["position"] == nil {
 		t.Fatalf("applySearchMatch(special) = %v, body=%v", ok, body)
 	}
 	// Date search.
 	body = map[string]any{}
-	ok = applySearchMatch(body, "Location", &model.SearchParameter{Code: "recorded", Type: "date", Expression: "Location.recorded"}, "2024-01-01", reg)
+	ok = applySearchMatch(
+		body,
+		"Location",
+		&model.SearchParameter{Code: "recorded", Type: "date", Expression: "Location.recorded"},
+		"2024-01-01",
+		reg,
+	)
 	if !ok {
 		t.Fatalf("applySearchMatch(date) = %v", ok)
 	}
@@ -523,17 +899,43 @@ func TestApplySearchMatchSpecialDateComposite(t *testing.T) {
 
 func TestSearchSeedSkipsNonMatchableSearch(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.active", Min: 1, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
-	}})
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://example.org/StructureDefinition/patient",
+			Type: "Patient",
+			Elements: []model.ElementDefinition{
+				{Path: "Patient", Min: 0, Max: "*"},
+				{
+					Path:  "Patient.active",
+					Min:   1,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "boolean"}},
+				},
+			},
+		},
+	)
 	// `unknown-param` points at a non-existent element path, so the engine
 	// cannot resolve a leaf to seed and no matching seed is added (the search
 	// remains status-only).
-	reg.AddSearchParameter(&model.SearchParameter{URL: "http://example.org/SearchParameter/Patient-unknown", Name: "unknown-param", Code: "unknown-param", Base: []string{"Patient"}, Type: "token", Expression: "Patient.noSuchElement"})
+	reg.AddSearchParameter(
+		&model.SearchParameter{
+			URL:        "http://example.org/SearchParameter/Patient-unknown",
+			Name:       "unknown-param",
+			Code:       "unknown-param",
+			Base:       []string{"Patient"},
+			Type:       "token",
+			Expression: "Patient.noSuchElement",
+		},
+	)
 
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
-		{ID: "search|Patient|unknown-param|multiple", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch, Variant: coverage.CoverageVariantSearchMultipleResults, SearchCode: "unknown-param"},
+		{
+			ID:           "search|Patient|unknown-param|multiple",
+			ResourceType: "Patient",
+			Domain:       coverage.CoverageDomainSearch,
+			Variant:      coverage.CoverageVariantSearchMultipleResults,
+			SearchCode:   "unknown-param",
+		},
 	}}
 	opts := BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: reg}
 
@@ -580,8 +982,10 @@ func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
 	// CodeableConcept example: stale coding system/display and text removed.
 	concept := map[string]any{
 		"type": map[string]any{
-			"coding": []any{map[string]any{"system": "http://example.org", "code": "old", "display": "Old"}},
-			"text":   "Old",
+			"coding": []any{
+				map[string]any{"system": "http://example.org", "code": "old", "display": "Old"},
+			},
+			"text": "Old",
 		},
 	}
 	setSearchCodeValue(concept, "type", "new", "CodeableConcept", false, "")
@@ -640,7 +1044,11 @@ func TestSetSearchCodeValueCodingArrayNonMap(t *testing.T) {
 
 func TestSetSearchCodeValueDefaultBranches(t *testing.T) {
 	// An existing array whose first element has a coding array of maps.
-	body := map[string]any{"type": []any{map[string]any{"coding": []any{map[string]any{"code": "old", "system": "old"}}}}}
+	body := map[string]any{
+		"type": []any{
+			map[string]any{"coding": []any{map[string]any{"code": "old", "system": "old"}}},
+		},
+	}
 	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
 	codings := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
 	first := codings[0].(map[string]any)
@@ -670,11 +1078,27 @@ func TestSetSearchCodeValueDefaultBranches(t *testing.T) {
 
 func TestApplyCompositeMatchTypeBranches(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/observation", Type: "Observation", Elements: []model.ElementDefinition{
-		{Path: "Observation", Min: 0, Max: "*"},
-		{Path: "Observation.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
-		{Path: "Observation.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Quantity"}}},
-	}})
+	reg.AddStructureDefinition(
+		&model.StructureDefinition{
+			URL:  "http://example.org/StructureDefinition/observation",
+			Type: "Observation",
+			Elements: []model.ElementDefinition{
+				{Path: "Observation", Min: 0, Max: "*"},
+				{
+					Path:  "Observation.active",
+					Min:   0,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "boolean"}},
+				},
+				{
+					Path:  "Observation.value",
+					Min:   0,
+					Max:   "1",
+					Types: []model.ElementType{{Code: "Quantity"}},
+				},
+			},
+		},
+	)
 	// Boolean component.
 	body := map[string]any{}
 	if !applyCompositeMatch(body, "active | value", "Observation", "true$5.4", reg) {
@@ -691,7 +1115,14 @@ func TestApplyCompositeMatchTypeBranches(t *testing.T) {
 func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
 	body := map[string]any{}
 	// New CodeableConcept: system applied alongside the search code.
-	setSearchCodeValue(body, "serviceProvisionCode", "free", "CodeableConcept", true, "http://digitalhealth.gov.au/fhir/hcpd/CodeSystem/service-provision-cs")
+	setSearchCodeValue(
+		body,
+		"serviceProvisionCode",
+		"free",
+		"CodeableConcept",
+		true,
+		"http://digitalhealth.gov.au/fhir/hcpd/CodeSystem/service-provision-cs",
+	)
 	arr := body["serviceProvisionCode"].([]any)
 	cc := arr[0].(map[string]any)
 	coding := cc["coding"].([]any)[0].(map[string]any)
@@ -704,9 +1135,20 @@ func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
 
 	// Existing Coding: system realigned to the resolved system, stale display dropped.
 	existing := map[string]any{
-		"connectionType": map[string]any{"system": "http://hl7.org.au/fhir/CodeSystem/smd-interfaces", "code": "old", "display": "Old"},
+		"connectionType": map[string]any{
+			"system":  "http://hl7.org.au/fhir/CodeSystem/smd-interfaces",
+			"code":    "old",
+			"display": "Old",
+		},
 	}
-	setSearchCodeValue(existing, "connectionType", "dicom-wado-rs", "Coding", false, "http://hl7.org/fhir/ValueSet/endpoint-connection-type")
+	setSearchCodeValue(
+		existing,
+		"connectionType",
+		"dicom-wado-rs",
+		"Coding",
+		false,
+		"http://hl7.org/fhir/ValueSet/endpoint-connection-type",
+	)
 	ct := existing["connectionType"].(map[string]any)
 	if ct["code"] != "dicom-wado-rs" {
 		t.Fatalf("got code %v, want dicom-wado-rs", ct["code"])
@@ -763,7 +1205,9 @@ func TestSetSearchCodeValueBranches(t *testing.T) {
 		t.Fatalf("existing string = %v", body["status"])
 	}
 	// Existing array of codings.
-	body = map[string]any{"type": []any{map[string]any{"coding": []any{map[string]any{"code": "old"}}}}}
+	body = map[string]any{
+		"type": []any{map[string]any{"coding": []any{map[string]any{"code": "old"}}}},
+	}
 	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
 	codings := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
 	if codings[0].(map[string]any)["code"] != "new" {
@@ -774,33 +1218,6 @@ func TestSetSearchCodeValueBranches(t *testing.T) {
 	setSearchCodeValue(body, "type", "new", "Coding", false, "")
 	if body["type"].(map[string]any)["code"] != "new" {
 		t.Fatalf("bare coding = %v", body["type"])
-	}
-}
-
-func TestSetFieldLeafAndForceBranches(t *testing.T) {
-	// setFieldLeaf: missing field -> array.
-	body := map[string]any{}
-	setFieldLeaf(body, "contact", "city", "Sydney")
-	if body["contact"].([]any)[0].(map[string]any)["city"] != "Sydney" {
-		t.Fatalf("setFieldLeaf(missing) = %v", body)
-	}
-	// Empty array -> replaced.
-	body = map[string]any{"contact": []any{}}
-	setFieldLeaf(body, "contact", "city", "Sydney")
-	if body["contact"].([]any)[0].(map[string]any)["city"] != "Sydney" {
-		t.Fatalf("setFieldLeaf(empty array) = %v", body)
-	}
-	// Non-map first array element -> replaced.
-	body = map[string]any{"contact": []any{"str"}}
-	setFieldLeaf(body, "contact", "city", "Sydney")
-	if body["contact"].([]any)[0].(map[string]any)["city"] != "Sydney" {
-		t.Fatalf("setFieldLeaf(non-map array) = %v", body)
-	}
-	// Existing map field.
-	body = map[string]any{"addr": map[string]any{}}
-	setFieldLeaf(body, "addr", "city", "Sydney")
-	if body["addr"].(map[string]any)["city"] != "Sydney" {
-		t.Fatalf("setFieldLeaf(map) = %v", body)
 	}
 }
 
@@ -832,20 +1249,8 @@ func TestSetFieldLeafForceBranches(t *testing.T) {
 }
 
 func TestSetFieldLeafAndForce(t *testing.T) {
-	// setFieldLeaf with existing array preserves first element's leaf if present.
-	body := map[string]any{"contact": []any{map[string]any{"city": "X"}}}
-	setFieldLeaf(body, "contact", "city", "Y")
-	if body["contact"].([]any)[0].(map[string]any)["city"] != "X" {
-		t.Fatalf("setFieldLeaf preserved = %v", body["contact"])
-	}
-	// setFieldLeaf with missing leaf.
-	body = map[string]any{"contact": []any{map[string]any{"phone": "1"}}}
-	setFieldLeaf(body, "contact", "city", "Y")
-	if body["contact"].([]any)[0].(map[string]any)["city"] != "Y" {
-		t.Fatalf("setFieldLeaf added = %v", body["contact"])
-	}
 	// setFieldLeafForce overwrites.
-	body = map[string]any{"contact": []any{map[string]any{"city": "X"}}}
+	body := map[string]any{"contact": []any{map[string]any{"city": "X"}}}
 	setFieldLeafForce(body, "contact", "city", "Y")
 	if body["contact"].([]any)[0].(map[string]any)["city"] != "Y" {
 		t.Fatalf("setFieldLeafForce = %v", body["contact"])
