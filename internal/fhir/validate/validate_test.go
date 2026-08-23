@@ -263,3 +263,41 @@ func TestParseMax(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateNilResource(t *testing.T) {
+	r := buildPatientRegistry()
+	v := New(r)
+	if _, err := v.Validate(context.Background(), patientProfile, nil); err == nil {
+		t.Fatal("expected error for nil resource, got nil")
+	}
+}
+
+func TestValidateUnknownProfile(t *testing.T) {
+	r := buildPatientRegistry()
+	v := New(r)
+	_, err := v.Validate(context.Background(), "http://example.org/StructureDefinition/missing", map[string]any{"resourceType": "Patient"})
+	if err == nil {
+		t.Fatal("expected error for unknown profile, got nil")
+	}
+}
+
+func TestNewMockAdapter(t *testing.T) {
+	r := buildPatientRegistry()
+	adapter := NewMockAdapter(r)
+	if adapter == nil {
+		t.Fatal("NewMockAdapter returned nil")
+	}
+	// Valid resource -> no issues.
+	issues, err := adapter.Validate(context.Background(), patientProfile, map[string]any{
+		"name":   []any{map[string]any{"family": "Smith"}},
+		"status": "active",
+	})
+	if err != nil {
+		t.Fatalf("MockAdapter.Validate: %v", err)
+	}
+	for _, iss := range issues {
+		if iss.Kind == "cardinality" && iss.Path == "Patient.name" {
+			t.Fatalf("unexpected cardinality issue: %+v", iss)
+		}
+	}
+}
