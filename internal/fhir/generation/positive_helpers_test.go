@@ -251,3 +251,173 @@ func TestApplySliceElementConstraint(t *testing.T) {
 		t.Fatalf("pattern scalar not applied: %v", value)
 	}
 }
+
+func TestMergeCodingArrayAndMap(t *testing.T) {
+	binding := generatedCoding{System: "http://sys", Code: "c", Display: "D"}
+	// Existing codings array -> merge each, fill missing fields.
+	merged := mergeCodingArray([]any{map[string]any{"code": "existing"}}, binding)
+	if len(merged) != 1 {
+		t.Fatalf("mergeCodingArray = %v", merged)
+	}
+	m := merged[0].(map[string]any)
+	if m["code"] != "existing" || m["system"] != "http://sys" {
+		t.Fatalf("merged coding = %v", m)
+	}
+	// Non-array existing -> binding map.
+	merged = mergeCodingArray("not-array", binding)
+	if len(merged) != 1 || merged[0].(map[string]any)["code"] != "c" {
+		t.Fatalf("mergeCodingArray(non-array) = %v", merged)
+	}
+	// Empty binding.
+	if merged := mergeCodingArray(nil, generatedCoding{}); merged != nil {
+		t.Fatalf("mergeCodingArray(empty binding) = %v", merged)
+	}
+	// mergeCodingMap nil.
+	if got := mergeCodingMap(nil, binding); got["code"] != "c" {
+		t.Fatalf("mergeCodingMap(nil) = %v", got)
+	}
+}
+
+func TestFirstCodingInValueAndCodingFromMap(t *testing.T) {
+	// CodeableConcept with coding.
+	v := map[string]any{"coding": []any{map[string]any{"code": "c", "system": "s"}}}
+	c, ok := firstCodingInValue(v)
+	if !ok || c.Code != "c" {
+		t.Fatalf("firstCodingInValue = %+v, %v", c, ok)
+	}
+	// Array.
+	if _, ok := firstCodingInValue([]any{"nope", map[string]any{"code": "x"}}); !ok {
+		t.Fatal("firstCodingInValue(array) should find a coding")
+	}
+	// Empty / placeholder.
+	if _, ok := firstCodingInValue(map[string]any{"coding": []any{}}); ok {
+		t.Fatal("empty coding array should be false")
+	}
+	// codingFromMap with placeholder code.
+	if _, ok := codingFromMap(map[string]any{"code": "XX"}); ok {
+		t.Fatal("placeholder code should not be meaningful")
+	}
+}
+
+func TestCodingAtPath(t *testing.T) {
+	raw := map[string]any{
+		"communication": []any{map[string]any{"coding": []any{map[string]any{"code": "it", "system": "urn:ietf:bcp:47"}}}},
+	}
+	c, ok := codingAtPath(raw, "communication.coding")
+	if !ok || c.Code != "it" {
+		t.Fatalf("codingAtPath = %+v, %v", c, ok)
+	}
+	if _, ok := codingAtPath(raw, "missing.path"); ok {
+		t.Fatal("codingAtPath(missing) should be false")
+	}
+	if _, ok := codingAtPath(nil, "x"); ok {
+		t.Fatal("codingAtPath(nil) should be false")
+	}
+	if _, ok := codingAtPath(raw, ""); ok {
+		t.Fatal("codingAtPath(empty path) should be false")
+	}
+}
+
+func TestFirstExpansionCodingAndFirstCodeSystemConcept(t *testing.T) {
+	// Expansion with a placeholder then a real code.
+	entries := []model.ValueSetExpansionContains{
+		{Code: "XX", Contains: []model.ValueSetExpansionContains{{Code: "RI", Display: "RI"}}},
+	}
+	c, ok := firstExpansionCoding(entries)
+	if !ok || c.Code != "RI" {
+		t.Fatalf("firstExpansionCoding = %+v, %v", c, ok)
+	}
+	concepts := []model.CodeSystemConcept{
+		{Code: "XX", Concepts: []model.CodeSystemConcept{{Code: "real", Display: "Real"}}},
+	}
+	concept, ok := firstCodeSystemConcept(concepts)
+	if !ok || concept.Code != "real" {
+		t.Fatalf("firstCodeSystemConcept = %+v, %v", concept, ok)
+	}
+}
+
+func TestEnsurePractitionerRoleAndHealthcareServiceIdentifierMatchers(t *testing.T) {
+	// Known type matches.
+	identifier := map[string]any{"type": map[string]any{"coding": []any{map[string]any{"system": "http://terminology.hl7.org.au/CodeSystem/v2-0203", "code": "UPIN"}}}}
+	if !identifierMatchesPractitionerRoleKnownType(identifier) {
+		t.Fatal("UPIN should match practitioner role known type")
+	}
+	// NOI matches the healthcare service known type.
+	noi := map[string]any{"type": map[string]any{"coding": []any{map[string]any{"system": "http://terminology.hl7.org.au/CodeSystem/v2-0203", "code": "NOI"}}}}
+	if !identifierMatchesHealthcareServiceKnownType(noi) {
+		t.Fatal("NOI should match healthcare service known type")
+	}
+	// Wrong system.
+	bad := map[string]any{"type": map[string]any{"coding": []any{map[string]any{"system": "http://other", "code": "UPIN"}}}}
+	if identifierMatchesPractitionerRoleKnownType(bad) {
+		t.Fatal("wrong system should not match")
+	}
+	// Missing type.
+	if identifierMatchesPractitionerRoleKnownType(map[string]any{}) {
+		t.Fatal("missing type should not match")
+	}
+}
+
+func TestEnsurePractitionerRoleAddsWhenMissing(t *testing.T) {
+	body := map[string]any{}
+	ensurePractitionerRoleKnownIdentifier(body)
+	ids := body["identifier"].([]any)
+	if len(ids) != 1 {
+		t.Fatalf("identifier count = %d, want 1", len(ids))
+	}
+	// Non-array identifier is replaced.
+	body = map[string]any{"identifier": "scalar"}
+	ensurePractitionerRoleKnownIdentifier(body)
+	if ids := body["identifier"].([]any); len(ids) != 1 {
+		t.Fatalf("non-array identifier not replaced: %v", body["identifier"])
+	}
+}
+
+func TestNormalizeHealthcareServiceTypeCodingAndReferenceResourceType(t *testing.T) {
+	// A CodeableConcept with a text but no coding gets a coding.
+	cc := map[string]any{"text": "Service Type"}
+	arr := []any{cc}
+	body := map[string]any{"type": arr}
+	_ = body
+	// normalizeHealthcareServiceTypeCoding iterates body["type"].
+	body = map[string]any{"type": []any{map[string]any{"text": "Service Type"}}}
+	normalizeHealthcareServiceTypeCoding(body)
+	types := body["type"].([]any)
+	first := types[0].(map[string]any)
+	if first["coding"] == nil {
+		t.Fatalf("expected coding populated: %v", first)
+	}
+	// A concept with an existing coding is left alone.
+	body = map[string]any{"type": []any{map[string]any{"coding": []any{map[string]any{"code": "x"}}}}}
+	normalizeHealthcareServiceTypeCoding(body)
+	// referenceResourceType.
+	if got := referenceResourceType("Patient/p1"); got != "Patient" {
+		t.Fatalf("referenceResourceType = %q", got)
+	}
+}
+
+func TestIsMeaningfulCodingPlaceholders(t *testing.T) {
+	for _, code := range []string{"XX", "UNK", "NULL", "_Abstract"} {
+		if isMeaningfulCoding(code, "") {
+			t.Fatalf("placeholder %q should not be meaningful", code)
+		}
+	}
+	if !isMeaningfulCoding("real-code", "Display") {
+		t.Fatal("real code should be meaningful")
+	}
+}
+
+func TestEnsureEndpointKnownIdentifier(t *testing.T) {
+	body := map[string]any{}
+	ensureEndpointKnownIdentifier(body)
+	ids := body["identifier"].([]any)
+	if len(ids) != 1 {
+		t.Fatalf("endpoint identifier count = %d, want 1", len(ids))
+	}
+	// Already has an identifier -> a new one appended.
+	body = map[string]any{"identifier": []any{map[string]any{"system": "http://example.org", "value": "x"}}}
+	ensureEndpointKnownIdentifier(body)
+	if ids := body["identifier"].([]any); len(ids) != 2 {
+		t.Fatalf("endpoint identifier count = %d, want 2", len(ids))
+	}
+}
