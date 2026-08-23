@@ -300,4 +300,16 @@ func TestNewMockAdapter(t *testing.T) {
 			t.Fatalf("unexpected cardinality issue: %+v", iss)
 		}
 	}
+	// Unknown profile propagates the error.
+	if _, err := adapter.Validate(context.Background(), "http://missing", map[string]any{"resourceType": "Patient"}); err == nil {
+		t.Fatal("expected error for unknown profile through mock adapter")
+	}
+	// An invalid resource produces converted mock.Issue values.
+	issues, err = adapter.Validate(context.Background(), patientProfile, map[string]any{})
+	if err != nil {
+		t.Fatalf("MockAdapter.Validate(invalid): %v", err)
+	}
+	if len(issues) == 0 {
+		t.Fatal("expected issues for an invalid resource")
+	}
 }
