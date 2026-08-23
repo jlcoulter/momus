@@ -309,6 +309,43 @@ func TestFetchCapabilityStatementLimitsResponseBody(t *testing.T) {
 	}
 }
 
+func TestApplyCapabilityRequestAuth(t *testing.T) {
+	applyCapabilityRequestAuth(nil, CapabilityFetchOptions{}) // no panic
+
+	// Existing auth preserved.
+	req, _ := http.NewRequest("GET", "http://x", nil)
+	req.Header.Set("Authorization", "Existing")
+	applyCapabilityRequestAuth(req, CapabilityFetchOptions{BearerToken: "tok"})
+	if req.Header.Get("Authorization") != "Existing" {
+		t.Fatal("existing auth overwritten")
+	}
+	// Bearer token.
+	req, _ = http.NewRequest("GET", "http://x", nil)
+	applyCapabilityRequestAuth(req, CapabilityFetchOptions{BearerToken: "tok"})
+	if req.Header.Get("Authorization") != "Bearer tok" {
+		t.Fatal("bearer auth not applied")
+	}
+	// Basic auth.
+	req, _ = http.NewRequest("GET", "http://x", nil)
+	applyCapabilityRequestAuth(req, CapabilityFetchOptions{BasicUsername: "u", BasicPassword: "p"})
+	if _, _, ok := req.BasicAuth(); !ok {
+		t.Fatal("basic auth not applied")
+	}
+}
+
+func TestHasInteraction(t *testing.T) {
+	interactions := []model.CapabilityStatementInteraction{{Code: "read"}, {Code: "Create"}}
+	if !hasInteraction(interactions, "read") {
+		t.Fatal("read should be present")
+	}
+	if !hasInteraction(interactions, "create") {
+		t.Fatal("create should be present (case-insensitive)")
+	}
+	if hasInteraction(interactions, "delete") {
+		t.Fatal("delete should be absent")
+	}
+}
+
 func TestFetchCapabilityStatementErrorPaths(t *testing.T) {
 	if _, err := FetchCapabilityStatement(context.Background(), "  ", CapabilityFetchOptions{}); err == nil {
 		t.Fatal("expected error for empty base URL")
