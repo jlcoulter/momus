@@ -388,32 +388,34 @@ func TestApplySearchMatch(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
 		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
-		{Path: "Patient.gender", Min: 0, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Patient.name", Min: 0, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		{Path: "Patient.address", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Address"}}},
+		{Path: "Patient.telecom", Min: 0, Max: "*", Types: []model.ElementType{{Code: "ContactPoint"}}},
+		{Path: "Patient.generalPractitioner", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference"}}},
+		{Path: "Patient.valueQuantity", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Quantity"}}},
+		{Path: "Patient.score", Min: 0, Max: "1", Types: []model.ElementType{{Code: "integer"}}},
 	}})
-	// _id search.
-	body := map[string]any{}
-	ok := applySearchMatch(body, "Patient", &model.SearchParameter{Code: "_id", Type: "token"}, "p-1", reg)
-	if !ok || body["id"] != "p-1" {
-		t.Fatalf("applySearchMatch(_id) = %v, body=%v", ok, body)
+	cases := []struct {
+		code, typ, expr, want string
+		check                 func(map[string]any) bool
+	}{
+		{"name", "string", "Patient.name", "momus-search", func(b map[string]any) bool { return b["name"] != nil }},
+		{"address", "string", "Patient.address", "momus-search", func(b map[string]any) bool { return b["address"] != nil }},
+		{"telecom", "token", "Patient.telecom", "momus-search", func(b map[string]any) bool { return b["telecom"] != nil }},
+		{"general-practitioner", "reference", "Patient.generalPractitioner", "Patient/x", func(b map[string]any) bool { return b["generalPractitioner"] != nil }},
+		{"value-quantity", "quantity", "Patient.valueQuantity", "5.4|http://sys|mg", func(b map[string]any) bool { return b["valueQuantity"] != nil }},
+		{"score", "number", "Patient.score", "10", func(b map[string]any) bool { return b["score"] != nil }},
 	}
-	// Boolean search.
-	body = map[string]any{}
-	ok = applySearchMatch(body, "Patient", &model.SearchParameter{Code: "active", Type: "boolean", Expression: "Patient.active"}, "true", reg)
-	if !ok || body["active"] != true {
-		t.Fatalf("applySearchMatch(boolean) = %v, body=%v", ok, body)
-	}
-	// code token search.
-	body = map[string]any{}
-	ok = applySearchMatch(body, "Patient", &model.SearchParameter{Code: "gender", Type: "token", Expression: "Patient.gender"}, "male", reg)
-	if !ok || body["gender"] != "male" {
-		t.Fatalf("applySearchMatch(code) = %v, body=%v", ok, body)
-	}
-	// Unknown element path -> false.
-	body = map[string]any{}
-	ok = applySearchMatch(body, "Patient", &model.SearchParameter{Code: "zzz", Type: "token", Expression: "Patient.noSuch"}, "x", reg)
-	if ok {
-		t.Fatal("applySearchMatch(unknown) should be false")
+	for _, c := range cases {
+		sp := &model.SearchParameter{Code: c.code, Type: c.typ, Expression: c.expr}
+		body := map[string]any{}
+		if ok := applySearchMatch(body, "Patient", sp, c.want, reg); !ok {
+			t.Errorf("applySearchMatch(%s) = false, want true", c.code)
+			continue
+		}
+		if !c.check(body) {
+			t.Errorf("applySearchMatch(%s) body = %v, did not set element", c.code, body)
+		}
 	}
 }
 
@@ -539,5 +541,71 @@ func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
 	}
 	if _, has := ct["display"]; has {
 		t.Fatalf("stale display should be cleared, got %v", ct["display"])
+	}
+}
+
+func TestSetSearchCodeValueBranches(t *testing.T) {
+	// Primitive repeatable code, absent.
+	body := map[string]any{}
+	setSearchCodeValue(body, "status", "active", "code", true, "")
+	if got := body["status"].([]any)[0]; got != "active" {
+		t.Fatalf("repeatable code = %v", got)
+	}
+	// Primitive non-repeatable code.
+	body = map[string]any{}
+	setSearchCodeValue(body, "status", "active", "code", false, "")
+	if body["status"] != "active" {
+		t.Fatalf("non-repeatable code = %v", body["status"])
+	}
+	// Existing primitive array (repeatable).
+	body = map[string]any{"status": []any{"old"}}
+	setSearchCodeValue(body, "status", "new", "code", true, "")
+	if body["status"].([]any)[0] != "new" {
+		t.Fatalf("existing repeatable code = %v", body["status"])
+	}
+	// Coding type, absent -> coding map.
+	body = map[string]any{}
+	setSearchCodeValue(body, "connectionType", "dicom-wado-rs", "Coding", false, "http://sys")
+	if body["connectionType"].(map[string]any)["code"] != "dicom-wado-rs" {
+		t.Fatalf("Coding = %v", body["connectionType"])
+	}
+	// CodeableConcept repeatable absent.
+	body = map[string]any{}
+	setSearchCodeValue(body, "type", "x", "CodeableConcept", true, "")
+	if body["type"].([]any)[0].(map[string]any)["coding"] == nil {
+		t.Fatalf("CodeableConcept repeatable = %v", body["type"])
+	}
+	// Empty array case.
+	body = map[string]any{"status": []any{}}
+	setSearchCodeValue(body, "status", "active", "code", true, "")
+	if body["status"].([]any)[0] != "active" {
+		t.Fatalf("empty array code = %v", body["status"])
+	}
+}
+
+func TestSetFieldLeafAndForce(t *testing.T) {
+	// setFieldLeaf with existing array preserves first element's leaf if present.
+	body := map[string]any{"contact": []any{map[string]any{"city": "X"}}}
+	setFieldLeaf(body, "contact", "city", "Y")
+	if body["contact"].([]any)[0].(map[string]any)["city"] != "X" {
+		t.Fatalf("setFieldLeaf preserved = %v", body["contact"])
+	}
+	// setFieldLeaf with missing leaf.
+	body = map[string]any{"contact": []any{map[string]any{"phone": "1"}}}
+	setFieldLeaf(body, "contact", "city", "Y")
+	if body["contact"].([]any)[0].(map[string]any)["city"] != "Y" {
+		t.Fatalf("setFieldLeaf added = %v", body["contact"])
+	}
+	// setFieldLeafForce overwrites.
+	body = map[string]any{"contact": []any{map[string]any{"city": "X"}}}
+	setFieldLeafForce(body, "contact", "city", "Y")
+	if body["contact"].([]any)[0].(map[string]any)["city"] != "Y" {
+		t.Fatalf("setFieldLeafForce = %v", body["contact"])
+	}
+	// setFieldLeafForce with a scalar map field.
+	body = map[string]any{"addr": map[string]any{"city": "X"}}
+	setFieldLeafForce(body, "addr", "city", "Y")
+	if body["addr"].(map[string]any)["city"] != "Y" {
+		t.Fatalf("setFieldLeafForce(map) = %v", body["addr"])
 	}
 }
