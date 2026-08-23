@@ -720,6 +720,22 @@ func TestMod89Valid(t *testing.T) {
 	}
 }
 
+func TestIdentifierMatchersNonMapCoding(t *testing.T) {
+	// A coding array containing a non-map element is skipped.
+	identifier := map[string]any{"type": map[string]any{"coding": []any{"not-a-map"}}}
+	if identifierMatchesPractitionerRoleKnownType(identifier) {
+		t.Fatal("non-map coding should not match practitioner role")
+	}
+	if identifierMatchesHealthcareServiceKnownType(identifier) {
+		t.Fatal("non-map coding should not match healthcare service")
+	}
+	// A non-coding type field is skipped.
+	identifier = map[string]any{"type": map[string]any{"coding": "not-an-array"}}
+	if identifierMatchesPractitionerRoleKnownType(identifier) {
+		t.Fatal("non-array coding should not match")
+	}
+}
+
 func TestIsEmptyExtensionBranches(t *testing.T) {
 	// Extension with value.
 	if isEmptyExtension(map[string]any{"url": "http://x", "valueString": "v"}) {
