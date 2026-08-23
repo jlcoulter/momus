@@ -138,6 +138,35 @@ func TestLoadPlanRoutes(t *testing.T) {
 	}
 }
 
+func TestRecordRejectAcceptAssertion(t *testing.T) {
+	// An accept assertion (no 4xx) does not create a reject route.
+	routes := &planRoutes{rejects: make(map[string]rejectRoute)}
+	req := &ast.Request{Method: "PUT", URL: "http://example.org/Patient/p1"}
+	assert := &ast.Assert{Expression: "status in [200,201]"}
+	recordReject(req, assert, routes)
+	if len(routes.rejects) != 0 {
+		t.Fatalf("accept assertion created a reject route: %v", routes.rejects)
+	}
+	// A reject assertion creates one.
+	assert = &ast.Assert{Expression: "status in [400,412,422]"}
+	recordReject(req, assert, routes)
+	if len(routes.rejects) != 1 {
+		t.Fatalf("expected one reject route, got %v", routes.rejects)
+	}
+}
+
+func TestWalkPlanWithoutTrailingAssert(t *testing.T) {
+	// A request not followed by an assert records no route.
+	plan := &ast.Sequence{Steps: []ast.Node{
+		&ast.Request{Method: "GET", URL: "http://example.org/Patient"},
+		&ast.Capture{Name: "id", Path: "id"},
+	}}
+	routes := buildPlanRoutes(plan)
+	if len(routes.rejects) != 0 {
+		t.Fatalf("no reject route expected, got %v", routes.rejects)
+	}
+}
+
 func TestLoadPlanRoutesMissingFile(t *testing.T) {
 	if _, err := loadPlanRoutes(filepath.Join(t.TempDir(), "missing.json")); err == nil {
 		t.Fatal("expected error for missing plan file")
