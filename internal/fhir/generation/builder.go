@@ -79,6 +79,15 @@ func (b *fhirBuilder) SearchAcceptValue(req coverage.CoverageRequirement, code s
 	if !ok || def == nil {
 		return "momus-search"
 	}
+	if strings.ToLower(sp.Type) == "token" && primaryTypeCode(def) == "Identifier" {
+		return identifierTokenSearchValue(req.ResourceType)
+	}
+	if req.ResourceType == "Provenance" && code == "target" {
+		return "Organization/" + coregen.SetupResourceID("Organization")
+	}
+	if req.ResourceType == "HealthcareService" && code == "hsbilling" {
+		return "NFE"
+	}
 	switch primaryTypeCode(def) {
 	case "code", "Coding", "CodeableConcept":
 		if bound, ok := resolveBoundCoding(def, b.reg); ok && bound.Code != "" {
@@ -101,6 +110,25 @@ func (b *fhirBuilder) SearchAcceptValue(req coverage.CoverageRequirement, code s
 			return t + "/" + coregen.SetupResourceID(t)
 		}
 		return "momus-search"
+	default:
+		return "momus-search"
+	}
+}
+
+// identifierTokenSearchValue returns a profile-valid identifier value for
+// resource types with strict AU/HCPD identifier constraints.
+func identifierTokenSearchValue(resourceType string) string {
+	switch resourceType {
+	case "Organization":
+		return generateABN()
+	case "Practitioner":
+		return generateHPIINumber()
+	case "PractitionerRole":
+		return "UPIN-123456"
+	case "HealthcareService":
+		return generateHPIONumber()
+	case "Endpoint":
+		return "smd-target-001"
 	default:
 		return "momus-search"
 	}

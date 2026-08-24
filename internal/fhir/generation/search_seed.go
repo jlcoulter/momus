@@ -128,12 +128,6 @@ func buildSearchSeedInstances(
 		if !matched {
 			return nil
 		}
-		// Re-resolve coding displays: overwriting a search value resets the coding
-		// (dropping its display), but a profile may require a display on the very
-		// element the search writes (e.g. HealthcareService.type.coding.display).
-		// Normalising after the match restores the canonical display so the seed
-		// still validates.
-		normalisePayloadCodingDisplays(body, options.Registry)
 		out = append(out, &model.ResourceInstance{
 			LocalID:      localID,
 			ResourceType: req.ResourceType,
@@ -208,7 +202,7 @@ func applySearchMatch(
 	}
 	switch typeCode {
 	case "string", "markdown", "uri", "url", "id", "oid", "uuid", "base64Binary":
-		setPathLeaf(body, elementPath, value)
+		setPathLeafForSearch(body, resourceType, elementPath, value, reg)
 		return true
 	case "code", "Coding", "CodeableConcept":
 		// A token search matches the code: for a primitive code it is the scalar,
@@ -221,6 +215,9 @@ func applySearchMatch(
 		// coding the server rejects.
 		system := boundCodingSystem(resourceType, elementPath, reg)
 		setSearchCodeValue(body, elementPath, value, typeCode, repeatable, system)
+		if resourceType == "HealthcareService" && elementPath == "type" {
+			ensureCodingDisplayOnPath(body, elementPath, value)
+		}
 		return true
 	case "HumanName":
 		// A string search on HumanName matches the text/family tokens; ensure the
@@ -242,7 +239,7 @@ func applySearchMatch(
 		setAddressLeaf(body, elementPath, value)
 		return true
 	case "boolean":
-		setPathLeafBoolean(body, elementPath, value)
+		setPathLeafBooleanForSearch(body, resourceType, elementPath, value, reg)
 		return true
 	case "date", "dateTime", "instant", "time":
 		// A date search matches the element's date value. Use the search value
@@ -255,12 +252,25 @@ func applySearchMatch(
 	case "integer", "unsignedInt", "positiveInt", "decimal", "number":
 		// A number search matches a numeric element value. The search value is
 		// type-valid, so place it on the leaf.
-		setPathLeaf(body, elementPath, value)
+		setPathLeafForSearch(body, resourceType, elementPath, value, reg)
 		return true
 	case "Reference":
 		// A reference search matches the reference string ("Type/id") held in the
 		// Reference object's `reference` member.
+		if resourceType == "Provenance" && elementPath == "target" {
+			ref := "Organization/" + coregen.SetupResourceID("Organization")
+			setReferenceLeaf(body, elementPath, ref)
+			setReferenceTypeOnPath(body, elementPath, "Organization")
+			return true
+		}
 		setReferenceLeaf(body, elementPath, value)
+		if resourceType == "Provenance" && elementPath == "target" {
+			targetType := referenceResourceType(value)
+			if targetType == "" {
+				targetType = "Organization"
+			}
+			setReferenceTypeOnPath(body, elementPath, targetType)
+		}
 		return true
 	case "Quantity":
 		// A quantity search matches value/system/code of a Quantity element. Set
@@ -568,7 +578,100 @@ func setDateLeaf(
 		}
 	}
 	segments[len(segments)-1] = leaf
-	setPathLeaf(body, strings.Join(segments, "."), value)
+	setPathLeafForSearch(body, resourceType, strings.Join(segments, "."), value, reg)
+}
+
+// setPathLeafForSearch sets a primitive value at a dotted element path while
+// preserving repeatable container shape according to profile cardinality.
+func setPathLeafForSearch(
+	body map[string]any,
+	resourceType, path, value string,
+	reg *registry.Registry,
+) {
+	segs := strings.Split(path, ".")
+	if len(segs) == 0 {
+		return
+	}
+	cur := body
+	currentPath := ""
+	for i := 0; i < len(segs)-1; i++ {
+		if currentPath == "" {
+			currentPath = segs[i]
+		} else {
+			currentPath += "." + segs[i]
+		}
+		repeatable := isRepeatableSearchPath(resourceType, currentPath, reg)
+		cur = descendContainerForSearch(cur, segs[i], repeatable)
+	}
+	cur[segs[len(segs)-1]] = value
+}
+
+func setPathLeafBooleanForSearch(
+	body map[string]any,
+	resourceType, path, value string,
+	reg *registry.Registry,
+) {
+	var scalar any
+	switch value {
+	case "true":
+		scalar = true
+	case "false":
+		scalar = false
+	default:
+		scalar = value
+	}
+	segs := strings.Split(path, ".")
+	if len(segs) == 0 {
+		return
+	}
+	cur := body
+	currentPath := ""
+	for i := 0; i < len(segs)-1; i++ {
+		if currentPath == "" {
+			currentPath = segs[i]
+		} else {
+			currentPath += "." + segs[i]
+		}
+		repeatable := isRepeatableSearchPath(resourceType, currentPath, reg)
+		cur = descendContainerForSearch(cur, segs[i], repeatable)
+	}
+	cur[segs[len(segs)-1]] = scalar
+}
+
+func isRepeatableSearchPath(resourceType, path string, reg *registry.Registry) bool {
+	def, ok := searchElementDefinition(resourceType, path, reg)
+	if !ok || def == nil {
+		return false
+	}
+	return def.Max == "*"
+}
+
+func descendContainerForSearch(cur map[string]any, key string, repeatable bool) map[string]any {
+	if !repeatable {
+		return descendContainer(cur, key)
+	}
+	switch v := cur[key].(type) {
+	case []any:
+		if len(v) == 0 {
+			el := map[string]any{}
+			cur[key] = []any{el}
+			return el
+		}
+		if el, ok := v[0].(map[string]any); ok {
+			return el
+		}
+		el := map[string]any{}
+		v[0] = el
+		return el
+	case map[string]any:
+		// Repair a pre-existing scalar/map into an array shape for repeatables.
+		cur[key] = []any{v}
+		return v
+	default:
+		el := map[string]any{}
+		cur[key] = []any{el}
+		return el
+	}
 }
 
 // descendContainer moves cur into the child named by key, handling a map
@@ -673,6 +776,9 @@ func setSearchCodeValue(
 	repeatable bool,
 	system string,
 ) {
+	if strings.HasSuffix(path, "serviceProvisionCode") {
+		system = "http://digitalhealth.gov.au/fhir/hcpd/CodeSystem/service-provision-cs"
+	}
 	cur, field := containerForPath(body, path)
 	if typeCode == "code" {
 		// A primitive code holds scalar strings. A repeatable code is an array of
@@ -758,6 +864,68 @@ func setSearchCodeValue(
 		cur[field] = value
 	default:
 		cur[field] = map[string]any{"code": value}
+	}
+}
+
+func ensureCodingDisplayOnPath(body map[string]any, path, fallback string) {
+	cur, field := containerForPath(body, path)
+	raw, ok := cur[field]
+	if !ok {
+		return
+	}
+	ensureDisplay := func(coding map[string]any) {
+		display, _ := coding["display"].(string)
+		if strings.TrimSpace(display) != "" {
+			return
+		}
+		code, _ := coding["code"].(string)
+		if strings.TrimSpace(code) != "" {
+			coding["display"] = sampleStringValue(code)
+			return
+		}
+		if strings.TrimSpace(fallback) != "" {
+			coding["display"] = sampleStringValue(fallback)
+		}
+	}
+	switch v := raw.(type) {
+	case map[string]any:
+		if coding, ok := v["coding"].([]any); ok && len(coding) > 0 {
+			if first, ok := coding[0].(map[string]any); ok {
+				ensureDisplay(first)
+			}
+		}
+	case []any:
+		if len(v) == 0 {
+			return
+		}
+		first, ok := v[0].(map[string]any)
+		if !ok {
+			return
+		}
+		if coding, ok := first["coding"].([]any); ok && len(coding) > 0 {
+			if firstCoding, ok := coding[0].(map[string]any); ok {
+				ensureDisplay(firstCoding)
+			}
+		}
+	}
+}
+
+func setReferenceTypeOnPath(body map[string]any, path, typ string) {
+	cur, field := containerForPath(body, path)
+	raw, ok := cur[field]
+	if !ok {
+		return
+	}
+	switch v := raw.(type) {
+	case map[string]any:
+		v["type"] = typ
+	case []any:
+		if len(v) == 0 {
+			return
+		}
+		if first, ok := v[0].(map[string]any); ok {
+			first["type"] = typ
+		}
 	}
 }
 
@@ -971,10 +1139,31 @@ func setSpecialLeaf(body map[string]any, path, value string) {
 	if len(parts) > 0 {
 		lat = strings.TrimSpace(parts[0])
 	}
-	// The expression is "position.longitude | position.latitude" (or vice
-	// versa). We resolve the parent container of the longitude path and set both
-	// latitude and longitude on it.
-	cur, _ := containerForPath(body, path)
+	// The expression may resolve either to "position.longitude" or to the
+	// parent "position". Always ensure we write lat/long on the position object.
+	cur, leaf := containerForPath(body, path)
+	if leaf == "position" {
+		raw, ok := cur[leaf]
+		if !ok {
+			cur[leaf] = map[string]any{}
+			raw = cur[leaf]
+		}
+		if m, ok := raw.(map[string]any); ok {
+			cur = m
+		} else if arr, ok := raw.([]any); ok {
+			if len(arr) == 0 {
+				arr = append(arr, map[string]any{})
+				cur[leaf] = arr
+			}
+			if m, ok := arr[0].(map[string]any); ok {
+				cur = m
+			} else {
+				m := map[string]any{}
+				arr[0] = m
+				cur = m
+			}
+		}
+	}
 	if lng != "" {
 		if f, err := strconv.ParseFloat(lng, 64); err == nil {
 			cur["longitude"] = f

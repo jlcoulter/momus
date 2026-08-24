@@ -975,9 +975,19 @@ func TestNormalizeReferenceType(t *testing.T) {
 	normalizeReferenceType(nil, nil, reg)
 	// Reference-derived type.
 	value := map[string]any{"reference": "Organization/o-1"}
-	normalizeReferenceType(value, &model.ElementDefinition{}, reg)
+	normalizeReferenceType(
+		value,
+		&model.ElementDefinition{TargetProfile: []string{"http://example.org/StructureDefinition/Organization"}},
+		reg,
+	)
 	if value["type"] != "Organization" {
 		t.Fatalf("normalizeReferenceType = %v", value)
+	}
+	// Abstract-only targets should not force a concrete type.
+	value = map[string]any{"reference": "Organization/o-1", "type": "Organization"}
+	normalizeReferenceType(value, &model.ElementDefinition{TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Resource"}}, reg)
+	if _, ok := value["type"]; ok {
+		t.Fatalf("normalizeReferenceType(abstract target) = %v", value)
 	}
 	// Type derived from the element's target profile when the reference has no
 	// parseable type.

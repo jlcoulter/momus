@@ -478,8 +478,7 @@
                   "resourceType": "Observation",
                   "status": "status",
                   "subject": {
-                    "reference": "Organization/momus-setup-organization",
-                    "type": "Organization"
+                    "reference": "Organization/momus-setup-organization"
                   },
                   "valueQuantity": {
                     "code": "mmol",
@@ -614,8 +613,7 @@
                   "resourceType": "Observation",
                   "status": "status",
                   "subject": {
-                    "reference": "Organization/momus-setup-organization",
-                    "type": "Organization"
+                    "reference": "Organization/momus-setup-organization"
                   },
                   "valueQuantity": {
                     "code": "mmol",
@@ -763,8 +761,7 @@
                   "resourceType": "Observation",
                   "status": "status",
                   "subject": {
-                    "reference": "Organization/momus-setup-organization",
-                    "type": "Organization"
+                    "reference": "Organization/momus-setup-organization"
                   },
                   "valueQuantity": {
                     "code": "mmol",
@@ -828,8 +825,7 @@
                   "resourceType": "Observation",
                   "status": "status",
                   "subject": {
-                    "reference": "Organization/momus-setup-organization",
-                    "type": "Organization"
+                    "reference": "Organization/momus-setup-organization"
                   },
                   "valueQuantity": {
                     "code": "mmol",

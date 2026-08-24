@@ -2186,16 +2186,49 @@ func normalizeReferenceType(value map[string]any, def *model.ElementDefinition, 
 	if value == nil || def == nil {
 		return
 	}
+	allowedTargets := allowedTargetResourceTypes(def, reg)
+	if len(allowedTargets) == 0 {
+		// Abstract-only targets (e.g. Resource) should not force a concrete type.
+		delete(value, "type")
+		return
+	}
 	reference, _ := value["reference"].(string)
 	targetType := referenceResourceType(reference)
 	if targetType == "" {
 		targetType = firstTargetResourceType(def, reg)
 	}
 	if targetType == "" {
+		delete(value, "type")
 		return
+	}
+	if _, allowed := allowedTargets[targetType]; !allowed {
+		for candidate := range allowedTargets {
+			targetType = candidate
+			break
+		}
 	}
 	// Reference.type must identify a valid target resource type for this reference.
 	value["type"] = targetType
+}
+
+func allowedTargetResourceTypes(def *model.ElementDefinition, reg *registry.Registry) map[string]struct{} {
+	allowed := map[string]struct{}{}
+	if def == nil {
+		return allowed
+	}
+	for _, canonical := range def.TargetProfile {
+		if resourceType := resolveTargetResourceType(canonical, reg); resourceType != "" && !isAbstractResourceType(resourceType) {
+			allowed[resourceType] = struct{}{}
+		}
+	}
+	for _, et := range def.Types {
+		for _, canonical := range et.TargetProfile {
+			if resourceType := resolveTargetResourceType(canonical, reg); resourceType != "" && !isAbstractResourceType(resourceType) {
+				allowed[resourceType] = struct{}{}
+			}
+		}
+	}
+	return allowed
 }
 
 func normalizeGeneratedIdentifier(identifier map[string]any) {
@@ -2421,6 +2454,7 @@ func normalizeResourceSpecificPayload(body map[string]any) {
 	switch resourceType {
 	case "HealthcareService":
 		normalizeHealthcareServiceTypeCoding(body)
+		normalizeHealthcareServiceProvisionCode(body)
 		ensureHealthcareServiceKnownIdentifier(body)
 	case "PractitionerRole":
 		ensurePractitionerRoleKnownIdentifier(body)
@@ -2485,6 +2519,7 @@ func normalizePractitionerFields(body map[string]any) {
 	if _, exists := body["active"]; !exists {
 		body["active"] = true
 	}
+	normalizePractitionerQualificationIdentifiers(body)
 	rawName, ok := body["name"].([]any)
 	if !ok || len(rawName) == 0 {
 		body["name"] = []any{
@@ -2528,6 +2563,94 @@ func normalizePractitionerFields(body map[string]any) {
 	body["name"] = rawName
 }
 
+func normalizePractitionerQualificationIdentifiers(body map[string]any) {
+	rawQualifications, ok := body["qualification"].([]any)
+	if !ok {
+		return
+	}
+	for _, rawQualification := range rawQualifications {
+		qualification, ok := rawQualification.(map[string]any)
+		if !ok {
+			continue
+		}
+		rawIdentifiers, ok := qualification["identifier"].([]any)
+		if !ok || len(rawIdentifiers) == 0 {
+			continue
+		}
+		selected := firstAHPRAIdentifier(rawIdentifiers)
+		if selected == nil {
+			selected, _ = rawIdentifiers[0].(map[string]any)
+		}
+		if selected == nil {
+			continue
+		}
+		normalizePractitionerQualificationIdentifier(selected)
+		qualification["identifier"] = []any{selected}
+	}
+}
+
+func firstAHPRAIdentifier(rawIdentifiers []any) map[string]any {
+	for _, rawIdentifier := range rawIdentifiers {
+		identifier, ok := rawIdentifier.(map[string]any)
+		if !ok {
+			continue
+		}
+		system, _ := identifier["system"].(string)
+		if strings.TrimSpace(system) == "http://hl7.org.au/id/ahpra-registration-number" {
+			return identifier
+		}
+	}
+	for _, rawIdentifier := range rawIdentifiers {
+		identifier, ok := rawIdentifier.(map[string]any)
+		if !ok {
+			continue
+		}
+		if identifierHasAHPRACoding(identifier) {
+			return identifier
+		}
+	}
+	return nil
+}
+
+func identifierHasAHPRACoding(identifier map[string]any) bool {
+	rawType, _ := identifier["type"].(map[string]any)
+	rawCoding, _ := rawType["coding"].([]any)
+	for _, raw := range rawCoding {
+		coding, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		system, _ := coding["system"].(string)
+		code, _ := coding["code"].(string)
+		if strings.TrimSpace(system) == "http://terminology.hl7.org.au/CodeSystem/v2-0203" &&
+			strings.TrimSpace(code) == "AHPRA" {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizePractitionerQualificationIdentifier(identifier map[string]any) {
+	rawType, ok := identifier["type"].(map[string]any)
+	if !ok {
+		return
+	}
+	// Fixed qualification codings reject extra text/display members.
+	delete(rawType, "text")
+	rawCoding, ok := rawType["coding"].([]any)
+	if !ok {
+		return
+	}
+	for _, raw := range rawCoding {
+		coding, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		delete(coding, "display")
+		coding[fixedCodingKey] = true
+	}
+}
+
 func normalizeHealthcareServiceTypeCoding(body map[string]any) {
 	values, ok := body["type"].([]any)
 	if !ok {
@@ -2538,17 +2661,73 @@ func normalizeHealthcareServiceTypeCoding(body map[string]any) {
 		if !ok {
 			continue
 		}
-		if _, hasCoding := cc["coding"]; hasCoding {
+		rawCoding, hasCoding := cc["coding"]
+		if !hasCoding {
+			code := "service-type"
+			if text, _ := cc["text"].(string); strings.TrimSpace(text) != "" {
+				code = sampleCodeValue(text)
+			}
+			cc["coding"] = []any{map[string]any{
+				"system": "http://example.org/fhir/service-type",
+				"code":   code,
+			}}
+			rawCoding = cc["coding"]
+		}
+		codings, _ := rawCoding.([]any)
+		for _, rawCodingEntry := range codings {
+			coding, ok := rawCodingEntry.(map[string]any)
+			if !ok {
+				continue
+			}
+			display, _ := coding["display"].(string)
+			if strings.TrimSpace(display) != "" {
+				continue
+			}
+			if text, _ := cc["text"].(string); strings.TrimSpace(text) != "" {
+				coding["display"] = text
+				continue
+			}
+			if code, _ := coding["code"].(string); strings.TrimSpace(code) != "" {
+				coding["display"] = sampleStringValue(code)
+			}
+		}
+	}
+}
+
+func normalizeHealthcareServiceProvisionCode(body map[string]any) {
+	rawProvisionCodes, ok := body["serviceProvisionCode"].([]any)
+	if !ok {
+		return
+	}
+	for _, rawProvisionCode := range rawProvisionCodes {
+		cc, ok := rawProvisionCode.(map[string]any)
+		if !ok {
 			continue
 		}
-		code := "service-type"
-		if text, _ := cc["text"].(string); strings.TrimSpace(text) != "" {
-			code = sampleCodeValue(text)
+		rawCoding, ok := cc["coding"].([]any)
+		if !ok || len(rawCoding) == 0 {
+			cc["coding"] = []any{map[string]any{
+				"system":  "http://digitalhealth.gov.au/fhir/hcpd/CodeSystem/service-provision-cs",
+				"code":    "NFE",
+				"display": "No fee",
+			}}
+			continue
 		}
-		cc["coding"] = []any{map[string]any{
-			"system": "http://example.org/fhir/service-type",
-			"code":   code,
-		}}
+		first, ok := rawCoding[0].(map[string]any)
+		if !ok {
+			rawCoding[0] = map[string]any{
+				"system":  "http://digitalhealth.gov.au/fhir/hcpd/CodeSystem/service-provision-cs",
+				"code":    "NFE",
+				"display": "No fee",
+			}
+			continue
+		}
+		system, _ := first["system"].(string)
+		if strings.TrimSpace(system) == "http://terminology.hl7.org/CodeSystem/service-provision-conditions" {
+			first["system"] = "http://digitalhealth.gov.au/fhir/hcpd/CodeSystem/service-provision-cs"
+			first["code"] = "NFE"
+			first["display"] = "No fee"
+		}
 	}
 }
 
