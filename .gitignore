@@ -21,3 +21,5 @@ vendor/
 
 # FHIR
 package.tgz
+.serena/
+AGENTS.md
