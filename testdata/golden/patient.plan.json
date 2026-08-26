@@ -15,7 +15,7 @@
                 "Body": null
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Patient?name: reject an invalid search modifier",
                 "RequirementID": "search|Patient|name|search-invalid-modifier",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -25,7 +25,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-modifier",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Patient?name: reject an invalid search modifier",
+                  "HumanID": "Patient.search.name.invalid-modifier",
+                  "SearchCode": "name",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -51,7 +55,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-value",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -77,7 +85,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-multiple-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -93,7 +105,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Patient?name: accept a valid search returning no results",
                 "RequirementID": "search|Patient|name|search-no-results",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -103,7 +115,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-no-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient?name: accept a valid search returning no results",
+                  "HumanID": "Patient.search.name.no-results",
+                  "SearchCode": "name",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -119,7 +135,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Patient?name: return results for a valid search",
                 "RequirementID": "search|Patient|name|search-valid",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -129,7 +145,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-valid",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient?name: return results for a valid search",
+                  "HumanID": "Patient.search.name.valid",
+                  "SearchCode": "name",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -173,7 +193,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-delete",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: delete removes the resource",
+                  "HumanID": "Patient.operation.delete",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -196,7 +220,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-delete",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: delete removes the resource",
+                  "HumanID": "Patient.operation.delete",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -240,7 +268,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-history",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: history returns the version chain",
+                  "HumanID": "Patient.operation.history",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -263,7 +295,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-history",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: history returns the version chain",
+                  "HumanID": "Patient.operation.history",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -307,7 +343,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-patch",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: patch (PATCH) partially modifies the resource",
+                  "HumanID": "Patient.operation.patch",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -338,7 +378,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-patch",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: patch (PATCH) partially modifies the resource",
+                  "HumanID": "Patient.operation.patch",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -382,7 +426,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-read",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: read (GET) returns the resource",
+                  "HumanID": "Patient.operation.read",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -405,7 +453,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-read",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: read (GET) returns the resource",
+                  "HumanID": "Patient.operation.read",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -449,7 +501,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-update",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: update (PUT) modifies the resource",
+                  "HumanID": "Patient.operation.update",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -489,7 +545,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-update",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: update (PUT) modifies the resource",
+                  "HumanID": "Patient.operation.update",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -533,7 +593,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Patient.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -556,7 +620,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Patient.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -596,7 +664,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Patient.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -619,7 +691,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Patient.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -642,7 +718,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Patient.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -665,7 +745,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Patient: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Patient.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -692,7 +776,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-delete-nonexistent",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient: delete a nonexistent resource returns 404/200",
+                  "HumanID": "Patient.state.delete-nonexistent",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -719,7 +807,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-read-nonexistent",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Patient: read a nonexistent resource returns 404",
+                  "HumanID": "Patient.state.read-nonexistent",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -746,7 +838,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Patient.name (HumanName): reject a lexically invalid value",
                 "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-invalid-lexical",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -756,7 +848,11 @@
                   "ElementPath": "Patient.name",
                   "Domain": "datatype",
                   "Variant": "datatype-invalid-lexical",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Patient.name (HumanName): reject a lexically invalid value",
+                  "HumanID": "Patient.name.datatype.datatype-invalid-lexical",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -783,7 +879,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Patient.name (HumanName): reject a null value for a non-null element",
                 "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-null",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -793,7 +889,11 @@
                   "ElementPath": "Patient.name",
                   "Domain": "datatype",
                   "Variant": "datatype-null",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Patient.name (HumanName): reject a null value for a non-null element",
+                  "HumanID": "Patient.name.datatype.datatype-null",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -827,7 +927,7 @@
                 }
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Patient.name (HumanName): accept a valid value",
                 "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-valid",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -837,7 +937,11 @@
                   "ElementPath": "Patient.name",
                   "Domain": "datatype",
                   "Variant": "datatype-valid",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient.name (HumanName): accept a valid value",
+                  "HumanID": "Patient.name.datatype.datatype-valid",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -864,7 +968,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Patient.name (HumanName): reject a value with the wrong JSON type",
                 "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-wrong-json-type",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -874,7 +978,11 @@
                   "ElementPath": "Patient.name",
                   "Domain": "datatype",
                   "Variant": "datatype-wrong-json-type",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Patient.name (HumanName): reject a value with the wrong JSON type",
+                  "HumanID": "Patient.name.datatype.datatype-wrong-json-type",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -900,7 +1008,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Patient.name: reject a resource missing the required element (min=1)",
                 "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|missing-required",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -910,7 +1018,11 @@
                   "ElementPath": "Patient.name",
                   "Domain": "cardinality",
                   "Variant": "missing-required",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Patient.name: reject a resource missing the required element (min=1)",
+                  "HumanID": "Patient.name.cardinality.missing-required",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -944,7 +1056,7 @@
                 }
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Patient.name: accept a resource with multiple values (max=*)",
                 "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|multiple-values",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -954,7 +1066,11 @@
                   "ElementPath": "Patient.name",
                   "Domain": "cardinality",
                   "Variant": "multiple-values",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient.name: accept a resource with multiple values (max=*)",
+                  "HumanID": "Patient.name.cardinality.multiple-values",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -988,7 +1104,7 @@
                 }
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Patient.name: accept a resource with the required element present (min=1)",
                 "RequirementID": "http://example.org/StructureDefinition/patient|Patient.name|valid-min",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -998,7 +1114,11 @@
                   "ElementPath": "Patient.name",
                   "Domain": "cardinality",
                   "Variant": "valid-min",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Patient.name: accept a resource with the required element present (min=1)",
+                  "HumanID": "Patient.name.cardinality.valid-min",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]

@@ -13,20 +13,26 @@ import (
 // summary table plus a per-case table linking to the case files.
 func renderHTML(report *runner.Report, evaluation coverage.EvaluationReport) ([]byte, error) {
 	type row struct {
-		ID     string
-		Passed bool
-		Status int
-		File   string
-		Err    string
+		ID      string
+		HumanID string
+		Passed  bool
+		Status  int
+		File    string
+		Err     string
 	}
 	rows := make([]row, 0, len(report.Cases))
 	for _, c := range report.Cases {
+		humanID := ""
+		if c.Trace != nil {
+			humanID = c.Trace.HumanID
+		}
 		rows = append(rows, row{
-			ID:     c.RequirementID,
-			Passed: c.Passed,
-			Status: c.StatusCode,
-			File:   caseFileName(c),
-			Err:    c.Error,
+			ID:      c.RequirementID,
+			HumanID: humanID,
+			Passed:  c.Passed,
+			Status:  c.StatusCode,
+			File:    caseFileName(c),
+			Err:     c.Error,
 		})
 	}
 
@@ -73,7 +79,7 @@ a{color:#0366d6;text-decoration:none}
 <thead><tr><th>Requirement</th><th>Result</th><th>Status</th><th>Detail</th><th>Case file</th></tr></thead>
 <tbody>
 {{range .Rows}}<tr class="{{if .Passed}}pass{{else}}fail{{end}}">
-<td>{{.ID}}</td><td>{{if .Passed}}PASS{{else}}FAIL{{end}}</td>
+<td>{{if .HumanID}}{{.HumanID}}{{else}}{{.ID}}{{end}}</td><td>{{if .Passed}}PASS{{else}}FAIL{{end}}</td>
 <td>{{if .Status}}{{.Status}}{{end}}</td>
 <td>{{.Err}}</td>
 <td><a href="cases/{{.File}}">{{.File}}</a></td>

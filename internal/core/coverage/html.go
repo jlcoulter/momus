@@ -10,9 +10,14 @@ import (
 // status and, for drill-down, its assertion and request/response detail.
 type HTMLItem struct {
 	ID            string
+	HumanID       string
 	Domain        string
 	Resource      string
+	ElementPath   string
+	SearchCode    string
+	SearchCodeB   string
 	Variant       string
+	Description   string
 	Expression    string
 	Passed        bool
 	StatusCode    int
@@ -50,7 +55,17 @@ type htmlReport struct {
 	TotalRequirements     int
 	CoveredRequirements   int
 	UncoveredRequirements int
+	Matrices              []coverageMatrix
 	Sections              []htmlSection
+	DomainGlossary        []glossaryEntry
+	VariantGlossary       []glossaryEntry
+}
+
+// glossaryEntry is one row of a glossary table (a domain or variant name and its
+// plain-English description).
+type glossaryEntry struct {
+	Name        string
+	Description string
 }
 
 // htmlSection is one titled drill-down section (By Domain / By Resource Type /
@@ -60,10 +75,147 @@ type htmlSection struct {
 	Drills []htmlDrill
 }
 
+// matrixCell is one cell in the coverage matrix: the outcome of a single
+// (element/parameter, variant) intersection for a resource type.
+type matrixCell struct {
+	RequirementID string
+	HumanID       string
+	Passed        bool
+	Tested        bool
+}
+
+// matrixRow is one row of the coverage matrix (an element, search parameter,
+// or operation/state label), with one cell per variant column.
+type matrixRow struct {
+	Label    string
+	Cells    map[CoverageVariant]matrixCell
+	Total    int
+	Passed   int
+	Failed   int
+	Untested int
+}
+
+// coverageMatrix is the 2D pass/fail grid for one resource type: rows are
+// elements/parameters, columns are variants.
+type coverageMatrix struct {
+	Resource string
+	Rows     []matrixRow
+	Columns  []CoverageVariant
+}
+
+type matrixRowKey struct {
+	label string
+}
+
+func matrixKeyFor(it HTMLItem) matrixRowKey {
+	switch CoverageDomain(it.Domain) {
+	case CoverageDomainSearch:
+		code := it.SearchCode
+		if it.Variant == string(CoverageVariantSearchCombination) && it.SearchCodeB != "" {
+			code = code + "+" + it.SearchCodeB
+		}
+		return matrixRowKey{label: it.Resource + "?" + code}
+	case CoverageDomainOperation:
+		return matrixRowKey{label: it.Resource + " · " + shortVariant(CoverageVariant(it.Variant))}
+	case CoverageDomainState:
+		return matrixRowKey{label: it.Resource + " · " + shortVariant(CoverageVariant(it.Variant))}
+	default:
+		elem := it.ElementPath
+		if elem == "" {
+			elem = it.Resource
+		}
+		return matrixRowKey{label: elem}
+	}
+}
+
+// buildMatrices pivots executed items into per-resource coverage matrices. Rows
+// are keyed by the item's element path, search code, or operation/state variant;
+// columns are the distinct variants exercised for that resource. Cells are
+// colored pass/fail/untested.
+func buildMatrices(items []HTMLItem) []coverageMatrix {
+	// rowIdx maps resource -> rowKey -> *matrixRow.
+	rowIdx := make(map[string]map[matrixRowKey]*matrixRow)
+	// colIdx maps resource -> rowKey -> ordered distinct variants.
+	colIdx := make(map[string]map[matrixRowKey][]CoverageVariant)
+	resourceOrder := make([]string, 0)
+	resourceSeen := make(map[string]struct{})
+
+	for _, it := range items {
+		if it.Resource == "" || it.Variant == "" {
+			continue
+		}
+		if _, ok := resourceSeen[it.Resource]; !ok {
+			resourceSeen[it.Resource] = struct{}{}
+			resourceOrder = append(resourceOrder, it.Resource)
+			rowIdx[it.Resource] = make(map[matrixRowKey]*matrixRow)
+			colIdx[it.Resource] = make(map[matrixRowKey][]CoverageVariant)
+		}
+
+		key := matrixKeyFor(it)
+		row := rowIdx[it.Resource][key]
+		if row == nil {
+			row = &matrixRow{Label: key.label, Cells: make(map[CoverageVariant]matrixCell)}
+			rowIdx[it.Resource][key] = row
+		}
+		variant := CoverageVariant(it.Variant)
+		row.Cells[variant] = matrixCell{RequirementID: it.ID, HumanID: it.HumanID, Passed: it.Passed, Tested: true}
+		row.Total++
+		if it.Passed {
+			row.Passed++
+		} else {
+			row.Failed++
+		}
+		// Track column order (variant) for the row.
+		found := false
+		for _, c := range colIdx[it.Resource][key] {
+			if c == variant {
+				found = true
+				break
+			}
+		}
+		if !found {
+			colIdx[it.Resource][key] = append(colIdx[it.Resource][key], variant)
+		}
+	}
+
+	// Compute the global ordered variant columns across all rows of a resource.
+	matrices := make([]coverageMatrix, 0, len(resourceOrder))
+	for _, r := range resourceOrder {
+		colSet := make(map[CoverageVariant]struct{})
+		for _, variants := range colIdx[r] {
+			for _, v := range variants {
+				colSet[v] = struct{}{}
+			}
+		}
+		columns := make([]CoverageVariant, 0, len(colSet))
+		for v := range colSet {
+			columns = append(columns, v)
+		}
+		sort.Slice(columns, func(i, j int) bool { return columns[i] < columns[j] })
+
+		rows := make([]matrixRow, 0, len(rowIdx[r]))
+		for _, row := range rowIdx[r] {
+			// Fill untested columns.
+			for _, v := range columns {
+				if _, ok := row.Cells[v]; !ok {
+					row.Cells[v] = matrixCell{}
+					row.Untested++
+				}
+			}
+			rows = append(rows, *row)
+		}
+		sort.Slice(rows, func(i, j int) bool { return rows[i].Label < rows[j].Label })
+
+		matrices = append(matrices, coverageMatrix{Resource: r, Rows: rows, Columns: columns})
+	}
+	return matrices
+}
+
 // RenderHTML produces a self-contained HTML report with drill-down navigation:
-// overall contractual coverage, per-domain percentages, and per-domain /
-// per-resource / per-variant lists where every item shows pass/fail and
-// expands to its assertion, request URL/body, and response body.
+// overall contractual coverage, a pass/fail coverage matrix, per-domain
+// percentages, and per-domain / per-resource / per-variant lists where every
+// item shows pass/fail and expands to its assertion, request URL/body, and
+// response body.
 func RenderHTML(evaluation EvaluationReport, items []HTMLItem) ([]byte, error) {
 	rep := buildHTMLReport(evaluation, items)
 	var buf bytesBuffer
@@ -75,11 +227,15 @@ func RenderHTML(evaluation EvaluationReport, items []HTMLItem) ([]byte, error) {
 
 func buildHTMLReport(evaluation EvaluationReport, items []HTMLItem) htmlReport {
 	hasEvaluation := evaluation.TotalRequirements > 0
+	matrices := buildMatrices(items)
 	return htmlReport{
 		CoveragePercent:       overallPercent(evaluation, items),
 		TotalRequirements:     totalRequirements(evaluation, items),
 		CoveredRequirements:   coveredRequirements(evaluation, items),
 		UncoveredRequirements: totalRequirements(evaluation, items) - coveredRequirements(evaluation, items),
+		Matrices:              matrices,
+		DomainGlossary:        sortedGlossaryDomains(),
+		VariantGlossary:       sortedGlossaryVariants(),
 		Sections: []htmlSection{
 			{Title: "By Domain", Drills: groupItems(items, func(it HTMLItem) string { return it.Domain }, func(name string) float64 {
 				return drillPercent(evaluation, items, name, hasEvaluation, func(it HTMLItem) string { return it.Domain }, func(n string) float64 { return percentOf(evaluation.ByDomain, n) })
@@ -243,6 +399,58 @@ func percentOfVariant(m map[CoverageVariant]DomainCoverageSummary, name string) 
 	return 0
 }
 
+// sortedGlossaryDomains returns the domain glossary sorted by name.
+func sortedGlossaryDomains() []glossaryEntry {
+	descs := DomainDescriptions()
+	names := make([]CoverageDomain, 0, len(descs))
+	for d := range descs {
+		names = append(names, d)
+	}
+	sort.Slice(names, func(i, j int) bool { return names[i] < names[j] })
+	entries := make([]glossaryEntry, 0, len(names))
+	for _, d := range names {
+		entries = append(entries, glossaryEntry{Name: string(d), Description: descs[d]})
+	}
+	return entries
+}
+
+// sortedGlossaryVariants returns the variant glossary sorted by name.
+func sortedGlossaryVariants() []glossaryEntry {
+	descs := VariantDescriptions()
+	names := make([]CoverageVariant, 0, len(descs))
+	for v := range descs {
+		names = append(names, v)
+	}
+	sort.Slice(names, func(i, j int) bool { return names[i] < names[j] })
+	entries := make([]glossaryEntry, 0, len(names))
+	for _, v := range names {
+		entries = append(entries, glossaryEntry{Name: string(v), Description: descs[v]})
+	}
+	return entries
+}
+
+// matrixCellClass returns the CSS class for a matrix cell based on test outcome.
+func matrixCellClass(c matrixCell) template.CSS {
+	if !c.Tested {
+		return template.CSS("cell-untested")
+	}
+	if c.Passed {
+		return template.CSS("cell-pass")
+	}
+	return template.CSS("cell-fail")
+}
+
+// matrixCellGlyph returns a symbol for a matrix cell outcome.
+func matrixCellGlyph(c matrixCell) string {
+	if !c.Tested {
+		return "—"
+	}
+	if c.Passed {
+		return "✓"
+	}
+	return "✗"
+}
+
 func rowFillStyle(percent float64) template.CSS {
 	if percent < 0 {
 		percent = 0
@@ -261,6 +469,14 @@ var reportTemplate = template.Must(template.New("report").Funcs(template.FuncMap
 		}
 		return 0
 	},
+	"matrixCellClass": matrixCellClass,
+	"matrixCellGlyph": matrixCellGlyph,
+	"itemLabel": func(it HTMLItem) string {
+		if it.HumanID != "" {
+			return it.HumanID
+		}
+		return it.ID
+	},
 }).Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -269,6 +485,7 @@ var reportTemplate = template.Must(template.New("report").Funcs(template.FuncMap
 <style>
   body { font-family: system-ui, sans-serif; margin: 2rem; color: #222; }
   h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
   .overall { background:#f5f5f5; padding:1rem; border-radius:8px; margin-bottom:1.5rem; }
   .overall .pct { font-size:2rem; font-weight:700; }
   .stats { display:flex; gap:2.5rem; flex-wrap:wrap; margin-top:0.5rem; }
@@ -289,6 +506,17 @@ var reportTemplate = template.Must(template.New("report").Funcs(template.FuncMap
   dt { font-weight:600; margin-top:0.4rem; }
   dd { margin:0 0 0 1rem; }
   pre { background:#f8f8f8; border:1px solid #eee; padding:0.5rem; overflow-x:auto; font-size:0.8rem; white-space:pre-wrap; word-break:break-word; }
+
+  .matrix { border-collapse:collapse; margin:1rem 0; width:100%; }
+  .matrix th, .matrix td { border:1px solid #ddd; padding:.4rem .6rem; text-align:center; font-size:0.85rem; }
+  .matrix th { background:#f5f5f5; }
+  .matrix td:first-child { text-align:left; font-weight:600; }
+  .cell-pass { background:#d9f5de; }
+  .cell-fail { background:#f5d5d5; }
+  .cell-untested { background:#eee; color:#999; }
+  .glossary table { border-collapse:collapse; width:100%; margin-top:1rem; }
+  .glossary th, .glossary td { border:1px solid #ddd; padding:.4rem .6rem; text-align:left; }
+  .glossary th { background:#f5f5f5; }
 </style>
 </head>
 <body>
@@ -302,7 +530,43 @@ var reportTemplate = template.Must(template.New("report").Funcs(template.FuncMap
   </div>
 </div>
 
+{{range $m := .Matrices}}
+<h2>Coverage Matrix: {{$m.Resource}}</h2>
+<table class="matrix">
+<thead><tr><th>Element / Parameter</th>{{range $col := $m.Columns}}<th>{{$col}}</th>{{end}}</tr></thead>
+<tbody>
+{{range $row := $m.Rows}}
+<tr>
+<td>{{$row.Label}}</td>
+{{range $col := $m.Columns}}
+{{$cell := index $row.Cells $col}}
+<td class="{{matrixCellClass $cell}}" title="{{$cell.RequirementID}}">{{matrixCellGlyph $cell}}</td>
+{{end}}
+</tr>
+{{end}}
+</tbody>
+</table>
+{{end}}
+
 {{range .Sections}}{{template "section" .}}{{end}}
+
+<details class="glossary">
+<summary>Glossary</summary>
+<h3>Domains</h3>
+<table>
+<thead><tr><th>Domain</th><th>Description</th></tr></thead>
+<tbody>
+{{range $g := .DomainGlossary}}<tr><td>{{$g.Name}}</td><td>{{$g.Description}}</td></tr>{{end}}
+</tbody>
+</table>
+<h3>Variants</h3>
+<table>
+<thead><tr><th>Variant</th><th>Description</th></tr></thead>
+<tbody>
+{{range $g := .VariantGlossary}}<tr><td>{{$g.Name}}</td><td>{{$g.Description}}</td></tr>{{end}}
+</tbody>
+</table>
+</details>
 
 {{define "section"}}
 <h2>{{.Title}}</h2>
@@ -314,8 +578,9 @@ var reportTemplate = template.Must(template.New("report").Funcs(template.FuncMap
 		<summary class="coverage-row" style="{{rowFillStyle $pol.Percent}}">{{$pol.Name}} — {{printf "%.1f" $pol.Percent}}% ({{$pol.Passed}} passed / {{$pol.Failed}} failed / {{$pol.Total}} total)</summary>
     {{range $item := $pol.Items}}
     <details>
-			<summary class="coverage-row" style="{{rowFillStyle (itemPercent $item.Passed)}}">{{if $item.Passed}}<span class="pass">PASS</span>{{else}}<span class="fail">FAIL</span>{{end}} — {{$item.ID}}</summary>
+			<summary class="coverage-row" style="{{rowFillStyle (itemPercent $item.Passed)}}">{{if $item.Passed}}<span class="pass">PASS</span>{{else}}<span class="fail">FAIL</span>{{end}} — {{itemLabel $item}}{{if $item.Description}} — {{$item.Description}}{{end}}</summary>
       <dl>
+        <dt>Requirement ID</dt><dd>{{$item.ID}}</dd>
         <dt>Assert</dt><dd>{{$item.Expression}}</dd>
         <dt>Domain</dt><dd>{{$item.Domain}}</dd>
         <dt>Resource</dt><dd>{{$item.Resource}}</dd>

@@ -15,7 +15,7 @@
                 "Body": null
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Observation?code-value-quantity: reject an invalid search modifier",
                 "RequirementID": "search|Observation|code-value-quantity|search-invalid-modifier",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -25,7 +25,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-modifier",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation?code-value-quantity: reject an invalid search modifier",
+                  "HumanID": "Observation.search.code-value-quantity.invalid-modifier",
+                  "SearchCode": "code-value-quantity",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -51,7 +55,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-value",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -77,7 +85,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-multiple-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -93,7 +105,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Observation?code-value-quantity: accept a valid search returning no results",
                 "RequirementID": "search|Observation|code-value-quantity|search-no-results",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -103,7 +115,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-no-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation?code-value-quantity: accept a valid search returning no results",
+                  "HumanID": "Observation.search.code-value-quantity.no-results",
+                  "SearchCode": "code-value-quantity",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -119,7 +135,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Observation?code-value-quantity: return results for a valid search",
                 "RequirementID": "search|Observation|code-value-quantity|search-valid",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -129,7 +145,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-valid",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation?code-value-quantity: return results for a valid search",
+                  "HumanID": "Observation.search.code-value-quantity.valid",
+                  "SearchCode": "code-value-quantity",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -145,7 +165,7 @@
                 "Body": null
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Observation?code: reject an invalid search modifier",
                 "RequirementID": "search|Observation|code|search-invalid-modifier",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -155,7 +175,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-modifier",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation?code: reject an invalid search modifier",
+                  "HumanID": "Observation.search.code.invalid-modifier",
+                  "SearchCode": "code",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -181,7 +205,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-value",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -207,7 +235,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-multiple-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -223,7 +255,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Observation?code: accept a valid search returning no results",
                 "RequirementID": "search|Observation|code|search-no-results",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -233,7 +265,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-no-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation?code: accept a valid search returning no results",
+                  "HumanID": "Observation.search.code.no-results",
+                  "SearchCode": "code",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -249,7 +285,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Observation?code: return results for a valid search",
                 "RequirementID": "search|Observation|code|search-valid",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -259,7 +295,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-valid",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation?code: return results for a valid search",
+                  "HumanID": "Observation.search.code.valid",
+                  "SearchCode": "code",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -275,7 +315,7 @@
                 "Body": null
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Observation?status: reject an invalid search modifier",
                 "RequirementID": "search|Observation|status|search-invalid-modifier",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -285,7 +325,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-modifier",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation?status: reject an invalid search modifier",
+                  "HumanID": "Observation.search.status.invalid-modifier",
+                  "SearchCode": "status",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -311,7 +355,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-value",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -337,7 +385,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-multiple-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -353,7 +405,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Observation?status: accept a valid search returning no results",
                 "RequirementID": "search|Observation|status|search-no-results",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -363,7 +415,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-no-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation?status: accept a valid search returning no results",
+                  "HumanID": "Observation.search.status.no-results",
+                  "SearchCode": "status",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -379,7 +435,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Observation?status: return results for a valid search",
                 "RequirementID": "search|Observation|status|search-valid",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -389,7 +445,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-valid",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation?status: return results for a valid search",
+                  "HumanID": "Observation.search.status.valid",
+                  "SearchCode": "status",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -405,7 +465,7 @@
                 "Body": null
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Observation?value-quantity: reject an invalid search modifier",
                 "RequirementID": "search|Observation|value-quantity|search-invalid-modifier",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -415,7 +475,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-modifier",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation?value-quantity: reject an invalid search modifier",
+                  "HumanID": "Observation.search.value-quantity.invalid-modifier",
+                  "SearchCode": "value-quantity",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -441,7 +505,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-value",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -467,7 +535,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-multiple-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -483,7 +555,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Observation?value-quantity: accept a valid search returning no results",
                 "RequirementID": "search|Observation|value-quantity|search-no-results",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -493,7 +565,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-no-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation?value-quantity: accept a valid search returning no results",
+                  "HumanID": "Observation.search.value-quantity.no-results",
+                  "SearchCode": "value-quantity",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -509,7 +585,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Observation?value-quantity: return results for a valid search",
                 "RequirementID": "search|Observation|value-quantity|search-valid",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -519,7 +595,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-valid",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation?value-quantity: return results for a valid search",
+                  "HumanID": "Observation.search.value-quantity.valid",
+                  "SearchCode": "value-quantity",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -565,7 +645,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-delete",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: delete removes the resource",
+                  "HumanID": "Observation.operation.delete",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -588,7 +672,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-delete",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: delete removes the resource",
+                  "HumanID": "Observation.operation.delete",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -640,7 +728,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-history",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: history returns the version chain",
+                  "HumanID": "Observation.operation.history",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -663,7 +755,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-history",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: history returns the version chain",
+                  "HumanID": "Observation.operation.history",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -709,7 +805,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-patch",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: patch (PATCH) partially modifies the resource",
+                  "HumanID": "Observation.operation.patch",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -740,7 +840,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-patch",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: patch (PATCH) partially modifies the resource",
+                  "HumanID": "Observation.operation.patch",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -792,7 +896,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-read",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: read (GET) returns the resource",
+                  "HumanID": "Observation.operation.read",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -815,7 +923,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-read",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: read (GET) returns the resource",
+                  "HumanID": "Observation.operation.read",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -861,7 +973,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-update",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: update (PUT) modifies the resource",
+                  "HumanID": "Observation.operation.update",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -903,7 +1019,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-update",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: update (PUT) modifies the resource",
+                  "HumanID": "Observation.operation.update",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -955,7 +1075,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Observation.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -978,7 +1102,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Observation.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -1026,7 +1154,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Observation.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -1049,7 +1181,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Observation.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -1072,7 +1208,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Observation.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -1095,7 +1235,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Observation.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1122,7 +1266,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-delete-nonexistent",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation: delete a nonexistent resource returns 404/200",
+                  "HumanID": "Observation.state.delete-nonexistent",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1149,7 +1297,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-read-nonexistent",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation: read a nonexistent resource returns 404",
+                  "HumanID": "Observation.state.read-nonexistent",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1176,7 +1328,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Observation.code (CodeableConcept): reject a lexically invalid value",
                 "RequirementID": "http://example.org/StructureDefinition/observation|Observation.code|CodeableConcept|datatype-invalid-lexical",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -1186,7 +1338,11 @@
                   "ElementPath": "Observation.code",
                   "Domain": "datatype",
                   "Variant": "datatype-invalid-lexical",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation.code (CodeableConcept): reject a lexically invalid value",
+                  "HumanID": "Observation.code.datatype.datatype-invalid-lexical",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1213,7 +1369,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Observation.code (CodeableConcept): reject a null value for a non-null element",
                 "RequirementID": "http://example.org/StructureDefinition/observation|Observation.code|CodeableConcept|datatype-null",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -1223,7 +1379,11 @@
                   "ElementPath": "Observation.code",
                   "Domain": "datatype",
                   "Variant": "datatype-null",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation.code (CodeableConcept): reject a null value for a non-null element",
+                  "HumanID": "Observation.code.datatype.datatype-null",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1259,7 +1419,7 @@
                 }
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Observation.code (CodeableConcept): accept a valid value",
                 "RequirementID": "http://example.org/StructureDefinition/observation|Observation.code|CodeableConcept|datatype-valid",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -1269,7 +1429,11 @@
                   "ElementPath": "Observation.code",
                   "Domain": "datatype",
                   "Variant": "datatype-valid",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation.code (CodeableConcept): accept a valid value",
+                  "HumanID": "Observation.code.datatype.datatype-valid",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1296,7 +1460,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Observation.code (CodeableConcept): reject a value with the wrong JSON type",
                 "RequirementID": "http://example.org/StructureDefinition/observation|Observation.code|CodeableConcept|datatype-wrong-json-type",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -1306,7 +1470,11 @@
                   "ElementPath": "Observation.code",
                   "Domain": "datatype",
                   "Variant": "datatype-wrong-json-type",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation.code (CodeableConcept): reject a value with the wrong JSON type",
+                  "HumanID": "Observation.code.datatype.datatype-wrong-json-type",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1332,7 +1500,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Observation.code: reject a resource missing the required element (min=1)",
                 "RequirementID": "http://example.org/StructureDefinition/observation|Observation.code|missing-required",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -1342,7 +1510,11 @@
                   "ElementPath": "Observation.code",
                   "Domain": "cardinality",
                   "Variant": "missing-required",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation.code: reject a resource missing the required element (min=1)",
+                  "HumanID": "Observation.code.cardinality.missing-required",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1378,7 +1550,7 @@
                 }
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Observation.code: accept a resource with the required element present (min=1)",
                 "RequirementID": "http://example.org/StructureDefinition/observation|Observation.code|valid-min",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -1388,7 +1560,11 @@
                   "ElementPath": "Observation.code",
                   "Domain": "cardinality",
                   "Variant": "valid-min",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation.code: accept a resource with the required element present (min=1)",
+                  "HumanID": "Observation.code.cardinality.valid-min",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1424,7 +1600,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Observation.status (code): reject a lexically invalid value",
                 "RequirementID": "http://example.org/StructureDefinition/observation|Observation.status|code|datatype-invalid-lexical",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -1434,7 +1610,11 @@
                   "ElementPath": "Observation.status",
                   "Domain": "datatype",
                   "Variant": "datatype-invalid-lexical",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation.status (code): reject a lexically invalid value",
+                  "HumanID": "Observation.status.datatype.datatype-invalid-lexical",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1470,7 +1650,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Observation.status (code): reject a null value for a non-null element",
                 "RequirementID": "http://example.org/StructureDefinition/observation|Observation.status|code|datatype-null",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -1480,7 +1660,11 @@
                   "ElementPath": "Observation.status",
                   "Domain": "datatype",
                   "Variant": "datatype-null",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation.status (code): reject a null value for a non-null element",
+                  "HumanID": "Observation.status.datatype.datatype-null",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1516,7 +1700,7 @@
                 }
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Observation.status (code): accept a valid value",
                 "RequirementID": "http://example.org/StructureDefinition/observation|Observation.status|code|datatype-valid",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -1526,7 +1710,11 @@
                   "ElementPath": "Observation.status",
                   "Domain": "datatype",
                   "Variant": "datatype-valid",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation.status (code): accept a valid value",
+                  "HumanID": "Observation.status.datatype.datatype-valid",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1562,7 +1750,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Observation.status (code): reject a value with the wrong JSON type",
                 "RequirementID": "http://example.org/StructureDefinition/observation|Observation.status|code|datatype-wrong-json-type",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -1572,7 +1760,11 @@
                   "ElementPath": "Observation.status",
                   "Domain": "datatype",
                   "Variant": "datatype-wrong-json-type",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation.status (code): reject a value with the wrong JSON type",
+                  "HumanID": "Observation.status.datatype.datatype-wrong-json-type",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1607,7 +1799,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Observation.status: reject a resource missing the required element (min=1)",
                 "RequirementID": "http://example.org/StructureDefinition/observation|Observation.status|missing-required",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -1617,7 +1809,11 @@
                   "ElementPath": "Observation.status",
                   "Domain": "cardinality",
                   "Variant": "missing-required",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Observation.status: reject a resource missing the required element (min=1)",
+                  "HumanID": "Observation.status.cardinality.missing-required",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1653,7 +1849,7 @@
                 }
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Observation.status: accept a resource with the required element present (min=1)",
                 "RequirementID": "http://example.org/StructureDefinition/observation|Observation.status|valid-min",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -1663,7 +1859,11 @@
                   "ElementPath": "Observation.status",
                   "Domain": "cardinality",
                   "Variant": "valid-min",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Observation.status: accept a resource with the required element present (min=1)",
+                  "HumanID": "Observation.status.cardinality.valid-min",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]

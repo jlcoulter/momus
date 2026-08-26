@@ -96,6 +96,17 @@ type Trace struct {
 	Domain       string
 	Variant      string
 	Expected     string // "accept" or "reject"
+	// Description is a human-readable sentence explaining what conformance
+	// obligation the bound requirement tests.
+	Description string
+	// HumanID is a human-friendly identifier for the obligation, more readable
+	// than the pipe-delimited machine ID.
+	HumanID string
+	// SearchCode is the search parameter code for search-domain obligations.
+	SearchCode string
+	// SearchCodeB is the second search parameter code for pairwise search
+	// combination obligations.
+	SearchCodeB string
 }
 
 func (*Sequence) node() {}

@@ -204,14 +204,17 @@ func DerivePlan(r *registry.Registry, options coverage.DeriveOptions) (*coverage
 			continue
 		}
 		if _, ok := inScopeResourceTypes[c.ResourceType]; ok {
-			appendRequirement(plan, seen, coverage.CoverageRequirement{
+			req := coverage.CoverageRequirement{
 				ID:            fmt.Sprintf("operation|%s|%s", c.ResourceType, c.OperationName),
 				ProfileURL:    profileURLByType[c.ResourceType],
 				ResourceType:  c.ResourceType,
 				Domain:        coverage.CoverageDomainOperation,
 				Variant:       coverage.CoverageVariantOperationCustom,
 				OperationName: c.OperationName,
-			})
+			}
+			req.Description = coverage.DescribeCoverageRequirement(req)
+			req.HumanID = coverage.HumanID(req)
+			appendRequirement(plan, seen, req)
 		}
 	}
 
@@ -285,6 +288,8 @@ func deriveInteractionObligations(plan *coverage.CoveragePlan, seen map[string]s
 					PairA:        a.ID,
 					PairB:        b.ID,
 				}
+				interaction.Description = coverage.DescribeCoverageRequirement(interaction)
+				interaction.HumanID = coverage.HumanID(interaction)
 				appendRequirement(plan, seen, interaction)
 				plan.Interactions = append(plan.Interactions, coverage.InteractionRequirement{
 					ID:           id,
@@ -359,14 +364,17 @@ func appendSearchObligations(plan *coverage.CoveragePlan, seen map[string]struct
 		coverage.CoverageVariantSearchMultipleResults,
 		coverage.CoverageVariantSearchInvalidModifier,
 	} {
-		appendRequirement(plan, seen, coverage.CoverageRequirement{
+		req := coverage.CoverageRequirement{
 			ID:           fmt.Sprintf("search|%s|%s|%s", resourceType, c.SearchCode, variant),
 			ConstraintID: c.ID,
 			ResourceType: resourceType,
 			Domain:       coverage.CoverageDomainSearch,
 			Variant:      variant,
 			SearchCode:   c.SearchCode,
-		})
+		}
+		req.Description = coverage.DescribeCoverageRequirement(req)
+		req.HumanID = coverage.HumanID(req)
+		appendRequirement(plan, seen, req)
 	}
 }
 
@@ -380,13 +388,16 @@ func appendOperationObligations(plan *coverage.CoveragePlan, seen map[string]str
 		coverage.CoverageVariantOperationDelete,
 		coverage.CoverageVariantOperationHistory,
 	} {
-		appendRequirement(plan, seen, coverage.CoverageRequirement{
+		req := coverage.CoverageRequirement{
 			ID:           fmt.Sprintf("operation|%s|%s", resourceType, variant),
 			ProfileURL:   profileURL,
 			ResourceType: resourceType,
 			Domain:       coverage.CoverageDomainOperation,
 			Variant:      variant,
-		})
+		}
+		req.Description = coverage.DescribeCoverageRequirement(req)
+		req.HumanID = coverage.HumanID(req)
+		appendRequirement(plan, seen, req)
 	}
 }
 
@@ -398,13 +409,16 @@ func appendStateObligations(plan *coverage.CoveragePlan, seen map[string]struct{
 		coverage.CoverageVariantStateReadNonexistent,
 		coverage.CoverageVariantStateDeleteNonexistent,
 	} {
-		appendRequirement(plan, seen, coverage.CoverageRequirement{
+		req := coverage.CoverageRequirement{
 			ID:           fmt.Sprintf("state|%s|%s", resourceType, variant),
 			ProfileURL:   profileURL,
 			ResourceType: resourceType,
 			Domain:       coverage.CoverageDomainState,
 			Variant:      variant,
-		})
+		}
+		req.Description = coverage.DescribeCoverageRequirement(req)
+		req.HumanID = coverage.HumanID(req)
+		appendRequirement(plan, seen, req)
 	}
 }
 
@@ -414,7 +428,7 @@ func appendSearchCombinationObligations(plan *coverage.CoveragePlan, seen map[st
 	codes = uniqueSortedStrings(codes)
 	for i := 0; i < len(codes); i++ {
 		for j := i + 1; j < len(codes); j++ {
-			appendRequirement(plan, seen, coverage.CoverageRequirement{
+			req := coverage.CoverageRequirement{
 				ID:           fmt.Sprintf("search|%s|%s++%s|%s", resourceType, codes[i], codes[j], coverage.CoverageVariantSearchCombination),
 				ProfileURL:   profileURL,
 				ResourceType: resourceType,
@@ -422,7 +436,10 @@ func appendSearchCombinationObligations(plan *coverage.CoveragePlan, seen map[st
 				Variant:      coverage.CoverageVariantSearchCombination,
 				SearchCode:   codes[i],
 				SearchCodeB:  codes[j],
-			})
+			}
+			req.Description = coverage.DescribeCoverageRequirement(req)
+			req.HumanID = coverage.HumanID(req)
+			appendRequirement(plan, seen, req)
 		}
 	}
 }
@@ -497,7 +514,7 @@ func addRequirement(plan *coverage.CoveragePlan, seen map[string]struct{}, c con
 	if c.Datatype != "" {
 		id = fmt.Sprintf("%s|%s|%s|%s", c.ProfileURL, c.ElementPath, c.Datatype, variant)
 	}
-	appendRequirement(plan, seen, coverage.CoverageRequirement{
+	req := coverage.CoverageRequirement{
 		ID:                id,
 		ConstraintID:      c.ID,
 		ProfileURL:        c.ProfileURL,
@@ -508,7 +525,11 @@ func addRequirement(plan *coverage.CoveragePlan, seen map[string]struct{}, c con
 		Variant:           variant,
 		Min:               de.element.Min,
 		Max:               de.element.Max,
-	})
+		Datatype:          c.Datatype,
+	}
+	req.Description = coverage.DescribeCoverageRequirement(req)
+	req.HumanID = coverage.HumanID(req)
+	appendRequirement(plan, seen, req)
 }
 
 func collectDependencyTargets(r *registry.Registry, element model.ElementDefinition) []string {
