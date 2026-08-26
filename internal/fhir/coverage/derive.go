@@ -222,6 +222,10 @@ func DerivePlan(r *registry.Registry, options coverage.DeriveOptions) (*coverage
 		return plan.Requirements[i].ID < plan.Requirements[j].ID
 	})
 
+	// Apply the domain filter before interaction derivation so pairwise
+	// interaction obligations are only derived from in-scope domains.
+	filterRequirements(plan, options)
+
 	// Interaction strength 2 adds pairwise interaction obligations: pairs of
 	// accept obligations on the same profile that must be satisfiable together
 	// in a single payload. These are appended as first-class requirements in
@@ -232,11 +236,57 @@ func DerivePlan(r *registry.Registry, options coverage.DeriveOptions) (*coverage
 		sort.Slice(plan.Requirements, func(i, j int) bool {
 			return plan.Requirements[i].ID < plan.Requirements[j].ID
 		})
+		// Apply the variant filter to the final list (interaction obligations
+		// are never excluded by domain, but variant exclusions still apply).
+		filterRequirements(plan, options)
 	}
 
 	plan.Summary.TotalRequirements = len(plan.Requirements)
 
 	return plan, nil
+}
+
+// filterRequirements removes requirements excluded by the IncludeDomains and
+// ExcludeVariants options and rebuilds the plan's summary counts to match the
+// filtered set. It is a no-op when neither option is set.
+func filterRequirements(plan *coverage.CoveragePlan, options coverage.DeriveOptions) {
+	if len(options.IncludeDomains) == 0 && len(options.ExcludeVariants) == 0 {
+		return
+	}
+	includeDomains := make(map[coverage.CoverageDomain]struct{}, len(options.IncludeDomains))
+	for _, d := range options.IncludeDomains {
+		includeDomains[d] = struct{}{}
+	}
+	excludeVariants := make(map[coverage.CoverageVariant]struct{}, len(options.ExcludeVariants))
+	for _, v := range options.ExcludeVariants {
+		excludeVariants[v] = struct{}{}
+	}
+
+	filtered := make([]coverage.CoverageRequirement, 0, len(plan.Requirements))
+	for _, req := range plan.Requirements {
+		if len(includeDomains) > 0 {
+			if _, ok := includeDomains[req.Domain]; !ok {
+				continue
+			}
+		}
+		if len(excludeVariants) > 0 {
+			if _, ok := excludeVariants[req.Variant]; ok {
+				continue
+			}
+		}
+		filtered = append(filtered, req)
+	}
+	plan.Requirements = filtered
+
+	// Rebuild summary counts from the filtered set.
+	plan.Summary.ByDomain = make(map[coverage.CoverageDomain]int)
+	plan.Summary.ByResourceType = make(map[string]int)
+	plan.Summary.ByVariant = make(map[coverage.CoverageVariant]int)
+	for _, req := range plan.Requirements {
+		plan.Summary.ByDomain[req.Domain]++
+		plan.Summary.ByResourceType[req.ResourceType]++
+		plan.Summary.ByVariant[req.Variant]++
+	}
 }
 
 // deriveInteractionObligations appends pairwise interaction obligations between

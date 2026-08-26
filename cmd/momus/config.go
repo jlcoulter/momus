@@ -40,6 +40,8 @@ type config struct {
 	IncludeLowValuePaths   bool     `mapstructure:"include_low_value_paths" flag:"include-low-value-paths"`
 	InteractionStrength    int      `mapstructure:"interaction_strength" flag:"strength"`
 	IncludeUniversalSearch bool     `mapstructure:"include_universal_search" flag:"include-universal-search"`
+	IncludeDomains         []string `mapstructure:"include_domains" flag:"include-domain"`
+	ExcludeVariants        []string `mapstructure:"exclude_variants" flag:"exclude-variant"`
 
 	// Target FHIR server / API
 	BaseURL           string `mapstructure:"base_url" flag:"base-url"`

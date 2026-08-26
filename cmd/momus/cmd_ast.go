@@ -85,6 +85,8 @@ func newAstCmd(cfg *config) *cobra.Command {
 	cmd.Flags().BoolVar(&cfg.IncludeOptional, "include-optional", false, "include optional non-mustSupport elements")
 	cmd.Flags().BoolVar(&cfg.IncludeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
 	cmd.Flags().BoolVar(&cfg.IncludeUniversalSearch, "include-universal-search", false, "include universal FHIR search parameters (_id, _count, _sort, _include, _summary, _filter) for every resource type even when the server's CapabilityStatement does not declare them")
+	cmd.Flags().StringSliceVar(&cfg.IncludeDomains, "include-domain", nil, "include only these coverage domains (repeatable; e.g. search, operation)")
+	cmd.Flags().StringSliceVar(&cfg.ExcludeVariants, "exclude-variant", nil, "exclude these coverage variants (repeatable; e.g. operation-delete, state-crud-sequence)")
 	cmd.Flags().StringVar(&cfg.BaseURL, "base-url", "", "target FHIR base URL for request nodes")
 	cmd.Flags().StringVar(&cfg.WriteBaseURL, "write-base-url", "", "alternate FHIR base URL for resource creation (write) request nodes; defaults to --base-url")
 	cmd.Flags().StringVar(&cfg.CapabilityBaseURL, "capability-base-url", "", "optional alternate FHIR base URL to fetch CapabilityStatement metadata for scope/profile selection")

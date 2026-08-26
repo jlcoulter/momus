@@ -174,6 +174,17 @@ type DeriveOptions struct {
 	// that a conformant server is expected to support, overriding the
 	// capability-declaration restriction for universal codes.
 	IncludeUniversalSearchParams bool
+	// IncludeDomains, when non-empty, restricts derived obligations to the
+	// listed coverage domains. When empty (the default), all domains are
+	// derived. This lets a caller scope a plan to only the interactions a
+	// server exposes (e.g. search-only) so downstream consumers (AST, Karate
+	// export, execution) never see obligations for excluded domains.
+	IncludeDomains []CoverageDomain
+	// ExcludeVariants, when non-empty, removes obligations with the listed
+	// variants from the derived plan. This allows excluding specific test types
+	// (e.g. operation-delete, state-crud-sequence) without removing an entire
+	// domain.
+	ExcludeVariants []CoverageVariant
 }
 
 // PruneReason describes why an element was excluded from derivation.

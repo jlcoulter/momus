@@ -68,6 +68,8 @@ func newPlanCmd(cfg *config) *cobra.Command {
 	cmd.Flags().BoolVar(&cfg.IncludeOptional, "include-optional", false, "include optional non-mustSupport elements")
 	cmd.Flags().BoolVar(&cfg.IncludeLowValuePaths, "include-low-value-paths", false, "include low-value infrastructure paths like meta/text/language")
 	cmd.Flags().BoolVar(&cfg.IncludeUniversalSearch, "include-universal-search", false, "include universal FHIR search parameters (_id, _count, _sort, _include, _summary, _filter) for every resource type even when the server's CapabilityStatement does not declare them")
+	cmd.Flags().StringSliceVar(&cfg.IncludeDomains, "include-domain", nil, "include only these coverage domains (repeatable; e.g. search, operation)")
+	cmd.Flags().StringSliceVar(&cfg.ExcludeVariants, "exclude-variant", nil, "exclude these coverage variants (repeatable; e.g. operation-delete, state-crud-sequence)")
 	cmd.Flags().IntVar(&cfg.InteractionStrength, "strength", 1, "interaction strength: 1 = individual requirements, 2 = pairwise interactions")
 	cmd.Flags().BoolVar(&cfg.Exhaustive, "exhaustive", true, "populate optional elements to produce fuller, more realistic resources")
 	return cmd

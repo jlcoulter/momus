@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/jlcoulter/momus/internal/home"
 
@@ -72,7 +73,37 @@ func deriveCoveragePlan(cfg *config, reg *registry.Registry, resourceTypes, prof
 		Strength:                     cfg.InteractionStrength,
 		CapabilitySearchCodes:        searchCodes,
 		IncludeUniversalSearchParams: cfg.IncludeUniversalSearch,
+		IncludeDomains:               parseDomains(cfg.IncludeDomains),
+		ExcludeVariants:              parseVariants(cfg.ExcludeVariants),
 	})
+}
+
+// parseDomains converts CLI domain strings into CoverageDomain values, ignoring
+// empty entries.
+func parseDomains(values []string) []testcoverage.CoverageDomain {
+	out := make([]testcoverage.CoverageDomain, 0, len(values))
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		out = append(out, testcoverage.CoverageDomain(v))
+	}
+	return out
+}
+
+// parseVariants converts CLI variant strings into CoverageVariant values,
+// ignoring empty entries.
+func parseVariants(values []string) []testcoverage.CoverageVariant {
+	out := make([]testcoverage.CoverageVariant, 0, len(values))
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		out = append(out, testcoverage.CoverageVariant(v))
+	}
+	return out
 }
 
 // buildTestPlan builds the test plan (seed dataset + test AST) from a coverage
