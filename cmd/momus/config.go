@@ -70,6 +70,10 @@ type config struct {
 	ProfileURLs []string `mapstructure:"profile_urls" flag:"profile"`
 	PackagePath string   `mapstructure:"package_path" flag:"package"`
 
+	// Karate export
+	KarateOutDir      string `mapstructure:"karate_out_dir" flag:"output-dir,dir"`
+	GenerateKarateCfg bool   `mapstructure:"generate_karate_config" flag:"karate-config"`
+
 	// Conformance self-test
 	GoldenDir       string `mapstructure:"golden_dir" flag:"fixtures"`
 	ConformanceOut  string `mapstructure:"conformance_out" flag:"output"`
