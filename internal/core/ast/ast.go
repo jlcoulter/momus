@@ -107,6 +107,14 @@ type Trace struct {
 	// SearchCodeB is the second search parameter code for pairwise search
 	// combination obligations.
 	SearchCodeB string
+	// SearchModifier is a valid FHIR search modifier applied to SearchCode.
+	SearchModifier string
+	// SearchTargetType is the target resource type for include/revinclude or
+	// chaining obligations.
+	SearchTargetType string
+	// SearchTargetCode is the terminal search parameter code for chaining
+	// obligations.
+	SearchTargetCode string
 }
 
 func (*Sequence) node() {}

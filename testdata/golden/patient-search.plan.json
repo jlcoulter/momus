@@ -29,7 +29,10 @@
                   "Description": "Patient?birthdate: reject an invalid search modifier",
                   "HumanID": "Patient.search.birthdate.invalid-modifier",
                   "SearchCode": "birthdate",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -59,7 +62,10 @@
                   "Description": "Patient?birthdate: handle an invalid search value",
                   "HumanID": "Patient.search.birthdate.invalid-value",
                   "SearchCode": "birthdate",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -89,7 +95,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -119,7 +128,10 @@
                   "Description": "Patient?birthdate: accept a valid search returning no results",
                   "HumanID": "Patient.search.birthdate.no-results",
                   "SearchCode": "birthdate",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -149,7 +161,10 @@
                   "Description": "Patient?birthdate: return results for a valid search",
                   "HumanID": "Patient.search.birthdate.valid",
                   "SearchCode": "birthdate",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -179,7 +194,10 @@
                   "Description": "Patient?deceased: reject an invalid search modifier",
                   "HumanID": "Patient.search.deceased.invalid-modifier",
                   "SearchCode": "deceased",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -209,7 +227,10 @@
                   "Description": "Patient?deceased: handle an invalid search value",
                   "HumanID": "Patient.search.deceased.invalid-value",
                   "SearchCode": "deceased",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -239,7 +260,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -269,7 +293,10 @@
                   "Description": "Patient?deceased: accept a valid search returning no results",
                   "HumanID": "Patient.search.deceased.no-results",
                   "SearchCode": "deceased",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -299,7 +326,10 @@
                   "Description": "Patient?deceased: return results for a valid search",
                   "HumanID": "Patient.search.deceased.valid",
                   "SearchCode": "deceased",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -329,7 +359,10 @@
                   "Description": "Patient?gender: reject an invalid search modifier",
                   "HumanID": "Patient.search.gender.invalid-modifier",
                   "SearchCode": "gender",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -359,7 +392,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -389,7 +425,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -419,7 +458,10 @@
                   "Description": "Patient?gender: accept a valid search returning no results",
                   "HumanID": "Patient.search.gender.no-results",
                   "SearchCode": "gender",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -449,7 +491,10 @@
                   "Description": "Patient?gender: return results for a valid search",
                   "HumanID": "Patient.search.gender.valid",
                   "SearchCode": "gender",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -479,7 +524,10 @@
                   "Description": "Patient?identifier: reject an invalid search modifier",
                   "HumanID": "Patient.search.identifier.invalid-modifier",
                   "SearchCode": "identifier",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -509,7 +557,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -539,7 +590,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -569,7 +623,10 @@
                   "Description": "Patient?identifier: accept a valid search returning no results",
                   "HumanID": "Patient.search.identifier.no-results",
                   "SearchCode": "identifier",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -599,7 +656,10 @@
                   "Description": "Patient?identifier: return results for a valid search",
                   "HumanID": "Patient.search.identifier.valid",
                   "SearchCode": "identifier",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -629,7 +689,10 @@
                   "Description": "Patient?name: reject an invalid search modifier",
                   "HumanID": "Patient.search.name.invalid-modifier",
                   "SearchCode": "name",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -659,7 +722,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -689,7 +755,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -719,7 +788,10 @@
                   "Description": "Patient?name: accept a valid search returning no results",
                   "HumanID": "Patient.search.name.no-results",
                   "SearchCode": "name",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -749,7 +821,10 @@
                   "Description": "Patient?name: return results for a valid search",
                   "HumanID": "Patient.search.name.valid",
                   "SearchCode": "name",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -779,7 +854,10 @@
                   "Description": "Patient?telecom: reject an invalid search modifier",
                   "HumanID": "Patient.search.telecom.invalid-modifier",
                   "SearchCode": "telecom",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -809,7 +887,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -839,7 +920,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -869,7 +953,10 @@
                   "Description": "Patient?telecom: accept a valid search returning no results",
                   "HumanID": "Patient.search.telecom.no-results",
                   "SearchCode": "telecom",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -899,7 +986,10 @@
                   "Description": "Patient?telecom: return results for a valid search",
                   "HumanID": "Patient.search.telecom.valid",
                   "SearchCode": "telecom",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -954,7 +1044,10 @@
                   "Description": "Patient: delete removes the resource",
                   "HumanID": "Patient.operation.delete",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -981,7 +1074,10 @@
                   "Description": "Patient: delete removes the resource",
                   "HumanID": "Patient.operation.delete",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1036,7 +1132,10 @@
                   "Description": "Patient: history returns the version chain",
                   "HumanID": "Patient.operation.history",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1063,7 +1162,10 @@
                   "Description": "Patient: history returns the version chain",
                   "HumanID": "Patient.operation.history",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1122,7 +1224,10 @@
                   "Description": "Patient: patch (PATCH) partially modifies the resource",
                   "HumanID": "Patient.operation.patch",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1157,7 +1262,10 @@
                   "Description": "Patient: patch (PATCH) partially modifies the resource",
                   "HumanID": "Patient.operation.patch",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1220,7 +1328,10 @@
                   "Description": "Patient: read (GET) returns the resource",
                   "HumanID": "Patient.operation.read",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1247,7 +1358,10 @@
                   "Description": "Patient: read (GET) returns the resource",
                   "HumanID": "Patient.operation.read",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1302,7 +1416,10 @@
                   "Description": "Patient: update (PUT) modifies the resource",
                   "HumanID": "Patient.operation.update",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1353,7 +1470,10 @@
                   "Description": "Patient: update (PUT) modifies the resource",
                   "HumanID": "Patient.operation.update",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1412,7 +1532,10 @@
                   "Description": "Patient: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "Patient.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1439,7 +1562,10 @@
                   "Description": "Patient: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "Patient.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1494,7 +1620,10 @@
                   "Description": "Patient: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "Patient.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1521,7 +1650,10 @@
                   "Description": "Patient: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "Patient.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1548,7 +1680,10 @@
                   "Description": "Patient: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "Patient.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1575,7 +1710,10 @@
                   "Description": "Patient: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "Patient.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1606,7 +1744,10 @@
                   "Description": "Patient: delete a nonexistent resource returns 404/200",
                   "HumanID": "Patient.state.delete-nonexistent",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1637,7 +1778,10 @@
                   "Description": "Patient: read a nonexistent resource returns 404",
                   "HumanID": "Patient.state.read-nonexistent",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1678,7 +1822,10 @@
                   "Description": "Patient.name (HumanName): reject a lexically invalid value",
                   "HumanID": "Patient.name.datatype.datatype-invalid-lexical",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1719,7 +1866,10 @@
                   "Description": "Patient.name (HumanName): reject a null value for a non-null element",
                   "HumanID": "Patient.name.datatype.datatype-null",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1767,7 +1917,10 @@
                   "Description": "Patient.name (HumanName): accept a valid value",
                   "HumanID": "Patient.name.datatype.datatype-valid",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1808,7 +1961,10 @@
                   "Description": "Patient.name (HumanName): reject a value with the wrong JSON type",
                   "HumanID": "Patient.name.datatype.datatype-wrong-json-type",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1848,7 +2004,10 @@
                   "Description": "Patient.name: reject a resource missing the required element (min=1)",
                   "HumanID": "Patient.name.cardinality.missing-required",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1896,7 +2055,10 @@
                   "Description": "Patient.name: accept a resource with multiple values (max=*)",
                   "HumanID": "Patient.name.cardinality.multiple-values",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1944,7 +2106,10 @@
                   "Description": "Patient.name: accept a resource with the required element present (min=1)",
                   "HumanID": "Patient.name.cardinality.valid-min",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]

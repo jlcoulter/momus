@@ -71,6 +71,32 @@ func TestParseBodyStringComparison(t *testing.T) {
 	}
 }
 
+func TestParseBodyAnyQuantifier(t *testing.T) {
+	expr := `body.entry[].resource.resourceType == "Organization"`
+	a, err := ParseExpression(expr)
+	if err != nil {
+		t.Fatalf("ParseExpression returned error: %v", err)
+	}
+	matching := Result{Body: []byte(`{"resourceType":"Bundle","entry":[
+		{"resource":{"resourceType":"Patient"}},
+		{"resource":{"resourceType":"Organization"}}
+	]}`)}
+	if err := a.Evaluate(context.Background(), matching); err != nil {
+		t.Fatalf("expected pass when an entry matches, got %v", err)
+	}
+	nonMatching := Result{Body: []byte(`{"resourceType":"Bundle","entry":[
+		{"resource":{"resourceType":"Patient"}},
+		{"resource":{"resourceType":"Practitioner"}}
+	]}`)}
+	if err := a.Evaluate(context.Background(), nonMatching); err == nil {
+		t.Fatal("expected fail when no entry matches")
+	}
+	empty := Result{Body: []byte(`{"resourceType":"Bundle","entry":[]}`)}
+	if err := a.Evaluate(context.Background(), empty); err == nil {
+		t.Fatal("expected fail when entry is empty")
+	}
+}
+
 func TestParseBodyArrayIndexComparison(t *testing.T) {
 	a, err := ParseExpression(`body.issue[0].severity == "error"`)
 	if err != nil {

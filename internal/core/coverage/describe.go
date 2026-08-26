@@ -81,6 +81,12 @@ func DescribeCoverageRequirement(req CoverageRequirement) string {
 		return fmt.Sprintf("%s?%s: reject an invalid search modifier", rt, req.SearchCode)
 	case CoverageVariantSearchCombination:
 		return fmt.Sprintf("%s?%s&%s: return results for a combined search", rt, req.SearchCode, req.SearchCodeB)
+	case CoverageVariantSearchInclude:
+		return fmt.Sprintf("%s?_include=%s: return a bundle including %s resources", rt, req.SearchCode, req.SearchTargetType)
+	case CoverageVariantSearchRevInclude:
+		return fmt.Sprintf("%s?_revinclude=%s: return a bundle including %s resources", rt, req.SearchCode, req.SearchTargetType)
+	case CoverageVariantSearchChaining:
+		return fmt.Sprintf("%s?%s: return results for a chained search", rt, req.SearchCode)
 
 	// Operation domain.
 	case CoverageVariantOperationRead:
@@ -129,6 +135,9 @@ func HumanID(req CoverageRequirement) string {
 		}
 		if req.Variant == CoverageVariantSearchCombination && req.SearchCodeB != "" {
 			code = code + "+" + req.SearchCodeB
+		}
+		if req.SearchModifier != "" {
+			code = code + ":" + req.SearchModifier
 		}
 		return rt + ".search." + code + "." + shortVariant(req.Variant)
 	case CoverageDomainOperation:
@@ -226,6 +235,9 @@ var variantDescriptions = map[CoverageVariant]string{
 	CoverageVariantSearchMultipleResults:  "Accept: server returns multiple results for a valid search",
 	CoverageVariantSearchInvalidModifier:  "Reject: server rejects an invalid search modifier",
 	CoverageVariantSearchCombination:      "Accept: server returns results for a combined search",
+	CoverageVariantSearchInclude:          "Accept: server returns a bundle including the referenced resources",
+	CoverageVariantSearchRevInclude:       "Accept: server returns a bundle including the referencing resources",
+	CoverageVariantSearchChaining:         "Accept: server returns results for a chained search",
 	CoverageVariantOperationRead:          "Accept: read (GET) returns the resource",
 	CoverageVariantOperationUpdate:        "Accept: update (PUT) modifies the resource",
 	CoverageVariantOperationPatch:         "Accept: patch (PATCH) partially modifies the resource",

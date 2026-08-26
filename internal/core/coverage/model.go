@@ -61,6 +61,9 @@ const (
 	CoverageVariantSearchMultipleResults CoverageVariant = "search-multiple-results"
 	CoverageVariantSearchInvalidModifier CoverageVariant = "search-invalid-modifier"
 	CoverageVariantSearchCombination     CoverageVariant = "search-combination"
+	CoverageVariantSearchInclude         CoverageVariant = "search-include"
+	CoverageVariantSearchRevInclude      CoverageVariant = "search-revinclude"
+	CoverageVariantSearchChaining        CoverageVariant = "search-chaining"
 
 	// Operation domain.
 	CoverageVariantOperationRead    CoverageVariant = "operation-read"
@@ -126,6 +129,15 @@ type CoverageRequirement struct {
 	// SearchCodeB is the second search parameter code for pairwise search
 	// combination obligations.
 	SearchCodeB string `json:"searchCodeB,omitempty"`
+	// SearchModifier is a valid FHIR search modifier (e.g. "exact", "contains",
+	// "not") applied to SearchCode for a search-valid modifier obligation.
+	SearchModifier string `json:"searchModifier,omitempty"`
+	// SearchTargetType is the target resource type for _include/_revinclude
+	// (the included type) or chaining (the terminal referenced type).
+	SearchTargetType string `json:"searchTargetType,omitempty"`
+	// SearchTargetCode is the search parameter code on SearchTargetType for
+	// chaining obligations (e.g. "name" in "organization.name").
+	SearchTargetCode string `json:"searchTargetCode,omitempty"`
 	// OperationName is the custom operation name ($name) for operation-custom
 	// obligations.
 	OperationName string `json:"operationName,omitempty"`
@@ -174,6 +186,17 @@ type DeriveOptions struct {
 	// that a conformant server is expected to support, overriding the
 	// capability-declaration restriction for universal codes.
 	IncludeUniversalSearchParams bool
+	// IncludeSearchModifiers, when true, derives a search-valid obligation for
+	// every valid FHIR search modifier (e.g. :exact, :contains, :not) supported
+	// by a search parameter's type.
+	IncludeSearchModifiers bool
+	// IncludeSearchChains, when true, derives chaining obligations
+	// (e.g. "organization.name") through reference-type search parameters at
+	// interaction strength >= 2.
+	IncludeSearchChains bool
+	// IncludeSearchIncludes, when true, derives _include and _revinclude
+	// obligations from the server's CapabilityStatement-declared include values.
+	IncludeSearchIncludes bool
 	// IncludeDomains, when non-empty, restricts derived obligations to the
 	// listed coverage domains. When empty (the default), all domains are
 	// derived. This lets a caller scope a plan to only the interactions a

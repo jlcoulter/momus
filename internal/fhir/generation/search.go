@@ -1,6 +1,7 @@
 package generation
 
 import (
+	"fmt"
 	"net/url"
 
 	"github.com/jlcoulter/momus/internal/core/ast"
@@ -23,15 +24,40 @@ func buildSearchCase(req coverage.CoverageRequirement, options coregen.BuildOpti
 }
 
 // searchQuery builds the query string for a search obligation, handling pairwise
-// combinations (two parameters) and invalid modifiers.
+// combinations (two parameters), invalid modifiers, and the dedicated
+// _include/_revinclude/_has/chaining variants.
 func searchQuery(req coverage.CoverageRequirement, options coregen.BuildOptions) string {
+	switch req.Variant {
+	case coverage.CoverageVariantSearchInclude, coverage.CoverageVariantSearchRevInclude:
+		// _include/_revinclude carry their value as "<ResourceType>:<param>"
+		// (e.g. "Patient:organization"). The value is already a valid search
+		// token, so it is used verbatim rather than URL-escaped (escaping would
+		// turn the ":" into "%3A" and break the FHIR include syntax).
+		value := "*"
+		if req.SearchTargetType != "" {
+			value = req.SearchTargetType
+			if req.SearchTargetCode != "" {
+				value += ":" + req.SearchTargetCode
+			}
+		}
+		return req.SearchCode + "=" + value
+	case coverage.CoverageVariantSearchChaining:
+		// A chained search is "<refParam>.<targetParam>=<value>". The terminal
+		// parameter lives on the target resource type, so resolve the value
+		// against that type.
+		targetReq := req
+		targetReq.ResourceType = req.SearchTargetType
+		return req.SearchCode + "=" + url.QueryEscape(SearchQueryValue(targetReq, req.SearchTargetCode, options.Builder))
+	case coverage.CoverageVariantSearchInvalidModifier:
+		return req.SearchCode + ":zzz" + "=" + url.QueryEscape(SearchQueryValue(req, req.SearchCode, options.Builder))
+	}
 	if req.Variant == coverage.CoverageVariantSearchCombination && req.SearchCodeB != "" {
 		return req.SearchCode + "=" + url.QueryEscape(SearchQueryValue(req, req.SearchCode, options.Builder)) +
 			"&" + req.SearchCodeB + "=" + url.QueryEscape(SearchQueryValue(req, req.SearchCodeB, options.Builder))
 	}
 	code := req.SearchCode
-	if req.Variant == coverage.CoverageVariantSearchInvalidModifier {
-		code += ":zzz"
+	if req.SearchModifier != "" {
+		code += ":" + req.SearchModifier
 	}
 	return code + "=" + url.QueryEscape(SearchQueryValue(req, req.SearchCode, options.Builder))
 }
@@ -100,8 +126,33 @@ func searchAcceptValue(req coverage.CoverageRequirement, code string, builder co
 }
 
 // searchAssert builds the assertion for a search obligation. Multiple-results
-// uses a body assertion on the returned Bundle total.
+// uses a body assertion on the returned Bundle total; include/revinclude use a
+// body assertion that the Bundle contains resources of the included type.
 func searchAssert(req coverage.CoverageRequirement, options coregen.BuildOptions) *ast.Assert {
+	switch req.Variant {
+	case coverage.CoverageVariantSearchInclude, coverage.CoverageVariantSearchRevInclude:
+		if req.SearchTargetType == "" {
+			return buildRequirementAssert(req)
+		}
+		return &ast.Assert{
+			Description:   "server returns a bundle including the referenced resources",
+			RequirementID: req.ID,
+			Expression:    fmt.Sprintf("body.entry[].resource.resourceType == %q", req.SearchTargetType),
+			Trace: &ast.Trace{
+				ConstraintID:     req.ConstraintID,
+				ProfileURL:       req.ProfileURL,
+				ResourceType:     req.ResourceType,
+				ElementPath:      req.ElementPath,
+				Domain:           string(req.Domain),
+				Variant:          string(req.Variant),
+				Expected:         "accept",
+				Description:      req.Description,
+				HumanID:          req.HumanID,
+				SearchCode:       req.SearchCode,
+				SearchTargetType: req.SearchTargetType,
+			},
+		}
+	}
 	if req.Variant == coverage.CoverageVariantSearchMultipleResults {
 		return &ast.Assert{
 			Description:   "server returns multiple search results",

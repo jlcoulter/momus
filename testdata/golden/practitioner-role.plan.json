@@ -29,7 +29,10 @@
                   "Description": "PractitionerRole?date: reject an invalid search modifier",
                   "HumanID": "PractitionerRole.search.date.invalid-modifier",
                   "SearchCode": "date",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -59,7 +62,10 @@
                   "Description": "PractitionerRole?date: handle an invalid search value",
                   "HumanID": "PractitionerRole.search.date.invalid-value",
                   "SearchCode": "date",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -89,7 +95,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -119,7 +128,10 @@
                   "Description": "PractitionerRole?date: accept a valid search returning no results",
                   "HumanID": "PractitionerRole.search.date.no-results",
                   "SearchCode": "date",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -149,7 +161,10 @@
                   "Description": "PractitionerRole?date: return results for a valid search",
                   "HumanID": "PractitionerRole.search.date.valid",
                   "SearchCode": "date",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -210,7 +225,10 @@
                   "Description": "PractitionerRole: delete removes the resource",
                   "HumanID": "PractitionerRole.operation.delete",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -237,7 +255,10 @@
                   "Description": "PractitionerRole: delete removes the resource",
                   "HumanID": "PractitionerRole.operation.delete",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -294,7 +315,10 @@
                   "Description": "PractitionerRole: history returns the version chain",
                   "HumanID": "PractitionerRole.operation.history",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -321,7 +345,10 @@
                   "Description": "PractitionerRole: history returns the version chain",
                   "HumanID": "PractitionerRole.operation.history",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -382,7 +409,10 @@
                   "Description": "PractitionerRole: patch (PATCH) partially modifies the resource",
                   "HumanID": "PractitionerRole.operation.patch",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -417,7 +447,10 @@
                   "Description": "PractitionerRole: patch (PATCH) partially modifies the resource",
                   "HumanID": "PractitionerRole.operation.patch",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -474,7 +507,10 @@
                   "Description": "PractitionerRole: read (GET) returns the resource",
                   "HumanID": "PractitionerRole.operation.read",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -501,7 +537,10 @@
                   "Description": "PractitionerRole: read (GET) returns the resource",
                   "HumanID": "PractitionerRole.operation.read",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -562,7 +601,10 @@
                   "Description": "PractitionerRole: update (PUT) modifies the resource",
                   "HumanID": "PractitionerRole.operation.update",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -619,7 +661,10 @@
                   "Description": "PractitionerRole: update (PUT) modifies the resource",
                   "HumanID": "PractitionerRole.operation.update",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -680,7 +725,10 @@
                   "Description": "PractitionerRole: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "PractitionerRole.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -707,7 +755,10 @@
                   "Description": "PractitionerRole: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "PractitionerRole.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -764,7 +815,10 @@
                   "Description": "PractitionerRole: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "PractitionerRole.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -791,7 +845,10 @@
                   "Description": "PractitionerRole: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "PractitionerRole.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -818,7 +875,10 @@
                   "Description": "PractitionerRole: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "PractitionerRole.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -845,7 +905,10 @@
                   "Description": "PractitionerRole: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "PractitionerRole.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -876,7 +939,10 @@
                   "Description": "PractitionerRole: delete a nonexistent resource returns 404/200",
                   "HumanID": "PractitionerRole.state.delete-nonexistent",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -907,7 +973,10 @@
                   "Description": "PractitionerRole: read a nonexistent resource returns 404",
                   "HumanID": "PractitionerRole.state.read-nonexistent",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -964,7 +1033,10 @@
                   "Description": "PractitionerRole.active (boolean): reject a lexically invalid value",
                   "HumanID": "PractitionerRole.active.datatype.datatype-invalid-lexical",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1021,7 +1093,10 @@
                   "Description": "PractitionerRole.active (boolean): reject a null value for a non-null element",
                   "HumanID": "PractitionerRole.active.datatype.datatype-null",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1078,7 +1153,10 @@
                   "Description": "PractitionerRole.active (boolean): accept a valid value",
                   "HumanID": "PractitionerRole.active.datatype.datatype-valid",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1135,7 +1213,10 @@
                   "Description": "PractitionerRole.active (boolean): reject a value with the wrong JSON type",
                   "HumanID": "PractitionerRole.active.datatype.datatype-wrong-json-type",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1191,7 +1272,10 @@
                   "Description": "PractitionerRole.active: reject a resource missing the required element (min=1)",
                   "HumanID": "PractitionerRole.active.cardinality.missing-required",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1248,7 +1332,10 @@
                   "Description": "PractitionerRole.active: accept a resource with the required element present (min=1)",
                   "HumanID": "PractitionerRole.active.cardinality.valid-min",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]

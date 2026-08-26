@@ -13,6 +13,7 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/constraintderive"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+	"github.com/jlcoulter/momus/internal/fhir/search"
 )
 
 var defaultLowValueSegments = map[string]struct{}{
@@ -175,7 +176,7 @@ func DerivePlan(r *registry.Registry, options coverage.DeriveOptions) (*coverage
 				if !options.IncludeUniversalSearchParams && !isSearchCodeAllowed(rt, c.SearchCode, options.CapabilitySearchCodes) {
 					continue
 				}
-				appendSearchObligations(plan, seen, c, rt)
+				appendSearchObligations(plan, seen, c, rt, options)
 				searchCodesByType[rt] = appendUniqueString(searchCodesByType[rt], c.SearchCode)
 			}
 			continue
@@ -184,8 +185,47 @@ func DerivePlan(r *registry.Registry, options coverage.DeriveOptions) (*coverage
 			if !isSearchCodeAllowed(c.ResourceType, c.SearchCode, options.CapabilitySearchCodes) {
 				continue
 			}
-			appendSearchObligations(plan, seen, c, c.ResourceType)
+			appendSearchObligations(plan, seen, c, c.ResourceType, options)
 			searchCodesByType[c.ResourceType] = appendUniqueString(searchCodesByType[c.ResourceType], c.SearchCode)
+		}
+	}
+
+	// Implicit universal search parameters (_include, _revinclude, _has,
+	// _sort, ...) have no SearchParameter resource in R4 core, so they never
+	// become KindSearch constraints. When IncludeUniversalSearchParams opts
+	// into full universal coverage, synthesize their obligations directly from
+	// the known implicit list.
+	if options.IncludeUniversalSearchParams {
+		for _, rt := range scopedTypes {
+			for _, imp := range search.ImplicitUniversal() {
+				if !isSearchCodeAllowed(rt, imp.Code, options.CapabilitySearchCodes) {
+					continue
+				}
+				appendImplicitSearchObligations(plan, seen, rt, imp)
+			}
+		}
+	}
+
+	// _include and _revinclude obligations are derived from the server's
+	// CapabilityStatement-declared include values (SearchInclude /
+	// SearchRevInclude), not from SearchParameter resources.
+	if options.IncludeSearchIncludes {
+		for _, rt := range scopedTypes {
+			for _, inc := range r.SearchIncludesForType(rt) {
+				appendIncludeObligation(plan, seen, rt, inc, coverage.CoverageVariantSearchInclude, r)
+			}
+			for _, rev := range r.SearchRevIncludesForType(rt) {
+				appendIncludeObligation(plan, seen, rt, rev, coverage.CoverageVariantSearchRevInclude, r)
+			}
+		}
+	}
+
+	// Chaining obligations follow reference-type search parameters through
+	// their target types. They are opt-in and only at interaction strength 2
+	// (like combinations) to avoid combinatorial explosion by default.
+	if options.IncludeSearchChains && options.Strength >= 2 {
+		for _, rt := range scopedTypes {
+			appendChainObligations(plan, seen, rt, r, options)
 		}
 	}
 
@@ -407,8 +447,10 @@ func isElementConstraintKind(k constraint.Kind) bool {
 }
 
 // appendSearchObligations adds the search coverage obligations for a search
-// constraint applied to a single resource type.
-func appendSearchObligations(plan *coverage.CoveragePlan, seen map[string]struct{}, c constraint.Constraint, resourceType string) {
+// constraint applied to a single resource type. When IncludeSearchModifiers is
+// set, it also derives a search-valid obligation per valid FHIR search modifier
+// supported by the parameter's type.
+func appendSearchObligations(plan *coverage.CoveragePlan, seen map[string]struct{}, c constraint.Constraint, resourceType string, options coverage.DeriveOptions) {
 	if strings.TrimSpace(c.SearchCode) == "" {
 		return
 	}
@@ -426,6 +468,145 @@ func appendSearchObligations(plan *coverage.CoveragePlan, seen map[string]struct
 			Domain:       coverage.CoverageDomainSearch,
 			Variant:      variant,
 			SearchCode:   c.SearchCode,
+		}
+		req.Description = coverage.DescribeCoverageRequirement(req)
+		req.HumanID = coverage.HumanID(req)
+		appendRequirement(plan, seen, req)
+	}
+	if options.IncludeSearchModifiers {
+		for _, mod := range search.ModifiersForType(c.SearchType) {
+			modReq := coverage.CoverageRequirement{
+				ID:             fmt.Sprintf("search|%s|%s:%s|%s", resourceType, c.SearchCode, mod, coverage.CoverageVariantSearchValid),
+				ConstraintID:   c.ID,
+				ResourceType:   resourceType,
+				Domain:         coverage.CoverageDomainSearch,
+				Variant:        coverage.CoverageVariantSearchValid,
+				SearchCode:     c.SearchCode,
+				SearchModifier: mod,
+			}
+			modReq.Description = coverage.DescribeCoverageRequirement(modReq)
+			modReq.HumanID = coverage.HumanID(modReq)
+			appendRequirement(plan, seen, modReq)
+		}
+	}
+}
+
+// appendImplicitSearchObligations adds obligations for an implicit universal
+// search parameter (one with no SearchParameter resource in R4 core) applied to
+// a single resource type. _include/_revinclude/_has get their dedicated
+// variants; the remaining result-modifier parameters (_sort, _count, _summary,
+// ...) are covered by a valid search returning no results.
+func appendImplicitSearchObligations(plan *coverage.CoveragePlan, seen map[string]struct{}, resourceType string, imp model.SearchParameter) {
+	var variants []coverage.CoverageVariant
+	switch imp.Code {
+	case "_include":
+		variants = []coverage.CoverageVariant{coverage.CoverageVariantSearchInclude}
+	case "_revinclude":
+		variants = []coverage.CoverageVariant{coverage.CoverageVariantSearchRevInclude}
+	case "_has":
+		variants = []coverage.CoverageVariant{coverage.CoverageVariantSearchChaining}
+	default:
+		variants = []coverage.CoverageVariant{
+			coverage.CoverageVariantSearchValid,
+			coverage.CoverageVariantSearchNoResults,
+		}
+	}
+	for _, variant := range variants {
+		req := coverage.CoverageRequirement{
+			ID:           fmt.Sprintf("search|%s|%s|%s", resourceType, imp.Code, variant),
+			ResourceType: resourceType,
+			Domain:       coverage.CoverageDomainSearch,
+			Variant:      variant,
+			SearchCode:   imp.Code,
+		}
+		req.Description = coverage.DescribeCoverageRequirement(req)
+		req.HumanID = coverage.HumanID(req)
+		appendRequirement(plan, seen, req)
+	}
+}
+
+// appendIncludeObligation adds an _include or _revinclude obligation for a
+// server-declared include value of the form "<ResourceType>:<searchParam>" (or
+// "*"). The type that appears in the returned Bundle is the target type of the
+// reference search parameter the include names (e.g. _include=Patient:organization
+// includes Organization resources). SearchTargetType is set to that included
+// type so seed generation and assertions know what the Bundle must contain.
+func appendIncludeObligation(plan *coverage.CoveragePlan, seen map[string]struct{}, resourceType, includeValue string, variant coverage.CoverageVariant, r *registry.Registry) {
+	if includeValue == "" {
+		return
+	}
+	baseType, targetCode := parseIncludeValue(includeValue)
+	includedType := baseType
+	if variant == coverage.CoverageVariantSearchInclude && targetCode != "" && r != nil {
+		// For _include, the referenced resources' type is the reference
+		// parameter's target type, not the base type the parameter is defined
+		// on (e.g. _include=Patient:organization includes Organization
+		// resources). For _revinclude the included type is the base type that
+		// references the subject (e.g. _revinclude=Observation:patient includes
+		// Observation resources).
+		if sp, ok := r.SearchParameter(baseType, targetCode); ok && len(sp.Target) > 0 {
+			includedType = sp.Target[0]
+		}
+	}
+	req := coverage.CoverageRequirement{
+		ID:               fmt.Sprintf("search|%s|%s=%s|%s", resourceType, includeParamCode(variant), includeValue, variant),
+		ResourceType:     resourceType,
+		Domain:           coverage.CoverageDomainSearch,
+		Variant:          variant,
+		SearchCode:       includeParamCode(variant),
+		SearchTargetType: includedType,
+		SearchTargetCode: targetCode,
+	}
+	req.Description = coverage.DescribeCoverageRequirement(req)
+	req.HumanID = coverage.HumanID(req)
+	appendRequirement(plan, seen, req)
+}
+
+func includeParamCode(variant coverage.CoverageVariant) string {
+	if variant == coverage.CoverageVariantSearchRevInclude {
+		return "_revinclude"
+	}
+	return "_include"
+}
+
+// parseIncludeValue parses a CapabilityStatement include value into its
+// resource type and search parameter code. FHIR uses "<ResourceType>:<param>"
+// (and the equivalent dot-separated "<ResourceType>.<param>" form seen in some
+// CapabilityStatements). A wildcard "*" yields empty parts.
+func parseIncludeValue(value string) (string, string) {
+	sep := ":"
+	if !strings.Contains(value, ":") && strings.Contains(value, ".") {
+		sep = "."
+	}
+	parts := strings.SplitN(value, sep, 2)
+	targetType := strings.TrimSpace(parts[0])
+	if targetType == "*" {
+		targetType = ""
+	}
+	targetCode := ""
+	if len(parts) > 1 {
+		targetCode = strings.TrimSpace(parts[1])
+	}
+	return targetType, targetCode
+}
+
+// appendChainObligations derives chaining obligations for a resource type from
+// its reference-type search parameters, following their target types up to two
+// levels deep.
+func appendChainObligations(plan *coverage.CoveragePlan, seen map[string]struct{}, resourceType string, r *registry.Registry, options coverage.DeriveOptions) {
+	for _, ch := range search.ChainsWithDepth(r, resourceType, 2) {
+		firstSeg := strings.SplitN(ch.Path, ".", 2)[0]
+		if !isSearchCodeAllowed(resourceType, firstSeg, options.CapabilitySearchCodes) {
+			continue
+		}
+		req := coverage.CoverageRequirement{
+			ID:               fmt.Sprintf("search|%s|%s|%s", resourceType, ch.Path, coverage.CoverageVariantSearchChaining),
+			ResourceType:     resourceType,
+			Domain:           coverage.CoverageDomainSearch,
+			Variant:          coverage.CoverageVariantSearchChaining,
+			SearchCode:       ch.Path,
+			SearchTargetType: ch.TargetType,
+			SearchTargetCode: ch.TargetCode,
 		}
 		req.Description = coverage.DescribeCoverageRequirement(req)
 		req.HumanID = coverage.HumanID(req)

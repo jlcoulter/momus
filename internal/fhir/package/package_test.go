@@ -800,3 +800,104 @@ func mustMarshalJSON(t *testing.T, v any) []byte {
 func withUTF8BOM(b []byte) []byte {
 	return append([]byte{0xEF, 0xBB, 0xBF}, bytes.TrimSpace(b)...)
 }
+
+func TestReadPackageParsesSearchParameterTarget(t *testing.T) {
+	archivePath := buildTestPackageArchive(t, map[string]any{
+		"package/package.json": map[string]any{
+			"name":    "example.fhir.pkg",
+			"version": "1.2.3",
+		},
+		"package/SearchParameter-Patient-organization.json": map[string]any{
+			"resourceType": "SearchParameter",
+			"url":          "http://example.org/SearchParameter/Patient-organization",
+			"name":         "organization",
+			"code":         "organization",
+			"base":         []any{"Patient"},
+			"type":         "reference",
+			"expression":   "Patient.managingOrganization",
+			"target":       []any{"Organization"},
+		},
+	})
+
+	pkg, err := ReadPackage(archivePath)
+	if err != nil {
+		t.Fatalf("ReadPackage returned error: %v", err)
+	}
+
+	var sp *model.SearchParameter
+	for _, res := range pkg.Resources {
+		if s, ok := res.(*model.SearchParameter); ok {
+			sp = s
+		}
+	}
+	if sp == nil {
+		t.Fatal("expected a SearchParameter to be parsed")
+	}
+	if len(sp.Target) != 1 || sp.Target[0] != "Organization" {
+		t.Fatalf("Target = %v, want [Organization]", sp.Target)
+	}
+}
+
+func TestReadPackageParsesCapabilityStatementSearchFields(t *testing.T) {
+	archivePath := buildTestPackageArchive(t, map[string]any{
+		"package/package.json": map[string]any{
+			"name":    "example.fhir.pkg",
+			"version": "1.2.3",
+		},
+		"package/CapabilityStatement-server.json": map[string]any{
+			"resourceType": "CapabilityStatement",
+			"url":          "http://example.org/CapabilityStatement/server",
+			"status":       "active",
+			"version":      "1.0.0",
+			"name":         "Server",
+			"fhirVersion":  "4.0.1",
+			"rest": []any{
+				map[string]any{
+					"mode": "server",
+					"resource": []any{
+						map[string]any{
+							"type":             "Patient",
+							"searchInclude":    []any{"Patient.organization", "Patient.general-practitioner"},
+							"searchRevInclude": []any{"Observation.patient"},
+							"searchParam": []any{
+								map[string]any{
+									"name":       "identifier",
+									"definition": "http://hl7.org/fhir/SearchParameter/Patient-identifier",
+									"type":       "token",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+
+	pkg, err := ReadPackage(archivePath)
+	if err != nil {
+		t.Fatalf("ReadPackage returned error: %v", err)
+	}
+
+	var cs *model.CapabilityStatement
+	for _, res := range pkg.Resources {
+		if c, ok := res.(*model.CapabilityStatement); ok {
+			cs = c
+		}
+	}
+	if cs == nil {
+		t.Fatal("expected a CapabilityStatement to be parsed")
+	}
+	if len(cs.Rest) != 1 || len(cs.Rest[0].Resource) != 1 {
+		t.Fatalf("unexpected rest structure: %+v", cs.Rest)
+	}
+	res := cs.Rest[0].Resource[0]
+	if len(res.SearchInclude) != 2 || res.SearchInclude[0] != "Patient.organization" {
+		t.Fatalf("SearchInclude = %v, want [Patient.organization Patient.general-practitioner]", res.SearchInclude)
+	}
+	if len(res.SearchRevInclude) != 1 || res.SearchRevInclude[0] != "Observation.patient" {
+		t.Fatalf("SearchRevInclude = %v, want [Observation.patient]", res.SearchRevInclude)
+	}
+	if len(res.SearchParam) != 1 || res.SearchParam[0].Name != "identifier" || res.SearchParam[0].Type != "token" {
+		t.Fatalf("SearchParam = %+v, want single identifier/token", res.SearchParam)
+	}
+}

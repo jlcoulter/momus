@@ -25,6 +25,19 @@ func appendSearchSeedResources(
 	options BuildOptions,
 	byResource map[string][]coverage.CoverageRequirement,
 ) {
+	if req.Variant == coverage.CoverageVariantSearchChaining {
+		// A chaining search needs both the primary resource (referencing the
+		// target) and the target resource (carrying the terminal value), so the
+		// returned Bundle contains a primary result and the server can resolve
+		// the chain through the reference.
+		for _, inst := range buildChainSeedInstances(req, options, byResource) {
+			if inst == nil || inst.LocalID == "" {
+				continue
+			}
+			ds.Resources[inst.LocalID] = inst
+		}
+		return
+	}
 	var count int
 	switch req.Variant {
 	case coverage.CoverageVariantSearchValid, coverage.CoverageVariantSearchCombination:
@@ -39,6 +52,115 @@ func appendSearchSeedResources(
 			continue
 		}
 		ds.Resources[inst.LocalID] = inst
+	}
+}
+
+// buildChainSeedInstances builds the seed resources a chaining search needs: a
+// primary resource of req.ResourceType that references a target resource of
+// req.SearchTargetType whose terminal search parameter (req.SearchTargetCode)
+// equals the query value. Returns the primary and target instances, or nil when
+// the chain cannot be seeded (so the test stays status-only).
+func buildChainSeedInstances(
+	req coverage.CoverageRequirement,
+	options BuildOptions,
+	byResource map[string][]coverage.CoverageRequirement,
+) []*model.ResourceInstance {
+	if options.Registry == nil || req.SearchTargetType == "" || req.SearchTargetCode == "" {
+		return nil
+	}
+	// The first segment of the chain is a reference search parameter on the
+	// primary type; resolve it so the primary seed can reference the target.
+	firstSeg := strings.SplitN(req.SearchCode, ".", 2)[0]
+	refParam, ok := options.Registry.SearchParameter(req.ResourceType, firstSeg)
+	if !ok {
+		return nil
+	}
+	// The terminal value is the query value for the target parameter on the
+	// target type.
+	targetReq := req
+	targetReq.ResourceType = req.SearchTargetType
+	builder := NewBuilder(options.Registry, options.Exhaustive)
+	value := SearchQueryValue(targetReq, req.SearchTargetCode, builder)
+	if value == "" {
+		return nil
+	}
+
+	// Build the target resource carrying the terminal value.
+	targetParams := byResource[req.SearchTargetType]
+	targetProfiles := coregen.UniqueProfileURLs(targetParams)
+	targetProfileURL := ""
+	if len(targetProfiles) > 0 {
+		targetProfileURL = targetProfiles[0]
+	}
+	targetSetupProfiles := coregen.OrderedProfilesForResource(
+		req.SearchTargetType,
+		targetProfileURL,
+		options.PreferredProfileURLsByResource,
+	)
+	targetPrimaryProfile := coregen.FirstProfileURL(targetSetupProfiles)
+	targetID := coregen.SetupResourceID(req.SearchTargetType)
+	targetBody := buildSetupBody(
+		req.SearchTargetType,
+		targetID,
+		targetSetupProfiles,
+		targetPrimaryProfile,
+		nil,
+		options.Registry,
+		options.Exhaustive,
+	)
+	targetSP, ok := options.Registry.SearchParameter(req.SearchTargetType, req.SearchTargetCode)
+	if !ok {
+		return nil
+	}
+	if !applySearchMatch(targetBody, req.SearchTargetType, targetSP, value, options.Registry) {
+		return nil
+	}
+	normalisePayloadCodingDisplays(targetBody, options.Registry)
+
+	// Build the primary resource referencing the target.
+	primaryParams := byResource[req.ResourceType]
+	primaryProfiles := coregen.UniqueProfileURLs(primaryParams)
+	primaryProfileURL := ""
+	if len(primaryProfiles) > 0 {
+		primaryProfileURL = primaryProfiles[0]
+	}
+	primarySetupProfiles := coregen.OrderedProfilesForResource(
+		req.ResourceType,
+		primaryProfileURL,
+		options.PreferredProfileURLsByResource,
+	)
+	primaryPrimaryProfile := coregen.FirstProfileURL(primarySetupProfiles)
+	primaryID := searchSeedID(req, 0)
+	primaryBody := buildSetupBody(
+		req.ResourceType,
+		primaryID,
+		primarySetupProfiles,
+		primaryPrimaryProfile,
+		nil,
+		options.Registry,
+		options.Exhaustive,
+	)
+	// Place a reference on the primary resource's reference element pointing at
+	// the target resource.
+	refTarget := req.SearchTargetType + "/" + targetID
+	if !applySearchMatch(primaryBody, req.ResourceType, refParam, refTarget, options.Registry) {
+		return nil
+	}
+	normalisePayloadCodingDisplays(primaryBody, options.Registry)
+
+	return []*model.ResourceInstance{
+		{
+			LocalID:      targetID,
+			ResourceType: req.SearchTargetType,
+			Profile:      targetPrimaryProfile,
+			Resource:     targetBody,
+		},
+		{
+			LocalID:      primaryID,
+			ResourceType: req.ResourceType,
+			Profile:      primaryPrimaryProfile,
+			Resource:     primaryBody,
+		},
 	}
 }
 

@@ -29,7 +29,10 @@
                   "Description": "Observation?code-value-quantity: reject an invalid search modifier",
                   "HumanID": "Observation.search.code-value-quantity.invalid-modifier",
                   "SearchCode": "code-value-quantity",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -59,7 +62,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -89,7 +95,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -119,7 +128,10 @@
                   "Description": "Observation?code-value-quantity: accept a valid search returning no results",
                   "HumanID": "Observation.search.code-value-quantity.no-results",
                   "SearchCode": "code-value-quantity",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -149,7 +161,10 @@
                   "Description": "Observation?code-value-quantity: return results for a valid search",
                   "HumanID": "Observation.search.code-value-quantity.valid",
                   "SearchCode": "code-value-quantity",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -179,7 +194,10 @@
                   "Description": "Observation?code: reject an invalid search modifier",
                   "HumanID": "Observation.search.code.invalid-modifier",
                   "SearchCode": "code",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -209,7 +227,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -239,7 +260,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -269,7 +293,10 @@
                   "Description": "Observation?code: accept a valid search returning no results",
                   "HumanID": "Observation.search.code.no-results",
                   "SearchCode": "code",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -299,7 +326,10 @@
                   "Description": "Observation?code: return results for a valid search",
                   "HumanID": "Observation.search.code.valid",
                   "SearchCode": "code",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -329,7 +359,10 @@
                   "Description": "Observation?status: reject an invalid search modifier",
                   "HumanID": "Observation.search.status.invalid-modifier",
                   "SearchCode": "status",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -359,7 +392,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -389,7 +425,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -419,7 +458,10 @@
                   "Description": "Observation?status: accept a valid search returning no results",
                   "HumanID": "Observation.search.status.no-results",
                   "SearchCode": "status",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -449,7 +491,10 @@
                   "Description": "Observation?status: return results for a valid search",
                   "HumanID": "Observation.search.status.valid",
                   "SearchCode": "status",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -479,7 +524,10 @@
                   "Description": "Observation?value-quantity: reject an invalid search modifier",
                   "HumanID": "Observation.search.value-quantity.invalid-modifier",
                   "SearchCode": "value-quantity",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -509,7 +557,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -539,7 +590,10 @@
                   "Description": "",
                   "HumanID": "",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -569,7 +623,10 @@
                   "Description": "Observation?value-quantity: accept a valid search returning no results",
                   "HumanID": "Observation.search.value-quantity.no-results",
                   "SearchCode": "value-quantity",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -599,7 +656,10 @@
                   "Description": "Observation?value-quantity: return results for a valid search",
                   "HumanID": "Observation.search.value-quantity.valid",
                   "SearchCode": "value-quantity",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -649,7 +709,10 @@
                   "Description": "Observation: delete removes the resource",
                   "HumanID": "Observation.operation.delete",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -676,7 +739,10 @@
                   "Description": "Observation: delete removes the resource",
                   "HumanID": "Observation.operation.delete",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -732,7 +798,10 @@
                   "Description": "Observation: history returns the version chain",
                   "HumanID": "Observation.operation.history",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -759,7 +828,10 @@
                   "Description": "Observation: history returns the version chain",
                   "HumanID": "Observation.operation.history",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -809,7 +881,10 @@
                   "Description": "Observation: patch (PATCH) partially modifies the resource",
                   "HumanID": "Observation.operation.patch",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -844,7 +919,10 @@
                   "Description": "Observation: patch (PATCH) partially modifies the resource",
                   "HumanID": "Observation.operation.patch",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -900,7 +978,10 @@
                   "Description": "Observation: read (GET) returns the resource",
                   "HumanID": "Observation.operation.read",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -927,7 +1008,10 @@
                   "Description": "Observation: read (GET) returns the resource",
                   "HumanID": "Observation.operation.read",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -977,7 +1061,10 @@
                   "Description": "Observation: update (PUT) modifies the resource",
                   "HumanID": "Observation.operation.update",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1023,7 +1110,10 @@
                   "Description": "Observation: update (PUT) modifies the resource",
                   "HumanID": "Observation.operation.update",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1079,7 +1169,10 @@
                   "Description": "Observation: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "Observation.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1106,7 +1199,10 @@
                   "Description": "Observation: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "Observation.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1158,7 +1254,10 @@
                   "Description": "Observation: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "Observation.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1185,7 +1284,10 @@
                   "Description": "Observation: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "Observation.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1212,7 +1314,10 @@
                   "Description": "Observation: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "Observation.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               },
               {
@@ -1239,7 +1344,10 @@
                   "Description": "Observation: create-read-update-read-delete-read(404) sequence",
                   "HumanID": "Observation.state.crud-sequence",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1270,7 +1378,10 @@
                   "Description": "Observation: delete a nonexistent resource returns 404/200",
                   "HumanID": "Observation.state.delete-nonexistent",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1301,7 +1412,10 @@
                   "Description": "Observation: read a nonexistent resource returns 404",
                   "HumanID": "Observation.state.read-nonexistent",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1342,7 +1456,10 @@
                   "Description": "Observation.code (CodeableConcept): reject a lexically invalid value",
                   "HumanID": "Observation.code.datatype.datatype-invalid-lexical",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1383,7 +1500,10 @@
                   "Description": "Observation.code (CodeableConcept): reject a null value for a non-null element",
                   "HumanID": "Observation.code.datatype.datatype-null",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1433,7 +1553,10 @@
                   "Description": "Observation.code (CodeableConcept): accept a valid value",
                   "HumanID": "Observation.code.datatype.datatype-valid",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1474,7 +1597,10 @@
                   "Description": "Observation.code (CodeableConcept): reject a value with the wrong JSON type",
                   "HumanID": "Observation.code.datatype.datatype-wrong-json-type",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1514,7 +1640,10 @@
                   "Description": "Observation.code: reject a resource missing the required element (min=1)",
                   "HumanID": "Observation.code.cardinality.missing-required",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1564,7 +1693,10 @@
                   "Description": "Observation.code: accept a resource with the required element present (min=1)",
                   "HumanID": "Observation.code.cardinality.valid-min",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1614,7 +1746,10 @@
                   "Description": "Observation.status (code): reject a lexically invalid value",
                   "HumanID": "Observation.status.datatype.datatype-invalid-lexical",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1664,7 +1799,10 @@
                   "Description": "Observation.status (code): reject a null value for a non-null element",
                   "HumanID": "Observation.status.datatype.datatype-null",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1714,7 +1852,10 @@
                   "Description": "Observation.status (code): accept a valid value",
                   "HumanID": "Observation.status.datatype.datatype-valid",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1764,7 +1905,10 @@
                   "Description": "Observation.status (code): reject a value with the wrong JSON type",
                   "HumanID": "Observation.status.datatype.datatype-wrong-json-type",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1813,7 +1957,10 @@
                   "Description": "Observation.status: reject a resource missing the required element (min=1)",
                   "HumanID": "Observation.status.cardinality.missing-required",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]
@@ -1863,7 +2010,10 @@
                   "Description": "Observation.status: accept a resource with the required element present (min=1)",
                   "HumanID": "Observation.status.cardinality.valid-min",
                   "SearchCode": "",
-                  "SearchCodeB": ""
+                  "SearchCodeB": "",
+                  "SearchModifier": "",
+                  "SearchTargetType": "",
+                  "SearchTargetCode": ""
                 }
               }
             ]

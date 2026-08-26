@@ -448,3 +448,60 @@ func TestResolveElementsKeepsIDBasedSliceChildrenDistinct(t *testing.T) {
 		t.Fatal("ID-based slice child Organization.extension:suppressed.url missing after merge")
 	}
 }
+
+func TestRegistrySearchIncludesForType(t *testing.T) {
+	r := New()
+	r.AddCapabilityStatement(&model.CapabilityStatement{
+		URL: "http://example.org/CapabilityStatement/server",
+		Rest: []model.CapabilityStatementRest{{
+			Mode: "server",
+			Resource: []model.CapabilityStatementRestResource{
+				{
+					Type:             "Patient",
+					SearchInclude:    []string{"Patient.organization", "Patient.general-practitioner"},
+					SearchRevInclude: []string{"Observation.patient", "Encounter.patient", "Observation.patient"},
+				},
+			},
+		}},
+	})
+	// A non-server block must be ignored.
+	r.AddCapabilityStatement(&model.CapabilityStatement{
+		URL: "http://example.org/CapabilityStatement/client",
+		Rest: []model.CapabilityStatementRest{{
+			Mode: "client",
+			Resource: []model.CapabilityStatementRestResource{{
+				Type:          "Patient",
+				SearchInclude: []string{"Patient.link"},
+			}},
+		}},
+	})
+
+	inc := r.SearchIncludesForType("Patient")
+	wantInc := []string{"Patient.general-practitioner", "Patient.organization"}
+	if !equalStrings(inc, wantInc) {
+		t.Fatalf("includes = %v, want %v", inc, wantInc)
+	}
+
+	rev := r.SearchRevIncludesForType("Patient")
+	wantRev := []string{"Encounter.patient", "Observation.patient"}
+	if !equalStrings(rev, wantRev) {
+		t.Fatalf("revincludes = %v, want %v", rev, wantRev)
+	}
+
+	// Unknown type -> nil.
+	if got := r.SearchIncludesForType("Observation"); got != nil {
+		t.Fatalf("expected nil includes for unlisted type, got %v", got)
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

@@ -262,3 +262,242 @@ func TestDerivePlanIncludeUniversalSearchParams(t *testing.T) {
 		t.Fatal("expected type-specific active search obligation with IncludeUniversalSearchParams")
 	}
 }
+
+func TestDerivePlanImplicitUniversalSearchParams(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/org-profile",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.name", Min: 1, Max: "1"},
+		},
+	})
+
+	// Without opt-in, no implicit universal obligations are derived.
+	plan, err := DerivePlan(r, coverage.DeriveOptions{})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+	for _, req := range plan.Requirements {
+		if req.SearchCode == "_include" || req.SearchCode == "_revinclude" || req.SearchCode == "_sort" {
+			t.Fatalf("unexpected implicit universal obligation without opt-in: %+v", req)
+		}
+	}
+
+	// With IncludeUniversalSearchParams, implicit universals are derived with
+	// their dedicated variants.
+	plan2, err := DerivePlan(r, coverage.DeriveOptions{IncludeUniversalSearchParams: true})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+	byCodeVariant := map[string]map[coverage.CoverageVariant]bool{}
+	for _, req := range plan2.Requirements {
+		if req.Domain != coverage.CoverageDomainSearch {
+			continue
+		}
+		if byCodeVariant[req.SearchCode] == nil {
+			byCodeVariant[req.SearchCode] = map[coverage.CoverageVariant]bool{}
+		}
+		byCodeVariant[req.SearchCode][req.Variant] = true
+	}
+	if !byCodeVariant["_include"][coverage.CoverageVariantSearchInclude] {
+		t.Fatal("expected _include search-include obligation")
+	}
+	if !byCodeVariant["_revinclude"][coverage.CoverageVariantSearchRevInclude] {
+		t.Fatal("expected _revinclude search-revinclude obligation")
+	}
+	if !byCodeVariant["_has"][coverage.CoverageVariantSearchChaining] {
+		t.Fatal("expected _has search-chaining obligation")
+	}
+	if !byCodeVariant["_sort"][coverage.CoverageVariantSearchValid] {
+		t.Fatal("expected _sort search-valid obligation")
+	}
+	if !byCodeVariant["_sort"][coverage.CoverageVariantSearchNoResults] {
+		t.Fatal("expected _sort search-no-results obligation")
+	}
+}
+
+func TestDerivePlanIncludeSearchModifiers(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/pat-profile",
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 1, Max: "1"},
+		},
+	})
+	r.AddSearchParameter(&model.SearchParameter{
+		URL:  "http://hl7.org/fhir/SearchParameter/Patient-name",
+		Name: "name",
+		Code: "name",
+		Base: []string{"Patient"},
+		Type: "string",
+	})
+	r.AddSearchParameter(&model.SearchParameter{
+		URL:  "http://hl7.org/fhir/SearchParameter/Patient-active",
+		Name: "active",
+		Code: "active",
+		Base: []string{"Patient"},
+		Type: "token",
+	})
+
+	plan, err := DerivePlan(r, coverage.DeriveOptions{IncludeSearchModifiers: true})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+	var foundExact, foundNot bool
+	for _, req := range plan.Requirements {
+		if req.Variant != coverage.CoverageVariantSearchValid || req.SearchModifier == "" {
+			continue
+		}
+		switch req.SearchModifier {
+		case "exact", "contains":
+			if req.SearchCode == "name" {
+				foundExact = true
+			}
+		case "not":
+			if req.SearchCode == "active" {
+				foundNot = true
+			}
+		}
+	}
+	// string params support :exact and :contains.
+	if !foundExact {
+		t.Fatal("expected a string search modifier (exact/contains) on name")
+	}
+	// token params support :not.
+	if !foundNot {
+		t.Fatal("expected a token search modifier (not) on active")
+	}
+}
+
+func TestDerivePlanIncludeSearchChains(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/pat-profile",
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 1, Max: "1"},
+			{Path: "Patient.managingOrganization", Min: 0, Max: "1"},
+		},
+	})
+	r.AddSearchParameter(&model.SearchParameter{
+		URL:    "http://hl7.org/fhir/SearchParameter/Patient-organization",
+		Name:   "organization",
+		Code:   "organization",
+		Base:   []string{"Patient"},
+		Type:   "reference",
+		Target: []string{"Organization"},
+	})
+	r.AddSearchParameter(&model.SearchParameter{
+		URL:  "http://hl7.org/fhir/SearchParameter/Organization-name",
+		Name: "name",
+		Code: "name",
+		Base: []string{"Organization"},
+		Type: "string",
+	})
+
+	// Chains require IncludeSearchChains and strength >= 2.
+	plan, err := DerivePlan(r, coverage.DeriveOptions{IncludeSearchChains: true, Strength: 2})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+	var found bool
+	for _, req := range plan.Requirements {
+		if req.Variant == coverage.CoverageVariantSearchChaining && req.SearchCode == "organization.name" {
+			found = true
+			if req.SearchTargetType != "Organization" || req.SearchTargetCode != "name" {
+				t.Fatalf("chaining requirement missing target info: %+v", req)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected search-chaining obligation organization.name")
+	}
+}
+
+func TestDerivePlanIncludeSearchIncludesFromCapability(t *testing.T) {
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/pat-profile",
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.name", Min: 1, Max: "1"},
+		},
+	})
+	r.AddCapabilityStatement(&model.CapabilityStatement{
+		URL: "http://example.org/CapabilityStatement/server",
+		Rest: []model.CapabilityStatementRest{{
+			Mode: "server",
+			Resource: []model.CapabilityStatementRestResource{{
+				Type:             "Patient",
+				SearchInclude:    []string{"Patient.organization", "Patient.general-practitioner"},
+				SearchRevInclude: []string{"Observation.patient"},
+			}},
+		}},
+	})
+	r.AddSearchParameter(&model.SearchParameter{
+		URL:    "http://hl7.org/fhir/SearchParameter/Patient-organization",
+		Name:   "organization",
+		Code:   "organization",
+		Base:   []string{"Patient"},
+		Type:   "reference",
+		Target: []string{"Organization"},
+	})
+	r.AddSearchParameter(&model.SearchParameter{
+		URL:    "http://hl7.org/fhir/SearchParameter/Patient-general-practitioner",
+		Name:   "general-practitioner",
+		Code:   "general-practitioner",
+		Base:   []string{"Patient"},
+		Type:   "reference",
+		Target: []string{"Practitioner", "Organization"},
+	})
+	r.AddSearchParameter(&model.SearchParameter{
+		URL:    "http://hl7.org/fhir/SearchParameter/Observation-patient",
+		Name:   "patient",
+		Code:   "patient",
+		Base:   []string{"Observation"},
+		Type:   "reference",
+		Target: []string{"Patient"},
+	})
+
+	plan, err := DerivePlan(r, coverage.DeriveOptions{IncludeSearchIncludes: true})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+	var includeOrg, includePract, revinclude bool
+	for _, req := range plan.Requirements {
+		if req.ResourceType != "Patient" {
+			continue
+		}
+		switch req.Variant {
+		case coverage.CoverageVariantSearchInclude:
+			switch req.SearchTargetType {
+			case "Organization":
+				includeOrg = true
+			case "Practitioner":
+				includePract = true
+			default:
+				t.Fatalf("unexpected _include target type %q", req.SearchTargetType)
+			}
+		case coverage.CoverageVariantSearchRevInclude:
+			revinclude = true
+			if req.SearchTargetType != "Observation" {
+				t.Fatalf("_revinclude target type = %q, want Observation", req.SearchTargetType)
+			}
+		}
+	}
+	if !includeOrg {
+		t.Fatal("expected _include of Organization resources")
+	}
+	if !includePract {
+		t.Fatal("expected _include of Practitioner resources")
+	}
+	if !revinclude {
+		t.Fatal("expected search-revinclude obligation from CapabilityStatement")
+	}
+}

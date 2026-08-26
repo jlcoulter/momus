@@ -110,8 +110,13 @@ const (
 
 type pathStep struct {
 	key   string
-	index int // -1 when the step is not an array index
+	index int // -1 when the step is not an array index; anyIndex for "[]"
 }
+
+// anyIndex marks a path step that fans out across every element of an array
+// (the "[]" selector). A comparison passes when any extracted element satisfies
+// it, e.g. `body.entry[].resource.resourceType == "Organization"`.
+const anyIndex = -2
 
 type selector struct {
 	kind  selectorKind
@@ -151,6 +156,16 @@ func parsePath(path string) []pathStep {
 			key := seg[:idx]
 			rest := seg[idx+1:]
 			rest = strings.TrimSuffix(rest, "]")
+			// An empty bracket is the "any" quantifier over the array: emit the
+			// key step followed by a fan-out step (mirroring "[0]" which emits a
+			// key step then an index step).
+			if strings.TrimSpace(rest) == "" {
+				if key != "" {
+					steps = append(steps, pathStep{key: key, index: -1})
+				}
+				steps = append(steps, pathStep{index: anyIndex})
+				continue
+			}
 			n, err := strconv.Atoi(strings.TrimSpace(rest))
 			if err != nil {
 				n = -1
@@ -202,6 +217,18 @@ type comparisonAssertion struct {
 
 func (a *comparisonAssertion) Evaluate(ctx context.Context, result Result) error {
 	_ = ctx
+	if hasAnyStep(a.sel) {
+		matches := 0
+		_ = extractAny(a.sel, result, func(actual any) {
+			if ok, err := compareValues(actual, a.op, a.rhs); err == nil && ok {
+				matches++
+			}
+		})
+		if matches == 0 {
+			return fmt.Errorf("assertion failed: %s (no element satisfied the expression)", a.expression)
+		}
+		return nil
+	}
 	actual, err := extractValue(a.sel, result)
 	if err != nil {
 		return fmt.Errorf("assertion failed: %s: %w", a.expression, err)
@@ -213,6 +240,67 @@ func (a *comparisonAssertion) Evaluate(ctx context.Context, result Result) error
 	if !ok {
 		return fmt.Errorf("assertion failed: %s (%v %s %v)", a.expression, actual, a.op, a.rhs)
 	}
+	return nil
+}
+
+// hasAnyStep reports whether a body selector contains an anyIndex ("[]") step,
+// which requires the fan-out evaluation in extractAny.
+func hasAnyStep(sel selector) bool {
+	if sel.kind != selectorBody {
+		return false
+	}
+	for _, step := range sel.steps {
+		if step.index == anyIndex {
+			return true
+		}
+	}
+	return false
+}
+
+// extractAny fans out a body selector across every element of the array at an
+// anyIndex step, invoking visit for each fully-resolved value. It is a best-effort
+// walk: elements that fail to resolve (non-array at the fan-out step, absent
+// keys, index bounds) are skipped rather than aborting the walk.
+func extractAny(sel selector, result Result, visit func(any)) error {
+	var data any
+	if err := json.Unmarshal(result.Body, &data); err != nil {
+		return fmt.Errorf("response body is not valid JSON: %w", err)
+	}
+	var walk func(cur any, steps []pathStep)
+	walk = func(cur any, steps []pathStep) {
+		if len(steps) == 0 {
+			visit(cur)
+			return
+		}
+		step := steps[0]
+		switch {
+		case step.index == anyIndex:
+			arr, ok := cur.([]any)
+			if !ok {
+				return
+			}
+			for _, elem := range arr {
+				walk(elem, steps[1:])
+			}
+		case step.key != "":
+			m, ok := cur.(map[string]any)
+			if !ok {
+				return
+			}
+			next, ok := m[step.key]
+			if !ok {
+				return
+			}
+			walk(next, steps[1:])
+		case step.index >= 0:
+			arr, ok := cur.([]any)
+			if !ok || step.index >= len(arr) {
+				return
+			}
+			walk(arr[step.index], steps[1:])
+		}
+	}
+	walk(data, sel.steps)
 	return nil
 }
 

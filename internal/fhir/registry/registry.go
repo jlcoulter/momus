@@ -5,6 +5,7 @@ package registry
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -320,6 +321,69 @@ func (r *Registry) CapabilityStatements() []*model.CapabilityStatement {
 	for _, cs := range r.capabilityStatements {
 		out = append(out, cs)
 	}
+	return out
+}
+
+// SearchIncludesForType returns the aggregated _include parameter values
+// declared for a resource type across the registry's server-mode
+// CapabilityStatement entries. Each value is the "Type.param" form declared in
+// the server's searchInclude, e.g. "Patient.organization". Values are
+// de-duplicated and returned sorted. When no server declaration exists the
+// result is nil.
+func (r *Registry) SearchIncludesForType(resourceType string) []string {
+	return includesForType(r, resourceType, true)
+}
+
+// SearchRevIncludesForType returns the aggregated _revinclude parameter values
+// declared for a resource type across the registry's server-mode
+// CapabilityStatement entries. Each value is the "Type.param" form declared in
+// the server's searchRevInclude. Values are de-duplicated and returned sorted;
+// when no declaration exists the result is nil.
+func (r *Registry) SearchRevIncludesForType(resourceType string) []string {
+	return includesForType(r, resourceType, false)
+}
+
+// includesForType is the shared implementation for the include/revinclude
+// accessors. When include is true it reads SearchInclude; otherwise
+// SearchRevInclude. Only server-mode rest blocks are considered.
+func includesForType(r *Registry, resourceType string, include bool) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	seen := make(map[string]struct{})
+	out := make([]string, 0)
+	for _, cs := range r.capabilityStatements {
+		for _, rest := range cs.Rest {
+			if rest.Mode != "" && !strings.EqualFold(rest.Mode, "server") {
+				continue
+			}
+			for _, res := range rest.Resource {
+				if !strings.EqualFold(res.Type, resourceType) {
+					continue
+				}
+				var values []string
+				if include {
+					values = res.SearchInclude
+				} else {
+					values = res.SearchRevInclude
+				}
+				for _, v := range values {
+					v = strings.TrimSpace(v)
+					if v == "" {
+						continue
+					}
+					if _, ok := seen[v]; ok {
+						continue
+					}
+					seen[v] = struct{}{}
+					out = append(out, v)
+				}
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.Strings(out)
 	return out
 }
 

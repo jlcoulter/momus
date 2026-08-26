@@ -30,6 +30,12 @@ type CapabilityStatementRestResource struct {
 	// type. When non-empty, only these search parameters should be included in
 	// the test plan; when empty, no search-parameter restriction is applied.
 	SearchParam []CapabilityStatementSearchParam
+	// SearchInclude lists the valid _include parameter values (e.g.
+	// "Patient.organization") the server supports for this resource type.
+	SearchInclude []string
+	// SearchRevInclude lists the valid _revinclude parameter values the server
+	// supports for this resource type.
+	SearchRevInclude []string
 }
 
 // CapabilityStatementSearchParam represents a search parameter declared in a

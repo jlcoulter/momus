@@ -81,6 +81,91 @@ func TestSearchCombinationUsesPerCodeValues(t *testing.T) {
 	}
 }
 
+func TestSearchQueryIncludeRevIncludeChainingAndModifier(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/pat",
+		Type: "Patient",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.managingOrganization", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Organization"}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/org",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.name", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+	reg.AddSearchParameter(&model.SearchParameter{Code: "organization", Base: []string{"Patient"}, Type: "reference", Expression: "Patient.managingOrganization", Target: []string{"Organization"}})
+	reg.AddSearchParameter(&model.SearchParameter{Code: "name", Base: []string{"Organization"}, Type: "string", Expression: "Organization.name"})
+	options := coregen.BuildOptions{BaseURL: "http://localhost:8080/fhir", Builder: NewBuilder(reg, false)}
+
+	include := coverage.CoverageRequirement{
+		ID: "inc-1", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch,
+		Variant: coverage.CoverageVariantSearchInclude, SearchCode: "_include",
+		SearchTargetType: "Organization", SearchTargetCode: "organization",
+	}
+	if q := searchQuery(include, options); q != "_include=Organization:organization" {
+		t.Fatalf("_include query = %q", q)
+	}
+
+	revinclude := coverage.CoverageRequirement{
+		ID: "rev-1", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch,
+		Variant: coverage.CoverageVariantSearchRevInclude, SearchCode: "_revinclude",
+		SearchTargetType: "Observation", SearchTargetCode: "patient",
+	}
+	if q := searchQuery(revinclude, options); q != "_revinclude=Observation:patient" {
+		t.Fatalf("_revinclude query = %q", q)
+	}
+
+	chain := coverage.CoverageRequirement{
+		ID: "chain-1", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch,
+		Variant: coverage.CoverageVariantSearchChaining, SearchCode: "organization.name",
+		SearchTargetType: "Organization", SearchTargetCode: "name",
+	}
+	if q := searchQuery(chain, options); q != "organization.name=momus-search" {
+		t.Fatalf("chaining query = %q", q)
+	}
+
+	mod := coverage.CoverageRequirement{
+		ID: "mod-1", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch,
+		Variant: coverage.CoverageVariantSearchValid, SearchCode: "name", SearchModifier: "exact",
+	}
+	if q := searchQuery(mod, options); q != "name:exact=momus-search" {
+		t.Fatalf("modifier query = %q", q)
+	}
+}
+
+func TestSearchAssertForIncludeVariantChecksBundleContents(t *testing.T) {
+	reg := registry.New()
+	options := coregen.BuildOptions{Builder: NewBuilder(reg, false)}
+	include := coverage.CoverageRequirement{
+		ID: "inc-1", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch,
+		Variant: coverage.CoverageVariantSearchInclude, SearchCode: "_include",
+		SearchTargetType: "Organization",
+	}
+	assert := searchAssert(include, options)
+	if assert.Expression != `body.entry[].resource.resourceType == "Organization"` {
+		t.Fatalf("_include assertion expression = %q", assert.Expression)
+	}
+	if assert.Trace == nil || assert.Trace.SearchTargetType != "Organization" {
+		t.Fatalf("_include assertion trace missing target type: %+v", assert.Trace)
+	}
+
+	// A wildcard include (no specific target) falls back to a status assertion.
+	wildcard := coverage.CoverageRequirement{
+		ID: "inc-2", ResourceType: "Patient", Domain: coverage.CoverageDomainSearch,
+		Variant: coverage.CoverageVariantSearchInclude, SearchCode: "_include",
+	}
+	assert2 := searchAssert(wildcard, options)
+	if !strings.Contains(assert2.Expression, "200") {
+		t.Fatalf("wildcard include assertion = %q, want a status assertion", assert2.Expression)
+	}
+}
+
 func TestBuildSearchCasesEmitGETRequests(t *testing.T) {
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
 		Requirements: []coverage.CoverageRequirement{

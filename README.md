@@ -48,14 +48,29 @@ What is implemented:
   selects a near-minimal set by greedy set-cover, grouping compatible accepts
   into shared valid payloads.
 - **Search, operation, and CRUD coverage** — valid / no-results /
-  invalid-value / multiple-results / invalid-modifier searches, read / update /
-  patch / delete / history, custom (`$`) operations, negative state
-  transitions, and a full create-read-update-read-delete-read(404) sequence.
-  Search obligations are scoped to the parameters the server's
-  CapabilityStatement declares; pass `--include-universal-search` to also cover
-  the default universal FHIR parameters (`_id`, `_count`, `_sort`, `_include`,
-  `_summary`, `_filter`) for every resource type even when the server does not
-  declare them.
+   invalid-value / multiple-results / invalid-modifier searches, read / update /
+   patch / delete / history, custom (`$`) operations, negative state
+   transitions, and a full create-read-update-read-delete-read(404) sequence.
+   Search obligations are scoped to the parameters the server's
+   CapabilityStatement declares; pass `--include-universal-search` to also cover
+   the default universal FHIR parameters (`_id`, `_count`, `_sort`, `_include`,
+   `_summary`, `_filter`) for every resource type even when the server does not
+   declare them.
+- **Programmatic built-in search features** (`internal/fhir/search`) — a
+   package that synthesises the FHIR search machinery that is implicit in the
+   specification rather than shipped as concrete `SearchParameter` resources:
+   the complete **universal parameter** set (merging the R4 `SearchParameter`
+   resources like `_id`, `_lastUpdated`, `_content`, `_text`, `_filter` with the
+   spec-referenced ones like `_include`, `_revinclude`, `_has`, `_sort`,
+   `_count`, `_summary`, `_elements`, `_contained`), the per-type **search
+   modifiers** (`ModifiersForType`: `string`→`exact`/`contains`,
+   `token`→`text`/`not`/`in`/`not-in`/`above`/`below`/`identifier`,
+   `reference`→`type`/`identifier`, `uri`→`above`/`below`,
+   `quantity`→`not`), and valid **chaining paths** (`Chains`, e.g.
+   `Patient.organization.name`) built from reference parameters' target types.
+   The registry also exposes the `_include`/`_revinclude` values declared in the
+   server-mode CapabilityStatement via `SearchIncludesForType` and
+   `SearchRevIncludesForType`.
 - **A single registry-driven data pipeline** — one core synthesises both the
   seed `Dataset` and every test payload from the registry as the source of
   truth, so test data and provisioned data cannot drift apart.
@@ -94,7 +109,8 @@ internal/core/      domain-agnostic engine: test AST, coverage model/planner/
                     tracing, constraint model
 internal/fhir/      FHIR domain: model, constraint derivation, coverage
                     derivation, generation adapter (PayloadBuilder), package
-                    loading, registry, terminology, provisioning, bulk,
+                    loading, registry, built-in search features (search),
+                    terminology, provisioning, bulk,
                     profile validator (validate), FHIRPath engine (fhirpath),
                     golden self-conformance runner, navigable report writer
 internal/openapi/   OpenAPI document loading and API constraint derivation

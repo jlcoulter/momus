@@ -179,6 +179,13 @@ type capabilityStatementJSON struct {
 				Name       string `json:"name"`
 				Definition string `json:"definition"`
 			} `json:"operation"`
+			SearchInclude    []string `json:"searchInclude"`
+			SearchRevInclude []string `json:"searchRevInclude"`
+			SearchParam      []struct {
+				Name       string `json:"name"`
+				Definition string `json:"definition"`
+				Type       string `json:"type"`
+			} `json:"searchParam"`
 		} `json:"resource"`
 	} `json:"rest"`
 }
@@ -190,6 +197,7 @@ type searchParameterJSON struct {
 	Base       []string `json:"base"`
 	Type       string   `json:"type"`
 	Expression string   `json:"expression"`
+	Target     []string `json:"target"`
 }
 
 // ReadPackage reads a FHIR package from a .tgz archive.
@@ -404,12 +412,23 @@ func decodeResource(data []byte) (any, error) {
 				for _, operation := range resource.Operation {
 					operations = append(operations, model.CapabilityStatementOperation{Name: operation.Name, Definition: operation.Definition})
 				}
+				searchParams := make([]model.CapabilityStatementSearchParam, 0, len(resource.SearchParam))
+				for _, sp := range resource.SearchParam {
+					searchParams = append(searchParams, model.CapabilityStatementSearchParam{
+						Name:       sp.Name,
+						Definition: sp.Definition,
+						Type:       sp.Type,
+					})
+				}
 				resources = append(resources, model.CapabilityStatementRestResource{
 					Type:             resource.Type,
 					Profile:          resource.Profile,
 					SupportedProfile: resource.SupportedProfile,
 					Interaction:      interactions,
 					Operation:        operations,
+					SearchParam:      searchParams,
+					SearchInclude:    resource.SearchInclude,
+					SearchRevInclude: resource.SearchRevInclude,
 				})
 			}
 			rest = append(rest, model.CapabilityStatementRest{
@@ -437,6 +456,7 @@ func decodeResource(data []byte) (any, error) {
 			Base:       sp.Base,
 			Type:       sp.Type,
 			Expression: sp.Expression,
+			Target:     sp.Target,
 		}, nil
 	default:
 		// Any other resource type is an instance resource (e.g. an example
