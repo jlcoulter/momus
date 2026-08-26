@@ -11,9 +11,13 @@ import (
 )
 
 // karateConfigTemplate is a generated karate-config.js that parameterizes the
-// base URLs the exported .feature files reference. baseUrl is the read/search
-// base and writeBaseUrl the write base; both default to the same value and can
-// be overridden via -D system properties at Karate run time.
+// base URLs the exported .feature files reference and configures authentication
+// globally. baseUrl is the read/search base and writeBaseUrl the write base;
+// both default to the same value and can be overridden via -D system properties
+// at Karate run time. Auth is applied once to every request via Karate's
+// configure("headers"), mirroring the Go runner's precedence: an explicit
+// Authorization header on a request wins; otherwise a bearer token, else basic
+// auth.
 const karateConfigTemplate = `function fn() {
   var config = {
     baseUrl: 'http://localhost:8080/fhir',
@@ -25,6 +29,21 @@ const karateConfigTemplate = `function fn() {
   if (karate.properties['momus.writeBaseUrl']) {
     config.writeBaseUrl = karate.properties['momus.writeBaseUrl'];
   }
+
+  // Authentication, applied globally to every request. Configure credentials
+  // at Karate run time with -D system properties:
+  //   -Dmomus.auth.bearerToken=<token>
+  //   -Dmomus.auth.basicUsername=<user> -Dmomus.auth.basicPassword=<pass>
+  var bearerToken = karate.properties['momus.auth.bearerToken'];
+  var basicUsername = karate.properties['momus.auth.basicUsername'];
+  var basicPassword = karate.properties['momus.auth.basicPassword'];
+
+  if (bearerToken) {
+    karate.configure('headers', { Authorization: 'Bearer ' + bearerToken });
+  } else if (basicUsername || basicPassword) {
+    karate.configure('headers', { Authorization: 'Basic ' + karate.base64encode(basicUsername + ':' + basicPassword) });
+  }
+
   return config;
 }
 `

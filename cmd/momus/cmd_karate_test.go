@@ -61,8 +61,20 @@ func TestKarateCmdGeneratesConfig(t *testing.T) {
 		t.Fatalf("karate failed: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(outDir, "karate-config.js")); err != nil {
+	cfgPath := filepath.Join(outDir, "karate-config.js")
+	cfgContent, err := os.ReadFile(cfgPath)
+	if err != nil {
 		t.Errorf("expected karate-config.js: %v", err)
+	}
+	for _, want := range []string{
+		"momus.auth.bearerToken",
+		"momus.auth.basicUsername",
+		"momus.auth.basicPassword",
+		"karate.configure('headers'",
+	} {
+		if !strings.Contains(string(cfgContent), want) {
+			t.Errorf("karate-config.js missing %q", want)
+		}
 	}
 }
 
