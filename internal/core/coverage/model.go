@@ -113,6 +113,9 @@ type CoverageRequirement struct {
 	Variant           CoverageVariant `json:"variant"`
 	Min               int             `json:"min"`
 	Max               string          `json:"max"`
+	// Datatype is the datatype code of the constrained element (e.g. "code",
+	// "string") for datatype-domain obligations and choice elements.
+	Datatype string `json:"datatype,omitempty"`
 	// PairA and PairB reference the two source requirements of an interaction
 	// obligation. They are set only for coverage-domain requirements derived at
 	// interaction strength >= 2.
@@ -126,6 +129,14 @@ type CoverageRequirement struct {
 	// OperationName is the custom operation name ($name) for operation-custom
 	// obligations.
 	OperationName string `json:"operationName,omitempty"`
+	// Description is a human-readable sentence explaining what conformance
+	// obligation this requirement tests. It is derived at plan time so the
+	// coverage plan JSON is self-describing.
+	Description string `json:"description,omitempty"`
+	// HumanID is a human-friendly identifier for the obligation, more readable
+	// than the pipe-delimited machine ID (e.g. "Patient.search.name.valid"
+	// instead of "search|Patient|name|search-valid").
+	HumanID string `json:"humanId,omitempty"`
 }
 
 // InteractionRequirement records a pairwise interaction obligation: the two

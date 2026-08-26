@@ -146,6 +146,10 @@ func decodeTrace(raw map[string]any) (*Trace, error) {
 		Domain:       getString(raw, "domain"),
 		Variant:      getString(raw, "variant"),
 		Expected:     getString(raw, "expected"),
+		Description:  getString(raw, "description"),
+		HumanID:      getString(raw, "humanId"),
+		SearchCode:   getString(raw, "searchCode"),
+		SearchCodeB:  getString(raw, "searchCodeB"),
 	}, nil
 }
 

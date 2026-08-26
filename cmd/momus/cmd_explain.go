@@ -37,6 +37,36 @@ func newExplainCmd(cfg *config) *cobra.Command {
 					return fmt.Errorf("case %q not found in %s/cases: %w", id, dir, err)
 				}
 			}
+
+			var caseObj struct {
+				RequirementID string `json:"requirementId"`
+				Passed        bool   `json:"passed"`
+				Requirement   struct {
+					HumanID     string `json:"humanId"`
+					Description string `json:"description"`
+					Domain      string `json:"domain"`
+					Variant     string `json:"variant"`
+				} `json:"requirement"`
+			}
+			if err := json.Unmarshal(raw, &caseObj); err != nil {
+				return fmt.Errorf("decode case %s: %w", file, err)
+			}
+
+			label := caseObj.Requirement.HumanID
+			if label == "" {
+				label = caseObj.RequirementID
+			}
+			status := "PASS"
+			if !caseObj.Passed {
+				status = "FAIL"
+			}
+			fmt.Printf("case %s [%s]\n", label, status)
+			if caseObj.Requirement.Description != "" {
+				fmt.Printf("what is tested: %s\n", caseObj.Requirement.Description)
+			}
+			if caseObj.Requirement.Domain != "" || caseObj.Requirement.Variant != "" {
+				fmt.Printf("domain/variant: %s/%s\n", caseObj.Requirement.Domain, caseObj.Requirement.Variant)
+			}
 			var pretty map[string]any
 			if err := json.Unmarshal(raw, &pretty); err != nil {
 				return fmt.Errorf("decode case %s: %w", file, err)
@@ -45,7 +75,7 @@ func newExplainCmd(cfg *config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("case %s (from %s)\n%s\n", id, file, out)
+			fmt.Printf("full detail (from %s):\n%s\n", file, out)
 			return nil
 		},
 	}

@@ -15,7 +15,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Practitioner?_id\u0026active: return results for a combined search",
                 "RequirementID": "search|Practitioner|_id++active|search-combination",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -25,7 +25,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-combination",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner?_id\u0026active: return results for a combined search",
+                  "HumanID": "Practitioner.search._id+active.combination",
+                  "SearchCode": "_id",
+                  "SearchCodeB": "active"
                 }
               }
             ]
@@ -41,7 +45,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Practitioner?_id\u0026name: return results for a combined search",
                 "RequirementID": "search|Practitioner|_id++name|search-combination",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -51,7 +55,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-combination",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner?_id\u0026name: return results for a combined search",
+                  "HumanID": "Practitioner.search._id+name.combination",
+                  "SearchCode": "_id",
+                  "SearchCodeB": "name"
                 }
               }
             ]
@@ -67,7 +75,7 @@
                 "Body": null
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Practitioner?_id: reject an invalid search modifier",
                 "RequirementID": "search|Practitioner|_id|search-invalid-modifier",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -77,7 +85,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-modifier",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Practitioner?_id: reject an invalid search modifier",
+                  "HumanID": "Practitioner.search._id.invalid-modifier",
+                  "SearchCode": "_id",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -103,7 +115,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-value",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -129,7 +145,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-multiple-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -145,7 +165,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Practitioner?_id: accept a valid search returning no results",
                 "RequirementID": "search|Practitioner|_id|search-no-results",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -155,7 +175,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-no-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner?_id: accept a valid search returning no results",
+                  "HumanID": "Practitioner.search._id.no-results",
+                  "SearchCode": "_id",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -171,7 +195,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Practitioner?_id: return results for a valid search",
                 "RequirementID": "search|Practitioner|_id|search-valid",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -181,7 +205,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-valid",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner?_id: return results for a valid search",
+                  "HumanID": "Practitioner.search._id.valid",
+                  "SearchCode": "_id",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -197,7 +225,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Practitioner?active\u0026name: return results for a combined search",
                 "RequirementID": "search|Practitioner|active++name|search-combination",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -207,7 +235,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-combination",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner?active\u0026name: return results for a combined search",
+                  "HumanID": "Practitioner.search.active+name.combination",
+                  "SearchCode": "active",
+                  "SearchCodeB": "name"
                 }
               }
             ]
@@ -223,7 +255,7 @@
                 "Body": null
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Practitioner?active: reject an invalid search modifier",
                 "RequirementID": "search|Practitioner|active|search-invalid-modifier",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -233,7 +265,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-modifier",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Practitioner?active: reject an invalid search modifier",
+                  "HumanID": "Practitioner.search.active.invalid-modifier",
+                  "SearchCode": "active",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -259,7 +295,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-value",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -285,7 +325,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-multiple-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -301,7 +345,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Practitioner?active: accept a valid search returning no results",
                 "RequirementID": "search|Practitioner|active|search-no-results",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -311,7 +355,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-no-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner?active: accept a valid search returning no results",
+                  "HumanID": "Practitioner.search.active.no-results",
+                  "SearchCode": "active",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -327,7 +375,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Practitioner?active: return results for a valid search",
                 "RequirementID": "search|Practitioner|active|search-valid",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -337,7 +385,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-valid",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner?active: return results for a valid search",
+                  "HumanID": "Practitioner.search.active.valid",
+                  "SearchCode": "active",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -353,7 +405,7 @@
                 "Body": null
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Practitioner?name: reject an invalid search modifier",
                 "RequirementID": "search|Practitioner|name|search-invalid-modifier",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -363,7 +415,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-modifier",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Practitioner?name: reject an invalid search modifier",
+                  "HumanID": "Practitioner.search.name.invalid-modifier",
+                  "SearchCode": "name",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -389,7 +445,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-invalid-value",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -415,7 +475,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-multiple-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -431,7 +495,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Practitioner?name: accept a valid search returning no results",
                 "RequirementID": "search|Practitioner|name|search-no-results",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -441,7 +505,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-no-results",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner?name: accept a valid search returning no results",
+                  "HumanID": "Practitioner.search.name.no-results",
+                  "SearchCode": "name",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -457,7 +525,7 @@
                 "Body": null
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Practitioner?name: return results for a valid search",
                 "RequirementID": "search|Practitioner|name|search-valid",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -467,7 +535,11 @@
                   "ElementPath": "",
                   "Domain": "search",
                   "Variant": "search-valid",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner?name: return results for a valid search",
+                  "HumanID": "Practitioner.search.name.valid",
+                  "SearchCode": "name",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -525,7 +597,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-delete",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: delete removes the resource",
+                  "HumanID": "Practitioner.operation.delete",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -548,7 +624,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-delete",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: delete removes the resource",
+                  "HumanID": "Practitioner.operation.delete",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -606,7 +686,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-history",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: history returns the version chain",
+                  "HumanID": "Practitioner.operation.history",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -629,7 +713,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-history",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: history returns the version chain",
+                  "HumanID": "Practitioner.operation.history",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -687,7 +775,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-patch",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: patch (PATCH) partially modifies the resource",
+                  "HumanID": "Practitioner.operation.patch",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -718,7 +810,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-patch",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: patch (PATCH) partially modifies the resource",
+                  "HumanID": "Practitioner.operation.patch",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -776,7 +872,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-read",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: read (GET) returns the resource",
+                  "HumanID": "Practitioner.operation.read",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -799,7 +899,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-read",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: read (GET) returns the resource",
+                  "HumanID": "Practitioner.operation.read",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -857,7 +961,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-update",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: update (PUT) modifies the resource",
+                  "HumanID": "Practitioner.operation.update",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -911,7 +1019,11 @@
                   "ElementPath": "",
                   "Domain": "operation",
                   "Variant": "operation-update",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: update (PUT) modifies the resource",
+                  "HumanID": "Practitioner.operation.update",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -969,7 +1081,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Practitioner.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -992,7 +1108,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Practitioner.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -1046,7 +1166,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Practitioner.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -1069,7 +1193,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Practitioner.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -1092,7 +1220,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Practitioner.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -1115,7 +1247,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-crud-sequence",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Practitioner: create-read-update-read-delete-read(404) sequence",
+                  "HumanID": "Practitioner.state.crud-sequence",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1142,7 +1278,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-delete-nonexistent",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner: delete a nonexistent resource returns 404/200",
+                  "HumanID": "Practitioner.state.delete-nonexistent",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1169,7 +1309,11 @@
                   "ElementPath": "",
                   "Domain": "state",
                   "Variant": "state-read-nonexistent",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Practitioner: read a nonexistent resource returns 404",
+                  "HumanID": "Practitioner.state.read-nonexistent",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1217,7 +1361,7 @@
                 }
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Practitioner.name (HumanName): accept a valid value",
                 "RequirementID": "http://example.org/StructureDefinition/practitioner|Practitioner.name|HumanName|datatype-valid",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -1227,11 +1371,15 @@
                   "ElementPath": "Practitioner.name",
                   "Domain": "datatype",
                   "Variant": "datatype-valid",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner.name (HumanName): accept a valid value",
+                  "HumanID": "Practitioner.name.datatype.datatype-valid",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Practitioner.name: accept a resource with multiple values (max=*)",
                 "RequirementID": "http://example.org/StructureDefinition/practitioner|Practitioner.name|multiple-values",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -1241,11 +1389,15 @@
                   "ElementPath": "Practitioner.name",
                   "Domain": "cardinality",
                   "Variant": "multiple-values",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner.name: accept a resource with multiple values (max=*)",
+                  "HumanID": "Practitioner.name.cardinality.multiple-values",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
-                "Description": "server accepts generated payload",
+                "Description": "Practitioner.name: accept a resource with the required element present (min=1)",
                 "RequirementID": "http://example.org/StructureDefinition/practitioner|Practitioner.name|valid-min",
                 "Expression": "status in [200,201]",
                 "Trace": {
@@ -1255,7 +1407,11 @@
                   "ElementPath": "Practitioner.name",
                   "Domain": "cardinality",
                   "Variant": "valid-min",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "Practitioner.name: accept a resource with the required element present (min=1)",
+                  "HumanID": "Practitioner.name.cardinality.valid-min",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -1269,7 +1425,11 @@
                   "ElementPath": "Practitioner.name ++ Practitioner.name",
                   "Domain": "interaction",
                   "Variant": "interaction-pair",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -1283,7 +1443,11 @@
                   "ElementPath": "Practitioner.name ++ Practitioner.name",
                   "Domain": "interaction",
                   "Variant": "interaction-pair",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               },
               {
@@ -1297,7 +1461,11 @@
                   "ElementPath": "Practitioner.name ++ Practitioner.name",
                   "Domain": "interaction",
                   "Variant": "interaction-pair",
-                  "Expected": "accept"
+                  "Expected": "accept",
+                  "Description": "",
+                  "HumanID": "",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1324,7 +1492,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Practitioner.name (HumanName): reject a lexically invalid value",
                 "RequirementID": "http://example.org/StructureDefinition/practitioner|Practitioner.name|HumanName|datatype-invalid-lexical",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -1334,7 +1502,11 @@
                   "ElementPath": "Practitioner.name",
                   "Domain": "datatype",
                   "Variant": "datatype-invalid-lexical",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Practitioner.name (HumanName): reject a lexically invalid value",
+                  "HumanID": "Practitioner.name.datatype.datatype-invalid-lexical",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1361,7 +1533,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Practitioner.name (HumanName): reject a null value for a non-null element",
                 "RequirementID": "http://example.org/StructureDefinition/practitioner|Practitioner.name|HumanName|datatype-null",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -1371,7 +1543,11 @@
                   "ElementPath": "Practitioner.name",
                   "Domain": "datatype",
                   "Variant": "datatype-null",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Practitioner.name (HumanName): reject a null value for a non-null element",
+                  "HumanID": "Practitioner.name.datatype.datatype-null",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1398,7 +1574,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Practitioner.name (HumanName): reject a value with the wrong JSON type",
                 "RequirementID": "http://example.org/StructureDefinition/practitioner|Practitioner.name|HumanName|datatype-wrong-json-type",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -1408,7 +1584,11 @@
                   "ElementPath": "Practitioner.name",
                   "Domain": "datatype",
                   "Variant": "datatype-wrong-json-type",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Practitioner.name (HumanName): reject a value with the wrong JSON type",
+                  "HumanID": "Practitioner.name.datatype.datatype-wrong-json-type",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]
@@ -1434,7 +1614,7 @@
                 }
               },
               {
-                "Description": "server rejects violating payload",
+                "Description": "Practitioner.name: reject a resource missing the required element (min=1)",
                 "RequirementID": "http://example.org/StructureDefinition/practitioner|Practitioner.name|missing-required",
                 "Expression": "status in [400,412,422]",
                 "Trace": {
@@ -1444,7 +1624,11 @@
                   "ElementPath": "Practitioner.name",
                   "Domain": "cardinality",
                   "Variant": "missing-required",
-                  "Expected": "reject"
+                  "Expected": "reject",
+                  "Description": "Practitioner.name: reject a resource missing the required element (min=1)",
+                  "HumanID": "Practitioner.name.cardinality.missing-required",
+                  "SearchCode": "",
+                  "SearchCodeB": ""
                 }
               }
             ]

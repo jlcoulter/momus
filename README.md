@@ -68,7 +68,11 @@ What is implemented:
   branches running concurrently, per-branch variable scoping, and
   deterministic result aggregation.
 - **Coverage reporting** — JSON report (`--output`), console summary, and an
-  HTML report with drill-down navigation (`--html`).
+  HTML report with drill-down navigation (`--html`). Every requirement and test
+  case carries a plain-English `description` and a human-friendly `humanId`, the
+  HTML report adds a per-resource pass/fail **coverage matrix** heatmap plus a
+  glossary of every domain and variant, and `coverage describe` renders any
+  coverage plan as a readable Markdown document.
 - **Assertion expression engine** — `status in [...]` plus `body.<path>`,
   `header.<name>`, and `variable.<name>` comparisons (`==`, `!=`, `<`, `<=`,
   `>`, `>=`).
@@ -210,6 +214,15 @@ Derive a coverage plan from resolved package constraints:
 
 ```sh
 go run ./cmd/momus coverage derive package.tgz --output ./coverage-plan.json
+```
+
+Render a coverage plan as a human-readable Markdown document, so you can see at
+a glance what conformance obligations the plan asserts — grouped by domain with
+plain-English descriptions of each obligation and a glossary explaining every
+domain and variant:
+
+```sh
+go run ./cmd/momus coverage describe ./coverage-plan.json
 ```
 
 Derivation defaults are intentionally practical:

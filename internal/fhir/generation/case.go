@@ -9,13 +9,19 @@ import (
 // buildRequirementAssert builds the assertion for a single requirement: an
 // accept assertion for positive variants, a reject assertion for negative ones.
 func buildRequirementAssert(req coverage.CoverageRequirement) *ast.Assert {
-	description := "server accepts generated payload"
+	description := req.Description
+	if description == "" {
+		description = coverage.DescribeCoverageRequirement(req)
+	}
 	expression := "status in [200,201]"
 	expected := "accept"
 	if isNegativeVariant(req.Variant) {
-		description = "server rejects violating payload"
 		expression = "status in [400,412,422]"
 		expected = "reject"
+	}
+	humanID := req.HumanID
+	if humanID == "" {
+		humanID = coverage.HumanID(req)
 	}
 	return &ast.Assert{
 		Description:   description,
@@ -29,6 +35,10 @@ func buildRequirementAssert(req coverage.CoverageRequirement) *ast.Assert {
 			Domain:       string(req.Domain),
 			Variant:      string(req.Variant),
 			Expected:     expected,
+			Description:  description,
+			HumanID:      humanID,
+			SearchCode:   req.SearchCode,
+			SearchCodeB:  req.SearchCodeB,
 		},
 	}
 }

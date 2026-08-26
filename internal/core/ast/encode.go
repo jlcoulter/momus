@@ -71,6 +71,10 @@ func encodeTrace(t *Trace) map[string]any {
 		"domain":       t.Domain,
 		"variant":      t.Variant,
 		"expected":     t.Expected,
+		"description":  t.Description,
+		"humanId":      t.HumanID,
+		"searchCode":   t.SearchCode,
+		"searchCodeB":  t.SearchCodeB,
 	}
 }
 

@@ -241,13 +241,18 @@ func htmlItems(cases []testrunner.CaseResult) []testcoverage.HTMLItem {
 			continue
 		}
 		item := testcoverage.HTMLItem{
-			ID:         c.RequirementID,
-			Domain:     c.Trace.Domain,
-			Resource:   c.Trace.ResourceType,
-			Variant:    c.Trace.Variant,
-			Expression: c.Expression,
-			Passed:     c.Passed,
-			StatusCode: c.StatusCode,
+			ID:          c.RequirementID,
+			HumanID:     c.Trace.HumanID,
+			Domain:      c.Trace.Domain,
+			Resource:    c.Trace.ResourceType,
+			ElementPath: c.Trace.ElementPath,
+			SearchCode:  c.Trace.SearchCode,
+			SearchCodeB: c.Trace.SearchCodeB,
+			Variant:     c.Trace.Variant,
+			Description: c.Trace.Description,
+			Expression:  c.Expression,
+			Passed:      c.Passed,
+			StatusCode:  c.StatusCode,
 		}
 		if c.Debug != nil {
 			item.RequestMethod = c.Debug.RequestMethod

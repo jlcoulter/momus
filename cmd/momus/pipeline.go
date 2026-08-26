@@ -139,7 +139,11 @@ func writeRunReport(cfg *config, report *testrunner.Report, coverageEvaluation t
 					if idx >= 10 {
 						break
 					}
-					fmt.Printf("  - %s\n", req.ID)
+					label := req.HumanID
+					if label == "" {
+						label = req.ID
+					}
+					fmt.Printf("  - %s\n", label)
 				}
 			}
 		}

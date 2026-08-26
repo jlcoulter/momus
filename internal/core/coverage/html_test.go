@@ -76,6 +76,14 @@ func TestRenderHTMLGroupsByPolarity(t *testing.T) {
 	}
 	html := string(out)
 
+	// The coverage matrix may render requirement IDs before the polarity
+	// sections, so scope the polarity check to the drill-down section (which
+	// starts at the "By Domain" heading) to verify grouping independently of the
+	// matrix.
+	if idx := strings.Index(html, "By Domain"); idx >= 0 {
+		html = html[idx:]
+	}
+
 	// Both polarity headings must appear.
 	if !strings.Contains(html, "Positive") {
 		t.Fatalf("HTML report missing Positive sub-group\n%s", html)
@@ -152,7 +160,61 @@ func TestRenderHTMLAddsPercentageFillToRows(t *testing.T) {
 		`style="--success-pct: 0.0%;"><span class="fail">FAIL</span> — req-fail`,
 	} {
 		if !strings.Contains(html, want) {
-			t.Fatalf("HTML report missing %q\n%s", want, html)
+			t.Fatalf("HTML report missing %q\n%s", html, want)
+		}
+	}
+}
+
+// TestRenderHTMLIncludesCoverageMatrix verifies that the HTML report renders a
+// coverage matrix per resource type, with pass/fail/untested cells for each
+// (element, variant) intersection.
+func TestRenderHTMLIncludesCoverageMatrix(t *testing.T) {
+	items := []HTMLItem{
+		{ID: "cardinality|Patient|name|valid-min", HumanID: "Patient.name.cardinality.valid-min", Domain: "cardinality", Resource: "Patient", ElementPath: "Patient.name", Variant: "valid-min", Passed: true},
+		{ID: "cardinality|Patient|name|missing-required", Domain: "cardinality", Resource: "Patient", ElementPath: "Patient.name", Variant: "missing-required", Passed: false},
+		{ID: "search|Patient|name|search-valid", HumanID: "Patient.search.name.valid", Domain: "search", Resource: "Patient", SearchCode: "name", Variant: "search-valid", Passed: true},
+	}
+
+	out, err := RenderHTML(EvaluationReport{}, items)
+	if err != nil {
+		t.Fatalf("RenderHTML returned error: %v", err)
+	}
+	html := string(out)
+
+	for _, want := range []string{
+		"Coverage Matrix: Patient",
+		"Patient.name",
+		"Patient?name",
+		`class="cell-pass"`,
+		`class="cell-fail"`,
+		`class="cell-untested"`,
+		"✓",
+		"✗",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("HTML report missing %q", want)
+		}
+	}
+}
+
+// TestRenderHTMLIncludesGlossary verifies the domain/variant glossary renders.
+func TestRenderHTMLIncludesGlossary(t *testing.T) {
+	out, err := RenderHTML(EvaluationReport{}, nil)
+	if err != nil {
+		t.Fatalf("RenderHTML returned error: %v", err)
+	}
+	html := string(out)
+
+	for _, want := range []string{
+		"Glossary",
+		"Domains",
+		"Variants",
+		"cardinality",
+		"Required element presence and count constraints",
+		"search-valid",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("HTML report missing glossary %q", want)
 		}
 	}
 }

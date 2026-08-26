@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jlcoulter/momus/internal/core/ast"
+	"github.com/jlcoulter/momus/internal/core/coverage"
 )
 
 // pathParamPattern matches a `{param}` placeholder in an operation path.
@@ -58,6 +59,8 @@ func operationCase(op *Operation, base, writeBase string) ast.Node {
 				Variant:      op.Method,
 				Expected:     "accept",
 				ResourceType: resourceTypeFromPath(op.Path),
+				Description:  coverage.DescribeAPIOperation(op.Method, op.Path),
+				HumanID:      coverage.APIOperationHumanID(op.Method, op.Path),
 			},
 		},
 	}}

@@ -104,6 +104,14 @@ func buildCRUDCase(req coverage.CoverageRequirement, options coregen.BuildOption
 
 // operationAssert builds an assertion carrying the coverage trace.
 func operationAssert(req coverage.CoverageRequirement, expression, expected string) *ast.Assert {
+	description := req.Description
+	if description == "" {
+		description = coverage.DescribeCoverageRequirement(req)
+	}
+	humanID := req.HumanID
+	if humanID == "" {
+		humanID = coverage.HumanID(req)
+	}
 	return &ast.Assert{
 		Description:   "exercise " + string(req.Variant),
 		RequirementID: req.ID,
@@ -114,6 +122,10 @@ func operationAssert(req coverage.CoverageRequirement, expression, expected stri
 			Domain:       string(req.Domain),
 			Variant:      string(req.Variant),
 			Expected:     expected,
+			Description:  description,
+			HumanID:      humanID,
+			SearchCode:   req.SearchCode,
+			SearchCodeB:  req.SearchCodeB,
 		},
 	}
 }

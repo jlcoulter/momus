@@ -204,6 +204,7 @@ func safeName(s string) string {
 
 type matrixEntry struct {
 	RequirementID string `json:"requirementId"`
+	HumanID       string `json:"humanId,omitempty"`
 	Passed        bool   `json:"passed"`
 	Variant       string `json:"variant,omitempty"`
 	Domain        string `json:"domain,omitempty"`
@@ -213,11 +214,18 @@ func matrix(cs []runner.CaseResult) map[string]any {
 	entries := make([]matrixEntry, 0, len(cs))
 	passed, failed := 0, 0
 	for _, c := range cs {
+		var humanID, variant, domain string
+		if c.Trace != nil {
+			humanID = c.Trace.HumanID
+			variant = c.Trace.Variant
+			domain = c.Trace.Domain
+		}
 		entries = append(entries, matrixEntry{
 			RequirementID: c.RequirementID,
+			HumanID:       humanID,
 			Passed:        c.Passed,
-			Variant:       c.Trace.Variant,
-			Domain:        c.Trace.Domain,
+			Variant:       variant,
+			Domain:        domain,
 		})
 		if c.Passed {
 			passed++
@@ -259,12 +267,35 @@ func index(report *runner.Report, evaluation coverage.EvaluationReport) map[stri
 		if c.Passed {
 			continue
 		}
+		humanID := ""
+		if c.Trace != nil {
+			humanID = c.Trace.HumanID
+		}
 		failed = append(failed, map[string]any{
 			"requirementId": c.RequirementID,
+			"humanId":       humanID,
 			"caseFile":      "cases/" + caseFileName(c),
 			"reason":        kindOf(c),
 		})
 	}
 	summary["failed"] = failed
+	summary["glossary"] = glossaryJSON()
 	return summary
+}
+
+// glossaryJSON renders the domain/variant glossary as a JSON-friendly map so
+// reports are self-documenting even without the CLI.
+func glossaryJSON() map[string]any {
+	domains := make(map[string]string, 0)
+	for d, desc := range coverage.DomainDescriptions() {
+		domains[string(d)] = desc
+	}
+	variants := make(map[string]string, 0)
+	for v, desc := range coverage.VariantDescriptions() {
+		variants[string(v)] = desc
+	}
+	return map[string]any{
+		"domains":  domains,
+		"variants": variants,
+	}
 }
