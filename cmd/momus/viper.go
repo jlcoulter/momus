@@ -125,6 +125,7 @@ const homeConfigTemplate = `# Momus user configuration.
 # include_resource_types = []
 # include_profile_urls = []
 # exclude_path_prefixes = []
+# exclude_extension_urls = []
 # must_support_only = false
 # include_optional = false
 # include_low_value_paths = false

@@ -75,6 +75,7 @@ func deriveCoveragePlan(cfg *config, reg *registry.Registry, resourceTypes, prof
 		IncludeUniversalSearchParams: cfg.IncludeUniversalSearch,
 		IncludeDomains:               parseDomains(cfg.IncludeDomains),
 		ExcludeVariants:              parseVariants(cfg.ExcludeVariants),
+		ExcludeExtensionURLs:         cfg.ExcludeExtensionURLs,
 	})
 }
 

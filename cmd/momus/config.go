@@ -42,6 +42,7 @@ type config struct {
 	IncludeUniversalSearch bool     `mapstructure:"include_universal_search" flag:"include-universal-search"`
 	IncludeDomains         []string `mapstructure:"include_domains" flag:"include-domain"`
 	ExcludeVariants        []string `mapstructure:"exclude_variants" flag:"exclude-variant"`
+	ExcludeExtensionURLs   []string `mapstructure:"exclude_extension_urls" flag:"exclude-extension-url"`
 
 	// Target FHIR server / API
 	BaseURL           string `mapstructure:"base_url" flag:"base-url"`

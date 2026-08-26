@@ -100,3 +100,36 @@ func TestDerivePlanNoFilterIsNoop(t *testing.T) {
 		t.Fatalf("no-op filter changed requirement count: %d -> %d", len(unfiltered.Requirements), len(filtered.Requirements))
 	}
 }
+
+func TestDerivePlanExcludeExtensionURLs(t *testing.T) {
+	suppressedURL := "http://example.org/StructureDefinition/suppressed"
+	r := registry.New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/org-profile",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.name", Min: 1, Max: "1"},
+			// The suppression extension slice and its required descendants.
+			{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Extension", Profile: []string{suppressedURL}}}},
+			{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: "1"},
+		},
+	})
+
+	plan, err := DerivePlan(r, coverage.DeriveOptions{
+		ExcludeExtensionURLs: []string{suppressedURL},
+	})
+	if err != nil {
+		t.Fatalf("DerivePlan returned error: %v", err)
+	}
+
+	for _, req := range plan.Requirements {
+		if req.ElementPath == "Organization.extension" || req.ElementPath == "Organization.extension.url" {
+			t.Fatalf("requirement %s references excluded suppressed extension path %q", req.ID, req.ElementPath)
+		}
+	}
+
+	if plan.Summary.PrunedByReason[coverage.PruneReasonExtensionURL] == 0 {
+		t.Fatal("expected extension-url-filtered prune reason")
+	}
+}

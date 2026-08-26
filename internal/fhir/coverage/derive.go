@@ -93,7 +93,12 @@ func DerivePlan(r *registry.Registry, options coverage.DeriveOptions) (*coverage
 		if err != nil {
 			continue
 		}
+		excludedExtensionPrefixes := extensionSlicePrefixes(elements, options.ExcludeExtensionURLs)
 		for _, element := range elements {
+			if isExcludedExtensionElement(element, excludedExtensionPrefixes) {
+				trackPruned(plan, coverage.PruneReasonExtensionURL)
+				continue
+			}
 			ok, reason := isDerivableElement(element, options)
 			if !ok {
 				trackPruned(plan, reason)
@@ -644,6 +649,78 @@ func appendRequirement(plan *coverage.CoveragePlan, seen map[string]struct{}, re
 	plan.Summary.ByDomain[req.Domain]++
 	plan.Summary.ByResourceType[req.ResourceType]++
 	plan.Summary.ByVariant[req.Variant]++
+}
+
+// extensionSlicePrefixes returns the set of element IDs (and their descendant
+// prefixes) identifying the slice entry elements for every extension whose
+// profile URL matches one of the excluded extension URLs. Each returned entry
+// is the slice element's ID; a trailing "." is appended to match descendant
+// elements (e.g. "Organization.extension:suppressed.url"). A slice element's
+// profile URL lives on its type profile (Code "Extension"). The returned set is
+// empty when no extensions are excluded.
+func extensionSlicePrefixes(elements []model.ElementDefinition, excludedURLs []string) []string {
+	if len(excludedURLs) == 0 {
+		return nil
+	}
+	excluded := make(map[string]struct{}, len(excludedURLs))
+	for _, u := range excludedURLs {
+		excluded[normalizeCanonicalURL(u)] = struct{}{}
+	}
+	var prefixes []string
+	for _, el := range elements {
+		if !elementIsExcludedExtension(el, excluded) {
+			continue
+		}
+		if el.ID == "" {
+			continue
+		}
+		prefixes = append(prefixes, el.ID, el.ID+".")
+	}
+	return prefixes
+}
+
+// isExcludedExtensionElement reports whether element belongs to an extension
+// whose profile URL is in the excluded set, either because the element is the
+// extension's slice entry itself (exact ID match) or because it is a descendant
+// of such a slice (matched by the slice ID prefix).
+func isExcludedExtensionElement(element model.ElementDefinition, excludedIDs []string) bool {
+	if len(excludedIDs) == 0 {
+		return false
+	}
+	for _, id := range excludedIDs {
+		if element.ID == id || strings.HasPrefix(element.ID, id) {
+			return true
+		}
+	}
+	return false
+}
+
+// elementIsExcludedExtension reports whether element is an Extension-typed slice
+// (or the root Extension element) whose declared type profile matches one of the
+// excluded URLs.
+func elementIsExcludedExtension(element model.ElementDefinition, excluded map[string]struct{}) bool {
+	for _, et := range element.Types {
+		if !strings.EqualFold(et.Code, "Extension") {
+			continue
+		}
+		for _, p := range et.Profile {
+			if _, ok := excluded[normalizeCanonicalURL(p)]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// normalizeCanonicalURL lowercases a canonical URL and strips any trailing
+// version ("|v") or fragment ("#v") qualifier so an excluded URL matches a
+// profile URL that carries a version suffix (e.g. ".../suppressed|26.0.0").
+func normalizeCanonicalURL(v string) string {
+	v = strings.TrimSpace(v)
+	if i := strings.IndexAny(v, "|#"); i >= 0 {
+		v = v[:i]
+	}
+	return strings.ToLower(v)
 }
 
 func isDerivableElement(element model.ElementDefinition, options coverage.DeriveOptions) (bool, coverage.PruneReason) {
