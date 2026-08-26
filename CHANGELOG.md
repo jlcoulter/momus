@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/jlcoulter/momus/compare/v1.7.0...v1.8.0) (2026-08-26)
+
+
+### Features
+
+* add better test reporting ([#31](https://github.com/jlcoulter/momus/issues/31)) ([fae314f](https://github.com/jlcoulter/momus/commit/fae314f35affb35ce29147bf611e5e858c914264))
+
 ## [1.7.0](https://github.com/jlcoulter/momus/compare/v1.6.1...v1.7.0) (2026-08-23)
 
 
