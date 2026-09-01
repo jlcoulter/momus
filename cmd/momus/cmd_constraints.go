@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 
 	testconstraint "github.com/jlcoulter/momus/internal/fhir/constraintderive"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
@@ -19,17 +18,13 @@ func newConstraintsCmd(cfg *config) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rootPath := args[0]
-			searchDir := cfg.DepsDir
-			if searchDir == "" {
-				searchDir = filepath.Dir(rootPath)
-			}
 			cacheDir := cfg.DownloadDir
 			if cacheDir == "" {
 				cacheDir = home.PackageCacheDir()
 			}
 
 			graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
-				DepsDir:        searchDir,
+				DepsDir:        cfg.DepsDir,
 				DownloadDir:    cacheDir,
 				ConflictPolicy: fhirpackage.ConflictPolicy(cfg.ConflictPolicy),
 			})

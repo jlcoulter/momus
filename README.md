@@ -189,7 +189,8 @@ go run ./cmd/momus package resolve package.tgz
 
 Resolver behaviour:
 
-- Searches the local dependency directory first
+- Uses the root archive and package cache by default
+- Searches a local dependency directory first when `--deps-dir` is supplied
 - Downloads missing package archives from FHIR package registries
 - Stores downloaded archives in `.momus/packages` by default
 - Resolves floating dependency versions such as `current` using registry metadata
@@ -307,6 +308,7 @@ Generate realistic bulk data as NDJSON (the FHIR Bulk Data `$export` format):
 
 ```sh
 go run ./cmd/momus coverage bulk package.tgz --output ./data.ndjson
+go run ./cmd/momus coverage bulk package.tgz --output ./data/
 ```
 
 Key options:

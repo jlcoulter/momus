@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/jlcoulter/momus/internal/home"
@@ -31,17 +30,13 @@ import (
 // the scoped registry. It is the shared entry point for every command that
 // consumes a package archive.
 func resolvePackageGraph(cfg *config, rootPath string) (*fhirpackage.ResolvedGraph, *registry.Registry, error) {
-	searchDir := cfg.DepsDir
-	if searchDir == "" {
-		searchDir = filepath.Dir(rootPath)
-	}
 	cacheDir := cfg.DownloadDir
 	if cacheDir == "" {
 		cacheDir = home.PackageCacheDir()
 	}
 
 	graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
-		DepsDir:        searchDir,
+		DepsDir:        cfg.DepsDir,
 		DownloadDir:    cacheDir,
 		ConflictPolicy: fhirpackage.ConflictPolicy(cfg.ConflictPolicy),
 	})

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	testbulk "github.com/jlcoulter/momus/internal/fhir/bulk"
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -22,17 +23,13 @@ func newBulkCmd(cfg *config) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rootPath := args[0]
-			searchDir := cfg.DepsDir
-			if searchDir == "" {
-				searchDir = filepath.Dir(rootPath)
-			}
 			cacheDir := cfg.DownloadDir
 			if cacheDir == "" {
 				cacheDir = home.PackageCacheDir()
 			}
 
 			graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
-				DepsDir:        searchDir,
+				DepsDir:        cfg.DepsDir,
 				DownloadDir:    cacheDir,
 				ConflictPolicy: fhirpackage.ConflictPolicy(cfg.ConflictPolicy),
 			})
@@ -77,17 +74,22 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			var out io.Writer = os.Stdout
 			var f *os.File
 			if cfg.OutputPath != "" {
-				if dir := filepath.Dir(cfg.OutputPath); dir != "" && dir != "." {
+				outputPath, err := resolveBulkOutputPath(cfg.OutputPath)
+				if err != nil {
+					return err
+				}
+				if dir := filepath.Dir(outputPath); dir != "" && dir != "." {
 					if err := os.MkdirAll(dir, 0o755); err != nil {
 						return fmt.Errorf("create bulk output dir %s: %w", dir, err)
 					}
 				}
-				f, err = os.Create(cfg.OutputPath)
+				f, err = os.Create(outputPath)
 				if err != nil {
-					return fmt.Errorf("create bulk file %s: %w", cfg.OutputPath, err)
+					return fmt.Errorf("create bulk file %s: %w", outputPath, err)
 				}
 				defer f.Close()
 				out = f
+				cfg.OutputPath = outputPath
 			}
 
 			w := testbulk.NewWriter(out)
@@ -118,4 +120,21 @@ func newBulkCmd(cfg *config) *cobra.Command {
 	cmd.Flags().StringSliceVar(&cfg.BulkPerTypeCounts, "per-type", nil, "per-type resource counts as Type=Count (repeatable); overrides --count")
 	cmd.Flags().StringSliceVar(&cfg.IncludeResourceTypes, "include-resource", nil, "include only these resource types (repeatable); referenced target types are added automatically")
 	return cmd
+}
+
+func resolveBulkOutputPath(outputPath string) (string, error) {
+	if outputPath == "" {
+		return "", nil
+	}
+	if strings.HasSuffix(outputPath, string(os.PathSeparator)) {
+		return filepath.Join(outputPath, "bulk.ndjson"), nil
+	}
+	info, err := os.Stat(outputPath)
+	if err == nil && info.IsDir() {
+		return filepath.Join(outputPath, "bulk.ndjson"), nil
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("stat bulk output path %s: %w", outputPath, err)
+	}
+	return outputPath, nil
 }

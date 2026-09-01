@@ -283,3 +283,32 @@ func TestWriteDebugBulk(t *testing.T) {
 		t.Fatalf("bulk debug output = %q", data)
 	}
 }
+
+func TestResolveBulkOutputPath(t *testing.T) {
+	dir := t.TempDir()
+
+	got, err := resolveBulkOutputPath(dir)
+	if err != nil {
+		t.Fatalf("resolveBulkOutputPath(existing dir): %v", err)
+	}
+	if got != filepath.Join(dir, "bulk.ndjson") {
+		t.Fatalf("existing dir output = %q, want %q", got, filepath.Join(dir, "bulk.ndjson"))
+	}
+
+	got, err = resolveBulkOutputPath(filepath.Join(dir, "nested") + string(os.PathSeparator))
+	if err != nil {
+		t.Fatalf("resolveBulkOutputPath(trailing separator): %v", err)
+	}
+	if got != filepath.Join(dir, "nested", "bulk.ndjson") {
+		t.Fatalf("trailing separator output = %q, want %q", got, filepath.Join(dir, "nested", "bulk.ndjson"))
+	}
+
+	filePath := filepath.Join(dir, "data.ndjson")
+	got, err = resolveBulkOutputPath(filePath)
+	if err != nil {
+		t.Fatalf("resolveBulkOutputPath(file): %v", err)
+	}
+	if got != filePath {
+		t.Fatalf("file output = %q, want %q", got, filePath)
+	}
+}
