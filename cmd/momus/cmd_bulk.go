@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	testbulk "github.com/jlcoulter/momus/internal/fhir/bulk"
-	"github.com/jlcoulter/momus/internal/fhir/model"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	"github.com/jlcoulter/momus/internal/fhir/provisioning"
 	"github.com/jlcoulter/momus/internal/home"
@@ -94,17 +93,29 @@ func newBulkCmd(cfg *config) *cobra.Command {
 
 			w := testbulk.NewWriter(out)
 			// Provisioner is created once and reused for every batch so the
-			// streaming pipeline provisions each type's batch as soon as it is
+			// streaming pipeline provisions each mixed-type web as soon as it is
 			// generated, rather than holding the whole corpus in memory.
 			var provisioner *provisioning.ServerProvisioner
 			if cfg.BaseURL != "" {
 				provisioner = newBulkProvisioner(cfg)
 			}
+			// Debug bulk output is streamed per-batch so a very large corpus
+			// never accumulates every resource body in memory just for the
+			// debug dump.
+			debugBulk, err := newDebugBulkWriter(cfg.Debug)
+			if err != nil {
+				return err
+			}
 			var provisioned, failed int
-			var allInstances []*model.ResourceInstance
+			var generated int
 			var failures []provisioning.Failure
 
-			err = corpusGenerator.GenerateCorpusBatched(cmd.Context(), resourceTypes, cfg.BulkCount, parsePerTypeCounts(cfg.BulkPerTypeCounts), func(batch testbulk.CorpusBatch) error {
+			batchSize := cfg.BulkBatchSize
+			if batchSize < 1 {
+				batchSize = 1
+			}
+			batches, errs := corpusGenerator.GenerateCorpusStreamed(cmd.Context(), resourceTypes, cfg.BulkCount, parsePerTypeCounts(cfg.BulkPerTypeCounts), batchSize)
+			for batch := range batches {
 				// Provision this batch immediately: its references only point to
 				// resources already emitted (and thus already on the server).
 				if provisioner != nil {
@@ -121,15 +132,21 @@ func newBulkCmd(cfg *config) *cobra.Command {
 					if err := w.WriteInstances(batch.Instances); err != nil {
 						return err
 					}
-					allInstances = append(allInstances, batch.Instances...)
+					generated += len(batch.Instances)
+					if debugBulk != nil {
+						if err := debugBulk.WriteInstances(batch.Instances); err != nil {
+							return err
+						}
+					}
 				}
-				return nil
-			})
-			if err != nil {
+			}
+			if err := <-errs; err != nil {
 				return err
 			}
-			if err := writeDebugBulk(cfg.Debug, allInstances); err != nil {
-				return err
+			if debugBulk != nil {
+				if err := debugBulk.Close(); err != nil {
+					return err
+				}
 			}
 			if err := w.Close(); err != nil {
 				return err
@@ -151,7 +168,7 @@ func newBulkCmd(cfg *config) *cobra.Command {
 				fmt.Printf("Bulk repository stream complete: %d resources uploaded\n", provisioned)
 			}
 
-			fmt.Printf("Generated NDJSON bulk data: %d resources across %d resource types\n", len(allInstances), len(resourceTypes))
+			fmt.Printf("Generated NDJSON bulk data: %d resources across %d resource types\n", generated, len(resourceTypes))
 			if cfg.OutputPath != "" {
 				fmt.Printf("Bulk data written to %s\n", cfg.OutputPath)
 			}
@@ -164,6 +181,7 @@ func newBulkCmd(cfg *config) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "write NDJSON bulk data to a file")
 	cmd.Flags().BoolVar(&cfg.Exhaustive, "exhaustive", true, "populate optional elements to produce fuller, more complete resources")
 	cmd.Flags().IntVar(&cfg.BulkCount, "count", 25, "number of resources to generate per resource type")
+	cmd.Flags().IntVar(&cfg.BulkBatchSize, "batch-size", 100, "number of resource webs to emit per streaming batch; bounds peak memory")
 	cmd.Flags().StringSliceVar(&cfg.BulkPerTypeCounts, "per-type", nil, "per-type resource counts as Type=Count (repeatable); overrides --count")
 	cmd.Flags().StringSliceVar(&cfg.IncludeResourceTypes, "include-resource", nil, "include only these resource types (repeatable); referenced target types are added automatically")
 	cmd.Flags().StringVar(&cfg.BaseURL, "base-url", "", "target FHIR repository base URL for streaming generated resources")

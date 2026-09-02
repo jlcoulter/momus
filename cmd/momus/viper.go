@@ -155,6 +155,7 @@ const homeConfigTemplate = `# Momus user configuration.
 # Generation
 # exhaustive = true
 # bulk_count = 25
+# bulk_batch_size = 100
 # bulk_per_type_counts = []
 
 # Validate

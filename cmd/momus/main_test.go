@@ -267,16 +267,30 @@ func TestWriteDebugBulk(t *testing.T) {
 	}
 
 	// Disabled: no file written.
-	if err := writeDebugBulk(false, instances); err != nil {
-		t.Fatalf("writeDebugBulk(false) returned error: %v", err)
+	dbw, err := newDebugBulkWriter(false)
+	if err != nil {
+		t.Fatalf("newDebugBulkWriter(false) returned error: %v", err)
+	}
+	if dbw != nil {
+		t.Fatal("expected nil writer when debug disabled")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "bulk.ndjson")); !os.IsNotExist(err) {
 		t.Fatalf("expected no bulk file when debug disabled")
 	}
 
-	// Enabled: NDJSON written.
-	if err := writeDebugBulk(true, instances); err != nil {
-		t.Fatalf("writeDebugBulk(true) returned error: %v", err)
+	// Enabled: NDJSON written on close.
+	dbw, err = newDebugBulkWriter(true)
+	if err != nil {
+		t.Fatalf("newDebugBulkWriter(true) returned error: %v", err)
+	}
+	if dbw == nil {
+		t.Fatal("expected non-nil writer when debug enabled")
+	}
+	if err := dbw.WriteInstances(instances); err != nil {
+		t.Fatalf("debug bulk WriteInstances returned error: %v", err)
+	}
+	if err := dbw.Close(); err != nil {
+		t.Fatalf("debug bulk Close returned error: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "bulk.ndjson"))
 	if err != nil {

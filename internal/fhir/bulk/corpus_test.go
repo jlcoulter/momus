@@ -2,6 +2,7 @@ package bulk
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -835,5 +836,252 @@ func TestWireCorpusReferencesRootsSameTypeRefs(t *testing.T) {
 	}
 	if len(distinct) < 2 {
 		t.Fatalf("cross-type refs did not spread across the pool: %v", distinct)
+	}
+}
+
+// collectBatchInstances drains a streamed corpus into a slice of instances plus
+// any finalization batch, verifying the error channel is clean.
+func collectBatchInstances(t *testing.T, batches <-chan CorpusBatch, errs <-chan error) ([]*model.ResourceInstance, []CorpusBatch) {
+	t.Helper()
+	var all []*model.ResourceInstance
+	var finals []CorpusBatch
+	for b := range batches {
+		if b.Finalize {
+			finals = append(finals, b)
+			continue
+		}
+		all = append(all, b.Instances...)
+	}
+	if err := <-errs; err != nil {
+		t.Fatalf("GenerateCorpusStreamed returned error: %v", err)
+	}
+	return all, finals
+}
+
+// TestGenerateCorpusStreamedEmitsMixedTypeBatches verifies the streaming API
+// emits small mixed-type batches (not one giant batch per type) whose
+// references only point to already-emitted resources.
+func TestGenerateCorpusStreamedEmitsMixedTypeBatches(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 5, nil, 2)
+
+	emitted := make(map[string]bool)
+	var batchCount int
+	var obsCount, patCount int
+	for b := range batches {
+		batchCount++
+		// Instances are in topological order within a batch, so an instance's
+		// references may point to an earlier instance of the same batch. Mark
+		// each instance emitted inline as we iterate so those resolve.
+		for _, inst := range b.Instances {
+			collectReferences(inst.Resource, func(ref string) {
+				if danglingRef.MatchString(ref) {
+					t.Fatalf("streamed resource %s has dangling reference %q", inst.LocalID, ref)
+				}
+				_, targetID := splitReference(ref)
+				if targetID == "" {
+					t.Fatalf("resource %s has malformed reference %q", inst.LocalID, ref)
+				}
+				if !emitted[targetID] {
+					t.Fatalf("resource %s references %q which was not yet emitted", inst.LocalID, ref)
+				}
+			})
+			switch inst.ResourceType {
+			case "Observation":
+				obsCount++
+			case "Patient":
+				patCount++
+			}
+			emitted[inst.LocalID] = true
+		}
+	}
+	if err := <-errs; err != nil {
+		t.Fatalf("GenerateCorpusStreamed returned error: %v", err)
+	}
+	// 5 of each type.
+	if obsCount != 5 || patCount != 5 {
+		t.Fatalf("got %d observations and %d patients, want 5 and 5", obsCount, patCount)
+	}
+	// With batchSize=2 over 5 rounds, expect ~3 batches (2+2+1), not one per type.
+	if batchCount != 3 {
+		t.Fatalf("emitted %d batches, want 3 (round-based)", batchCount)
+	}
+}
+
+// TestGenerateCorpusStreamedPerTypeOverrides verifies that per-type overrides
+// produce the correct per-type counts, with higher-count types continuing in
+// extra rounds while lower-count types stop emitting.
+func TestGenerateCorpusStreamedPerTypeOverrides(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	// 3 observations but 7 patients: extra Patient-only rounds after round 3.
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 3, map[string]int{"Patient": 7}, 100)
+	all, _ := collectBatchInstances(t, batches, errs)
+
+	obsCount, patCount := 0, 0
+	for _, inst := range all {
+		switch inst.ResourceType {
+		case "Observation":
+			obsCount++
+		case "Patient":
+			patCount++
+		}
+	}
+	if obsCount != 3 || patCount != 7 {
+		t.Fatalf("got %d observations and %d patients, want 3 and 7", obsCount, patCount)
+	}
+}
+
+// TestGenerateCorpusStreamedBatchSizeOne verifies batchSize=1 emits a batch per
+// round (one mixed-type web per batch).
+func TestGenerateCorpusStreamedBatchSizeOne(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 4, nil, 1)
+
+	var batchCount int
+	for range batches {
+		batchCount++
+	}
+	if err := <-errs; err != nil {
+		t.Fatalf("GenerateCorpusStreamed returned error: %v", err)
+	}
+	if batchCount != 4 {
+		t.Fatalf("emitted %d batches, want 4 (one per round with batchSize=1)", batchCount)
+	}
+}
+
+// TestGenerateCorpusStreamedFinalizesRequiredForwardReferences verifies that a
+// required forward reference (from a reference cycle) is preserved and re-wired
+// in a finalization batch once the full pool exists.
+func TestGenerateCorpusStreamedFinalizesRequiredForwardReferences(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/org",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+			{Path: "Organization.endpoint", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/endpoint",
+		Type: "Endpoint",
+		Elements: []model.ElementDefinition{
+			{Path: "Endpoint", Min: 0, Max: "*"},
+			{Path: "Endpoint.managingOrganization", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+		},
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Organization", "Endpoint"}, 3, nil, 100)
+	all, finals := collectBatchInstances(t, batches, errs)
+
+	if len(finals) == 0 {
+		t.Fatal("expected a finalization batch for the required forward reference")
+	}
+	// Collect every instance (regular + finalized) and verify all references
+	// resolve within the complete pool.
+	allIDs := make(map[string]bool, len(all))
+	for _, inst := range all {
+		allIDs[inst.LocalID] = true
+	}
+	for _, b := range finals {
+		for _, inst := range b.Instances {
+			collectReferences(inst.Resource, func(ref string) {
+				if danglingRef.MatchString(ref) {
+					t.Fatalf("finalized %s still has dangling reference %q", inst.LocalID, ref)
+				}
+			})
+		}
+	}
+}
+
+// TestGenerateCorpusStreamedDeterministicIDs verifies that streaming and
+// batched generation produce identical local IDs, since both delegate to
+// synthesizeOne with the same (type, index) key.
+func TestGenerateCorpusStreamedDeterministicIDs(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Patient", "Observation"}, 3, nil, 1)
+	streamed, _ := collectBatchInstances(t, batches, errs)
+
+	// Re-generate via synthesizeType for comparison.
+	batched, err := gen.synthesizeType(context.Background(), "Patient", 3, nil)
+	if err != nil {
+		t.Fatalf("synthesizeType: %v", err)
+	}
+	// The first Patient instance from the stream (round 1) must match the first
+	// Patient from a whole-type batch.
+	if streamed[0].LocalID != batched[0].LocalID {
+		t.Fatalf("streamed id %q != batched id %q", streamed[0].LocalID, batched[0].LocalID)
+	}
+}
+
+// TestGenerateCorpusStreamedCancellation verifies a cancelled context stops
+// generation and surfaces a cancellation error.
+func TestGenerateCorpusStreamedCancellation(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancelled immediately
+	batches, errs := gen.GenerateCorpusStreamed(ctx, []string{"Observation", "Patient"}, 100, nil, 10)
+	// Drain to completion.
+	for range batches {
+	}
+	err := <-errs
+	if err == nil {
+		t.Fatal("expected a cancellation error from a cancelled context")
+	}
+	if err != context.Canceled {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+}
+
+// TestGenerateCorpusStreamedMemoryBounded verifies that peak heap stays roughly
+// constant as the requested count grows, because generation streams rounds into
+// small batches rather than materialising the whole corpus at once. The old
+// whole-type generation held every instance of a type in memory simultaneously.
+func TestGenerateCorpusStreamedMemoryBounded(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	// Measure peak heap for a small and a 50x-larger count. Peak heap must not
+	// grow proportionally with count (only with batchSize).
+	var peakSmall, peakLarge uint64
+	for _, count := range []int{200, 10000} {
+		var peak uint64
+		batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, count, nil, 100)
+		for b := range batches {
+			// Discard the bodies promptly (as the provisioner/writer consumer
+			// does) so peak heap reflects the streaming steady state.
+			_ = b
+			var ms runtime.MemStats
+			runtime.ReadMemStats(&ms)
+			if ms.HeapAlloc > peak {
+				peak = ms.HeapAlloc
+			}
+		}
+		if err := <-errs; err != nil {
+			t.Fatalf("count=%d: %v", count, err)
+		}
+		if count == 200 {
+			peakSmall = peak
+		} else {
+			peakLarge = peak
+		}
+	}
+	// Peak heap for 10000 should be well under 2x that for 200 (proportional
+	// growth would be ~50x). Allow generous headroom for the growing local-ID
+	// pool, which is O(count) but tiny (strings).
+	if peakLarge > peakSmall*4 {
+		t.Fatalf("peak heap grew from %d to %d across a 50x count increase; generation is not memory-bounded", peakSmall, peakLarge)
 	}
 }

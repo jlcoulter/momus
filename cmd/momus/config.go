@@ -67,6 +67,7 @@ type config struct {
 	// Generation
 	Exhaustive        bool     `mapstructure:"exhaustive" flag:"exhaustive"`
 	BulkCount         int      `mapstructure:"bulk_count" flag:"count"`
+	BulkBatchSize     int      `mapstructure:"bulk_batch_size" flag:"batch-size"`
 	BulkPerTypeCounts []string `mapstructure:"bulk_per_type_counts" flag:"per-type"`
 
 	// Validate
