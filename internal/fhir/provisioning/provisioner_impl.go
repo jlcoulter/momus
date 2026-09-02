@@ -155,38 +155,46 @@ func (p *ServerProvisioner) ProvisionAll(ctx context.Context, ds *model.Dataset)
 	return res
 }
 
-// ProvisionBatch uploads the given instances concurrently and returns the
-// outcome. It is the streaming counterpart to ProvisionAll: callers that
-// generate resources incrementally (e.g. bulk corpus batches) can provision each
-// batch as it is ready, without building a full Dataset first. Instances are
-// assumed dependency-ordered (targets before dependents), so all PUTs run in
-// parallel. Failures are reported in input order for determinism.
+// ProvisionBatch uploads the given instances and returns the outcome. It is the
+// streaming counterpart to ProvisionAll: callers that generate resources
+// incrementally (e.g. bulk corpus batches) can provision each batch as it is
+// ready, without building a full Dataset first.
+//
+// A batch is not assumed to be internally independent: references are resolved
+// from the instance bodies (e.g. Location.partOf → an earlier Location of the
+// same batch), and instances are grouped into dependency levels so targets are
+// PUT before the resources that reference them. Instances without intra-batch
+// dependencies are uploaded concurrently, as are all members of a level;
+// cyclic references fall back to a serial pass so targets still precede
+// dependents. Failures are reported in provisioning order for determinism.
+// Instance LocalIDs must be unique within the batch (the corpus generator
+// guarantees this).
 func (p *ServerProvisioner) ProvisionBatch(ctx context.Context, instances []*model.ResourceInstance) *Result {
 	res := &Result{}
 	if p.baseURL == "" || len(instances) == 0 {
 		return res
 	}
-	outcomes := make([]provisionOutcome, len(instances))
-	var wg sync.WaitGroup
-	for i, instance := range instances {
+	ds := &model.Dataset{Resources: make(map[string]*model.ResourceInstance, len(instances))}
+	for _, instance := range instances {
 		if instance == nil {
 			continue
 		}
-		wg.Add(1)
-		go func(i int, instance *model.ResourceInstance) {
-			defer wg.Done()
-			outcomes[i] = provisionOutcome{id: instance.LocalID, instance: instance, err: p.provisionInstance(ctx, instance)}
-		}(i, instance)
+		ds.Resources[instance.LocalID] = instance
 	}
-	wg.Wait()
-	for _, o := range outcomes {
-		if o.err != nil {
-			res.Failed++
-			res.FailedIDs = append(res.FailedIDs, o.id)
-			res.Failures = append(res.Failures, failureFromError(o.id, o.instance, o.err))
-			continue
+	// Record the references that actually appear in the bodies so the
+	// dependency graph reflects only real, intra-batch edges.
+	recordInstanceBodyReferences(ds)
+	for _, level := range provisionLevels(ds) {
+		outcomes := p.provisionBatch(ctx, ds, level)
+		for _, o := range outcomes {
+			if o.err != nil {
+				res.Failed++
+				res.FailedIDs = append(res.FailedIDs, o.id)
+				res.Failures = append(res.Failures, failureFromError(o.id, o.instance, o.err))
+				continue
+			}
+			res.Provisioned++
 		}
-		res.Provisioned++
 	}
 	return res
 }
@@ -220,6 +228,75 @@ func (p *ServerProvisioner) provisionBatch(ctx context.Context, ds *model.Datase
 	}
 	wg.Wait()
 	return outcomes
+}
+
+// recordInstanceBodyReferences scans every instance body in ds for "reference"
+// fields of the form "<Type>/<id>" and records a relationship for each one whose
+// target id is present in ds, so provisioning orders targets before dependents
+// for intra-batch dependencies. Self-references are skipped: they are validated
+// against the resource itself, which the server can resolve at create time.
+func recordInstanceBodyReferences(ds *model.Dataset) {
+	if ds == nil {
+		return
+	}
+	ids := make(map[string]struct{}, len(ds.Resources))
+	for id := range ds.Resources {
+		ids[id] = struct{}{}
+	}
+	for _, inst := range ds.Resources {
+		if inst == nil || inst.Resource == nil {
+			continue
+		}
+		walkInstanceRefs(inst, inst.Resource, ids, ds)
+	}
+}
+
+// walkInstanceRefs recursively descends an instance body, recording a
+// relationship for every "reference" value of the form "<Type>/<id>" whose
+// target id exists in the batch and is not the instance itself.
+func walkInstanceRefs(inst *model.ResourceInstance, node any, ids map[string]struct{}, ds *model.Dataset) {
+	switch v := node.(type) {
+	case map[string]any:
+		for key, val := range v {
+			if key == "reference" {
+				if ref, ok := val.(string); ok {
+					if targetID := batchReferenceTargetID(ref); targetID != "" && targetID != inst.LocalID {
+						if _, ok := ids[targetID]; ok {
+							ds.Relationships = append(ds.Relationships, model.Reference{
+								SourceID: inst.LocalID,
+								Path:     key,
+								TargetID: targetID,
+							})
+						}
+					}
+				}
+				continue
+			}
+			walkInstanceRefs(inst, val, ids, ds)
+		}
+	case []any:
+		for _, el := range v {
+			walkInstanceRefs(inst, el, ids, ds)
+		}
+	}
+}
+
+// batchReferenceTargetID parses a FHIR reference string "<Type>/<id>" and
+// returns the id portion, or "" when the reference is not a relative Type/id
+// reference (e.g. "#fragment", "http://...", "urn:uuid:...").
+func batchReferenceTargetID(ref string) string {
+	trimmed := strings.TrimSpace(ref)
+	if trimmed == "" {
+		return ""
+	}
+	slash := strings.Index(trimmed, "/")
+	if slash <= 0 || slash == len(trimmed)-1 {
+		return ""
+	}
+	if strings.ContainsAny(trimmed, ":#?") {
+		return ""
+	}
+	return trimmed[slash+1:]
 }
 
 func (p *ServerProvisioner) provisionInstance(ctx context.Context, instance *model.ResourceInstance) error {

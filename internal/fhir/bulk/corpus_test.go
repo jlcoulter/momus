@@ -309,6 +309,153 @@ func TestGenerateCorpusBatchedFinalizesRequiredForwardReferences(t *testing.T) {
 	}
 }
 
+// TestTopologicalTypeOrderIgnoresSelfReferences verifies that a type that
+// references itself (e.g. Location.partOf → Location) does not trap the type
+// behind the cycle breaker. Previously a self-reference kept the type's
+// dependency count permanently above zero, so it was only emitted by the
+// smallest-remaining cycle breaker — emitting HealthcareService before
+// Location/Organization and Location before Organization, which made
+// provisioning fail with HAPI-1094 "not found" (referential integrity).
+func TestTopologicalTypeOrderIgnoresSelfReferences(t *testing.T) {
+	reg := registry.New()
+	orgProfile := "http://example.org/StructureDefinition/org"
+	endpointProfile := "http://example.org/StructureDefinition/endpoint"
+	locationProfile := "http://example.org/StructureDefinition/location"
+	hsProfile := "http://example.org/StructureDefinition/hs"
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: endpointProfile, Type: "Endpoint",
+		Elements: []model.ElementDefinition{
+			{Path: "Endpoint", Min: 0, Max: "*"},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: orgProfile, Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{orgProfile}}}},
+			{Path: "Organization.endpoint", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{endpointProfile}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: locationProfile, Type: "Location",
+		Elements: []model.ElementDefinition{
+			{Path: "Location", Min: 0, Max: "*"},
+			{Path: "Location.managingOrganization", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{orgProfile}}}},
+			{Path: "Location.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{locationProfile}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: hsProfile, Type: "HealthcareService",
+		Elements: []model.ElementDefinition{
+			{Path: "HealthcareService", Min: 0, Max: "*"},
+			{Path: "HealthcareService.providedBy", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{orgProfile}}}},
+			{Path: "HealthcareService.location", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{locationProfile}}}},
+			{Path: "HealthcareService.endpoint", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{endpointProfile}}}},
+		},
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	var order []string
+	err := gen.GenerateCorpusBatched(context.Background(), []string{"HealthcareService"}, 2, nil, func(b CorpusBatch) error {
+		order = append(order, b.ResourceType)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("GenerateCorpusBatched returned error: %v", err)
+	}
+	pos := make(map[string]int, len(order))
+	for i, rt := range order {
+		pos[rt] = i
+	}
+	for _, rt := range []string{"Endpoint", "Organization", "Location", "HealthcareService"} {
+		if _, ok := pos[rt]; !ok {
+			t.Fatalf("no batch emitted for %s; order = %v", rt, order)
+		}
+	}
+	// The batch order must satisfy the cross-type reference constraints even
+	// though Location and Organization also reference themselves.
+	if pos["Organization"] > pos["Location"] {
+		t.Fatalf("Organization batch must precede Location batch (Location.managingOrganization); order = %v", order)
+	}
+	if pos["Organization"] > pos["HealthcareService"] || pos["Location"] > pos["HealthcareService"] {
+		t.Fatalf("Organization and Location batches must precede HealthcareService batch; order = %v", order)
+	}
+}
+
+// TestStripDanglingReferencesFiltersPlaceholderArrayElements verifies that
+// dangling setup placeholders are removed element-wise from repeatable
+// (multi-element) reference arrays. Previously only single-element arrays were
+// recognised, so a placeholder in element [1+] survived into the provisioned
+// payload and the server rejected the resource with HAPI-1094 "not found".
+func TestStripDanglingReferencesFiltersPlaceholderArrayElements(t *testing.T) {
+	body := map[string]any{
+		"resourceType": "HealthcareService",
+		"location": []any{
+			map[string]any{"reference": "Location/loc-1", "type": "Location"},
+			map[string]any{"reference": "Location/momus-setup-location"},
+		},
+	}
+	refFields := map[string]refFieldInfo{
+		"HealthcareService.location": {targetType: "Location", repeatable: true, required: false},
+	}
+	if preserved := stripDanglingReferences(body, refFields); preserved {
+		t.Fatal("expected preserved=false for an optional dangling array element")
+	}
+	arr, ok := body["location"].([]any)
+	if !ok || len(arr) != 1 {
+		t.Fatalf("location = %v, want the array filtered to its real reference", body["location"])
+	}
+	first, ok := arr[0].(map[string]any)
+	if !ok || first["reference"] != "Location/loc-1" {
+		t.Fatalf("location[0] = %v, want the real Location/loc-1 reference", arr[0])
+	}
+}
+
+// TestStripDanglingReferencesRemovesAllPlaceholderArray verifies that a
+// repeatable reference array consisting only of dangling placeholders is
+// removed entirely when optional.
+func TestStripDanglingReferencesRemovesAllPlaceholderArray(t *testing.T) {
+	body := map[string]any{
+		"resourceType": "HealthcareService",
+		"location": []any{
+			map[string]any{"reference": "Location/momus-setup-location"},
+			map[string]any{"reference": "Location/momus-setup-location"},
+		},
+	}
+	refFields := map[string]refFieldInfo{
+		"HealthcareService.location": {targetType: "Location", repeatable: true, required: false},
+	}
+	if preserved := stripDanglingReferences(body, refFields); preserved {
+		t.Fatal("expected preserved=false for an optional all-placeholder array")
+	}
+	if _, ok := body["location"]; ok {
+		t.Fatalf("location = %v, want the all-placeholder array removed", body["location"])
+	}
+}
+
+// TestStripDanglingReferencesPreservesRequiredArrayElements verifies that
+// dangling placeholders in a required repeatable reference field are preserved
+// (for the finalization pass) and reported via the preserved flag.
+func TestStripDanglingReferencesPreservesRequiredArrayElements(t *testing.T) {
+	body := map[string]any{
+		"resourceType": "HealthcareService",
+		"location": []any{
+			map[string]any{"reference": "Location/loc-1"},
+			map[string]any{"reference": "Location/momus-setup-location"},
+		},
+	}
+	refFields := map[string]refFieldInfo{
+		"HealthcareService.location": {targetType: "Location", repeatable: true, required: true},
+	}
+	if preserved := stripDanglingReferences(body, refFields); !preserved {
+		t.Fatal("expected preserved=true for a required dangling array element")
+	}
+	arr, ok := body["location"].([]any)
+	if !ok || len(arr) != 2 {
+		t.Fatalf("location = %v, want both elements preserved for a required field", body["location"])
+	}
+}
+
 // TestStripDanglingReferencesPreservesRequired verifies that stripDanglingReferences
 // removes optional dangling references but preserves required ones.
 func TestStripDanglingReferencesPreservesRequired(t *testing.T) {
@@ -319,7 +466,7 @@ func TestStripDanglingReferencesPreservesRequired(t *testing.T) {
 	}
 	refFields := map[string]refFieldInfo{
 		"Organization.endpoint": {targetType: "Endpoint", repeatable: true, required: true},
-		"Organization.partOf":  {targetType: "Organization", repeatable: false, required: false},
+		"Organization.partOf":   {targetType: "Organization", repeatable: false, required: false},
 	}
 	preserved := stripDanglingReferences(body, refFields)
 	if !preserved {

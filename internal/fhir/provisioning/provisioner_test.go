@@ -377,6 +377,64 @@ func TestProvisionTrimsTrailingSlashFromBaseURL(t *testing.T) {
 	}
 }
 
+// TestProvisionBatchOrdersSameBatchTargetsBeforeDependents verifies that
+// ProvisionBatch serialises resources whose references point at earlier
+// instances in the same batch. The corpus wires same-type references (e.g.
+// Location.partOf) to earlier instances of the same type, so a batch is not
+// necessarily independent: a concurrent upload PUTs a dependent before its
+// same-batch target exists and a server enforcing referential integrity
+// rejects it with HAPI-1094 "not found".
+func TestProvisionBatchOrdersSameBatchTargetsBeforeDependents(t *testing.T) {
+	var mu sync.Mutex
+	created := map[string]bool{}
+	locationChecked := make(chan struct{})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The Location child references the Location parent. The parent must be
+		// created first; delay the parent's creation until the child's request
+		// has been checked so a concurrent upload deterministically fails here.
+		if strings.HasSuffix(r.URL.Path, "/Location/parent") {
+			select {
+			case <-locationChecked:
+			case <-time.After(100 * time.Millisecond):
+			}
+			mu.Lock()
+			created["parent"] = true
+			mu.Unlock()
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/Location/child") {
+			mu.Lock()
+			ok := created["parent"]
+			mu.Unlock()
+			if ok {
+				w.WriteHeader(http.StatusCreated)
+			} else {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+			}
+			close(locationChecked)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	instances := []*model.ResourceInstance{
+		{LocalID: "parent", ResourceType: "Location", Resource: map[string]any{
+			"resourceType": "Location", "id": "parent",
+		}},
+		{LocalID: "child", ResourceType: "Location", Resource: map[string]any{
+			"resourceType": "Location", "id": "child",
+			"partOf": map[string]any{"reference": "Location/parent"},
+		}},
+	}
+	res := New(server.URL, &Options{HTTPClient: server.Client()}).ProvisionBatch(context.Background(), instances)
+	if !res.Complete() {
+		t.Fatalf("ProvisionBatch incomplete: %d provisioned, %d failed: %v", res.Provisioned, res.Failed, res.FailedIDs)
+	}
+}
+
 func TestResultCompleteEmptyDataset(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)

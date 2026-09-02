@@ -386,6 +386,15 @@ func topologicalTypeOrder(resourceTypes []string, g *CorpusGenerator) []string {
 	for _, t := range resourceTypes {
 		deps[t] = make(map[string]bool)
 		for _, info := range g.referenceFields(t) {
+			if info.targetType == t {
+				// A self-reference (e.g. Location.partOf → Location) is not a
+				// dependency on another type: same-type forward references are
+				// resolved by wiring to earlier instances and stripping danglers.
+				// Counting them as dependencies left the type permanently unready,
+				// deferring it to the cycle breaker and emitting dependents
+				// (HealthcareService) before their targets (Organization, Location).
+				continue
+			}
 			if included[info.targetType] {
 				deps[t][info.targetType] = true
 			}
@@ -722,6 +731,10 @@ func setReferenceLeaf(obj map[string]any, key string, target refTarget, repeatab
 // ones are preserved for later resolution (see GenerateCorpusBatched's
 // finalization pass). It returns true if any required reference was preserved.
 // When refFields is nil, all dangling references are stripped.
+//
+// Repeatable reference fields are filtered element-wise: a dangling placeholder
+// is removed from its array (or the whole array removed when no real reference
+// remains) rather than the array surviving intact.
 func stripDanglingReferences(value any, refFields map[string]refFieldInfo) bool {
 	preserved := false
 	// Seed the element path with the resource type so it matches the full
@@ -736,6 +749,12 @@ func stripDanglingReferences(value any, refFields map[string]refFieldInfo) bool 
 	return preserved
 }
 
+// stripDanglingAt walks value, removing dangling reference placeholders at or
+// below path. Optional (Min=0) placeholders are deleted; required (Min>=1) ones
+// are kept and reported through preserved. Reference arrays are filtered
+// element-wise in the map case, where the parent map is available for
+// reassignment (filtering a slice in place would not update the parent's slice
+// header).
 func stripDanglingAt(value any, path string, refFields map[string]refFieldInfo, preserved *bool) {
 	switch typed := value.(type) {
 	case map[string]any:
@@ -743,6 +762,34 @@ func stripDanglingAt(value any, path string, refFields map[string]refFieldInfo, 
 			childPath := k
 			if path != "" {
 				childPath = path + "." + k
+			}
+			if arr, ok := v.([]any); ok {
+				// Repeatable reference field: drop dangling placeholder elements,
+				// keep real references, and drop the key entirely when nothing real
+				// remains. Optional (Min=0) placeholders are removed; required
+				// (Min>=1) ones are preserved for later resolution.
+				kept := make([]any, 0, len(arr))
+				for _, item := range arr {
+					if isDanglingReferenceValue(item) {
+						if refFields != nil && refFields[childPath].required {
+							*preserved = true
+							kept = append(kept, item)
+						}
+						continue
+					}
+					kept = append(kept, item)
+				}
+				if len(kept) != len(arr) {
+					if len(kept) == 0 {
+						delete(typed, k)
+					} else {
+						typed[k] = kept
+					}
+				}
+				for _, item := range kept {
+					stripDanglingAt(item, childPath, refFields, preserved)
+				}
+				continue
 			}
 			if isDanglingReferenceValue(v) {
 				if refFields != nil && refFields[childPath].required {
