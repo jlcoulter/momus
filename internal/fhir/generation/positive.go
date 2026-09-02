@@ -2019,9 +2019,12 @@ func normalisePayloadCodingDisplays(v any, reg *registry.Registry) {
 	}
 }
 
-// normaliseCoding fixes the display on a single coding map. If a canonical
-// display is known it is set; if the display merely echoes the code and no
-// canonical display is known, the display is dropped rather than echoed.
+// normaliseCoding fixes the display on a single coding map. The canonical
+// CodeSystem display, when known, is authoritative and always wins over whatever
+// was generated — including a non-echoing display synthesised from the code by
+// title-casing (e.g. "Organisation Initiated" must become "Organisation
+// initiated" to match the CodeSystem). When no canonical display is known, a
+// display that merely echoes the code is dropped rather than echoed.
 func normaliseCoding(c any, reg *registry.Registry) {
 	m, ok := c.(map[string]any)
 	if !ok {
@@ -2038,16 +2041,15 @@ func normaliseCoding(c any, reg *registry.Registry) {
 		delete(m, "display")
 		return
 	}
-	current, _ := m["display"].(string)
-	if current != "" && current != code {
-		// An intentional, non-echoed display is preserved.
+	if resolved := resolveCodingDisplay(reg, system, code); resolved != "" {
+		// The canonical display is authoritative; replace any generated display
+		// so the payload matches the CodeSystem exactly (servers validate the
+		// display text against the bound value set).
+		m["display"] = resolved
 		return
 	}
-	resolved := resolveCodingDisplay(reg, system, code)
-	switch {
-	case resolved != "":
-		m["display"] = resolved
-	case current == code:
+	current, _ := m["display"].(string)
+	if current == code {
 		// Never echo the code as the display when the canonical display is not
 		// known.
 		delete(m, "display")

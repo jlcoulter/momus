@@ -177,11 +177,31 @@ func TestResolveCodingDisplayFillsCanonicalFromCodeSystem(t *testing.T) {
 		t.Fatalf("unknown-code display should be dropped, got %v", unknown["display"])
 	}
 
-	// A display that is intentional (not equal to the code) is preserved.
-	intentional := map[string]any{"system": "http://terminology.hl7.org/CodeSystem/v2-0203", "code": "XX", "display": "Deliberately different"}
+	// A display that differs from the code but differs from the canonical
+	// CodeSystem display is overwritten with the canonical display: the CodeSystem
+	// is authoritative and servers validate the display text against it.
+	// "Organisation Initiated" (title-cased from the code) must become the
+	// canonical "Organisation initiated".
+	reg2 := registry.New()
+	reg2.AddCodeSystem(&model.CodeSystem{URL: "http://example.org/cs/responsible-party-type", Concepts: []model.CodeSystemConcept{
+		{Code: "organisation-initiated", Display: "Organisation initiated"},
+	}})
+	overridden := map[string]any{"system": "http://example.org/cs/responsible-party-type", "code": "organisation-initiated", "display": "Organisation Initiated"}
+	normaliseCoding(overridden, reg2)
+	if overridden["display"] != "Organisation initiated" {
+		t.Fatalf("generated display was not replaced by the canonical display: %v", overridden["display"])
+	}
+}
+
+// TestNormaliseCodingPreservesDisplayWhenCodeSystemUnknown verifies that when the
+// CodeSystem has no canonical display for a code, a deliberate, non-echoing
+// display is preserved rather than overwritten or dropped.
+func TestNormaliseCodingPreservesDisplayWhenCodeSystemUnknown(t *testing.T) {
+	reg := registry.New()
+	intentional := map[string]any{"system": "http://example.org/cs", "code": "ABC", "display": "Deliberately different"}
 	normaliseCoding(intentional, reg)
 	if intentional["display"] != "Deliberately different" {
-		t.Fatalf("intentional display was overwritten: %v", intentional["display"])
+		t.Fatalf("intentional display was overwritten/dropped: %v", intentional["display"])
 	}
 }
 

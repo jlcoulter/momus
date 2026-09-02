@@ -644,3 +644,59 @@ func TestStripFailedReferences(t *testing.T) {
 		t.Fatal("nil failed set should be a no-op")
 	}
 }
+
+// TestProvisionBatchStripsCrossBatchFailedRefs verifies that a batch strips
+// references to resources that failed in a prior ProvisionBatch call on the same
+// provisioner (e.g. a HealthcareService batch referencing a Location that failed
+// in the Location batch). Without cross-batch tracking the dependent would
+// cascade a HAPI-1094 "not found" failure.
+func TestProvisionBatchStripsCrossBatchFailedRefs(t *testing.T) {
+	var mu sync.Mutex
+	var healthcareBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/Location/root"):
+			w.WriteHeader(http.StatusPreconditionFailed)
+		case strings.HasSuffix(r.URL.Path, "/HealthcareService/hs"):
+			healthcareBody = body
+			w.WriteHeader(http.StatusCreated)
+		default:
+			w.WriteHeader(http.StatusCreated)
+		}
+	}))
+	defer server.Close()
+
+	p := New(server.URL, &Options{HTTPClient: server.Client()})
+
+	// First batch: the Location root fails (validation error).
+	first := p.ProvisionBatch(context.Background(), []*model.ResourceInstance{
+		{LocalID: "root", ResourceType: "Location", Resource: map[string]any{
+			"resourceType": "Location", "id": "root",
+		}},
+	})
+	if first.Provisioned != 0 || first.Failed != 1 {
+		t.Fatalf("first batch: got %d provisioned, %d failed; want 0/1", first.Provisioned, first.Failed)
+	}
+
+	// Second batch: a HealthcareService referencing the failed Location root.
+	// Its reference must be stripped so it provisions rather than failing with a
+	// cascading "not found".
+	second := p.ProvisionBatch(context.Background(), []*model.ResourceInstance{
+		{LocalID: "hs", ResourceType: "HealthcareService", Resource: map[string]any{
+			"resourceType": "HealthcareService", "id": "hs",
+			"location": []any{map[string]any{"reference": "Location/root"}},
+		}},
+	})
+	if !second.Complete() {
+		t.Fatalf("second batch incomplete: %d provisioned, %d failed: %v", second.Provisioned, second.Failed, second.FailedIDs)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if _, ok := healthcareBody["location"]; ok {
+		t.Fatalf("HealthcareService still carries reference to failed Location: %v", healthcareBody["location"])
+	}
+}

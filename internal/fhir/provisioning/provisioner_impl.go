@@ -39,6 +39,15 @@ type Options struct {
 type ServerProvisioner struct {
 	baseURL string
 	options Options
+
+	// failedIDs records local ids the server has rejected across all
+	// ProvisionBatch/ProvisionAll calls on this provisioner. It lets later
+	// batches strip references to targets that failed in an earlier batch (e.g.
+	// a HealthcareService whose Location target failed in the Location batch),
+	// avoiding a cascade of HAPI-1094 "not found" referential-integrity
+	// failures. Guarded by mu.
+	mu        sync.Mutex
+	failedIDs map[string]bool
 }
 
 // New returns a ServerProvisioner that writes to baseURL (e.g.
@@ -51,7 +60,32 @@ func New(baseURL string, options *Options) *ServerProvisioner {
 	if opts.HTTPClient == nil {
 		opts.HTTPClient = &http.Client{Timeout: 30 * time.Second}
 	}
-	return &ServerProvisioner{baseURL: baseURL, options: opts}
+	return &ServerProvisioner{baseURL: baseURL, options: opts, failedIDs: make(map[string]bool)}
+}
+
+// snapshotFailedIDs returns a copy of the ids rejected in earlier calls so a
+// batch can strip references to them. The copy is safe to read concurrently.
+func (p *ServerProvisioner) snapshotFailedIDs() map[string]bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make(map[string]bool, len(p.failedIDs))
+	for id := range p.failedIDs {
+		out[id] = true
+	}
+	return out
+}
+
+// recordFailedIDs merges the given ids into the provisioner's cross-batch
+// failure set.
+func (p *ServerProvisioner) recordFailedIDs(ids ...string) {
+	if len(ids) == 0 {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, id := range ids {
+		p.failedIDs[id] = true
+	}
 }
 
 // Result reports the outcome of a best-effort provisioning pass.
@@ -132,6 +166,9 @@ func (p *ServerProvisioner) ProvisionAll(ctx context.Context, ds *model.Dataset)
 	if p.baseURL == "" || ds == nil {
 		return res
 	}
+	// Cross-batch failures are carried over so a dependent whose target failed
+	// in a previous call does not cascade a HAPI-1094 "not found".
+	failed := p.snapshotFailedIDs()
 	// Provision one dependency level at a time: every resource in a level depends
 	// only on resources in earlier levels, so all of a level's PUTs can run
 	// concurrently, while later levels wait for their targets to exist. Failures
@@ -139,6 +176,11 @@ func (p *ServerProvisioner) ProvisionAll(ctx context.Context, ds *model.Dataset)
 	// Cyclic levels are provisioned serially so targets precede dependents even
 	// within the cycle.
 	for _, level := range provisionLevels(ds) {
+		for _, id := range level.ids {
+			if inst := ds.Resources[id]; inst != nil && inst.Resource != nil {
+				stripFailedReferences(inst.Resource, failed)
+			}
+		}
 		outcomes := p.provisionBatch(ctx, ds, level)
 		// Collect results in level order (level is already sorted) so failure
 		// reporting is deterministic despite concurrent execution.
@@ -147,11 +189,13 @@ func (p *ServerProvisioner) ProvisionAll(ctx context.Context, ds *model.Dataset)
 				res.Failed++
 				res.FailedIDs = append(res.FailedIDs, o.id)
 				res.Failures = append(res.Failures, failureFromError(o.id, o.instance, o.err))
+				failed[o.id] = true
 				continue
 			}
 			res.Provisioned++
 		}
 	}
+	p.recordFailedIDs(res.FailedIDs...)
 	return res
 }
 
@@ -184,11 +228,12 @@ func (p *ServerProvisioner) ProvisionBatch(ctx context.Context, instances []*mod
 	// Record the references that actually appear in the bodies so the
 	// dependency graph reflects only real, intra-batch edges.
 	recordInstanceBodyReferences(ds)
-	// failed tracks local ids the server rejected. A later resource that
-	// references a failed target would otherwise cascade a HAPI-1094 "not found"
-	// (referential integrity) failure, so references to failed targets are
-	// stripped from each level's bodies before it is provisioned.
-	failed := make(map[string]bool)
+	// failed tracks local ids the server rejected: both earlier batches (via the
+	// provisioner's cross-batch set) and failures within this batch. A resource
+	// that references a failed target would otherwise cascade a HAPI-1094 "not
+	// found" (referential integrity) failure, so references to failed targets
+	// are stripped from each level's bodies before it is provisioned.
+	failed := p.snapshotFailedIDs()
 	for _, level := range provisionLevels(ds) {
 		for _, id := range level.ids {
 			if inst := ds.Resources[id]; inst != nil && inst.Resource != nil {
@@ -207,6 +252,7 @@ func (p *ServerProvisioner) ProvisionBatch(ctx context.Context, instances []*mod
 			res.Provisioned++
 		}
 	}
+	p.recordFailedIDs(res.FailedIDs...)
 	return res
 }
 
