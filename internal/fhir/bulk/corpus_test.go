@@ -114,6 +114,107 @@ func TestGenerateCorpusHonoursPerTypeCounts(t *testing.T) {
 	}
 }
 
+// TestGenerateCorpusWiresOnlyToAlreadyCreatedTargets verifies that reference
+// wiring only points at resources that will already exist when the referencing
+// resource is provisioned. A forward reference (Observation.subject → Patient,
+// where Patient is created after Observation in the topological order) must be
+// stripped rather than left dangling, so the corpus contains no references to
+// not-yet-created resources.
+func TestGenerateCorpusWiresOnlyToAlreadyCreatedTargets(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	// Observation references Patient. In the topological order Patient (no deps)
+	// is created before Observation, so Observation.subject must resolve to a
+	// real Patient instance.
+	ds, err := gen.GenerateCorpus(context.Background(), []string{"Observation"}, 5, nil)
+	if err != nil {
+		t.Fatalf("GenerateCorpus returned error: %v", err)
+	}
+	for _, inst := range ds.Resources {
+		if inst.ResourceType != "Observation" {
+			continue
+		}
+		subject, ok := inst.Resource["subject"].(map[string]any)
+		if !ok {
+			t.Fatalf("observation %s missing subject reference", inst.LocalID)
+		}
+		ref, _ := subject["reference"].(string)
+		if !strings.HasPrefix(ref, "Patient/") {
+			t.Fatalf("observation %s subject ref = %q, want Patient/…", inst.LocalID, ref)
+		}
+	}
+}
+
+// TestGenerateCorpusStripsForwardReferences verifies that no reference in the
+// corpus points to a not-yet-created resource: forward references (to a type
+// created later in the topological order) and self-references with no earlier
+// peer are stripped, leaving only references to resources that will already
+// exist when provisioned.
+func TestGenerateCorpusStripsForwardReferences(t *testing.T) {
+	reg := registry.New()
+	// Organization references Endpoint and Organization (self); Endpoint
+	// references Organization. This forms a mutual cycle, so the topological
+	// order breaks it deterministically (Endpoint before Organization).
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/org",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+			{Path: "Organization.endpoint", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/endpoint",
+		Type: "Endpoint",
+		Elements: []model.ElementDefinition{
+			{Path: "Endpoint", Min: 0, Max: "*"},
+			{Path: "Endpoint.managingOrganization", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+		},
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	ds, err := gen.GenerateCorpus(context.Background(), []string{"Organization", "Endpoint"}, 3, nil)
+	if err != nil {
+		t.Fatalf("GenerateCorpus returned error: %v", err)
+	}
+	// Every reference in every resource body must point to a resource that
+	// exists in the corpus (no dangling placeholders, no forward references).
+	for _, inst := range ds.Resources {
+		collectReferences(inst.Resource, func(ref string) {
+			if danglingRef.MatchString(ref) {
+				t.Fatalf("resource %s has dangling reference %q", inst.LocalID, ref)
+			}
+			targetType, targetID := splitReference(ref)
+			if targetType == "" || targetID == "" {
+				t.Fatalf("resource %s has malformed reference %q", inst.LocalID, ref)
+			}
+			if _, ok := ds.Resources[targetID]; !ok {
+				t.Fatalf("resource %s references %q which is not in the corpus", inst.LocalID, ref)
+			}
+		})
+	}
+}
+
+// collectReferences walks a resource body and invokes fn for every reference
+// string found.
+func collectReferences(value any, fn func(ref string)) {
+	switch typed := value.(type) {
+	case map[string]any:
+		if ref, ok := typed["reference"].(string); ok {
+			fn(ref)
+		}
+		for _, v := range typed {
+			collectReferences(v, fn)
+		}
+	case []any:
+		for _, item := range typed {
+			collectReferences(item, fn)
+		}
+	}
+}
+
 func TestExampleReferenceTargetsFromInstances(t *testing.T) {
 	reg := registry.New()
 	// A HealthcareService example referencing Organization, Location, Endpoint,

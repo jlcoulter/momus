@@ -231,13 +231,37 @@ func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []st
 		return nil, fmt.Errorf("bulk: failed to synthesize some resource types: %s", strings.Join(synthErrs, "; "))
 	}
 
-	// Pass 2: wire each resource's reference fields to a distributed target.
+	// Pass 2: wire each resource's reference fields to a distributed target that
+	// has already been created — a type earlier in the topological order, or an
+	// earlier instance of the same type. This guarantees every reference points
+	// to a resource that will already exist on the server when this resource is
+	// provisioned, so servers enforcing referential integrity accept the create.
+	// Forward references (to types not yet created) are left as dangling
+	// placeholders and stripped below.
+	availablePools := make(map[string][]string)
 	for _, t := range resourceTypes {
 		refFields := g.referenceFields(t)
 		for _, id := range pools[t] {
 			inst := ds.Resources[id]
-			ds.Relationships = append(ds.Relationships, wireCorpusReferences(inst, refFields, pools)...)
+			// Per-instance available pools: cross-type refs may target any
+			// instance of an already-created type; same-type refs may only
+			// target instances of this type already wired (earlier in the
+			// stream), so a resource never references a not-yet-created peer.
+			instPools := make(map[string][]string, len(availablePools)+1)
+			for k, v := range availablePools {
+				instPools[k] = v
+			}
+			instPools[t] = availablePools[t]
+			ds.Relationships = append(ds.Relationships, wireCorpusReferences(inst, refFields, instPools)...)
+			availablePools[t] = append(availablePools[t], id)
 		}
+	}
+
+	// Strip any remaining dangling reference placeholders (forward references to
+	// types not yet created) so the corpus contains only references to resources
+	// that will already exist when provisioned.
+	for _, inst := range ds.Resources {
+		stripDanglingReferences(inst.Resource)
 	}
 
 	return ds, nil
@@ -245,7 +269,12 @@ func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []st
 
 // expandReferenceTargets grows the type set to a fixpoint: whenever an included
 // type references another type available in the registry, that type is added so
-// the generated corpus is self-contained and every reference resolves.
+// the generated corpus is self-contained and every reference resolves. The
+// result is ordered topologically (targets before dependents) so that when
+// references are wired incrementally, every wired reference points to a type
+// that has already been created. Cycles (e.g. Organization.partOf → Organization)
+// are broken deterministically: same-type forward references are stripped during
+// wiring, so cycle members may be emitted in any stable order.
 func (g *CorpusGenerator) expandReferenceTargets(resourceTypes []string) []string {
 	included := make(map[string]bool, len(resourceTypes))
 	concrete := make([]string, 0, len(resourceTypes))
@@ -269,8 +298,62 @@ func (g *CorpusGenerator) expandReferenceTargets(resourceTypes []string) []strin
 			}
 		}
 	}
-	sort.Strings(resourceTypes)
-	return resourceTypes
+	return topologicalTypeOrder(resourceTypes, g)
+}
+
+// topologicalTypeOrder orders resource types so that a type appears after every
+// type it references (its targets). This lets reference wiring only point at
+// already-created types. Self-references and mutual cycles are broken by falling
+// back to a stable (sorted) order for the remaining cycle members.
+func topologicalTypeOrder(resourceTypes []string, g *CorpusGenerator) []string {
+	included := make(map[string]bool, len(resourceTypes))
+	for _, t := range resourceTypes {
+		included[t] = true
+	}
+	// deps[t] = set of types t references (that are in the corpus).
+	deps := make(map[string]map[string]bool, len(resourceTypes))
+	for _, t := range resourceTypes {
+		deps[t] = make(map[string]bool)
+		for _, info := range g.referenceFields(t) {
+			if included[info.targetType] {
+				deps[t][info.targetType] = true
+			}
+		}
+	}
+
+	// Kahn's algorithm: emit types with no remaining dependencies first.
+	remaining := make(map[string]bool, len(resourceTypes))
+	for _, t := range resourceTypes {
+		remaining[t] = true
+	}
+	var order []string
+	for len(remaining) > 0 {
+		ready := make([]string, 0)
+		for t := range remaining {
+			if len(deps[t]) == 0 {
+				ready = append(ready, t)
+			}
+		}
+		if len(ready) == 0 {
+			// Cycle: emit the smallest remaining type to break it deterministically.
+			smallest := ""
+			for t := range remaining {
+				if smallest == "" || t < smallest {
+					smallest = t
+				}
+			}
+			ready = []string{smallest}
+		}
+		sort.Strings(ready)
+		for _, t := range ready {
+			order = append(order, t)
+			delete(remaining, t)
+			for s := range remaining {
+				delete(deps[s], t)
+			}
+		}
+	}
+	return order
 }
 
 func (g *CorpusGenerator) hasResourceType(resourceType string) bool {
@@ -556,4 +639,48 @@ func setReferenceLeaf(obj map[string]any, key string, target refTarget, repeatab
 			obj[key] = map[string]any{"reference": ref}
 		}
 	}
+}
+
+// stripDanglingReferences removes any reference fields whose value is still a
+// dangling placeholder (Type/unknown or Type/momus-setup-*). These arise when a
+// reference field points to a type that is not yet created in the incremental
+// wiring order (a forward reference). Stripping them keeps the corpus valid:
+// every remaining reference points to a resource that will already exist when
+// the resource is provisioned. The field is removed entirely (rather than left
+// as a placeholder) so the server does not reject the create for a missing
+// target; optional (Min=0) reference fields are simply absent.
+func stripDanglingReferences(value any) {
+	switch typed := value.(type) {
+	case map[string]any:
+		for k, v := range typed {
+			if isDanglingReferenceValue(v) {
+				delete(typed, k)
+				continue
+			}
+			stripDanglingReferences(v)
+		}
+	case []any:
+		for _, item := range typed {
+			stripDanglingReferences(item)
+		}
+	}
+}
+
+// isDanglingReferenceValue reports whether a value is a reference object (or a
+// single-element array of one) whose reference string is still a dangling
+// placeholder.
+func isDanglingReferenceValue(v any) bool {
+	switch t := v.(type) {
+	case map[string]any:
+		ref, _ := t["reference"].(string)
+		return danglingRef.MatchString(ref)
+	case []any:
+		if len(t) == 1 {
+			if m, ok := t[0].(map[string]any); ok {
+				ref, _ := m["reference"].(string)
+				return danglingRef.MatchString(ref)
+			}
+		}
+	}
+	return false
 }
