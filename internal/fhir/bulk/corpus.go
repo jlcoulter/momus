@@ -35,10 +35,18 @@ type refTarget struct {
 // it is repeatable (Max > 1), and whether it is required (Min >= 1). repeatable
 // controls emitting the reference as an array; required controls whether a
 // forward reference may be stripped (optional) or must be resolved later.
+// intermediates maps the canonical element path of each intermediate (non-leaf)
+// segment of the reference's path to the shape information needed to create an
+// absent intermediate BackboneElement correctly (as an array when repeatable,
+// and with its required child fields populated), rather than a bare object.
 type refFieldInfo struct {
 	targetType string
 	repeatable bool
 	required   bool
+	// intermediates maps an intermediate element path (e.g. "Provenance.entity")
+	// to its element node, so wiring creates an absent repeatable BackboneElement
+	// as an array and populates its required child fields (e.g. entity.role).
+	intermediates map[string]*model.ElementNode
 }
 
 var abstractResourceTypes = map[string]bool{
@@ -449,9 +457,11 @@ func isConcreteResourceType(resourceType string) bool {
 // to example-instance data for fields without a target profile.
 func (g *CorpusGenerator) referenceFields(resourceType string) map[string]refFieldInfo {
 	out := make(map[string]refFieldInfo)
+	var root *model.ElementNode
 	if profileURL := defaultProfile(g.reg, resourceType); profileURL != "" {
 		if resolved, err := g.reg.ResolveProfile(profileURL); err == nil && resolved != nil && resolved.Root != nil {
-			collectReferenceFields(resolved.Root, g.reg, out)
+			root = resolved.Root
+			collectReferenceFields(resolved.Root, resolved.Root, g.reg, out)
 		}
 	}
 	// Derive reference targets from the package's own example instance data.
@@ -461,6 +471,16 @@ func (g *CorpusGenerator) referenceFields(resourceType string) map[string]refFie
 	for path, target := range exampleReferenceTargets(g.reg, resourceType) {
 		if _, exists := out[path]; !exists {
 			out[path] = refFieldInfo{targetType: target}
+		}
+	}
+	// Populate intermediate repeatability for any example-derived fields (which
+	// lack the profile tree) by resolving their path segments against the root.
+	if root != nil {
+		for path, info := range out {
+			if info.intermediates == nil {
+				info.intermediates = intermediateNodes(root, path)
+				out[path] = info
+			}
 		}
 	}
 	return out
@@ -540,28 +560,74 @@ func splitReference(ref string) (string, string) {
 }
 
 // collectReferenceFields walks an element tree and records Reference elements
-// with a resolvable target resource type, keyed by canonical path.
-func collectReferenceFields(node *model.ElementNode, reg *registry.Registry, out map[string]refFieldInfo) {
+// with a resolvable target resource type, keyed by canonical path. For each
+// Reference it also records the repeatability of every intermediate segment of
+// its path so wiring can create absent intermediate BackboneElements in the
+// correct shape (an array when the segment is repeatable).
+func collectReferenceFields(root, node *model.ElementNode, reg *registry.Registry, out map[string]refFieldInfo) {
 	if node == nil {
 		return
 	}
 	if node.Definition != nil && primaryTypeCode(node.Definition) == "Reference" {
 		if target := referenceTargetType(node.Definition, reg); target != "" {
 			out[node.Path] = refFieldInfo{
-				targetType: target,
-				repeatable: elementAllowsMultiple(node.Definition),
-				required:   elementRequired(node.Definition),
+				targetType:    target,
+				repeatable:    elementAllowsMultiple(node.Definition),
+				required:      elementRequired(node.Definition),
+				intermediates: intermediateNodes(root, node.Path),
 			}
 		}
 	}
 	for _, child := range node.Children {
-		collectReferenceFields(child, reg, out)
+		collectReferenceFields(root, child, reg, out)
 	}
 	for _, slice := range node.Slices {
 		for _, child := range slice.Children {
-			collectReferenceFields(child, reg, out)
+			collectReferenceFields(root, child, reg, out)
 		}
 	}
+}
+
+// intermediateNodes returns a map from each intermediate element path of path
+// (the path segments between the resource root and the reference's parent,
+// inclusive of the BackboneElement that owns the reference) to its ElementNode,
+// so wiring can create an absent optional repeatable BackboneElement such as
+// Provenance.entity as an array and populate its required child fields.
+func intermediateNodes(root *model.ElementNode, path string) map[string]*model.ElementNode {
+	if root == nil {
+		return nil
+	}
+	segments := strings.Split(path, ".")
+	if len(segments) <= 2 {
+		return nil
+	}
+	out := make(map[string]*model.ElementNode)
+	for i := 1; i < len(segments)-1; i++ {
+		prefix := strings.Join(segments[:i+1], ".")
+		if node := elementNodeByPath(root, segments[:i+1]); node != nil {
+			out[prefix] = node
+		}
+	}
+	return out
+}
+
+// elementNodeByPath returns the ElementNode for a path (given as segments) by
+// descending root's element tree, or nil when not found.
+func elementNodeByPath(root *model.ElementNode, segments []string) *model.ElementNode {
+	cur := root
+	for i, seg := range segments {
+		if cur == nil {
+			return nil
+		}
+		if i == 0 {
+			continue
+		}
+		cur = cur.Children[seg]
+		if cur == nil {
+			return nil
+		}
+	}
+	return cur
 }
 
 // referenceTargetType returns the first resolvable target resource type for a
@@ -654,7 +720,7 @@ func wireCorpusReferences(inst *model.ResourceInstance, refFields map[string]ref
 			idx = int(hashCorpus(inst.LocalID+"|"+path)) % len(pool)
 		}
 		targetID := pool[idx]
-		setReferencePath(inst.Resource, path, refTarget{resourceType: info.targetType, localID: targetID}, info.repeatable)
+		setReferencePath(inst.Resource, path, refTarget{resourceType: info.targetType, localID: targetID}, info.repeatable, info.intermediates)
 		refs = append(refs, model.Reference{SourceID: inst.LocalID, Path: path, TargetID: targetID})
 	}
 	return refs
@@ -673,14 +739,22 @@ func hashCorpus(seed string) uint32 {
 // repeatable intermediate is descended into at its first element, and a
 // repeatable reference field receives the reference at its first element rather
 // than being replaced by a single object (which would produce invalid FHIR).
-func setReferencePath(body map[string]any, path string, target refTarget, repeatable bool) {
+//
+// intermediates carries the element nodes of each intermediate path so an
+// absent repeatable BackboneElement (e.g. Provenance.entity) is created as a
+// single-element array rather than a bare object — a bare object makes the
+// server reject the resource ("The property entity must be a JSON Array") — and
+// its required child fields (e.g. entity.role, Min 1) are populated.
+func setReferencePath(body map[string]any, path string, target refTarget, repeatable bool, intermediates map[string]*model.ElementNode) {
 	parts := strings.Split(path, ".")
 	if len(parts) <= 1 {
 		return
 	}
 	cur := body
 	for i := 1; i < len(parts)-1; i++ {
-		cur = descendForReference(cur, parts[i])
+		segPath := strings.Join(parts[:i+1], ".")
+		segNode := intermediates[segPath]
+		cur = descendForReference(cur, parts[i], segNode)
 		if cur == nil {
 			return
 		}
@@ -690,27 +764,102 @@ func setReferencePath(body map[string]any, path string, target refTarget, repeat
 
 // descendForReference returns the map to continue wiring into for the given
 // segment, descending through a scalar map or into the first element of a
-// repeatable (array) container instead of overwriting it.
-func descendForReference(parent map[string]any, key string) map[string]any {
+// repeatable (array) container instead of overwriting it. When the segment is
+// absent and known to be a repeatable BackboneElement (node.Max > 1), a
+// single-element array container is created and its required child fields are
+// populated so the intermediate is a valid JSON array that satisfies its
+// cardinality constraints.
+func descendForReference(parent map[string]any, key string, node *model.ElementNode) map[string]any {
+	child := func() map[string]any {
+		m := map[string]any{}
+		populateRequiredSiblings(m, node)
+		return m
+	}
 	switch v := parent[key].(type) {
 	case map[string]any:
 		return v
 	case []any:
 		if len(v) == 0 {
-			child := map[string]any{}
-			parent[key] = []any{child}
-			return child
+			c := child()
+			parent[key] = []any{c}
+			return c
 		}
-		if child, ok := v[0].(map[string]any); ok {
-			return child
+		if m, ok := v[0].(map[string]any); ok {
+			return m
 		}
-		child := map[string]any{}
-		v[0] = child
-		return child
+		c := child()
+		v[0] = c
+		return c
 	default:
-		child := map[string]any{}
-		parent[key] = child
-		return child
+		c := child()
+		if node != nil && elementAllowsMultiple(node.Definition) {
+			parent[key] = []any{c}
+		} else {
+			parent[key] = c
+		}
+		return c
+	}
+}
+
+// populateRequiredSiblings fills the required (Min >= 1) primitive child fields
+// of a newly created BackboneElement container (e.g. Provenance.entity.role,
+// which is a code with Min 1). It only synthesises simple single-value primitive
+// children so the wiring does not pull in a full generation engine; complex or
+// repeatable required children are left for the generator that produced the
+// parent body. An empty or nil container is returned unchanged.
+func populateRequiredSiblings(m map[string]any, node *model.ElementNode) {
+	if m == nil || node == nil {
+		return
+	}
+	for name, child := range node.Children {
+		if child == nil || child.Definition == nil {
+			continue
+		}
+		def := child.Definition
+		if def.Min < 1 || def.Max == "0" {
+			continue
+		}
+		if _, exists := m[name]; exists {
+			continue
+		}
+		if elementAllowsMultiple(def) {
+			continue
+		}
+		val, ok := primitiveReferenceValue(def)
+		if ok {
+			m[name] = val
+		}
+	}
+}
+
+// primitiveReferenceValue synthesises a simple single-value for a primitive or
+// code element (e.g. Provenance.entity.role), mirroring the generation core's
+// leaf value production. It returns false for complex datatypes so wiring never
+// synthesises an object that needs deeper generation.
+func primitiveReferenceValue(def *model.ElementDefinition) (any, bool) {
+	if def == nil {
+		return nil, false
+	}
+	code := primaryTypeCode(def)
+	switch code {
+	case "code", "string", "id", "markdown":
+		return def.Path[strings.LastIndex(def.Path, ".")+1:], true
+	case "uri", "url", "canonical", "oid":
+		return "urn:uuid:" + def.Path, true
+	case "boolean":
+		return true, true
+	case "integer", "unsignedInt", "positiveInt":
+		return 1, true
+	case "decimal":
+		return 123.45, true
+	case "date":
+		return "2024-01-01", true
+	case "dateTime", "instant":
+		return "2024-01-01T00:00:00Z", true
+	case "time":
+		return "12:00:00", true
+	default:
+		return nil, false
 	}
 }
 
@@ -721,24 +870,35 @@ func descendForReference(parent map[string]any, key string) map[string]any {
 // is singular, a scalar object is created.
 func setReferenceLeaf(obj map[string]any, key string, target refTarget, repeatable bool) {
 	ref := target.resourceType + "/" + target.localID
+	// A reference object's "type" must identify the actual target resource type.
+	// Synthesis may leave a stale type behind (e.g. "Organization" as the
+	// fallback for an abstract Reference(Resource) target that is later rewired
+	// to a Practitioner), so it is always overwritten to agree with the rewired
+	// reference. Leaving it stale makes the server reject the resource with
+	// "Invalid Resource target type".
+	applyReference := func(m map[string]any) {
+		m["reference"] = ref
+		m["type"] = target.resourceType
+	}
 	switch v := obj[key].(type) {
 	case map[string]any:
-		v["reference"] = ref
+		applyReference(v)
 	case []any:
 		if len(v) == 0 {
-			obj[key] = []any{map[string]any{"reference": ref}}
+			obj[key] = []any{map[string]any{"reference": ref, "type": target.resourceType}}
 			return
 		}
 		if el, ok := v[0].(map[string]any); ok {
-			el["reference"] = ref
+			applyReference(el)
 			return
 		}
-		v[0] = map[string]any{"reference": ref}
+		v[0] = map[string]any{"reference": ref, "type": target.resourceType}
 	default:
+		refMap := map[string]any{"reference": ref, "type": target.resourceType}
 		if repeatable {
-			obj[key] = []any{map[string]any{"reference": ref}}
+			obj[key] = []any{refMap}
 		} else {
-			obj[key] = map[string]any{"reference": ref}
+			obj[key] = refMap
 		}
 	}
 }

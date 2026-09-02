@@ -725,7 +725,7 @@ func TestSetReferencePathPreservesRepeatableReferenceArray(t *testing.T) {
 			map[string]any{"reference": "Practitioner/other"},
 		},
 	}
-	setReferencePath(body, "Observation.performer", refTarget{resourceType: "Practitioner", localID: "prac-7"}, true)
+	setReferencePath(body, "Observation.performer", refTarget{resourceType: "Practitioner", localID: "prac-7"}, true, nil)
 
 	arr, ok := body["performer"].([]any)
 	if !ok {
@@ -760,7 +760,7 @@ func TestSetReferencePathDescendsIntoRepeatableContainer(t *testing.T) {
 			map[string]any{"function": map[string]any{"text": "responsible"}},
 		},
 	}
-	setReferencePath(body, "MedicationDispense.performer.actor", refTarget{resourceType: "Practitioner", localID: "prac-3"}, false)
+	setReferencePath(body, "MedicationDispense.performer.actor", refTarget{resourceType: "Practitioner", localID: "prac-3"}, false, nil)
 
 	arr, ok := body["performer"].([]any)
 	if !ok {
