@@ -69,6 +69,40 @@ func TestProvisionWritesTargetsBeforeDependents(t *testing.T) {
 	}
 }
 
+// TestProvisionBatchUploadsInstances verifies that ProvisionBatch uploads a
+// slice of instances concurrently and reports the outcome, without requiring a
+// full Dataset.
+func TestProvisionBatchUploadsInstances(t *testing.T) {
+	var mu sync.Mutex
+	seen := make(map[string]bool)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen[r.URL.Path] = true
+		mu.Unlock()
+		w.Header().Set("ETag", `W/"1"`)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	instances := []*model.ResourceInstance{
+		{LocalID: "pat", ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": "pat"}},
+		{LocalID: "obs", ResourceType: "Observation", Resource: map[string]any{"resourceType": "Observation", "id": "obs"}},
+	}
+	res := New(server.URL, &Options{HTTPClient: server.Client()}).ProvisionBatch(context.Background(), instances)
+	if !res.Complete() {
+		t.Fatalf("ProvisionBatch incomplete: %d provisioned, %d failed", res.Provisioned, res.Failed)
+	}
+	if res.Provisioned != 2 {
+		t.Fatalf("ProvisionBatch provisioned %d, want 2", res.Provisioned)
+	}
+	if !seen["/Patient/pat"] || !seen["/Observation/obs"] {
+		t.Fatalf("ProvisionBatch did not upload all instances: %v", seen)
+	}
+	if instances[0].ServerID != "pat" || instances[1].ServerID != "obs" {
+		t.Fatalf("ProvisionBatch did not record server ids: %+v", instances)
+	}
+}
+
 func TestProvisionSendsFhirJSONContentType(t *testing.T) {
 	var gotContentType string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

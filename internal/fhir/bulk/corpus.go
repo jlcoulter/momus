@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/jlcoulter/momus/internal/fhir/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -30,12 +31,14 @@ type refTarget struct {
 	localID      string
 }
 
-// refFieldInfo describes a single reference element of a resource: its target
-// resource type and whether the element is repeatable (Max > 1), so wiring can
-// emit the reference as a single object or an array to satisfy cardinality.
+// refFieldInfo describes a reference element: its target resource type, whether
+// it is repeatable (Max > 1), and whether it is required (Min >= 1). repeatable
+// controls emitting the reference as an array; required controls whether a
+// forward reference may be stripped (optional) or must be resolved later.
 type refFieldInfo struct {
 	targetType string
 	repeatable bool
+	required   bool
 }
 
 var abstractResourceTypes = map[string]bool{
@@ -122,6 +125,14 @@ func allowsMultiple(maxValue string) bool {
 	return n > 1
 }
 
+// elementRequired reports whether an element must appear at least once (Min >= 1).
+func elementRequired(def *model.ElementDefinition) bool {
+	if def == nil {
+		return false
+	}
+	return def.Min >= 1
+}
+
 // GenerateCorpus produces a realistic corpus of instances for each of the
 // given resource types. By default defaultCount instances are generated per
 // type; overrides, keyed by resource type, take precedence when present.
@@ -129,142 +140,202 @@ func allowsMultiple(maxValue string) bool {
 // sensible, distributed web: dependents are spread over the available targets
 // deterministically, so several resources share a common target rather than
 // everything pointing at one instance.
+//
+// It is a convenience wrapper over GenerateCorpusBatched that accumulates every
+// emitted batch into a single in-memory Dataset. For large corpora prefer
+// GenerateCorpusBatched, which streams each type's batch to a callback so
+// provisioning can begin before the whole corpus is generated.
 func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []string, defaultCount int, overrides map[string]int) (*model.Dataset, error) {
+	ds := &model.Dataset{Resources: make(map[string]*model.ResourceInstance), Relationships: []model.Reference{}}
+	err := g.GenerateCorpusBatched(ctx, resourceTypes, defaultCount, overrides, func(b CorpusBatch) error {
+		for _, inst := range b.Instances {
+			if _, exists := ds.Resources[inst.LocalID]; exists {
+				return fmt.Errorf("bulk: duplicate generated id %q", inst.LocalID)
+			}
+			ds.Resources[inst.LocalID] = inst
+		}
+		ds.Relationships = append(ds.Relationships, b.Relationships...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ds, nil
+}
+
+// CorpusBatch is a batch of generated instances of a single resource type,
+// ready to be provisioned. Every reference points to a resource already emitted
+// (an earlier batch), so the batch can be provisioned immediately.
+//
+// Finalize is true for batches from the finalization pass: these re-emit
+// instances that carried a required forward reference, now re-wired against the
+// complete pool. The caller should re-provision them (a PUT updates the server)
+// but not re-write them to NDJSON, since they were already written.
+type CorpusBatch struct {
+	ResourceType  string
+	Instances     []*model.ResourceInstance
+	Relationships []model.Reference
+	Finalize      bool
+}
+
+// GenerateCorpusBatched generates the corpus and invokes fn for each resource
+// type's batch in topological order (targets before dependents), so the caller
+// can provision each batch as it is ready rather than holding the whole corpus
+// in memory. Memory use is bounded by the largest single type's batch plus the
+// pool of already-emitted local IDs (not the full resource bodies).
+//
+// Reference wiring is incremental: a resource's references only point to types
+// already emitted, or to earlier instances of its own type, so every reference
+// resolves to a resource that will already exist on the server when the batch
+// is provisioned. Required (Min >= 1) forward references — which only arise
+// inside reference cycles — are preserved as dangling placeholders in the first
+// batch, then re-wired against the complete pool and re-emitted in a finalization
+// pass so the caller can re-provision them once their targets exist.
+func (g *CorpusGenerator) GenerateCorpusBatched(ctx context.Context, resourceTypes []string, defaultCount int, overrides map[string]int, fn func(CorpusBatch) error) error {
 	if g.reg == nil {
-		return nil, fmt.Errorf("generator requires a registry")
+		return fmt.Errorf("generator requires a registry")
 	}
 	if defaultCount < 1 {
 		defaultCount = 1
 	}
 	if len(resourceTypes) == 0 {
-		return nil, fmt.Errorf("no resource types to generate")
+		return fmt.Errorf("no resource types to generate")
 	}
-
-	ds := &model.Dataset{Resources: make(map[string]*model.ResourceInstance), Relationships: []model.Reference{}}
-	pools := make(map[string][]string) // resource type -> ordered generated local IDs
+	if fn == nil {
+		return fmt.Errorf("bulk: nil batch callback")
+	}
 
 	// Expand the type set to include referenced target types (e.g. including
 	// HealthcareService pulls in Organization, Practitioner, Location) so that
 	// every reference resolves even when the caller requested a subset.
 	resourceTypes = g.expandReferenceTargets(resourceTypes)
 	if len(resourceTypes) == 0 {
-		return nil, fmt.Errorf("no concrete resource types to generate")
+		return fmt.Errorf("no concrete resource types to generate")
 	}
 
-	// Pass 1: generate instances of each type. Types that cannot be synthesised
-	// (e.g. abstract or unresolved profiles) are skipped. Each type is generated
-	// in its own goroutine so the whole corpus is synthesised in parallel, and
-	// results are fanned-in through a channel and reordered deterministically by
-	// the original type index so the dataset (and Pass 2's reference wiring)
-	// stays reproducible. The registry is safe for concurrent reads.
-	type corpusResult struct {
-		index     int
-		instances []*model.ResourceInstance
-		err       error
-	}
-	resultCh := make(chan corpusResult, len(resourceTypes))
-	for idx, t := range resourceTypes {
-		go func(idx int, t string) {
-			count := defaultCount
-			if c, ok := overrides[t]; ok && c > 0 {
-				count = c
-			}
-			instances := make([]*model.ResourceInstance, 0, count)
-			var synthErr error
-			for i := 0; i < count; i++ {
-				// Embed a hash of the raw resource type so types that sanitize to the
-				// same segment (e.g. "A/B" vs "A-B") never collide on local ids.
-				id := fmt.Sprintf("momus-%s-%x-%d", sanitizeID(t), hashCorpus(t), i+1)
-				// Body synthesis is delegated entirely to the shared generation core
-				// (generation.SynthesizeBody), the single source of truth for FHIR
-				// resource bodies. The bulk corpus passes no dependency references:
-				// references are wired across the generated pools in Pass 2 below.
-				profileURL := defaultProfile(g.reg, t)
-				var profileURLs []string
-				if profileURL != "" {
-					profileURLs = []string{profileURL}
-					// A profile that resolves to no element tree cannot be synthesised;
-					// surface it as an error rather than emitting a bare resource.
-					if resolved, err := g.reg.ResolveProfile(profileURL); err != nil || resolved == nil || resolved.Root == nil {
-						synthErr = fmt.Errorf("synthesize %s: profile %s has no element tree", t, profileURL)
-						break
-					}
-				}
-				body := generation.SynthesizeBody(t, id, profileURLs, profileURL, nil, g.reg, g.exhaustive)
-				if len(body) == 0 {
-					synthErr = fmt.Errorf("synthesize %s: produced no resource body", t)
-					break
-				}
-				instances = append(instances, &model.ResourceInstance{LocalID: id, ResourceType: t, Profile: profileURL, Resource: body})
-			}
-			resultCh <- corpusResult{index: idx, instances: instances, err: synthErr}
-		}(idx, t)
-	}
-
-	// Fan-in the per-type results, then merge them in the original type order so
-	// the dataset and reference wiring are deterministic. Cancellation is honoured
-	// here: if the context is done we stop waiting on the synthesis goroutines and
-	// surface the cancellation rather than blocking on the fan-in.
-	results := make([]corpusResult, len(resourceTypes))
-	for range resourceTypes {
-		select {
-		case r := <-resultCh:
-			results[r.index] = r
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
-	var synthErrs []string
-	for _, res := range results {
-		if res.err != nil {
-			synthErrs = append(synthErrs, res.err.Error())
-		}
-		for _, inst := range res.instances {
-			if _, exists := ds.Resources[inst.LocalID]; exists {
-				return nil, fmt.Errorf("bulk: duplicate generated id %q", inst.LocalID)
-			}
-			ds.Resources[inst.LocalID] = inst
-			pools[inst.ResourceType] = append(pools[inst.ResourceType], inst.LocalID)
-		}
-	}
-	if len(synthErrs) > 0 {
-		return nil, fmt.Errorf("bulk: failed to synthesize some resource types: %s", strings.Join(synthErrs, "; "))
-	}
-
-	// Pass 2: wire each resource's reference fields to a distributed target that
-	// has already been created — a type earlier in the topological order, or an
-	// earlier instance of the same type. This guarantees every reference points
-	// to a resource that will already exist on the server when this resource is
-	// provisioned, so servers enforcing referential integrity accept the create.
-	// Forward references (to types not yet created) are left as dangling
-	// placeholders and stripped below.
+	// availablePools maps resource type -> ordered local IDs already emitted.
+	// It grows as batches are emitted, so later batches can only reference
+	// resources that have already been provisioned.
 	availablePools := make(map[string][]string)
+	// requiredDangling tracks instances that still carry a required forward
+	// reference (a dangling placeholder) after their first batch, keyed by the
+	// target type they need. They are re-wired and re-emitted in the
+	// finalization pass once that target type has been emitted.
+	requiredDangling := make(map[string][]*model.ResourceInstance)
+
 	for _, t := range resourceTypes {
+		instances, err := g.synthesizeType(ctx, t, defaultCount, overrides)
+		if err != nil {
+			return err
+		}
 		refFields := g.referenceFields(t)
-		for _, id := range pools[t] {
-			inst := ds.Resources[id]
+		batch := CorpusBatch{ResourceType: t, Instances: instances}
+		for _, inst := range instances {
 			// Per-instance available pools: cross-type refs may target any
 			// instance of an already-created type; same-type refs may only
-			// target instances of this type already wired (earlier in the
-			// stream), so a resource never references a not-yet-created peer.
+			// target instances of this type already emitted (earlier in the
+			// stream), so a resource never references a not-yet-emitted peer.
 			instPools := make(map[string][]string, len(availablePools)+1)
 			for k, v := range availablePools {
 				instPools[k] = v
 			}
 			instPools[t] = availablePools[t]
-			ds.Relationships = append(ds.Relationships, wireCorpusReferences(inst, refFields, instPools)...)
-			availablePools[t] = append(availablePools[t], id)
+			refs := wireCorpusReferences(inst, refFields, instPools)
+			batch.Relationships = append(batch.Relationships, refs...)
+			// Strip optional dangling references; preserve required ones for
+			// the finalization pass.
+			if stripDanglingReferences(inst.Resource, refFields) {
+				requiredDangling[t] = append(requiredDangling[t], inst)
+			}
+			availablePools[t] = append(availablePools[t], inst.LocalID)
+		}
+		if err := fn(batch); err != nil {
+			return err
 		}
 	}
 
-	// Strip any remaining dangling reference placeholders (forward references to
-	// types not yet created) so the corpus contains only references to resources
-	// that will already exist when provisioned.
-	for _, inst := range ds.Resources {
-		stripDanglingReferences(inst.Resource)
+	// Finalization pass: re-wire instances that carried a required forward
+	// reference now that every type has been emitted, and emit them again so
+	// the caller can re-provision them against their now-existing targets.
+	for _, t := range resourceTypes {
+		instances := requiredDangling[t]
+		if len(instances) == 0 {
+			continue
+		}
+		refFields := g.referenceFields(t)
+		batch := CorpusBatch{ResourceType: t, Instances: instances, Finalize: true}
+		for _, inst := range instances {
+			// The full pool is now available, so every reference resolves.
+			refs := wireCorpusReferences(inst, refFields, availablePools)
+			batch.Relationships = append(batch.Relationships, refs...)
+			// Any reference still dangling after the full pool is available is
+			// genuinely unresolvable (e.g. a self-reference with no peer); strip
+			// it. Required fields that cannot resolve are left as-is rather than
+			// silently dropped, so the caller can decide how to handle them.
+			stripDanglingReferences(inst.Resource, nil)
+		}
+		if err := fn(batch); err != nil {
+			return err
+		}
 	}
 
-	return ds, nil
+	return nil
+}
+
+// synthesizeType generates count instances of a single resource type in
+// parallel, returning them in deterministic order. Un-synthesizable types
+// (abstract or unresolved profiles) surface an error. Cancellation is honoured.
+func (g *CorpusGenerator) synthesizeType(ctx context.Context, t string, defaultCount int, overrides map[string]int) ([]*model.ResourceInstance, error) {
+	count := defaultCount
+	if c, ok := overrides[t]; ok && c > 0 {
+		count = c
+	}
+	instances := make([]*model.ResourceInstance, count)
+	errs := make([]error, count)
+	var wg sync.WaitGroup
+	for i := 0; i < count; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			select {
+			case <-ctx.Done():
+				errs[i] = ctx.Err()
+				return
+			default:
+			}
+			// Embed a hash of the raw resource type so types that sanitize to the
+			// same segment (e.g. "A/B" vs "A-B") never collide on local ids.
+			id := fmt.Sprintf("momus-%s-%x-%d", sanitizeID(t), hashCorpus(t), i+1)
+			// Body synthesis is delegated entirely to the shared generation core
+			// (generation.SynthesizeBody), the single source of truth for FHIR
+			// resource bodies. The bulk corpus passes no dependency references:
+			// references are wired across the generated pools by the caller.
+			profileURL := defaultProfile(g.reg, t)
+			var profileURLs []string
+			if profileURL != "" {
+				profileURLs = []string{profileURL}
+				// A profile that resolves to no element tree cannot be synthesised;
+				// surface it as an error rather than emitting a bare resource.
+				if resolved, err := g.reg.ResolveProfile(profileURL); err != nil || resolved == nil || resolved.Root == nil {
+					errs[i] = fmt.Errorf("synthesize %s: profile %s has no element tree", t, profileURL)
+					return
+				}
+			}
+			body := generation.SynthesizeBody(t, id, profileURLs, profileURL, nil, g.reg, g.exhaustive)
+			if len(body) == 0 {
+				errs[i] = fmt.Errorf("synthesize %s: produced no resource body", t)
+				return
+			}
+			instances[i] = &model.ResourceInstance{LocalID: id, ResourceType: t, Profile: profileURL, Resource: body}
+		}(i)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return instances, nil
 }
 
 // expandReferenceTargets grows the type set to a fixpoint: whenever an included
@@ -467,7 +538,11 @@ func collectReferenceFields(node *model.ElementNode, reg *registry.Registry, out
 	}
 	if node.Definition != nil && primaryTypeCode(node.Definition) == "Reference" {
 		if target := referenceTargetType(node.Definition, reg); target != "" {
-			out[node.Path] = refFieldInfo{targetType: target, repeatable: elementAllowsMultiple(node.Definition)}
+			out[node.Path] = refFieldInfo{
+				targetType: target,
+				repeatable: elementAllowsMultiple(node.Definition),
+				required:   elementRequired(node.Definition),
+			}
 		}
 	}
 	for _, child := range node.Children {
@@ -641,27 +716,48 @@ func setReferenceLeaf(obj map[string]any, key string, target refTarget, repeatab
 	}
 }
 
-// stripDanglingReferences removes any reference fields whose value is still a
-// dangling placeholder (Type/unknown or Type/momus-setup-*). These arise when a
-// reference field points to a type that is not yet created in the incremental
-// wiring order (a forward reference). Stripping them keeps the corpus valid:
-// every remaining reference points to a resource that will already exist when
-// the resource is provisioned. The field is removed entirely (rather than left
-// as a placeholder) so the server does not reject the create for a missing
-// target; optional (Min=0) reference fields are simply absent.
-func stripDanglingReferences(value any) {
+// stripDanglingReferences removes dangling reference placeholders (Type/unknown
+// or Type/momus-setup-*), which arise from forward references to types not yet
+// created. Optional (Min=0) dangling references are removed; required (Min>=1)
+// ones are preserved for later resolution (see GenerateCorpusBatched's
+// finalization pass). It returns true if any required reference was preserved.
+// When refFields is nil, all dangling references are stripped.
+func stripDanglingReferences(value any, refFields map[string]refFieldInfo) bool {
+	preserved := false
+	// Seed the element path with the resource type so it matches the full
+	// dot-separated paths used to key refFields (e.g. "Organization.endpoint").
+	root := ""
+	if m, ok := value.(map[string]any); ok {
+		if rt, ok := m["resourceType"].(string); ok {
+			root = rt
+		}
+	}
+	stripDanglingAt(value, root, refFields, &preserved)
+	return preserved
+}
+
+func stripDanglingAt(value any, path string, refFields map[string]refFieldInfo, preserved *bool) {
 	switch typed := value.(type) {
 	case map[string]any:
 		for k, v := range typed {
+			childPath := k
+			if path != "" {
+				childPath = path + "." + k
+			}
 			if isDanglingReferenceValue(v) {
+				if refFields != nil && refFields[childPath].required {
+					// Preserve a required forward reference for later resolution.
+					*preserved = true
+					continue
+				}
 				delete(typed, k)
 				continue
 			}
-			stripDanglingReferences(v)
+			stripDanglingAt(v, childPath, refFields, preserved)
 		}
 	case []any:
 		for _, item := range typed {
-			stripDanglingReferences(item)
+			stripDanglingAt(item, path, refFields, preserved)
 		}
 	}
 }

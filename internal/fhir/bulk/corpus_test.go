@@ -215,6 +215,126 @@ func collectReferences(value any, fn func(ref string)) {
 	}
 }
 
+// TestGenerateCorpusBatchedEmitsPerTypeBatches verifies that the streaming API
+// invokes the callback once per resource type, in topological order, and that
+// each batch's references only point to resources already emitted.
+func TestGenerateCorpusBatchedEmitsPerTypeBatches(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	var order []string
+	emitted := make(map[string]bool)
+	err := gen.GenerateCorpusBatched(context.Background(), []string{"Observation", "Patient"}, 3, nil, func(b CorpusBatch) error {
+		order = append(order, b.ResourceType)
+		for _, inst := range b.Instances {
+			collectReferences(inst.Resource, func(ref string) {
+				if danglingRef.MatchString(ref) {
+					t.Fatalf("batch %s has dangling reference %q", b.ResourceType, ref)
+				}
+				targetType, targetID := splitReference(ref)
+				if targetType == "" || targetID == "" {
+					t.Fatalf("batch %s has malformed reference %q", b.ResourceType, ref)
+				}
+				if !emitted[targetID] {
+					t.Fatalf("batch %s references %q which was not yet emitted", b.ResourceType, ref)
+				}
+			})
+		}
+		for _, inst := range b.Instances {
+			emitted[inst.LocalID] = true
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("GenerateCorpusBatched returned error: %v", err)
+	}
+	// Patient (no deps) must be emitted before Observation (depends on Patient).
+	if len(order) != 2 || order[0] != "Patient" || order[1] != "Observation" {
+		t.Fatalf("batch order = %v, want [Patient Observation]", order)
+	}
+}
+
+// TestGenerateCorpusBatchedFinalizesRequiredForwardReferences verifies that a
+// required (Min>=1) forward reference — which only arises inside a reference
+// cycle — is preserved in the initial batch and then re-wired and re-emitted in
+// a finalization batch once its target type has been emitted.
+func TestGenerateCorpusBatchedFinalizesRequiredForwardReferences(t *testing.T) {
+	reg := registry.New()
+	// Organization references Endpoint (required) and Organization (self);
+	// Endpoint references Organization (required). This is a mutual cycle, so
+	// the topological order emits one type before the other, leaving a required
+	// forward reference that must be finalized.
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/org",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+			{Path: "Organization.endpoint", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/endpoint",
+		Type: "Endpoint",
+		Elements: []model.ElementDefinition{
+			{Path: "Endpoint", Min: 0, Max: "*"},
+			{Path: "Endpoint.managingOrganization", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+		},
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	var finalized []string
+	err := gen.GenerateCorpusBatched(context.Background(), []string{"Organization", "Endpoint"}, 3, nil, func(b CorpusBatch) error {
+		if b.Finalize {
+			finalized = append(finalized, b.ResourceType)
+			// Finalized instances must have their required forward reference
+			// resolved to a real target (no dangling placeholders remain).
+			for _, inst := range b.Instances {
+				collectReferences(inst.Resource, func(ref string) {
+					if danglingRef.MatchString(ref) {
+						t.Fatalf("finalized %s still has dangling reference %q", inst.LocalID, ref)
+					}
+				})
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("GenerateCorpusBatched returned error: %v", err)
+	}
+	// The cycle member emitted first (Endpoint, alphabetically smallest) has a
+	// required forward reference to Organization and must be finalized.
+	if len(finalized) == 0 {
+		t.Fatal("expected a finalization batch for the required forward reference")
+	}
+}
+
+// TestStripDanglingReferencesPreservesRequired verifies that stripDanglingReferences
+// removes optional dangling references but preserves required ones.
+func TestStripDanglingReferencesPreservesRequired(t *testing.T) {
+	body := map[string]any{
+		"resourceType": "Organization",
+		"endpoint":     []any{map[string]any{"reference": "Endpoint/momus-setup-Endpoint"}},
+		"partOf":       map[string]any{"reference": "Organization/unknown"},
+	}
+	refFields := map[string]refFieldInfo{
+		"Organization.endpoint": {targetType: "Endpoint", repeatable: true, required: true},
+		"Organization.partOf":  {targetType: "Organization", repeatable: false, required: false},
+	}
+	preserved := stripDanglingReferences(body, refFields)
+	if !preserved {
+		t.Fatal("expected preserved=true for a required dangling reference")
+	}
+	// Required endpoint reference preserved.
+	if _, ok := body["endpoint"]; !ok {
+		t.Fatal("required endpoint reference was stripped")
+	}
+	// Optional partOf reference stripped.
+	if _, ok := body["partOf"]; ok {
+		t.Fatal("optional partOf reference was not stripped")
+	}
+}
+
 func TestExampleReferenceTargetsFromInstances(t *testing.T) {
 	reg := registry.New()
 	// A HealthcareService example referencing Organization, Location, Endpoint,

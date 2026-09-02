@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -68,10 +67,6 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			}
 
 			corpusGenerator := testbulk.NewCorpusGenerator(reg, cfg.Exhaustive)
-			corpus, err := corpusGenerator.GenerateCorpus(cmd.Context(), resourceTypes, cfg.BulkCount, parsePerTypeCounts(cfg.BulkPerTypeCounts))
-			if err != nil {
-				return err
-			}
 
 			var out io.Writer = os.Stdout
 			if cfg.BaseURL != "" && cfg.OutputPath == "" {
@@ -98,23 +93,65 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			}
 
 			w := testbulk.NewWriter(out)
-			instances := testbulk.Link([]*model.Dataset{corpus})
-			if err := writeDebugBulk(cfg.Debug, instances); err != nil {
+			// Provisioner is created once and reused for every batch so the
+			// streaming pipeline provisions each type's batch as soon as it is
+			// generated, rather than holding the whole corpus in memory.
+			var provisioner *provisioning.ServerProvisioner
+			if cfg.BaseURL != "" {
+				provisioner = newBulkProvisioner(cfg)
+			}
+			var provisioned, failed int
+			var allInstances []*model.ResourceInstance
+			var failures []provisioning.Failure
+
+			err = corpusGenerator.GenerateCorpusBatched(cmd.Context(), resourceTypes, cfg.BulkCount, parsePerTypeCounts(cfg.BulkPerTypeCounts), func(batch testbulk.CorpusBatch) error {
+				// Provision this batch immediately: its references only point to
+				// resources already emitted (and thus already on the server).
+				if provisioner != nil {
+					res := provisioner.ProvisionBatch(cmd.Context(), batch.Instances)
+					provisioned += res.Provisioned
+					failed += res.Failed
+					failures = append(failures, res.Failures...)
+				}
+				// Write the batch to NDJSON. Finalization batches re-emit
+				// instances that were already written in their initial batch, so
+				// they are provisioned (a PUT updates the server) but not
+				// re-written to the NDJSON stream.
+				if !batch.Finalize {
+					if err := w.WriteInstances(batch.Instances); err != nil {
+						return err
+					}
+					allInstances = append(allInstances, batch.Instances...)
+				}
+				return nil
+			})
+			if err != nil {
 				return err
 			}
-			if cfg.BaseURL != "" {
-				if err := streamBulkDataset(cfg, cmd.Context(), corpus); err != nil {
-					return err
-				}
-			}
-			if err := w.WriteInstances(instances); err != nil {
+			if err := writeDebugBulk(cfg.Debug, allInstances); err != nil {
 				return err
 			}
 			if err := w.Close(); err != nil {
 				return err
 			}
+			if provisioner != nil {
+				if failed > 0 {
+					fmt.Printf("WARNING: bulk repository stream incomplete: %d of %d resources uploaded\n", provisioned, provisioned+failed)
+					for _, failure := range failures {
+						fmt.Printf("  - %s\n", failure.Describe())
+					}
+					if !cfg.Debug {
+						fmt.Printf("Run with --debug to write the rejected payloads and full server responses to %s for inspection.\n", debugOutputDir)
+					}
+					if err := writeDebugProvisionFailures(cfg.Debug, failures); err != nil {
+						return err
+					}
+					return fmt.Errorf("bulk repository stream incomplete: %d of %d resources uploaded", provisioned, provisioned+failed)
+				}
+				fmt.Printf("Bulk repository stream complete: %d resources uploaded\n", provisioned)
+			}
 
-			fmt.Printf("Generated NDJSON bulk data: %d resources across %d resource types\n", len(instances), len(resourceTypes))
+			fmt.Printf("Generated NDJSON bulk data: %d resources across %d resource types\n", len(allInstances), len(resourceTypes))
 			if cfg.OutputPath != "" {
 				fmt.Printf("Bulk data written to %s\n", cfg.OutputPath)
 			}
@@ -139,10 +176,9 @@ func newBulkCmd(cfg *config) *cobra.Command {
 	return cmd
 }
 
-func streamBulkDataset(cfg *config, ctx context.Context, dataset *model.Dataset) error {
-	if cfg.BaseURL == "" {
-		return nil
-	}
+// newBulkProvisioner builds a ServerProvisioner for streaming generated
+// resources to the configured repository, reused across every corpus batch.
+func newBulkProvisioner(cfg *config) *provisioning.ServerProvisioner {
 	writeBase := cfg.WriteBaseURL
 	if writeBase == "" {
 		writeBase = cfg.BaseURL
@@ -155,35 +191,12 @@ func streamBulkDataset(cfg *config, ctx context.Context, dataset *model.Dataset)
 	if writeBasicPass == "" {
 		writeBasicPass = cfg.ApiBasicPassword
 	}
-
-	if dataset == nil || len(dataset.Resources) == 0 {
-		fmt.Printf("Bulk repository stream skipped: no generated resources\n")
-		return nil
-	}
-
-	provisioner := provisioning.New(writeBase, &provisioning.Options{
+	return provisioning.New(writeBase, &provisioning.Options{
 		BearerToken:   cfg.ApiBearerToken,
 		BasicUsername: writeBasicUser,
 		BasicPassword: writeBasicPass,
 		Tracer:        newDebugTracer(cfg.Debug),
 	})
-	fmt.Printf("Bulk repository stream: uploading %d generated resources to %s\n", len(dataset.Resources), writeBase)
-	res := provisioner.ProvisionAll(ctx, dataset)
-	if !res.Complete() {
-		fmt.Printf("WARNING: bulk repository stream incomplete: %d of %d resources uploaded\n", res.Provisioned, res.Provisioned+res.Failed)
-		for _, failure := range res.Failures {
-			fmt.Printf("  - %s\n", failure.Describe())
-		}
-		if !cfg.Debug {
-			fmt.Printf("Run with --debug to write the rejected payloads and full server responses to %s for inspection.\n", debugOutputDir)
-		}
-		if err := writeDebugProvisionFailures(cfg.Debug, res.Failures); err != nil {
-			return err
-		}
-		return fmt.Errorf("bulk repository stream incomplete: %d of %d resources uploaded", res.Provisioned, res.Provisioned+res.Failed)
-	}
-	fmt.Printf("Bulk repository stream complete: %d resources uploaded\n", res.Provisioned)
-	return nil
 }
 
 func resolveBulkOutputPath(outputPath string) (string, error) {

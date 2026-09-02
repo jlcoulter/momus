@@ -17,6 +17,7 @@ import (
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/core/runner"
 	"github.com/jlcoulter/momus/internal/fhir/model"
+	"github.com/jlcoulter/momus/internal/fhir/provisioning"
 )
 
 func TestParsePerTypeCounts(t *testing.T) {
@@ -343,8 +344,9 @@ func TestStreamBulkDatasetWritesTargetsBeforeDependents(t *testing.T) {
 		Relationships: []model.Reference{{SourceID: "obs", Path: "Observation.subject", TargetID: "pat"}},
 	}
 
-	if err := streamBulkDataset(&config{BaseURL: server.URL}, t.Context(), dataset); err != nil {
-		t.Fatalf("streamBulkDataset returned error: %v", err)
+	res := provisioning.New(server.URL, nil).ProvisionAll(t.Context(), dataset)
+	if !res.Complete() {
+		t.Fatalf("ProvisionAll incomplete: %d failed", res.Failed)
 	}
 	if len(order) != 2 || order[0] != "/Patient/pat" || order[1] != "/Observation/obs" {
 		t.Fatalf("write order = %v, want target before dependent", order)

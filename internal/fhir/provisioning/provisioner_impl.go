@@ -155,6 +155,42 @@ func (p *ServerProvisioner) ProvisionAll(ctx context.Context, ds *model.Dataset)
 	return res
 }
 
+// ProvisionBatch uploads the given instances concurrently and returns the
+// outcome. It is the streaming counterpart to ProvisionAll: callers that
+// generate resources incrementally (e.g. bulk corpus batches) can provision each
+// batch as it is ready, without building a full Dataset first. Instances are
+// assumed dependency-ordered (targets before dependents), so all PUTs run in
+// parallel. Failures are reported in input order for determinism.
+func (p *ServerProvisioner) ProvisionBatch(ctx context.Context, instances []*model.ResourceInstance) *Result {
+	res := &Result{}
+	if p.baseURL == "" || len(instances) == 0 {
+		return res
+	}
+	outcomes := make([]provisionOutcome, len(instances))
+	var wg sync.WaitGroup
+	for i, instance := range instances {
+		if instance == nil {
+			continue
+		}
+		wg.Add(1)
+		go func(i int, instance *model.ResourceInstance) {
+			defer wg.Done()
+			outcomes[i] = provisionOutcome{id: instance.LocalID, instance: instance, err: p.provisionInstance(ctx, instance)}
+		}(i, instance)
+	}
+	wg.Wait()
+	for _, o := range outcomes {
+		if o.err != nil {
+			res.Failed++
+			res.FailedIDs = append(res.FailedIDs, o.id)
+			res.Failures = append(res.Failures, failureFromError(o.id, o.instance, o.err))
+			continue
+		}
+		res.Provisioned++
+	}
+	return res
+}
+
 // provisionBatch uploads the resources with the given ids, either concurrently
 // (serial=false) or one at a time in order (serial=true, used for cyclic levels
 // so targets precede dependents). It returns one outcome per id, in id order.
