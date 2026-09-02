@@ -142,6 +142,32 @@ func TestSetReferenceLeaf(t *testing.T) {
 	}
 }
 
+// TestPrimitiveReferenceValueRespectsPattern verifies that a required primitive
+// sibling whose element definition carries a fixed/pattern value (e.g.
+// Provenance.entity.role has patternCode "source") is synthesised with that
+// value, not with the element's path segment. Emitting the path segment ("role")
+// makes HAPI reject the resource with "Unknown ProvenanceEntityRole code 'role'".
+func TestPrimitiveReferenceValueRespectsPattern(t *testing.T) {
+	// A code element with a pattern value must use the pattern, not the path leaf.
+	def := &model.ElementDefinition{Path: "Provenance.entity.role", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}, Pattern: "source"}
+	val, ok := primitiveReferenceValue(def)
+	if !ok || val != "source" {
+		t.Fatalf("primitiveReferenceValue(pattern) = %v, %v; want source, true", val, ok)
+	}
+	// A code element with a fixed value must use the fixed value.
+	def = &model.ElementDefinition{Path: "Provenance.entity.role", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}, Fixed: "derivation"}
+	val, ok = primitiveReferenceValue(def)
+	if !ok || val != "derivation" {
+		t.Fatalf("primitiveReferenceValue(fixed) = %v, %v; want derivation, true", val, ok)
+	}
+	// Without a fixed/pattern value, the path leaf is the fallback.
+	def = &model.ElementDefinition{Path: "Provenance.entity.role", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}}
+	val, ok = primitiveReferenceValue(def)
+	if !ok || val != "role" {
+		t.Fatalf("primitiveReferenceValue(no pattern) = %v, %v; want role, true", val, ok)
+	}
+}
+
 func TestHashCorpus(t *testing.T) {
 	if hashCorpus("a") == hashCorpus("b") {
 		t.Fatal("hashCorpus should distinguish inputs")

@@ -840,6 +840,17 @@ func primitiveReferenceValue(def *model.ElementDefinition) (any, bool) {
 	if def == nil {
 		return nil, false
 	}
+	// A fixed/pattern value on the element definition is authoritative: e.g.
+	// Provenance.entity.role carries patternCode "source", so the required
+	// sibling must be "source", not the element's path segment ("role"). Emitting
+	// the path segment makes HAPI reject the resource with "Unknown
+	// ProvenanceEntityRole code 'role'".
+	if def.Fixed != nil {
+		return def.Fixed, true
+	}
+	if def.Pattern != nil {
+		return def.Pattern, true
+	}
 	code := primaryTypeCode(def)
 	switch code {
 	case "code", "string", "id", "markdown":

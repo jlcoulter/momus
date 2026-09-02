@@ -37,6 +37,27 @@ func elementAllowsMultiple(def *model.ElementDefinition) bool {
 	return allowsMultiple(def.BaseMax)
 }
 
+// maxCardinality returns the element's maximum cardinality as an int, or -1 when
+// it is unbounded ("*"). It is used to cap how many values a repeated element
+// may emit so the parent's Max constraint is never violated.
+func maxCardinality(def *model.ElementDefinition) int {
+	if def == nil {
+		return -1
+	}
+	max := def.Max
+	if max == "" {
+		max = def.BaseMax
+	}
+	if max == "*" {
+		return -1
+	}
+	n, err := strconv.Atoi(max)
+	if err != nil {
+		return -1
+	}
+	return n
+}
+
 // optionalInclusionProbability is the chance that an optional (Min == 0)
 // element is included when generating exhaustive payloads, so presence varies
 // realistically across requests.
@@ -681,6 +702,12 @@ func generateRequiredValue(node *model.ElementNode, reg *registry.Registry, rng 
 
 func generateRepeatedValue(node *model.ElementNode, reg *registry.Registry, rng *rand.Rand) (any, bool) {
 	values := make([]any, 0)
+	// The parent element's Max cardinality caps how many values may be emitted,
+	// even when several optional slices could each contribute one. E.g. HCPD
+	// Practitioner.qualification.identifier has Max "1" with two optional slices;
+	// generating both violates the parent's max and a conformant server rejects
+	// the resource ("max allowed = 1, but found 2").
+	max := maxCardinality(node.Definition)
 	sliceNames := make([]string, 0, len(node.Slices))
 	for name := range node.Slices {
 		sliceNames = append(sliceNames, name)
@@ -704,9 +731,15 @@ func generateRepeatedValue(node *model.ElementNode, reg *registry.Registry, rng 
 			count = 1
 		}
 		for i := 0; i < count; i++ {
+			if max >= 0 && len(values) >= max {
+				break
+			}
 			if value, ok := generateSliceValue(slice, reg); ok {
 				values = append(values, value)
 			}
+		}
+		if max >= 0 && len(values) >= max {
+			break
 		}
 	}
 	for len(values) < coregen.Max(node.Definition.Min, 1) {
@@ -1058,6 +1091,12 @@ func sortedNodeChildren(node *model.ElementNode) []string {
 // repeatable), the fixed value is wrapped in a single-element array so the
 // existing array shape is preserved.
 func wrapFixedSlice(current any, def *model.ElementDefinition, fixed any) any {
+	// The fixed value is the profile's shared element definition data. It must
+	// never be returned (or wrapped) by reference: the caller mutates the result
+	// (markFixedCoding strips display/text and adds a marker), and aliasing the
+	// profile's map would race across concurrent synthesis of the same slice.
+	// Deep-clone so each generated instance owns its own copy.
+	fixed = cloneValue(fixed)
 	if _, isArray := current.([]any); isArray {
 		return []any{fixed}
 	}
@@ -1077,11 +1116,14 @@ func sortedSliceChildren(slice *model.SliceNode) []string {
 }
 
 // mergeSlicePattern merges a pattern object into value at prop, recursing into
-// nested objects and arrays so a patterned Coding/CodeableConcept lands.
+// nested objects and arrays so a patterned Coding/CodeableConcept lands. The
+// pattern is the profile's shared element definition data; it is deep-cloned so
+// the generated value never aliases it (the value is later mutated by
+// markFixedCoding, which would race across concurrent synthesis).
 func mergeSlicePattern(value map[string]any, prop string, pattern map[string]any) {
 	current, ok := value[prop].(map[string]any)
 	if !ok {
-		value[prop] = cloneMap(pattern)
+		value[prop] = cloneValue(pattern).(map[string]any)
 		return
 	}
 	for k, v := range pattern {
@@ -1091,7 +1133,7 @@ func mergeSlicePattern(value map[string]any, prop string, pattern map[string]any
 				continue
 			}
 		}
-		current[k] = v
+		current[k] = cloneValue(v)
 	}
 }
 
@@ -1140,17 +1182,34 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 	}
 	typeCode := primaryTypeCode(node.Definition)
 	if node.Definition.Fixed != nil {
-		return node.Definition.Fixed, true
+		// The fixed value is the profile's shared element definition data. It is
+		// deep-cloned so the returned value never aliases it: the caller mutates
+		// the result (markFixedCoding, stripFixedCodingMarkers, normaliseCoding),
+		// and aliasing would race across concurrent synthesis of the same element.
+		cloned := cloneValue(node.Definition.Fixed)
+		// A fixed CodeableConcept/Coding may carry only system+code; mark it so
+		// the display/text normalisation passes never add a display to it (HAPI
+		// rejects a display on a fixed value that defines only system+code).
+		if typeCode == "CodeableConcept" || typeCode == "Coding" {
+			markFixedCoding(cloned)
+		}
+		return cloned, true
 	}
 	boundCoding, hasBoundCoding := resolveBoundCodingForNode(node, reg)
 	if node.Definition.Pattern != nil {
 		if merged, ok := mergePatternWithBinding(node.Definition.Pattern, typeCode, boundCoding, hasBoundCoding); ok {
 			return merged, true
 		}
-		return node.Definition.Pattern, true
+		cloned := cloneValue(node.Definition.Pattern)
+		if typeCode == "CodeableConcept" || typeCode == "Coding" {
+			markFixedCoding(cloned)
+		}
+		return cloned, true
 	}
 	if len(node.Definition.Examples) > 0 {
-		return node.Definition.Examples[0], true
+		// Examples are the profile's shared element definition data; deep-clone
+		// so the returned value never aliases it (the caller mutates the result).
+		return cloneValue(node.Definition.Examples[0]), true
 	}
 	switch typeCode {
 	case "string", "markdown", "id":
@@ -2096,7 +2155,7 @@ func mergePatternWithBinding(pattern any, typeCode string, binding generatedCodi
 		if !ok {
 			return nil, false
 		}
-		merged := cloneMap(patternMap)
+		merged := cloneValue(patternMap).(map[string]any)
 		codings := mergeCodingArray(patternMap["coding"], binding)
 		if len(codings) > 0 {
 			merged["coding"] = codings
@@ -2110,7 +2169,7 @@ func mergePatternWithBinding(pattern any, typeCode string, binding generatedCodi
 		if !ok {
 			return nil, false
 		}
-		merged := cloneMap(patternMap)
+		merged := cloneValue(patternMap).(map[string]any)
 		if _, exists := merged["system"]; !exists && binding.System != "" {
 			merged["system"] = binding.System
 		}

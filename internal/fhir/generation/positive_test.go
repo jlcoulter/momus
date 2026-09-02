@@ -1382,6 +1382,55 @@ func contains(haystack []string, needle string) bool {
 	return false
 }
 
+// TestRepeatedValueRespectsParentMax verifies that generateRepeatedValue never
+// emits more values than the parent element's Max cardinality allows, even when
+// several optional slices could each contribute a value. The HCPD
+// Practitioner.qualification.identifier element has Max "1" with two optional
+// slices (ahpraregistrationnumber, peakbodyregistrationnumber); generating both
+// violates the parent's max and a conformant server rejects the resource
+// ("max allowed = 1, but found 2").
+func TestRepeatedValueRespectsParentMax(t *testing.T) {
+	makeSlice := func(name string) *model.SliceNode {
+		return &model.SliceNode{
+			Name: name,
+			Definition: &model.ElementDefinition{
+				Path:      "Practitioner.qualification.identifier",
+				SliceName: name,
+				Min:       0,
+				Max:       "1",
+				Types:     []model.ElementType{{Code: "Identifier"}},
+			},
+			Children: map[string]*model.ElementNode{
+				"system": {Name: "system", Path: "Practitioner.qualification.identifier.system", Definition: &model.ElementDefinition{Path: "Practitioner.qualification.identifier.system", Min: 1, Max: "1", Fixed: "http://example.org/" + name}},
+			},
+		}
+	}
+	// Parent element with Max "1" and two optional slices.
+	node := &model.ElementNode{
+		Name:       "identifier",
+		Path:       "Practitioner.qualification.identifier",
+		Definition: &model.ElementDefinition{Path: "Practitioner.qualification.identifier", Min: 0, Max: "1"},
+		Slices: map[string]*model.SliceNode{
+			"ahpraregistrationnumber":    makeSlice("ahpra"),
+			"peakbodyregistrationnumber": makeSlice("pbprn"),
+		},
+	}
+	reg := registry.New()
+	// With an RNG, both optional slices may be selected; the total must never
+	// exceed the parent's Max of 1.
+	for i := 0; i < 200; i++ {
+		rng := newRNG("seed-" + strconv.Itoa(i))
+		val, ok := generateRepeatedValue(node, reg, rng)
+		if !ok {
+			continue
+		}
+		arr := val.([]any)
+		if len(arr) > 1 {
+			t.Fatalf("generateRepeatedValue emitted %d values for a Max=1 element: %v", len(arr), arr)
+		}
+	}
+}
+
 // TestGenerateSingleValueMissingDatatypes verifies that the previously
 // fall-through datatypes (decimal, time, Quantity, Ratio, Range, Attachment)
 // are now explicitly synthesized.
