@@ -13,12 +13,14 @@ import (
 var version = "0.0.0"
 
 // abstractResourceTypes are FHIR types with kind "resource" that are abstract
-// base types and cannot be instantiated as concrete data.
+// base types and cannot be instantiated as concrete data, plus operational
+// types (Parameters) that are never provisioned to a server as seed data.
 var abstractResourceTypes = map[string]bool{
 	"Resource":          true,
 	"DomainResource":    true,
 	"CanonicalResource": true,
 	"MetadataResource":  true,
+	"Parameters":        true,
 }
 
 func main() {

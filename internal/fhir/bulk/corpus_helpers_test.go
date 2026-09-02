@@ -36,6 +36,26 @@ func TestSanitizeID(t *testing.T) {
 	}
 }
 
+func TestIsConcreteResourceTypeExcludesParameters(t *testing.T) {
+	// Parameters is an operational type (operation request/response payloads),
+	// not a resource that is provisioned to a server as seed data. Even though a
+	// package may ship a StructureDefinition for it (e.g. HCPD's
+	// hcpd-export-request-parameters), it must never be generated into the corpus.
+	if isConcreteResourceType("Parameters") {
+		t.Fatal("isConcreteResourceType(Parameters) should be false")
+	}
+	// The abstract base types remain excluded.
+	for _, rt := range []string{"Resource", "DomainResource", "CanonicalResource", "MetadataResource"} {
+		if isConcreteResourceType(rt) {
+			t.Fatalf("isConcreteResourceType(%s) should be false", rt)
+		}
+	}
+	// A real resource type stays concrete.
+	if !isConcreteResourceType("Practitioner") {
+		t.Fatal("isConcreteResourceType(Practitioner) should be true")
+	}
+}
+
 func TestResourceTypeOfProfile(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Organization", Type: "Organization", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: "1"}}})

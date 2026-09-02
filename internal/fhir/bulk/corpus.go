@@ -54,6 +54,11 @@ var abstractResourceTypes = map[string]bool{
 	"DomainResource":    true,
 	"CanonicalResource": true,
 	"MetadataResource":  true,
+	// Parameters is an operational type (operation request/response payloads),
+	// not a resource that is provisioned to a server as seed data. A package may
+	// ship a StructureDefinition for it (e.g. HCPD's hcpd-export-request-parameters),
+	// but it must never be generated into the corpus.
+	"Parameters": true,
 }
 
 // NewCorpusGenerator returns a CorpusGenerator backed by reg.
