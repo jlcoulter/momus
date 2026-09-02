@@ -21,6 +21,13 @@ type CorpusGenerator struct {
 	exhaustive bool
 }
 
+var abstractResourceTypes = map[string]bool{
+	"Resource":          true,
+	"DomainResource":    true,
+	"CanonicalResource": true,
+	"MetadataResource":  true,
+}
+
 // NewCorpusGenerator returns a CorpusGenerator backed by reg.
 func NewCorpusGenerator(reg *registry.Registry, exhaustive bool) *CorpusGenerator {
 	return &CorpusGenerator{reg: reg, exhaustive: exhaustive}
@@ -51,6 +58,9 @@ func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []st
 	// HealthcareService pulls in Organization, Practitioner, Location) so that
 	// every reference resolves even when the caller requested a subset.
 	resourceTypes = g.expandReferenceTargets(resourceTypes)
+	if len(resourceTypes) == 0 {
+		return nil, fmt.Errorf("no concrete resource types to generate")
+	}
 
 	// Pass 1: generate instances of each type. Types that cannot be synthesised
 	// (e.g. abstract or unresolved profiles) are skipped. Each type is generated
@@ -126,7 +136,7 @@ func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []st
 		refFields := g.referenceFields(t)
 		for _, id := range pools[t] {
 			inst := ds.Resources[id]
-			wireCorpusReferences(inst, refFields, pools)
+			ds.Relationships = append(ds.Relationships, wireCorpusReferences(inst, refFields, pools)...)
 		}
 	}
 
@@ -138,9 +148,15 @@ func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []st
 // the generated corpus is self-contained and every reference resolves.
 func (g *CorpusGenerator) expandReferenceTargets(resourceTypes []string) []string {
 	included := make(map[string]bool, len(resourceTypes))
+	concrete := make([]string, 0, len(resourceTypes))
 	for _, t := range resourceTypes {
+		if !g.hasResourceType(t) {
+			continue
+		}
 		included[t] = true
+		concrete = append(concrete, t)
 	}
+	resourceTypes = concrete
 	for changed := true; changed; {
 		changed = false
 		for _, t := range resourceTypes {
@@ -158,7 +174,11 @@ func (g *CorpusGenerator) expandReferenceTargets(resourceTypes []string) []strin
 }
 
 func (g *CorpusGenerator) hasResourceType(resourceType string) bool {
-	return g.reg != nil && len(g.reg.ProfilesForResource(resourceType)) > 0
+	return isConcreteResourceType(resourceType) && g.reg != nil && len(g.reg.ProfilesForResource(resourceType)) > 0
+}
+
+func isConcreteResourceType(resourceType string) bool {
+	return strings.TrimSpace(resourceType) != "" && !abstractResourceTypes[resourceType]
 }
 
 // referenceFields derives the reference element paths of a resource type and
@@ -329,18 +349,22 @@ func sanitizeID(s string) string {
 // the target type, chosen deterministically from the source id and path so
 // references spread across the pool (sharing targets) while staying
 // reproducible.
-func wireCorpusReferences(inst *model.ResourceInstance, refFields map[string]string, pools map[string][]string) {
+func wireCorpusReferences(inst *model.ResourceInstance, refFields map[string]string, pools map[string][]string) []model.Reference {
 	if inst == nil || inst.Resource == nil {
-		return
+		return nil
 	}
+	refs := make([]model.Reference, 0, len(refFields))
 	for path, targetType := range refFields {
 		pool := pools[targetType]
 		if len(pool) == 0 {
 			continue
 		}
 		idx := int(hashCorpus(inst.LocalID+"|"+path)) % len(pool)
-		setReferencePath(inst.Resource, path, refTarget{resourceType: targetType, localID: pool[idx]})
+		targetID := pool[idx]
+		setReferencePath(inst.Resource, path, refTarget{resourceType: targetType, localID: targetID})
+		refs = append(refs, model.Reference{SourceID: inst.LocalID, Path: path, TargetID: targetID})
 	}
+	return refs
 }
 
 func hashCorpus(seed string) uint32 {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 	testbulk "github.com/jlcoulter/momus/internal/fhir/bulk"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
+	"github.com/jlcoulter/momus/internal/fhir/provisioning"
 	"github.com/jlcoulter/momus/internal/home"
 	"github.com/spf13/cobra"
 )
@@ -72,6 +74,9 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			}
 
 			var out io.Writer = os.Stdout
+			if cfg.BaseURL != "" && cfg.OutputPath == "" {
+				out = io.Discard
+			}
 			var f *os.File
 			if cfg.OutputPath != "" {
 				outputPath, err := resolveBulkOutputPath(cfg.OutputPath)
@@ -97,6 +102,11 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			if err := writeDebugBulk(cfg.Debug, instances); err != nil {
 				return err
 			}
+			if cfg.BaseURL != "" {
+				if err := streamBulkDataset(cfg, cmd.Context(), corpus); err != nil {
+					return err
+				}
+			}
 			if err := w.WriteInstances(instances); err != nil {
 				return err
 			}
@@ -119,7 +129,61 @@ func newBulkCmd(cfg *config) *cobra.Command {
 	cmd.Flags().IntVar(&cfg.BulkCount, "count", 25, "number of resources to generate per resource type")
 	cmd.Flags().StringSliceVar(&cfg.BulkPerTypeCounts, "per-type", nil, "per-type resource counts as Type=Count (repeatable); overrides --count")
 	cmd.Flags().StringSliceVar(&cfg.IncludeResourceTypes, "include-resource", nil, "include only these resource types (repeatable); referenced target types are added automatically")
+	cmd.Flags().StringVar(&cfg.BaseURL, "base-url", "", "target FHIR repository base URL for streaming generated resources")
+	cmd.Flags().StringVar(&cfg.WriteBaseURL, "write-base-url", "", "alternate FHIR repository base URL for write requests; defaults to --base-url")
+	cmd.Flags().StringVar(&cfg.ApiBearerToken, "api-bearer-token", "", "bearer token used for repository write requests")
+	cmd.Flags().StringVar(&cfg.ApiBasicUsername, "api-basic-username", "", "basic auth username used for repository write requests")
+	cmd.Flags().StringVar(&cfg.ApiBasicPassword, "api-basic-password", "", "basic auth password used for repository write requests")
+	cmd.Flags().StringVar(&cfg.WriteBasicUsername, "write-basic-username", "", "basic auth username used for --write-base-url; defaults to --api-basic-username")
+	cmd.Flags().StringVar(&cfg.WriteBasicPassword, "write-basic-password", "", "basic auth password used for --write-base-url; defaults to --api-basic-password")
 	return cmd
+}
+
+func streamBulkDataset(cfg *config, ctx context.Context, dataset *model.Dataset) error {
+	if cfg.BaseURL == "" {
+		return nil
+	}
+	writeBase := cfg.WriteBaseURL
+	if writeBase == "" {
+		writeBase = cfg.BaseURL
+	}
+	writeBasicUser := cfg.WriteBasicUsername
+	if writeBasicUser == "" {
+		writeBasicUser = cfg.ApiBasicUsername
+	}
+	writeBasicPass := cfg.WriteBasicPassword
+	if writeBasicPass == "" {
+		writeBasicPass = cfg.ApiBasicPassword
+	}
+
+	if dataset == nil || len(dataset.Resources) == 0 {
+		fmt.Printf("Bulk repository stream skipped: no generated resources\n")
+		return nil
+	}
+
+	provisioner := provisioning.New(writeBase, &provisioning.Options{
+		BearerToken:   cfg.ApiBearerToken,
+		BasicUsername: writeBasicUser,
+		BasicPassword: writeBasicPass,
+		Tracer:        newDebugTracer(cfg.Debug),
+	})
+	fmt.Printf("Bulk repository stream: uploading %d generated resources to %s\n", len(dataset.Resources), writeBase)
+	res := provisioner.ProvisionAll(ctx, dataset)
+	if !res.Complete() {
+		fmt.Printf("WARNING: bulk repository stream incomplete: %d of %d resources uploaded\n", res.Provisioned, res.Provisioned+res.Failed)
+		for _, failure := range res.Failures {
+			fmt.Printf("  - %s\n", failure.Describe())
+		}
+		if !cfg.Debug {
+			fmt.Printf("Run with --debug to write the rejected payloads and full server responses to %s for inspection.\n", debugOutputDir)
+		}
+		if err := writeDebugProvisionFailures(cfg.Debug, res.Failures); err != nil {
+			return err
+		}
+		return fmt.Errorf("bulk repository stream incomplete: %d of %d resources uploaded", res.Provisioned, res.Provisioned+res.Failed)
+	}
+	fmt.Printf("Bulk repository stream complete: %d resources uploaded\n", res.Provisioned)
+	return nil
 }
 
 func resolveBulkOutputPath(outputPath string) (string, error) {

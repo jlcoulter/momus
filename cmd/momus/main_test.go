@@ -5,9 +5,11 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 
@@ -310,5 +312,41 @@ func TestResolveBulkOutputPath(t *testing.T) {
 	}
 	if got != filePath {
 		t.Fatalf("file output = %q, want %q", got, filePath)
+	}
+}
+
+func TestStreamBulkDatasetWritesTargetsBeforeDependents(t *testing.T) {
+	var mu sync.Mutex
+	created := make(map[string]bool)
+	var order []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		order = append(order, r.URL.Path)
+		if r.URL.Path == "/Observation/obs" && !created["/Patient/pat"] {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"error","diagnostics":"missing patient"}]}`))
+			return
+		}
+		created[r.URL.Path] = true
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	dataset := &model.Dataset{
+		Resources: map[string]*model.ResourceInstance{
+			"obs": {LocalID: "obs", ResourceType: "Observation", Resource: map[string]any{
+				"resourceType": "Observation", "id": "obs", "subject": map[string]any{"reference": "Patient/pat"},
+			}},
+			"pat": {LocalID: "pat", ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": "pat"}},
+		},
+		Relationships: []model.Reference{{SourceID: "obs", Path: "Observation.subject", TargetID: "pat"}},
+	}
+
+	if err := streamBulkDataset(&config{BaseURL: server.URL}, t.Context(), dataset); err != nil {
+		t.Fatalf("streamBulkDataset returned error: %v", err)
+	}
+	if len(order) != 2 || order[0] != "/Patient/pat" || order[1] != "/Observation/obs" {
+		t.Fatalf("write order = %v, want target before dependent", order)
 	}
 }

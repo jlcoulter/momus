@@ -78,6 +78,20 @@ func TestGenerateCorpusWiresDistributedReferences(t *testing.T) {
 	if len(targets) < 2 {
 		t.Fatalf("references not distributed across patients: %v", targets)
 	}
+	if len(ds.Relationships) != 5 {
+		t.Fatalf("relationships = %d, want one Observation.subject relationship per observation", len(ds.Relationships))
+	}
+	for _, rel := range ds.Relationships {
+		if rel.SourceID == "" || rel.TargetID == "" || rel.Path != "Observation.subject" {
+			t.Fatalf("unexpected relationship: %+v", rel)
+		}
+		if ds.Resources[rel.SourceID].ResourceType != "Observation" {
+			t.Fatalf("relationship source = %s, want Observation", ds.Resources[rel.SourceID].ResourceType)
+		}
+		if ds.Resources[rel.TargetID].ResourceType != "Patient" {
+			t.Fatalf("relationship target = %s, want Patient", ds.Resources[rel.TargetID].ResourceType)
+		}
+	}
 }
 
 func TestGenerateCorpusHonoursPerTypeCounts(t *testing.T) {
@@ -197,6 +211,64 @@ func TestGenerateCorpusExpandsReferenceTargets(t *testing.T) {
 	}
 	if !hasPatient {
 		t.Fatal("expected Patient to be auto-added as a reference target")
+	}
+}
+
+func TestGenerateCorpusSkipsAbstractResourceTypes(t *testing.T) {
+	reg := testRegistry(t)
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:      "http://hl7.org/fhir/StructureDefinition/Resource",
+		Type:     "Resource",
+		Kind:     "resource",
+		Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: "*"}},
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	ds, err := gen.GenerateCorpus(context.Background(), []string{"Patient", "Resource"}, 2, nil)
+	if err != nil {
+		t.Fatalf("GenerateCorpus returned error: %v", err)
+	}
+	for _, inst := range ds.Resources {
+		if inst.ResourceType == "Resource" {
+			t.Fatalf("generated abstract Resource instance: %+v", inst)
+		}
+	}
+	if len(ds.Resources) != 2 {
+		t.Fatalf("generated resource count = %d, want 2 concrete Patient resources", len(ds.Resources))
+	}
+
+	if _, err := gen.GenerateCorpus(context.Background(), []string{"Resource"}, 2, nil); err == nil {
+		t.Fatal("expected an error when only abstract resource types are requested")
+	}
+}
+
+func TestGenerateCorpusDoesNotExpandAbstractResourceTarget(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  patientProfile,
+		Type: "Patient",
+		Kind: "resource",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.managingOrganization", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Resource"}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:      "http://hl7.org/fhir/StructureDefinition/Resource",
+		Type:     "Resource",
+		Kind:     "resource",
+		Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: "*"}},
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	ds, err := gen.GenerateCorpus(context.Background(), []string{"Patient"}, 2, nil)
+	if err != nil {
+		t.Fatalf("GenerateCorpus returned error: %v", err)
+	}
+	for _, inst := range ds.Resources {
+		if inst.ResourceType == "Resource" {
+			t.Fatalf("generated abstract Resource instance from reference target: %+v", inst)
+		}
 	}
 }
 
