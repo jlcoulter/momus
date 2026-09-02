@@ -386,7 +386,7 @@ func TestSynthesizeBodyStripsSelfReferences(t *testing.T) {
 
 	// Setup Location: its partOf resolves to its own reference and must be
 	// stripped.
-	setupBody := synthesizeBody("Location", "momus-setup-location", []string{locationURL}, locationURL, nil, reg, true)
+	setupBody := SynthesizeBody("Location", "momus-setup-location", []string{locationURL}, locationURL, nil, reg, true)
 	if _, ok := setupBody["partOf"]; ok {
 		t.Fatalf("setup Location must not self-reference via partOf, got %+v", setupBody["partOf"])
 	}
@@ -396,7 +396,7 @@ func TestSynthesizeBodyStripsSelfReferences(t *testing.T) {
 
 	// Search-seed Location: partOf references the setup Location, not itself,
 	// so it must be preserved when present.
-	seed := synthesizeBody("Location", "momus-search-loc", []string{locationURL}, locationURL, nil, reg, true)
+	seed := SynthesizeBody("Location", "momus-search-loc", []string{locationURL}, locationURL, nil, reg, true)
 	if partOf, ok := seed["partOf"].(map[string]any); ok {
 		if ref, _ := partOf["reference"].(string); ref == "Location/momus-search-loc" {
 			t.Fatalf("search-seed Location self-reference not stripped: %v", ref)
@@ -502,7 +502,7 @@ func TestSynthesizeBodyGivesSimpleExtensionAValue(t *testing.T) {
 		{Path: "Organization.extension", Min: 1, Max: "1", SliceName: "active-period", Types: []model.ElementType{{Code: "Extension", Profile: []string{activePeriodURL}}}},
 	}})
 
-	body := synthesizeBody("Organization", "momus-test", []string{orgURL}, orgURL, nil, r, true)
+	body := SynthesizeBody("Organization", "momus-test", []string{orgURL}, orgURL, nil, r, true)
 	rawExt, ok := body["extension"].([]any)
 	if !ok || len(rawExt) == 0 {
 		t.Fatalf("expected extension array, got %#v", body["extension"])

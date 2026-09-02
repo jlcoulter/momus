@@ -252,22 +252,23 @@ func buildBodyTemplate(req coverage.CoverageRequirement, id string, profileURLs 
 	// resource, with an optional negative mutation applied only when the test
 	// expects the server to reject it. The bool reports whether the mutation
 	// produced a concrete violation (false when the target element is absent).
-	body := synthesizeBody(req.ResourceType, id, profileURLs, primaryProfileURL, deps, reg, exhaustive)
+	body := SynthesizeBody(req.ResourceType, id, profileURLs, primaryProfileURL, deps, reg, exhaustive)
 	applied := applyNegativeMutation(body, req, reg)
 	return body, applied
 }
 
 func buildSetupBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
-	return synthesizeBody(resourceType, id, profileURLs, primaryProfileURL, deps, reg, exhaustive)
+	return SynthesizeBody(resourceType, id, profileURLs, primaryProfileURL, deps, reg, exhaustive)
 }
 
-// synthesizeBody is the single registry-driven body-data core used for all
-// generated data — provisioned seed resources and test-case payloads alike. It
-// depends on the registry as the source of truth: it walks the resolved profile
-// to populate required (and, when exhaustive, optional) elements, resolves
-// bindings to real codes, and applies resource-specific normalisation. Keeping
-// one core means test data and provisioned data cannot drift apart.
-func synthesizeBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
+// SynthesizeBody is the single registry-driven body-data core used for all
+// generated data — provisioned seed resources, test-case payloads, and the bulk
+// corpus alike. It depends on the registry as the source of truth: it walks the
+// resolved profile to populate required (and, when exhaustive, optional)
+// elements, resolves bindings to real codes, and applies resource-specific
+// normalisation. Keeping one core means test data, provisioned data, and bulk
+// data cannot drift apart.
+func SynthesizeBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
 	body := baseBodyTemplate(resourceType, id, profileURLs, deps, reg, primaryProfileURL)
 	enrichBodyFromProfile(body, primaryProfileURL, reg)
 	if exhaustive {

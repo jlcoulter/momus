@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jlcoulter/momus/internal/fhir/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -21,6 +22,13 @@ type CorpusGenerator struct {
 	exhaustive bool
 }
 
+// refTarget is a resolved relationship reference: the resource type and the
+// local dataset ID it points at.
+type refTarget struct {
+	resourceType string
+	localID      string
+}
+
 var abstractResourceTypes = map[string]bool{
 	"Resource":          true,
 	"DomainResource":    true,
@@ -31,6 +39,57 @@ var abstractResourceTypes = map[string]bool{
 // NewCorpusGenerator returns a CorpusGenerator backed by reg.
 func NewCorpusGenerator(reg *registry.Registry, exhaustive bool) *CorpusGenerator {
 	return &CorpusGenerator{reg: reg, exhaustive: exhaustive}
+}
+
+// defaultProfile selects the profile used to synthesise a resource type in the
+// corpus. It prefers a scoped (package) profile — e.g. hcpd-organization over the
+// base FHIR Organization — so package-specific extensions (such as the suppressed
+// extension) are exercised. The registry is scoped to the selected package's
+// StructureDefinitions, so a profile whose URL is in scope is the profile the
+// user is testing against.
+func defaultProfile(reg *registry.Registry, resourceType string) string {
+	if reg == nil || resourceType == "" {
+		return ""
+	}
+	profiles := reg.ProfilesForResource(resourceType)
+	if len(profiles) == 0 {
+		return ""
+	}
+	inScope := make(map[string]bool)
+	for _, sd := range reg.ScopedStructureDefinitions() {
+		if sd != nil && sd.URL != "" {
+			inScope[normalizeCanonical(sd.URL)] = true
+		}
+	}
+	for _, p := range profiles {
+		if p == nil || strings.TrimSpace(p.URL) == "" {
+			continue
+		}
+		if inScope[normalizeCanonical(p.URL)] {
+			return p.URL
+		}
+	}
+	// Fall back to the first non-empty profile.
+	for _, p := range profiles {
+		if p != nil && strings.TrimSpace(p.URL) != "" {
+			return p.URL
+		}
+	}
+	return ""
+}
+
+// normalizeCanonical trims surrounding whitespace from a canonical URL.
+func normalizeCanonical(s string) string {
+	return strings.TrimSpace(s)
+}
+
+// primaryTypeCode returns the first declared datatype code of an element
+// definition, or "" when none is declared.
+func primaryTypeCode(def *model.ElementDefinition) string {
+	if def == nil || len(def.Types) == 0 {
+		return ""
+	}
+	return def.Types[0].Code
 }
 
 // GenerateCorpus produces a realistic corpus of instances for each of the
@@ -86,16 +145,27 @@ func (g *CorpusGenerator) GenerateCorpus(ctx context.Context, resourceTypes []st
 				// Embed a hash of the raw resource type so types that sanitize to the
 				// same segment (e.g. "A/B" vs "A-B") never collide on local ids.
 				id := fmt.Sprintf("momus-%s-%x-%d", sanitizeID(t), hashCorpus(t), i+1)
-				body, err := synthesizeResource(g.reg, t, "", id, nil, g.exhaustive, newRNG(id))
-				if err != nil {
-					synthErr = fmt.Errorf("synthesize %s: %w", t, err)
-					break
+				// Body synthesis is delegated entirely to the shared generation core
+				// (generation.SynthesizeBody), the single source of truth for FHIR
+				// resource bodies. The bulk corpus passes no dependency references:
+				// references are wired across the generated pools in Pass 2 below.
+				profileURL := defaultProfile(g.reg, t)
+				var profileURLs []string
+				if profileURL != "" {
+					profileURLs = []string{profileURL}
+					// A profile that resolves to no element tree cannot be synthesised;
+					// surface it as an error rather than emitting a bare resource.
+					if resolved, err := g.reg.ResolveProfile(profileURL); err != nil || resolved == nil || resolved.Root == nil {
+						synthErr = fmt.Errorf("synthesize %s: profile %s has no element tree", t, profileURL)
+						break
+					}
 				}
+				body := generation.SynthesizeBody(t, id, profileURLs, profileURL, nil, g.reg, g.exhaustive)
 				if len(body) == 0 {
 					synthErr = fmt.Errorf("synthesize %s: produced no resource body", t)
 					break
 				}
-				instances = append(instances, &model.ResourceInstance{LocalID: id, ResourceType: t, Profile: "", Resource: body})
+				instances = append(instances, &model.ResourceInstance{LocalID: id, ResourceType: t, Profile: profileURL, Resource: body})
 			}
 			resultCh <- corpusResult{index: idx, instances: instances, err: synthErr}
 		}(idx, t)
