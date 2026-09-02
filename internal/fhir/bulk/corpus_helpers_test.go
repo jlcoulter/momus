@@ -96,27 +96,39 @@ func TestSetReferenceLeaf(t *testing.T) {
 	target := refTarget{resourceType: "Patient", localID: "p-1"}
 	// Existing map.
 	obj := map[string]any{"subject": map[string]any{"reference": "old"}}
-	setReferenceLeaf(obj, "subject", target)
+	setReferenceLeaf(obj, "subject", target, false)
 	if obj["subject"].(map[string]any)["reference"] != "Patient/p-1" {
 		t.Fatalf("setReferenceLeaf(map) = %v", obj)
 	}
 	// Existing array.
 	obj = map[string]any{"author": []any{map[string]any{"reference": "old"}}}
-	setReferenceLeaf(obj, "author", target)
+	setReferenceLeaf(obj, "author", target, false)
 	if obj["author"].([]any)[0].(map[string]any)["reference"] != "Patient/p-1" {
 		t.Fatalf("setReferenceLeaf(array) = %v", obj)
 	}
 	// Empty array.
 	obj = map[string]any{"author": []any{}}
-	setReferenceLeaf(obj, "author", target)
+	setReferenceLeaf(obj, "author", target, false)
 	if obj["author"].([]any)[0].(map[string]any)["reference"] != "Patient/p-1" {
 		t.Fatalf("setReferenceLeaf(empty array) = %v", obj)
 	}
 	// Scalar.
 	obj = map[string]any{"subject": "scalar"}
-	setReferenceLeaf(obj, "subject", target)
+	setReferenceLeaf(obj, "subject", target, false)
 	if obj["subject"].(map[string]any)["reference"] != "Patient/p-1" {
 		t.Fatalf("setReferenceLeaf(scalar) = %v", obj)
+	}
+	// Absent repeatable field -> array is created.
+	obj = map[string]any{}
+	setReferenceLeaf(obj, "endpoint", target, true)
+	if arr, ok := obj["endpoint"].([]any); !ok || len(arr) != 1 || arr[0].(map[string]any)["reference"] != "Patient/p-1" {
+		t.Fatalf("setReferenceLeaf(repeatable) = %v", obj)
+	}
+	// Absent singular field -> scalar object is created.
+	obj = map[string]any{}
+	setReferenceLeaf(obj, "managingOrganization", target, false)
+	if m, ok := obj["managingOrganization"].(map[string]any); !ok || m["reference"] != "Patient/p-1" {
+		t.Fatalf("setReferenceLeaf(singular) = %v", obj)
 	}
 }
 
@@ -131,17 +143,17 @@ func TestHashCorpus(t *testing.T) {
 
 func TestWireCorpusReferences(t *testing.T) {
 	// Nil / empty resource is a no-op.
-	wireCorpusReferences(nil, map[string]string{}, nil)
-	wireCorpusReferences(&model.ResourceInstance{}, map[string]string{}, nil)
+	wireCorpusReferences(nil, map[string]refFieldInfo{}, nil)
+	wireCorpusReferences(&model.ResourceInstance{}, map[string]refFieldInfo{}, nil)
 	// A ref field with an empty pool is skipped.
 	inst := &model.ResourceInstance{LocalID: "o1", Resource: map[string]any{}}
-	wireCorpusReferences(inst, map[string]string{"Observation.subject": "Patient"}, map[string][]string{"Patient": {}})
+	wireCorpusReferences(inst, map[string]refFieldInfo{"Observation.subject": {targetType: "Patient"}}, map[string][]string{"Patient": {}})
 	if len(inst.Resource) != 0 {
 		t.Fatalf("empty pool should not wire: %v", inst.Resource)
 	}
 	// A ref field with a non-empty pool wires the reference.
 	inst = &model.ResourceInstance{LocalID: "o1", Resource: map[string]any{}}
-	wireCorpusReferences(inst, map[string]string{"Observation.subject": "Patient"}, map[string][]string{"Patient": {"p1", "p2"}})
+	wireCorpusReferences(inst, map[string]refFieldInfo{"Observation.subject": {targetType: "Patient"}}, map[string][]string{"Patient": {"p1", "p2"}})
 	subject := inst.Resource["subject"].(map[string]any)
 	if !strings.HasPrefix(subject["reference"].(string), "Patient/") {
 		t.Fatalf("wired reference = %v", subject["reference"])
@@ -153,11 +165,47 @@ func TestReferenceFields(t *testing.T) {
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/obs", Type: "Observation", Elements: []model.ElementDefinition{
 		{Path: "Observation", Min: 0, Max: "*"},
 		{Path: "Observation.subject", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
+		{Path: "Observation.performer", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
 	}})
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{{Path: "Patient", Min: 0, Max: "*"}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: "*"}}})
 	g := NewCorpusGenerator(reg, false)
 	fields := g.referenceFields("Observation")
-	if fields["Observation.subject"] != "Patient" {
-		t.Fatalf("referenceFields = %v", fields)
+	// Singular reference field: not repeatable.
+	if info, ok := fields["Observation.subject"]; !ok || info.targetType != "Patient" || info.repeatable {
+		t.Fatalf("subject field = %v, want Patient (non-repeatable)", fields["Observation.subject"])
+	}
+	// Repeatable reference field (Max *): repeatable.
+	if info, ok := fields["Observation.performer"]; !ok || info.targetType != "Practitioner" || !info.repeatable {
+		t.Fatalf("performer field = %v, want Practitioner (repeatable)", fields["Observation.performer"])
+	}
+}
+
+func TestCollectExampleReferenceTargetsUsesFullPath(t *testing.T) {
+	raw := map[string]any{
+		"target": []any{map[string]any{"reference": "Patient/p-1"}},
+		"entity": []any{
+			map[string]any{"what": map[string]any{"reference": "Organization/o-1"}},
+		},
+		"agent": []any{
+			map[string]any{"who": map[string]any{"reference": "Practitioner/pr-1"}},
+		},
+	}
+	out := map[string]string{}
+	collectExampleReferenceTargets(raw, "Provenance", out)
+	// Nested references must carry their full backbone path, not the leaf only,
+	// so wiring places them inside entity/agent rather than at the root.
+	if got, ok := out["Provenance.entity.what"]; !ok || got != "Organization" {
+		t.Fatalf("entity.what = %v, want Organization at Provenance.entity.what (got key %v)", got, out)
+	}
+	if got, ok := out["Provenance.agent.who"]; !ok || got != "Practitioner" {
+		t.Fatalf("agent.who = %v, want Practitioner at Provenance.agent.who (got key %v)", got, out)
+	}
+	if got, ok := out["Provenance.target"]; !ok || got != "Patient" {
+		t.Fatalf("target = %v, want Patient at Provenance.target", got)
+	}
+	// The leaf-only keys must not be present.
+	if _, ok := out["Provenance.what"]; ok {
+		t.Fatal("must not record a top-level Provenance.what leaf key")
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/jlcoulter/momus/internal/fhir/generation"
@@ -27,6 +28,14 @@ type CorpusGenerator struct {
 type refTarget struct {
 	resourceType string
 	localID      string
+}
+
+// refFieldInfo describes a single reference element of a resource: its target
+// resource type and whether the element is repeatable (Max > 1), so wiring can
+// emit the reference as a single object or an array to satisfy cardinality.
+type refFieldInfo struct {
+	targetType string
+	repeatable bool
 }
 
 var abstractResourceTypes = map[string]bool{
@@ -90,6 +99,27 @@ func primaryTypeCode(def *model.ElementDefinition) string {
 		return ""
 	}
 	return def.Types[0].Code
+}
+
+// elementAllowsMultiple reports whether an element may appear more than once
+// (its cardinality max is "*" or greater than 1), so repeatable reference
+// fields are emitted as arrays.
+func elementAllowsMultiple(def *model.ElementDefinition) bool {
+	if def == nil {
+		return false
+	}
+	return allowsMultiple(def.Max) || allowsMultiple(def.BaseMax)
+}
+
+func allowsMultiple(maxValue string) bool {
+	if maxValue == "*" {
+		return true
+	}
+	n, err := strconv.Atoi(maxValue)
+	if err != nil {
+		return false
+	}
+	return n > 1
 }
 
 // GenerateCorpus produces a realistic corpus of instances for each of the
@@ -230,10 +260,10 @@ func (g *CorpusGenerator) expandReferenceTargets(resourceTypes []string) []strin
 	for changed := true; changed; {
 		changed = false
 		for _, t := range resourceTypes {
-			for _, target := range g.referenceFields(t) {
-				if !included[target] && g.hasResourceType(target) {
-					included[target] = true
-					resourceTypes = append(resourceTypes, target)
+			for _, info := range g.referenceFields(t) {
+				if !included[info.targetType] && g.hasResourceType(info.targetType) {
+					included[info.targetType] = true
+					resourceTypes = append(resourceTypes, info.targetType)
 					changed = true
 				}
 			}
@@ -254,8 +284,8 @@ func isConcreteResourceType(resourceType string) bool {
 // referenceFields derives the reference element paths of a resource type and
 // their target resource types, from the type's resolved profile, falling back
 // to example-instance data for fields without a target profile.
-func (g *CorpusGenerator) referenceFields(resourceType string) map[string]string {
-	out := make(map[string]string)
+func (g *CorpusGenerator) referenceFields(resourceType string) map[string]refFieldInfo {
+	out := make(map[string]refFieldInfo)
 	if profileURL := defaultProfile(g.reg, resourceType); profileURL != "" {
 		if resolved, err := g.reg.ResolveProfile(profileURL); err == nil && resolved != nil && resolved.Root != nil {
 			collectReferenceFields(resolved.Root, g.reg, out)
@@ -267,7 +297,7 @@ func (g *CorpusGenerator) referenceFields(resourceType string) map[string]string
 	// profile itself did not resolve.
 	for path, target := range exampleReferenceTargets(g.reg, resourceType) {
 		if _, exists := out[path]; !exists {
-			out[path] = target
+			out[path] = refFieldInfo{targetType: target}
 		}
 	}
 	return out
@@ -293,21 +323,23 @@ func exampleReferenceTargets(reg *registry.Registry, resourceType string) map[st
 }
 
 // collectExampleReferenceTargets walks a raw example resource, recording every
-// Reference object as `resourceType.<leafElement> -> targetType`. The leaf
-// element is the final path segment (e.g. "subject", "performer",
-// "generalPractitioner"), matching how reference fields are keyed elsewhere.
+// Reference object as `resourceType.<fullPath> -> targetType`. The path is the
+// full dot-separated element path from the resource root (e.g.
+// "Provenance.entity.what", "Observation.performer"), matching how reference
+// fields are keyed and wired elsewhere, so nested references are placed inside
+// their backbone elements rather than leaking to the resource root.
 func collectExampleReferenceTargets(raw map[string]any, resourceType string, out map[string]string) {
 	if raw == nil {
 		return
 	}
-	var walk func(v any, leaf string)
-	walk = func(v any, leaf string) {
+	var walk func(v any, path string)
+	walk = func(v any, path string) {
 		switch typed := v.(type) {
 		case map[string]any:
 			// A Reference object.
 			if ref, ok := typed["reference"].(string); ok {
 				if target, id := splitReference(ref); target != "" && id != "" {
-					key := resourceType + "." + leaf
+					key := resourceType + "." + path
 					if _, exists := out[key]; !exists {
 						out[key] = target
 					}
@@ -316,11 +348,17 @@ func collectExampleReferenceTargets(raw map[string]any, resourceType string, out
 				}
 			}
 			for k, val := range typed {
-				walk(val, k)
+				next := path
+				if next == "" {
+					next = k
+				} else {
+					next = next + "." + k
+				}
+				walk(val, next)
 			}
 		case []any:
 			for _, item := range typed {
-				walk(item, leaf)
+				walk(item, path)
 			}
 		}
 	}
@@ -340,13 +378,13 @@ func splitReference(ref string) (string, string) {
 
 // collectReferenceFields walks an element tree and records Reference elements
 // with a resolvable target resource type, keyed by canonical path.
-func collectReferenceFields(node *model.ElementNode, reg *registry.Registry, out map[string]string) {
+func collectReferenceFields(node *model.ElementNode, reg *registry.Registry, out map[string]refFieldInfo) {
 	if node == nil {
 		return
 	}
 	if node.Definition != nil && primaryTypeCode(node.Definition) == "Reference" {
 		if target := referenceTargetType(node.Definition, reg); target != "" {
-			out[node.Path] = target
+			out[node.Path] = refFieldInfo{targetType: target, repeatable: elementAllowsMultiple(node.Definition)}
 		}
 	}
 	for _, child := range node.Children {
@@ -419,19 +457,19 @@ func sanitizeID(s string) string {
 // the target type, chosen deterministically from the source id and path so
 // references spread across the pool (sharing targets) while staying
 // reproducible.
-func wireCorpusReferences(inst *model.ResourceInstance, refFields map[string]string, pools map[string][]string) []model.Reference {
+func wireCorpusReferences(inst *model.ResourceInstance, refFields map[string]refFieldInfo, pools map[string][]string) []model.Reference {
 	if inst == nil || inst.Resource == nil {
 		return nil
 	}
 	refs := make([]model.Reference, 0, len(refFields))
-	for path, targetType := range refFields {
-		pool := pools[targetType]
+	for path, info := range refFields {
+		pool := pools[info.targetType]
 		if len(pool) == 0 {
 			continue
 		}
 		idx := int(hashCorpus(inst.LocalID+"|"+path)) % len(pool)
 		targetID := pool[idx]
-		setReferencePath(inst.Resource, path, refTarget{resourceType: targetType, localID: targetID})
+		setReferencePath(inst.Resource, path, refTarget{resourceType: info.targetType, localID: targetID}, info.repeatable)
 		refs = append(refs, model.Reference{SourceID: inst.LocalID, Path: path, TargetID: targetID})
 	}
 	return refs
@@ -450,7 +488,7 @@ func hashCorpus(seed string) uint32 {
 // repeatable intermediate is descended into at its first element, and a
 // repeatable reference field receives the reference at its first element rather
 // than being replaced by a single object (which would produce invalid FHIR).
-func setReferencePath(body map[string]any, path string, target refTarget) {
+func setReferencePath(body map[string]any, path string, target refTarget, repeatable bool) {
 	parts := strings.Split(path, ".")
 	if len(parts) <= 1 {
 		return
@@ -462,7 +500,7 @@ func setReferencePath(body map[string]any, path string, target refTarget) {
 			return
 		}
 	}
-	setReferenceLeaf(cur, parts[len(parts)-1], target)
+	setReferenceLeaf(cur, parts[len(parts)-1], target, repeatable)
 }
 
 // descendForReference returns the map to continue wiring into for the given
@@ -493,8 +531,10 @@ func descendForReference(parent map[string]any, key string) map[string]any {
 
 // setReferenceLeaf sets the reference value at the leaf of a path, preserving
 // an existing scalar object or descending into the first element of a repeatable
-// (array) reference field.
-func setReferenceLeaf(obj map[string]any, key string, target refTarget) {
+// (array) reference field. When the field is absent and it is repeatable
+// (Max > 1), a single-element array is created to satisfy cardinality; when it
+// is singular, a scalar object is created.
+func setReferenceLeaf(obj map[string]any, key string, target refTarget, repeatable bool) {
 	ref := target.resourceType + "/" + target.localID
 	switch v := obj[key].(type) {
 	case map[string]any:
@@ -510,6 +550,10 @@ func setReferenceLeaf(obj map[string]any, key string, target refTarget) {
 		}
 		v[0] = map[string]any{"reference": ref}
 	default:
-		obj[key] = map[string]any{"reference": ref}
+		if repeatable {
+			obj[key] = []any{map[string]any{"reference": ref}}
+		} else {
+			obj[key] = map[string]any{"reference": ref}
+		}
 	}
 }
