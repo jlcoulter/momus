@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jlcoulter/momus/internal/fhir/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 )
@@ -59,9 +60,12 @@ func synthesizeResource(reg *registry.Registry, resourceType, profileURL, id str
 		}
 		populateChildren(body, resolved.Root, reg, refs, exhaustive, rng)
 	}
-	// Drop any Extension that carries neither a value[x] nor a nested sub-extension
-	// (violates ext-1); simple extensions are populated with a value above.
-	stripEmptyExtensions(body)
+	// Apply the same post-generation normalisation passes the seed-data pipeline
+	// uses, so bulk resources conform to the same profiles and pass server
+	// validation: strip self-references, resolve coding displays, remove internal
+	// fixed-coding markers, apply resource-specific normalisation, and drop empty
+	// extensions.
+	generation.NormalizeGeneratedResource(body, resourceType, id, reg)
 	return body, nil
 }
 

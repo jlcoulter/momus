@@ -298,6 +298,24 @@ func synthesizeBody(resourceType, id string, profileURLs []string, primaryProfil
 	return body
 }
 
+// NormalizeGeneratedResource applies the same post-generation normalisation
+// passes that synthesizeBody applies to seed data and test-case payloads, so
+// resources produced by other generators (e.g. the bulk corpus) conform to the
+// same profiles and pass server validation. It strips self-references, resolves
+// coding displays, removes internal fixed-coding markers, applies
+// resource-specific normalisation, and drops empty extensions.
+func NormalizeGeneratedResource(body map[string]any, resourceType, id string, reg *registry.Registry) {
+	if body == nil {
+		return
+	}
+	stripSelfReferences(body, resourceType+"/"+id)
+	normalizeGeneratedPayload(body)
+	normalizeResourceSpecificPayload(body)
+	normalisePayloadCodingDisplays(body, reg)
+	stripFixedCodingMarkers(body)
+	stripEmptyExtensions(body)
+}
+
 // stripSelfReferences removes any FHIR Reference object (a map containing a
 // "reference" key) whose reference equals selfRef, deleting the enclosing
 // property (for object-valued references) or the array element (for arrays of
