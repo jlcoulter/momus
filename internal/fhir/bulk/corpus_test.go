@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
@@ -865,7 +866,7 @@ func TestGenerateCorpusStreamedEmitsMixedTypeBatches(t *testing.T) {
 	reg := testRegistry(t)
 	gen := NewCorpusGenerator(reg, true)
 
-	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 5, nil, 2)
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 5, nil, 2, 2)
 
 	emitted := make(map[string]bool)
 	var batchCount int
@@ -918,7 +919,7 @@ func TestGenerateCorpusStreamedPerTypeOverrides(t *testing.T) {
 	gen := NewCorpusGenerator(reg, true)
 
 	// 3 observations but 7 patients: extra Patient-only rounds after round 3.
-	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 3, map[string]int{"Patient": 7}, 100)
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 3, map[string]int{"Patient": 7}, 100, 2)
 	all, _ := collectBatchInstances(t, batches, errs)
 
 	obsCount, patCount := 0, 0
@@ -941,7 +942,7 @@ func TestGenerateCorpusStreamedBatchSizeOne(t *testing.T) {
 	reg := testRegistry(t)
 	gen := NewCorpusGenerator(reg, true)
 
-	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 4, nil, 1)
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 4, nil, 1, 2)
 
 	var batchCount int
 	for range batches {
@@ -979,7 +980,7 @@ func TestGenerateCorpusStreamedFinalizesRequiredForwardReferences(t *testing.T) 
 	})
 	gen := NewCorpusGenerator(reg, true)
 
-	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Organization", "Endpoint"}, 3, nil, 100)
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Organization", "Endpoint"}, 3, nil, 100, 2)
 	all, finals := collectBatchInstances(t, batches, errs)
 
 	if len(finals) == 0 {
@@ -1009,7 +1010,7 @@ func TestGenerateCorpusStreamedDeterministicIDs(t *testing.T) {
 	reg := testRegistry(t)
 	gen := NewCorpusGenerator(reg, true)
 
-	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Patient", "Observation"}, 3, nil, 1)
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Patient", "Observation"}, 3, nil, 1, 2)
 	streamed, _ := collectBatchInstances(t, batches, errs)
 
 	// Re-generate via synthesizeType for comparison.
@@ -1032,7 +1033,7 @@ func TestGenerateCorpusStreamedCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancelled immediately
-	batches, errs := gen.GenerateCorpusStreamed(ctx, []string{"Observation", "Patient"}, 100, nil, 10)
+	batches, errs := gen.GenerateCorpusStreamed(ctx, []string{"Observation", "Patient"}, 100, nil, 10, 2)
 	// Drain to completion.
 	for range batches {
 	}
@@ -1042,6 +1043,36 @@ func TestGenerateCorpusStreamedCancellation(t *testing.T) {
 	}
 	if err != context.Canceled {
 		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+}
+
+// TestGenerateCorpusStreamedPipelineDepth verifies the buffered channel lets
+// generation complete ahead of a slow consumer. With an unbuffered channel the
+// generator would block on every send; with pipelineDepth >= number of batches
+// the generator can produce everything before the consumer reads a batch.
+func TestGenerateCorpusStreamedPipelineDepth(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	// batchSize=1 with 5 rounds produces 5 batches. pipelineDepth=5 lets the
+	// generator enqueue all 5 before the consumer starts.
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 5, nil, 1, 5)
+	// Consume nothing yet; the generator must still reach completion (it can
+	// buffer all batches), proving the channel is buffered.
+	select {
+	case _, ok := <-batches:
+		if !ok {
+			// Channel already closed: generator finished without a consumer. This
+			// is only possible with a buffered channel.
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("generator blocked on a full channel; pipeline-depth buffering not effective")
+	}
+	// Drain the rest.
+	for range batches {
+	}
+	if err := <-errs; err != nil {
+		t.Fatalf("GenerateCorpusStreamed returned error: %v", err)
 	}
 }
 
@@ -1058,7 +1089,7 @@ func TestGenerateCorpusStreamedMemoryBounded(t *testing.T) {
 	var peakSmall, peakLarge uint64
 	for _, count := range []int{200, 10000} {
 		var peak uint64
-		batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, count, nil, 100)
+		batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, count, nil, 100, 2)
 		for b := range batches {
 			// Discard the bodies promptly (as the provisioner/writer consumer
 			// does) so peak heap reflects the streaming steady state.

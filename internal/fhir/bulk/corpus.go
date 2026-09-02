@@ -317,6 +317,13 @@ func (g *CorpusGenerator) GenerateCorpusBatched(ctx context.Context, resourceTyp
 // memory while remaining fully linked (a later Location references an earlier
 // Organization).
 //
+// pipelineDepth controls how many batches are buffered ahead of the consumer:
+// a depth of d lets the generator produce up to d batches before blocking on the
+// channel, overlapping synthesis of the next batch with provisioning of the
+// current one. Depth 1 is a single-batch lookahead; larger depths deepen the
+// pipeline at the cost of holding more batches in memory. Values below 1 are
+// treated as 1 (unbuffered).
+//
 // The returned channels: batches delivers mixed-type CorpusBatch values in
 // emission order and is closed when generation completes; errs delivers at most
 // one fatal error (a context cancellation, a synthesis failure, or an
@@ -326,8 +333,11 @@ func (g *CorpusGenerator) GenerateCorpusBatched(ctx context.Context, resourceTyp
 //
 // If ctx is cancelled, generation stops as soon as the in-flight round
 // completes; a partial batch already buffered is not delivered.
-func (g *CorpusGenerator) GenerateCorpusStreamed(ctx context.Context, resourceTypes []string, defaultCount int, overrides map[string]int, batchSize int) (<-chan CorpusBatch, <-chan error) {
-	batches := make(chan CorpusBatch)
+func (g *CorpusGenerator) GenerateCorpusStreamed(ctx context.Context, resourceTypes []string, defaultCount int, overrides map[string]int, batchSize int, pipelineDepth int) (<-chan CorpusBatch, <-chan error) {
+	if pipelineDepth < 1 {
+		pipelineDepth = 1
+	}
+	batches := make(chan CorpusBatch, pipelineDepth)
 	errs := make(chan error, 1)
 
 	go func() {
@@ -391,6 +401,14 @@ func (g *CorpusGenerator) streamCorpus(ctx context.Context, resourceTypes []stri
 	// re-wired and re-emitted in the finalization pass once the full pool exists.
 	requiredDangling := make(map[string][]*model.ResourceInstance)
 
+	// Cache each type's reference fields once; referenceFields is expensive
+	// (profile resolution + tree walk) and depends only on the type, so it must
+	// not be recomputed per instance.
+	refFieldsByType := make(map[string]map[string]refFieldInfo, len(resourceTypes))
+	for _, t := range resourceTypes {
+		refFieldsByType[t] = g.referenceFields(t)
+	}
+
 	var accumulated []*model.ResourceInstance
 	var accumulatedRefs []model.Reference
 	round := 0
@@ -399,34 +417,57 @@ func (g *CorpusGenerator) streamCorpus(ctx context.Context, resourceTypes []stri
 			return err
 		}
 		round++
+		// Collect the types that still have quota this round.
+		type roundItem struct {
+			t         string
+			refFields map[string]refFieldInfo
+			inst      *model.ResourceInstance
+		}
+		active := make([]roundItem, 0, len(resourceTypes))
 		for _, t := range resourceTypes {
 			if round > counts[t] {
 				// This type has emitted its full quota; skip it this round.
 				continue
 			}
-			inst, err := g.synthesizeOne(ctx, t, round)
-			if err != nil {
-				return err
+			active = append(active, roundItem{t: t, refFields: refFieldsByType[t]})
+		}
+		// Synthesize the round's instances in parallel: different types are
+		// independent, and the expensive profile-driven body generation benefits
+		// from CPU parallelism. Errors are collected and surfaced before wiring.
+		{
+			var wg sync.WaitGroup
+			errs := make([]error, len(active))
+			for i := range active {
+				wg.Add(1)
+				go func(i int) {
+					defer wg.Done()
+					inst, err := g.synthesizeOne(ctx, active[i].t, round)
+					if err != nil {
+						errs[i] = err
+						return
+					}
+					active[i].inst = inst
+				}(i)
 			}
-			refFields := g.referenceFields(t)
-			// Per-instance available pools: cross-type refs may target any
-			// instance of an already-created type; same-type refs may only
-			// target instances of this type emitted earlier (this round or a
-			// previous one), so a resource never references a not-yet-emitted peer.
-			instPools := make(map[string][]string, len(availablePools)+1)
-			for k, v := range availablePools {
-				instPools[k] = v
+			wg.Wait()
+			for _, err := range errs {
+				if err != nil {
+					return err
+				}
 			}
-			instPools[t] = availablePools[t]
-			refs := wireCorpusReferences(inst, refFields, instPools)
+		}
+		// Wire references sequentially in topological order: a dependent may
+		// target a type earlier in the same round, so the pool grows in order.
+		for _, item := range active {
+			refs := wireCorpusReferences(item.inst, item.refFields, availablePools)
 			accumulatedRefs = append(accumulatedRefs, refs...)
 			// Strip optional dangling references; preserve required ones for
 			// the finalization pass.
-			if stripDanglingReferences(inst.Resource, refFields) {
-				requiredDangling[t] = append(requiredDangling[t], inst)
+			if stripDanglingReferences(item.inst.Resource, item.refFields) {
+				requiredDangling[item.t] = append(requiredDangling[item.t], item.inst)
 			}
-			availablePools[t] = append(availablePools[t], inst.LocalID)
-			accumulated = append(accumulated, inst)
+			availablePools[item.t] = append(availablePools[item.t], item.inst.LocalID)
+			accumulated = append(accumulated, item.inst)
 		}
 		if len(accumulated) > 0 && (round%batchSize == 0 || round == maxCount) {
 			if err := sendBatch(ctx, out, CorpusBatch{Instances: accumulated, Relationships: accumulatedRefs}); err != nil {
@@ -445,7 +486,7 @@ func (g *CorpusGenerator) streamCorpus(ctx context.Context, resourceTypes []stri
 		if len(instances) == 0 {
 			continue
 		}
-		refFields := g.referenceFields(t)
+		refFields := refFieldsByType[t]
 		batch := CorpusBatch{ResourceType: t, Instances: instances, Finalize: true}
 		for _, inst := range instances {
 			// The full pool is now available, so every reference resolves.

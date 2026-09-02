@@ -114,7 +114,11 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			if batchSize < 1 {
 				batchSize = 1
 			}
-			batches, errs := corpusGenerator.GenerateCorpusStreamed(cmd.Context(), resourceTypes, cfg.BulkCount, parsePerTypeCounts(cfg.BulkPerTypeCounts), batchSize)
+			pipelineDepth := cfg.BulkPipelineDepth
+			if pipelineDepth < 1 {
+				pipelineDepth = 1
+			}
+			batches, errs := corpusGenerator.GenerateCorpusStreamed(cmd.Context(), resourceTypes, cfg.BulkCount, parsePerTypeCounts(cfg.BulkPerTypeCounts), batchSize, pipelineDepth)
 			for batch := range batches {
 				// Provision this batch immediately: its references only point to
 				// resources already emitted (and thus already on the server).
@@ -182,6 +186,8 @@ func newBulkCmd(cfg *config) *cobra.Command {
 	cmd.Flags().BoolVar(&cfg.Exhaustive, "exhaustive", true, "populate optional elements to produce fuller, more complete resources")
 	cmd.Flags().IntVar(&cfg.BulkCount, "count", 25, "number of resources to generate per resource type")
 	cmd.Flags().IntVar(&cfg.BulkBatchSize, "batch-size", 100, "number of resource webs to emit per streaming batch; bounds peak memory")
+	cmd.Flags().IntVar(&cfg.BulkPipelineDepth, "pipeline-depth", 2, "buffered batches generated ahead of provisioning to overlap synthesis and upload")
+	cmd.Flags().IntVar(&cfg.Concurrency, "concurrency", 8, "maximum concurrent HTTP requests to the repository (<=0 = unlimited)")
 	cmd.Flags().StringSliceVar(&cfg.BulkPerTypeCounts, "per-type", nil, "per-type resource counts as Type=Count (repeatable); overrides --count")
 	cmd.Flags().StringSliceVar(&cfg.IncludeResourceTypes, "include-resource", nil, "include only these resource types (repeatable); referenced target types are added automatically")
 	cmd.Flags().StringVar(&cfg.BaseURL, "base-url", "", "target FHIR repository base URL for streaming generated resources")
@@ -214,6 +220,7 @@ func newBulkProvisioner(cfg *config) *provisioning.ServerProvisioner {
 		BasicUsername: writeBasicUser,
 		BasicPassword: writeBasicPass,
 		Tracer:        newDebugTracer(cfg.Debug),
+		Concurrency:   cfg.Concurrency,
 	})
 }
 

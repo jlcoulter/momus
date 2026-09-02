@@ -31,6 +31,11 @@ type Options struct {
 	// Tracer, when set, logs every provisioning request and response as it is
 	// made (used for --debug request/response tracing).
 	Tracer *tracing.Tracer
+	// Concurrency caps the number of simultaneous PUT requests to the server.
+	// A value <= 0 means unlimited (one goroutine per resource per dependency
+	// level). It bounds server load for large batches: without a cap, a batch of
+	// many independent resources would open one connection per resource at once.
+	Concurrency int
 }
 
 // ServerProvisioner writes a Dataset to a FHIR server by PUTting each
@@ -61,9 +66,7 @@ func New(baseURL string, options *Options) *ServerProvisioner {
 		opts.HTTPClient = &http.Client{Timeout: 30 * time.Second}
 	}
 	return &ServerProvisioner{baseURL: baseURL, options: opts, failedIDs: make(map[string]bool)}
-}
-
-// snapshotFailedIDs returns a copy of the ids rejected in earlier calls so a
+} // snapshotFailedIDs returns a copy of the ids rejected in earlier calls so a
 // batch can strip references to them. The copy is safe to read concurrently.
 func (p *ServerProvisioner) snapshotFailedIDs() map[string]bool {
 	p.mu.Lock()
@@ -332,6 +335,11 @@ func refTargetFailed(v any, failed map[string]bool) bool {
 // provisionBatch uploads the resources with the given ids, either concurrently
 // (serial=false) or one at a time in order (serial=true, used for cyclic levels
 // so targets precede dependents). It returns one outcome per id, in id order.
+//
+// Concurrency is bounded by p.options.Concurrency (when > 0): a semaphore caps
+// how many PUT requests run at once so a batch of many independent resources
+// does not open one connection per resource simultaneously and overwhelm the
+// server.
 func (p *ServerProvisioner) provisionBatch(ctx context.Context, ds *model.Dataset, level provisionLevel) []provisionOutcome {
 	outcomes := make([]provisionOutcome, len(level.ids))
 	if level.serial {
@@ -344,6 +352,14 @@ func (p *ServerProvisioner) provisionBatch(ctx context.Context, ds *model.Datase
 		}
 		return outcomes
 	}
+	var sem chan struct{}
+	concurrency := p.options.Concurrency
+	if concurrency < 1 {
+		concurrency = len(level.ids)
+	}
+	if concurrency > 0 {
+		sem = make(chan struct{}, concurrency)
+	}
 	var wg sync.WaitGroup
 	for i, id := range level.ids {
 		instance := ds.Resources[id]
@@ -351,8 +367,14 @@ func (p *ServerProvisioner) provisionBatch(ctx context.Context, ds *model.Datase
 			continue
 		}
 		wg.Add(1)
+		if sem != nil {
+			sem <- struct{}{}
+		}
 		go func(i int, instance *model.ResourceInstance) {
 			defer wg.Done()
+			if sem != nil {
+				defer func() { <-sem }()
+			}
 			outcomes[i] = provisionOutcome{id: instance.LocalID, instance: instance, err: p.provisionInstance(ctx, instance)}
 		}(i, instance)
 	}

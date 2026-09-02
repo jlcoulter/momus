@@ -700,3 +700,55 @@ func TestProvisionBatchStripsCrossBatchFailedRefs(t *testing.T) {
 		t.Fatalf("HealthcareService still carries reference to failed Location: %v", healthcareBody["location"])
 	}
 }
+
+// TestProvisionBatchLimitsConcurrency verifies that the Concurrency option caps
+// the number of simultaneous PUT requests, even when a dependency level contains
+// many independent resources that could otherwise open one connection each.
+func TestProvisionBatchLimitsConcurrency(t *testing.T) {
+	const limit = 3
+	var mu sync.Mutex
+	active := 0
+	maxActive := 0
+	// Requests block until release closes, letting us observe how many run at
+	// once before any complete.
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		active++
+		if active > maxActive {
+			maxActive = active
+		}
+		mu.Unlock()
+		<-release
+		mu.Lock()
+		active--
+		mu.Unlock()
+		w.Header().Set("ETag", `W/"1"`)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	var instances []*model.ResourceInstance
+	for i := 0; i < 10; i++ {
+		id := fmt.Sprintf("r%d", i)
+		instances = append(instances, &model.ResourceInstance{LocalID: id, ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": id}})
+	}
+
+	p := New(server.URL, &Options{HTTPClient: server.Client(), Concurrency: limit})
+	done := make(chan *Result, 1)
+	go func() { done <- p.ProvisionBatch(context.Background(), instances) }()
+
+	// Let the handler observe peak concurrency, then release all requests.
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	res := <-done
+	if !res.Complete() {
+		t.Fatalf("ProvisionBatch incomplete: %d failed", res.Failed)
+	}
+	if maxActive > limit {
+		t.Fatalf("peak concurrent requests = %d, want <= %d", maxActive, limit)
+	}
+	if maxActive < 2 {
+		t.Fatalf("expected some concurrency (saw %d), the limit test is not exercising parallelism", maxActive)
+	}
+}
