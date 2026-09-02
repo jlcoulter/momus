@@ -184,19 +184,103 @@ func (p *ServerProvisioner) ProvisionBatch(ctx context.Context, instances []*mod
 	// Record the references that actually appear in the bodies so the
 	// dependency graph reflects only real, intra-batch edges.
 	recordInstanceBodyReferences(ds)
+	// failed tracks local ids the server rejected. A later resource that
+	// references a failed target would otherwise cascade a HAPI-1094 "not found"
+	// (referential integrity) failure, so references to failed targets are
+	// stripped from each level's bodies before it is provisioned.
+	failed := make(map[string]bool)
 	for _, level := range provisionLevels(ds) {
+		for _, id := range level.ids {
+			if inst := ds.Resources[id]; inst != nil && inst.Resource != nil {
+				stripFailedReferences(inst.Resource, failed)
+			}
+		}
 		outcomes := p.provisionBatch(ctx, ds, level)
 		for _, o := range outcomes {
 			if o.err != nil {
 				res.Failed++
 				res.FailedIDs = append(res.FailedIDs, o.id)
 				res.Failures = append(res.Failures, failureFromError(o.id, o.instance, o.err))
+				failed[o.id] = true
 				continue
 			}
 			res.Provisioned++
 		}
 	}
 	return res
+}
+
+// stripFailedReferences removes references to targets that failed to provision,
+// so a dependent resource does not cascade a HAPI-1094 "not found" failure when
+// the resource it references was itself rejected (e.g. for a validation error).
+// Repeatable reference arrays are filtered element-wise; a scalar reference is
+// removed from its parent map. This is the provisioning-time counterpart to the
+// corpus's dangling-reference stripping, keyed on targets that actually failed
+// during this batch rather than unresolved generation placeholders.
+func stripFailedReferences(value any, failed map[string]bool) {
+	if failed == nil || len(failed) == 0 {
+		return
+	}
+	stripFailedAt(value, failed)
+}
+
+// stripFailedAt walks value, removing reference objects (or array elements)
+// whose target id is in the failed set.
+func stripFailedAt(value any, failed map[string]bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		for k, v := range typed {
+			if arr, ok := v.([]any); ok {
+				kept := make([]any, 0, len(arr))
+				for _, item := range arr {
+					if refTargetFailed(item, failed) {
+						continue
+					}
+					kept = append(kept, item)
+				}
+				if len(kept) != len(arr) {
+					if len(kept) == 0 {
+						delete(typed, k)
+					} else {
+						typed[k] = kept
+					}
+				}
+				for _, item := range kept {
+					stripFailedAt(item, failed)
+				}
+				continue
+			}
+			if refTargetFailed(v, failed) {
+				delete(typed, k)
+				continue
+			}
+			stripFailedAt(v, failed)
+		}
+	case []any:
+		for _, item := range typed {
+			stripFailedAt(item, failed)
+		}
+	}
+}
+
+// refTargetFailed reports whether a value is a reference object (or a
+// single-element array of one) whose target id is in the failed set.
+func refTargetFailed(v any, failed map[string]bool) bool {
+	switch t := v.(type) {
+	case map[string]any:
+		if ref, ok := t["reference"].(string); ok {
+			return failed[batchReferenceTargetID(ref)]
+		}
+	case []any:
+		if len(t) == 1 {
+			if m, ok := t[0].(map[string]any); ok {
+				if ref, ok := m["reference"].(string); ok {
+					return failed[batchReferenceTargetID(ref)]
+				}
+			}
+		}
+	}
+	return false
 }
 
 // provisionBatch uploads the resources with the given ids, either concurrently

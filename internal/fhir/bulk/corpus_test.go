@@ -801,3 +801,39 @@ func TestDefaultProfilePrefersScopedProfile(t *testing.T) {
 		t.Fatalf("defaultProfile unscoped = %q, want first (base) profile", got)
 	}
 }
+
+// TestWireCorpusReferencesRootsSameTypeRefs verifies that a same-type reference
+// (e.g. Location.partOf → Location) is wired to the root of that type's emitted
+// pool rather than a hash-spread peer. Spreading same-type references across the
+// pool builds deep chains (Location-N → Location-(N-1) → … → Location-1), so a
+// single failure at any link cascades HAPI-1094 "not found" to every later
+// member. Pointing every member at the root keeps the same-type dependency graph
+// shallow and resilient. Cross-type references still spread deterministically.
+func TestWireCorpusReferencesRootsSameTypeRefs(t *testing.T) {
+	pool := []string{"loc-1", "loc-2", "loc-3"}
+	// Same-type reference (Location.partOf → Location) always targets the root.
+	for _, id := range []string{"loc-2", "loc-3"} {
+		inst := &model.ResourceInstance{LocalID: id, ResourceType: "Location", Resource: map[string]any{}}
+		refs := wireCorpusReferences(inst, map[string]refFieldInfo{
+			"Location.partOf": {targetType: "Location"},
+		}, map[string][]string{"Location": pool})
+		if len(refs) != 1 {
+			t.Fatalf("refs = %d, want 1", len(refs))
+		}
+		if refs[0].TargetID != "loc-1" {
+			t.Fatalf("same-type ref target = %s, want root loc-1", refs[0].TargetID)
+		}
+	}
+	// A cross-type reference still spreads across the pool deterministically.
+	distinct := map[string]bool{}
+	for i := 0; i < 20; i++ {
+		inst := &model.ResourceInstance{LocalID: "p" + string(rune('a'+i)), ResourceType: "PractitionerRole", Resource: map[string]any{}}
+		refs := wireCorpusReferences(inst, map[string]refFieldInfo{
+			"PractitionerRole.organization": {targetType: "Organization"},
+		}, map[string][]string{"Organization": pool})
+		distinct[refs[0].TargetID] = true
+	}
+	if len(distinct) < 2 {
+		t.Fatalf("cross-type refs did not spread across the pool: %v", distinct)
+	}
+}

@@ -550,3 +550,97 @@ func TestProvisionCycleLevelSerially(t *testing.T) {
 		t.Fatalf("provisioning incomplete: %d provisioned, %d failed: %v", res.Provisioned, res.Failed, res.FailedIDs)
 	}
 }
+
+// TestProvisionBatchStripsReferencesToFailedTargets verifies that when a target
+// resource fails to provision (e.g. a validation error), a later resource in the
+// same batch that references it has the reference stripped from its body instead
+// of cascading a HAPI-1094 "not found" failure. This mirrors the failure profile
+// observed in `coverage bulk`: Location-1 is rejected (412), and every Location
+// whose partOf references it, plus every downstream type referencing that
+// Location, would otherwise fail for referential integrity.
+func TestProvisionBatchStripsReferencesToFailedTargets(t *testing.T) {
+	var mu sync.Mutex
+	seen := make(map[string]string) // path -> received body
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		seen[r.URL.Path] = r.URL.Path
+		mu.Unlock()
+		if strings.HasSuffix(r.URL.Path, "/Location/root") {
+			// The root Location fails for a validation (non-referential) reason.
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return
+		}
+		w.Header().Set("ETag", `W/"1"`)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	instances := []*model.ResourceInstance{
+		{LocalID: "root", ResourceType: "Location", Resource: map[string]any{
+			"resourceType": "Location", "id": "root",
+		}},
+		{LocalID: "child", ResourceType: "Location", Resource: map[string]any{
+			"resourceType": "Location", "id": "child",
+			"partOf": map[string]any{"reference": "Location/root"},
+		}},
+	}
+	res := New(server.URL, &Options{HTTPClient: server.Client()}).ProvisionBatch(context.Background(), instances)
+	if res.Provisioned != 1 || res.Failed != 1 {
+		t.Fatalf("got %d provisioned, %d failed; want 1 provisioned (child) and 1 failed (root)", res.Provisioned, res.Failed)
+	}
+	if len(res.FailedIDs) != 1 || res.FailedIDs[0] != "root" {
+		t.Fatalf("failed ids = %v, want [root]", res.FailedIDs)
+	}
+	// The child must have had its reference to the failed root stripped: it must
+	// have been uploaded without the partOf field, so the server did not reject
+	// it with a "not found" error.
+	mu.Lock()
+	defer mu.Unlock()
+	if seen["/Location/child"] != "/Location/child" {
+		t.Fatalf("child Location was not uploaded; seen = %v", seen)
+	}
+	if _, ok := instances[1].Resource["partOf"]; ok {
+		t.Fatalf("child Location still carries a reference to failed target: %v", instances[1].Resource["partOf"])
+	}
+}
+
+// TestStripFailedReferences verifies the reference-stripping helper removes
+// references to failed targets from nested maps and repeatable arrays.
+func TestStripFailedReferences(t *testing.T) {
+	failed := map[string]bool{"bad": true}
+	body := map[string]any{
+		"resourceType": "Location",
+		"partOf":       map[string]any{"reference": "Location/bad"},
+		"endpoint": []any{
+			map[string]any{"reference": "Endpoint/good"},
+			map[string]any{"reference": "Endpoint/bad"},
+		},
+		"managingOrganization": map[string]any{"reference": "Organization/good"},
+	}
+	stripFailedReferences(body, failed)
+	if _, ok := body["partOf"]; ok {
+		t.Fatalf("partOf reference to failed target not stripped: %v", body["partOf"])
+	}
+	endpoints, ok := body["endpoint"].([]any)
+	if !ok || len(endpoints) != 1 {
+		t.Fatalf("endpoint = %v, want only the good reference retained", body["endpoint"])
+	}
+	if ref := endpoints[0].(map[string]any)["reference"]; ref != "Endpoint/good" {
+		t.Fatalf("endpoint[0] = %v, want Endpoint/good", ref)
+	}
+	if mo := body["managingOrganization"].(map[string]any)["reference"]; mo != "Organization/good" {
+		t.Fatalf("managingOrganization = %v, want Organization/good", mo)
+	}
+	// A reference to a live target (not in the failed set) is preserved.
+	if _, ok := body["endpoint"]; !ok {
+		t.Fatal("live endpoint reference should be preserved")
+	}
+	// nil/empty failed set is a no-op.
+	copyBody := map[string]any{"partOf": map[string]any{"reference": "Location/x"}}
+	stripFailedReferences(copyBody, nil)
+	if _, ok := copyBody["partOf"]; !ok {
+		t.Fatal("nil failed set should be a no-op")
+	}
+}

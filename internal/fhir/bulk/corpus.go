@@ -634,7 +634,21 @@ func wireCorpusReferences(inst *model.ResourceInstance, refFields map[string]ref
 		if len(pool) == 0 {
 			continue
 		}
-		idx := int(hashCorpus(inst.LocalID+"|"+path)) % len(pool)
+		// A same-type reference (e.g. Location.partOf → Location, an element of
+		// the same resource type) is wired to the root of that type's emitted
+		// pool rather than a hash-spread peer. Spreading same-type references
+		// across the pool tends to build deep chains (Location-N → Location-(N-1)
+		// → … → Location-1), so a single failure at any link cascades HAPI-1094
+		// "not found" to every later member. Pointing every member at the root
+		// keeps the same-type dependency graph shallow and resilient: the whole
+		// sub-tree is provisioned as soon as the root exists, and a failure only
+		// affects the members that reference the failed root.
+		var idx int
+		if info.targetType == inst.ResourceType {
+			idx = 0
+		} else {
+			idx = int(hashCorpus(inst.LocalID+"|"+path)) % len(pool)
+		}
 		targetID := pool[idx]
 		setReferencePath(inst.Resource, path, refTarget{resourceType: info.targetType, localID: targetID}, info.repeatable)
 		refs = append(refs, model.Reference{SourceID: inst.LocalID, Path: path, TargetID: targetID})
