@@ -565,16 +565,20 @@ func collectReferenceFields(node *model.ElementNode, reg *registry.Registry, out
 }
 
 // referenceTargetType returns the first resolvable target resource type for a
-// Reference element, from its target profiles.
+// Reference element, from its target profiles. An abstract target (e.g. the
+// base "Resource" type, which is never provisioned) is not returned: a
+// Reference to it would dangle on the server. This lets callers fall back to a
+// concrete target from example-instance data instead (e.g. Provenance.entity.what
+// targets abstract Resource, but a real example references Organization).
 func referenceTargetType(def *model.ElementDefinition, reg *registry.Registry) string {
 	for _, profileURL := range def.TargetProfile {
-		if rt := resourceTypeOfProfile(reg, profileURL); rt != "" {
+		if rt := resourceTypeOfProfile(reg, profileURL); rt != "" && isConcreteResourceType(rt) {
 			return rt
 		}
 	}
 	for _, et := range def.Types {
 		for _, profileURL := range et.TargetProfile {
-			if rt := resourceTypeOfProfile(reg, profileURL); rt != "" {
+			if rt := resourceTypeOfProfile(reg, profileURL); rt != "" && isConcreteResourceType(rt) {
 				return rt
 			}
 		}
