@@ -133,6 +133,16 @@ func newBulkCmd(cfg *config) *cobra.Command {
 					provisioned += res.Provisioned
 					failed += res.Failed
 					failures = append(failures, res.Failures...)
+					// Live upload progress on stderr, overwritten in place. The
+					// total is unknown in streaming mode (per-type overrides and
+					// finalization batches vary the count), so show the running
+					// count and rate rather than a fraction.
+					elapsed := time.Since(start)
+					if secs := elapsed.Seconds(); secs > 0 {
+						fmt.Fprintf(os.Stderr, "\r  %d (%.0f/sec)", provisioned, float64(provisioned)/secs)
+					} else {
+						fmt.Fprintf(os.Stderr, "\r  %d", provisioned)
+					}
 				}
 				// Write the batch to NDJSON. Finalization batches re-emit
 				// instances that were already written in their initial batch, so
@@ -163,28 +173,32 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			}
 			if provisioner != nil {
 				if failed > 0 {
-					fmt.Printf("WARNING: bulk repository stream incomplete: %d of %d resources uploaded\n", provisioned, provisioned+failed)
+					fmt.Fprintf(os.Stderr, "\rWARNING: bulk repository stream incomplete: %d of %d resources uploaded\n", provisioned, provisioned+failed)
 					for _, failure := range failures {
-						fmt.Printf("  - %s\n", failure.Describe())
+						fmt.Fprintf(os.Stderr, "  - %s\n", failure.Describe())
 					}
 					if !cfg.Debug {
-						fmt.Printf("Run with --debug to write the rejected payloads and full server responses to %s for inspection.\n", debugOutputDir)
+						fmt.Fprintf(os.Stderr, "Run with --debug to write the rejected payloads and full server responses to %s for inspection.\n", debugOutputDir)
 					}
 					if err := writeDebugProvisionFailures(cfg.Debug, failures); err != nil {
 						return err
 					}
 					return fmt.Errorf("bulk repository stream incomplete: %d of %d resources uploaded", provisioned, provisioned+failed)
 				}
-				fmt.Printf("Bulk repository stream complete: %d resources uploaded\n", provisioned)
+				// Clear the in-place progress line and print the final result.
 				elapsed := time.Since(start)
 				if secs := elapsed.Seconds(); secs > 0 {
-					fmt.Printf("  %.0f resources/sec (provisioning)\n", float64(provisioned)/secs)
+					fmt.Fprintf(os.Stderr, "\r%d resources uploaded (%.0f/sec)\n", provisioned, float64(provisioned)/secs)
+				} else {
+					fmt.Fprintf(os.Stderr, "\r%d resources uploaded\n", provisioned)
 				}
 			}
-			fmt.Printf("Generated NDJSON bulk data: %d resources across %d resource types\n", generated, len(resourceTypes))
-			elapsed := time.Since(start)
-			if secs := elapsed.Seconds(); secs > 0 {
-				fmt.Printf("  %.0f resources/sec (generation)\n", float64(generated)/secs)
+			if provisioner == nil {
+				fmt.Printf("Generated NDJSON bulk data: %d resources across %d resource types\n", generated, len(resourceTypes))
+				elapsed := time.Since(start)
+				if secs := elapsed.Seconds(); secs > 0 {
+					fmt.Printf("  %.0f resources/sec (generation)\n", float64(generated)/secs)
+				}
 			}
 			if cfg.OutputPath != "" && cfg.BaseURL == "" {
 				fmt.Printf("Bulk data written to %s\n", cfg.OutputPath)
