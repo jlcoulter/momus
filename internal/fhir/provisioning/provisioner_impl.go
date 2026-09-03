@@ -459,17 +459,9 @@ func (p *ServerProvisioner) provisionInstance(ctx context.Context, instance *mod
 	if instance.Resource == nil {
 		return fmt.Errorf("provision %s/%s: resource body is nil", instance.ResourceType, instance.LocalID)
 	}
-	// Use the body pre-marshalled at synthesis time when available; otherwise
-	// marshal now. Pre-marshalling moves the CPU cost off the hot path.
-	var body []byte
-	if len(instance.MarshaledJSON) > 0 {
-		body = instance.MarshaledJSON
-	} else {
-		var err error
-		body, err = json.Marshal(instance.Resource)
-		if err != nil {
-			return fmt.Errorf("marshal %s/%s: %w", instance.ResourceType, instance.LocalID, err)
-		}
+	body, err := json.Marshal(instance.Resource)
+	if err != nil {
+		return fmt.Errorf("marshal %s/%s: %w", instance.ResourceType, instance.LocalID, err)
 	}
 	url := fmt.Sprintf("%s/%s/%s", strings.TrimRight(p.baseURL, "/"), instance.ResourceType, instance.LocalID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(body))

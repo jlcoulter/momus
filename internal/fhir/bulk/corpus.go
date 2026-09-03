@@ -2,7 +2,6 @@ package bulk
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"sort"
@@ -597,13 +596,7 @@ func (g *CorpusGenerator) synthesizeOne(ctx context.Context, t string, index int
 	if len(body) == 0 {
 		return nil, fmt.Errorf("synthesize %s: produced no resource body", t)
 	}
-	// Pre-marshal the body during synthesis (which runs across all cores) so the
-	// provisioning hot path does not marshal each resource per PUT request.
-	marshaled, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("marshal %s: %w", t, err)
-	}
-	return &model.ResourceInstance{LocalID: id, ResourceType: t, Profile: profileURL, Resource: body, MarshaledJSON: marshaled}, nil
+	return &model.ResourceInstance{LocalID: id, ResourceType: t, Profile: profileURL, Resource: body}, nil
 }
 
 // expandReferenceTargets grows the type set to a fixpoint: whenever an included
