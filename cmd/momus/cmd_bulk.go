@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	testbulk "github.com/jlcoulter/momus/internal/fhir/bulk"
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
@@ -118,6 +119,7 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			if pipelineDepth < 1 {
 				pipelineDepth = 1
 			}
+			start := time.Now()
 			batches, errs := corpusGenerator.GenerateCorpusStreamed(cmd.Context(), resourceTypes, cfg.BulkCount, parsePerTypeCounts(cfg.BulkPerTypeCounts), batchSize, pipelineDepth)
 			for batch := range batches {
 				// Provision this batch immediately: its references only point to
@@ -170,9 +172,16 @@ func newBulkCmd(cfg *config) *cobra.Command {
 					return fmt.Errorf("bulk repository stream incomplete: %d of %d resources uploaded", provisioned, provisioned+failed)
 				}
 				fmt.Printf("Bulk repository stream complete: %d resources uploaded\n", provisioned)
+				elapsed := time.Since(start)
+				if secs := elapsed.Seconds(); secs > 0 {
+					fmt.Printf("  %.0f resources/sec (provisioning)\n", float64(provisioned)/secs)
+				}
 			}
-
 			fmt.Printf("Generated NDJSON bulk data: %d resources across %d resource types\n", generated, len(resourceTypes))
+			elapsed := time.Since(start)
+			if secs := elapsed.Seconds(); secs > 0 {
+				fmt.Printf("  %.0f resources/sec (generation)\n", float64(generated)/secs)
+			}
 			if cfg.OutputPath != "" {
 				fmt.Printf("Bulk data written to %s\n", cfg.OutputPath)
 			}
