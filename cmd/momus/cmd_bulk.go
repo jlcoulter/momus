@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	testbulk "github.com/jlcoulter/momus/internal/fhir/bulk"
@@ -124,6 +125,39 @@ func newBulkCmd(cfg *config) *cobra.Command {
 				pipelineDepth = 1
 			}
 			start := time.Now()
+			// Live progress bar: a background goroutine redraws the running count
+			// and rate on stdout every 100ms, so the bar advances continuously
+			// while batches are being provisioned rather than only after each
+			// batch completes. stdout is always free in provisioning mode (the
+			// NDJSON stream is discarded), even with --debug, whose
+			// request/response trace goes to stderr. The total is unknown in
+			// streaming mode (per-type overrides and finalization batches vary
+			// the count), so the bar shows the running count and rate rather than
+			// a fraction.
+			var provisionedAtomic atomic.Int64
+			stopProgress := make(chan struct{})
+			progressDone := make(chan struct{})
+			if provisioner != nil {
+				go func() {
+					defer close(progressDone)
+					ticker := time.NewTicker(100 * time.Millisecond)
+					defer ticker.Stop()
+					for {
+						select {
+						case <-stopProgress:
+							return
+						case <-ticker.C:
+							n := provisionedAtomic.Load()
+							elapsed := time.Since(start)
+							if secs := elapsed.Seconds(); secs > 0 {
+								fmt.Printf("\r  %d (%.0f/sec)", n, float64(n)/secs)
+							} else {
+								fmt.Printf("\r  %d", n)
+							}
+						}
+					}
+				}()
+			}
 			batches, errs := corpusGenerator.GenerateCorpusStreamed(cmd.Context(), resourceTypes, cfg.BulkCount, parsePerTypeCounts(cfg.BulkPerTypeCounts), batchSize, pipelineDepth)
 			for batch := range batches {
 				// Provision this batch immediately: its references only point to
@@ -133,20 +167,7 @@ func newBulkCmd(cfg *config) *cobra.Command {
 					provisioned += res.Provisioned
 					failed += res.Failed
 					failures = append(failures, res.Failures...)
-					// Live upload progress on stdout, overwritten in place. stdout
-					// is always free in provisioning mode (the NDJSON stream is
-					// discarded), even with --debug, whose request/response trace
-					// goes to stderr — so the progress bar stays visible above
-					// the trace. The total is unknown in streaming mode
-					// (per-type overrides and finalization batches vary the
-					// count), so show the running count and rate rather than a
-					// fraction.
-					elapsed := time.Since(start)
-					if secs := elapsed.Seconds(); secs > 0 {
-						fmt.Printf("\r  %d (%.0f/sec)", provisioned, float64(provisioned)/secs)
-					} else {
-						fmt.Printf("\r  %d", provisioned)
-					}
+					provisionedAtomic.Store(int64(provisioned))
 				}
 				// Write the batch to NDJSON. Finalization batches re-emit
 				// instances that were already written in their initial batch, so
@@ -166,6 +187,12 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			}
 			if err := <-errs; err != nil {
 				return err
+			}
+			// Stop the progress bar before printing the final result so the two
+			// don't interleave on the same line.
+			if provisioner != nil {
+				close(stopProgress)
+				<-progressDone
 			}
 			if debugBulk != nil {
 				if err := debugBulk.Close(); err != nil {
