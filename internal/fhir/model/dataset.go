@@ -18,6 +18,11 @@ type ResourceInstance struct {
 	Resource     map[string]any `json:"resource"`
 	ServerID     string         `json:"serverId,omitempty"`
 	Version      string         `json:"version,omitempty"`
+	// MarshaledJSON is the resource body pre-marshalled to JSON at synthesis
+	// time, so the provisioning hot path skips per-request marshalling. It is
+	// populated by generators that produce many instances (e.g. bulk corpus)
+	// and is otherwise nil.
+	MarshaledJSON []byte `json:"-"`
 }
 
 // Reference is a relationship between two generated resource instances.

@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/jlcoulter/momus/internal/core/tracing"
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -63,7 +62,12 @@ func New(baseURL string, options *Options) *ServerProvisioner {
 		opts = *options
 	}
 	if opts.HTTPClient == nil {
-		opts.HTTPClient = &http.Client{Timeout: 30 * time.Second}
+		// No blanket timeout: request cancellation is driven by the caller's
+		// context (streamed provisioning uses cmd.Context()), and a hard
+		// deadline on the whole response-body read would abort in-flight
+		// connections that could otherwise be reused. Callers that want a
+		// timeout should set HTTPClient explicitly.
+		opts.HTTPClient = &http.Client{}
 	}
 	return &ServerProvisioner{baseURL: baseURL, options: opts, failedIDs: make(map[string]bool)}
 } // snapshotFailedIDs returns a copy of the ids rejected in earlier calls so a
@@ -455,9 +459,17 @@ func (p *ServerProvisioner) provisionInstance(ctx context.Context, instance *mod
 	if instance.Resource == nil {
 		return fmt.Errorf("provision %s/%s: resource body is nil", instance.ResourceType, instance.LocalID)
 	}
-	body, err := json.Marshal(instance.Resource)
-	if err != nil {
-		return fmt.Errorf("marshal %s/%s: %w", instance.ResourceType, instance.LocalID, err)
+	// Use the body pre-marshalled at synthesis time when available; otherwise
+	// marshal now. Pre-marshalling moves the CPU cost off the hot path.
+	var body []byte
+	if len(instance.MarshaledJSON) > 0 {
+		body = instance.MarshaledJSON
+	} else {
+		var err error
+		body, err = json.Marshal(instance.Resource)
+		if err != nil {
+			return fmt.Errorf("marshal %s/%s: %w", instance.ResourceType, instance.LocalID, err)
+		}
 	}
 	url := fmt.Sprintf("%s/%s/%s", strings.TrimRight(p.baseURL, "/"), instance.ResourceType, instance.LocalID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(body))

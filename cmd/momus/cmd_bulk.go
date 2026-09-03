@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -227,12 +228,32 @@ func newBulkProvisioner(cfg *config) *provisioning.ServerProvisioner {
 	if writeBasicPass == "" {
 		writeBasicPass = cfg.ApiBasicPassword
 	}
+	concurrency := cfg.Concurrency
+	if concurrency < 1 {
+		concurrency = 16
+	}
+	// The default http.Transport keeps only 2 idle connections per host. Bulk
+	// provisioning opens up to --concurrency PUTs at once, so 16 goroutines
+	// would otherwise thrash on 2 connections: every extra request pays for a
+	// fresh TCP connect/TLS handshake. Size the idle pool to the concurrency
+	// (plus headroom) so connections are reused and keep-alive actually kicks
+	// in. The blanket client timeout is dropped: cancellation is driven by the
+	// request context, and a hard deadline on the whole body read would kill
+	// connections that could otherwise be reused under a slow server.
+	transport := &http.Transport{
+		MaxIdleConns:        concurrency + 64,
+		MaxIdleConnsPerHost: concurrency + 16,
+		IdleConnTimeout:     90 * time.Second,
+		MaxConnsPerHost:     concurrency * 2,
+	}
+	client := &http.Client{Transport: transport}
 	return provisioning.New(writeBase, &provisioning.Options{
 		BearerToken:   cfg.ApiBearerToken,
 		BasicUsername: writeBasicUser,
 		BasicPassword: writeBasicPass,
 		Tracer:        newDebugTracer(cfg.Debug),
-		Concurrency:   cfg.Concurrency,
+		Concurrency:   concurrency,
+		HTTPClient:    client,
 	})
 }
 
