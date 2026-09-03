@@ -411,42 +411,57 @@ func (g *CorpusGenerator) streamCorpus(ctx context.Context, resourceTypes []stri
 
 	var accumulated []*model.ResourceInstance
 	var accumulatedRefs []model.Reference
-	round := 0
-	for maxCount > 0 && round < maxCount {
+	// Synthesize a batch's worth of rounds up front and in parallel. The round
+	// barrier (waiting for every type in a round before starting the next) left
+	// most cores idle: only one instance per type ran concurrently, so on a
+	// multi-core machine synthesis used just the type count of goroutines. Since
+	// synthesis of an instance is independent of every other instance (only the
+	// wiring phase consumes the reference pools), we synthesize all instances in
+	// a batch of rounds concurrently and then wire them sequentially in
+	// topological order, which saturates the CPU with the synthesis phase.
+	type roundItem struct {
+		t         string
+		round     int
+		refFields map[string]refFieldInfo
+		inst      *model.ResourceInstance
+	}
+	for batchStart := 1; batchStart <= maxCount; batchStart += batchSize {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		round++
-		// Collect the types that still have quota this round.
-		type roundItem struct {
-			t         string
-			refFields map[string]refFieldInfo
-			inst      *model.ResourceInstance
+		batchEnd := batchStart + batchSize - 1
+		if batchEnd > maxCount {
+			batchEnd = maxCount
 		}
-		active := make([]roundItem, 0, len(resourceTypes))
-		for _, t := range resourceTypes {
-			if round > counts[t] {
-				// This type has emitted its full quota; skip it this round.
-				continue
+		// Collect every (type, round) item for this batch of rounds in emission
+		// order (round-major, then topological type order within a round), so the
+		// sequential wiring pass below sees them in exactly the original order.
+		items := make([]roundItem, 0, (batchEnd-batchStart+1)*len(resourceTypes))
+		for round := batchStart; round <= batchEnd; round++ {
+			for _, t := range resourceTypes {
+				if round > counts[t] {
+					// This type has emitted its full quota; skip it this round.
+					continue
+				}
+				items = append(items, roundItem{t: t, round: round, refFields: refFieldsByType[t]})
 			}
-			active = append(active, roundItem{t: t, refFields: refFieldsByType[t]})
 		}
-		// Synthesize the round's instances in parallel: different types are
-		// independent, and the expensive profile-driven body generation benefits
-		// from CPU parallelism. Errors are collected and surfaced before wiring.
+		// Synthesize all items in this batch concurrently. Synthesis of one
+		// instance is independent of every other (references are wired later), so
+		// launching a goroutine per item lets the scheduler use every core.
 		{
 			var wg sync.WaitGroup
-			errs := make([]error, len(active))
-			for i := range active {
+			errs := make([]error, len(items))
+			for i := range items {
 				wg.Add(1)
 				go func(i int) {
 					defer wg.Done()
-					inst, err := g.synthesizeOne(ctx, active[i].t, round)
+					inst, err := g.synthesizeOne(ctx, items[i].t, items[i].round)
 					if err != nil {
 						errs[i] = err
 						return
 					}
-					active[i].inst = inst
+					items[i].inst = inst
 				}(i)
 			}
 			wg.Wait()
@@ -456,9 +471,9 @@ func (g *CorpusGenerator) streamCorpus(ctx context.Context, resourceTypes []stri
 				}
 			}
 		}
-		// Wire references sequentially in topological order: a dependent may
-		// target a type earlier in the same round, so the pool grows in order.
-		for _, item := range active {
+		// Wire references sequentially in emission order: a dependent may target
+		// a type earlier in the same batch, so the pool grows in order.
+		for _, item := range items {
 			refs := wireCorpusReferences(item.inst, item.refFields, availablePools)
 			accumulatedRefs = append(accumulatedRefs, refs...)
 			// Strip optional dangling references; preserve required ones for
@@ -469,7 +484,7 @@ func (g *CorpusGenerator) streamCorpus(ctx context.Context, resourceTypes []stri
 			availablePools[item.t] = append(availablePools[item.t], item.inst.LocalID)
 			accumulated = append(accumulated, item.inst)
 		}
-		if len(accumulated) > 0 && (round%batchSize == 0 || round == maxCount) {
+		if len(accumulated) > 0 {
 			if err := sendBatch(ctx, out, CorpusBatch{Instances: accumulated, Relationships: accumulatedRefs}); err != nil {
 				return err
 			}

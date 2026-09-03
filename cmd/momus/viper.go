@@ -156,7 +156,7 @@ const homeConfigTemplate = `# Momus user configuration.
 # exhaustive = true
 # bulk_count = 25
 # bulk_batch_size = 100
-# bulk_pipeline_depth = 2
+# bulk_pipeline_depth = 4
 # concurrency = 8
 # bulk_per_type_counts = []
 

@@ -198,7 +198,7 @@ func newBulkCmd(cfg *config) *cobra.Command {
 	cmd.Flags().BoolVar(&cfg.Exhaustive, "exhaustive", true, "populate optional elements to produce fuller, more complete resources")
 	cmd.Flags().IntVar(&cfg.BulkCount, "count", 25, "number of resources to generate per resource type")
 	cmd.Flags().IntVar(&cfg.BulkBatchSize, "batch-size", 100, "number of resource webs to emit per streaming batch; bounds peak memory")
-	cmd.Flags().IntVar(&cfg.BulkPipelineDepth, "pipeline-depth", 2, "buffered batches generated ahead of provisioning to overlap synthesis and upload")
+	cmd.Flags().IntVar(&cfg.BulkPipelineDepth, "pipeline-depth", 4, "buffered batches generated ahead of provisioning to overlap synthesis and upload")
 	cmd.Flags().IntVar(&cfg.Concurrency, "concurrency", 8, "maximum concurrent HTTP requests to the repository (<=0 = unlimited)")
 	cmd.Flags().StringSliceVar(&cfg.BulkPerTypeCounts, "per-type", nil, "per-type resource counts as Type=Count (repeatable); overrides --count")
 	cmd.Flags().StringSliceVar(&cfg.IncludeResourceTypes, "include-resource", nil, "include only these resource types (repeatable); referenced target types are added automatically")

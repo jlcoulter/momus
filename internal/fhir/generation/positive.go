@@ -1716,6 +1716,24 @@ func resolveBoundCodingFromCodingChild(node *model.ElementNode, reg *registry.Re
 // example instance — extension URLs are globally unique, so the coding is found
 // wherever the extension appears (e.g. the "new-patient-availability" extension
 // on a HealthcareService example).
+//
+// The result is deterministic for a given (registry, resourceType, path,
+// profileURL): the example instances are immutable once the registry is built.
+// Because this is on the bulk corpus hot path, the result is cached per key.
+var exampleCodingCache sync.Map // exampleCodingCacheKey -> exampleCodingCacheEntry
+
+type exampleCodingCacheKey struct {
+	reg          *registry.Registry
+	resourceType string
+	path         string
+	profileURL   string
+}
+
+type exampleCodingCacheEntry struct {
+	coding generatedCoding
+	ok     bool
+}
+
 func resolveBoundCodingFromExample(node *model.ElementNode, reg *registry.Registry) (generatedCoding, bool) {
 	if node == nil || node.Path == "" || reg == nil {
 		return generatedCoding{}, false
@@ -1728,13 +1746,24 @@ func resolveBoundCodingFromExample(node *model.ElementNode, reg *registry.Regist
 	if resourceType == "" || path == "" {
 		return generatedCoding{}, false
 	}
+	profileURL := normalizeCanonical(node.ProfileURL)
+	key := exampleCodingCacheKey{reg: reg, resourceType: resourceType, path: path, profileURL: profileURL}
+	if cached, ok := exampleCodingCache.Load(key); ok {
+		entry := cached.(exampleCodingCacheEntry)
+		return entry.coding, entry.ok
+	}
+	coding, ok := resolveBoundCodingFromExampleUncached(resourceType, path, profileURL, reg)
+	exampleCodingCache.Store(key, exampleCodingCacheEntry{coding: coding, ok: ok})
+	return coding, ok
+}
+
+func resolveBoundCodingFromExampleUncached(resourceType, path, profileURL string, reg *registry.Registry) (generatedCoding, bool) {
 	instances := reg.ResourcesForType(resourceType)
 	if len(instances) == 0 {
 		return generatedCoding{}, false
 	}
 
 	// First pass: prefer instances whose meta.profile matches the node's profile.
-	profileURL := normalizeCanonical(node.ProfileURL)
 	for _, inst := range instances {
 		if !hasProfile(inst.ProfileURLs, profileURL) {
 			continue
@@ -1757,11 +1786,39 @@ func resolveBoundCodingFromExample(node *model.ElementNode, reg *registry.Regist
 // coding from its valueCodeableConcept (or valueCoding). The extension URL is
 // globally unique, so this resolves wherever the extension appears in the
 // package's examples.
+//
+// The result is deterministic for a given (registry, extensionURL): the example
+// instances are immutable once the registry is built. Because this is on the
+// bulk corpus hot path — it walks every example instance for every extension
+// value[x] element — the result is cached per (registry, extensionURL).
+var extensionValueCodingCache sync.Map // extensionValueCodingCacheKey -> extensionValueCodingCacheEntry
+
+type extensionValueCodingCacheKey struct {
+	reg          *registry.Registry
+	extensionURL string
+}
+
+type extensionValueCodingCacheEntry struct {
+	coding generatedCoding
+	ok     bool
+}
+
 func resolveBoundCodingFromExtensionValue(extensionURL string, reg *registry.Registry) (generatedCoding, bool) {
 	if extensionURL == "" || reg == nil {
 		return generatedCoding{}, false
 	}
 	extensionURL = normalizeCanonical(extensionURL)
+	key := extensionValueCodingCacheKey{reg: reg, extensionURL: extensionURL}
+	if cached, ok := extensionValueCodingCache.Load(key); ok {
+		entry := cached.(extensionValueCodingCacheEntry)
+		return entry.coding, entry.ok
+	}
+	coding, ok := resolveBoundCodingFromExtensionValueUncached(extensionURL, reg)
+	extensionValueCodingCache.Store(key, extensionValueCodingCacheEntry{coding: coding, ok: ok})
+	return coding, ok
+}
+
+func resolveBoundCodingFromExtensionValueUncached(extensionURL string, reg *registry.Registry) (generatedCoding, bool) {
 	for _, inst := range reg.AllResources() {
 		if inst == nil || inst.Raw == nil {
 			continue
