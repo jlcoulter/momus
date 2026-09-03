@@ -148,11 +148,17 @@ func newBulkCmd(cfg *config) *cobra.Command {
 							return
 						case <-ticker.C:
 							n := provisionedAtomic.Load()
+							// Skip the bar until the first batch completes so the
+							// user isn't shown a misleading 0 (0/sec) while the
+							// first (slow) batch is still in flight.
+							if n == 0 {
+								continue
+							}
 							elapsed := time.Since(start)
 							if secs := elapsed.Seconds(); secs > 0 {
-								fmt.Printf("\r  %d (%.0f/sec)", n, float64(n)/secs)
+								fmt.Printf("\r  %d (%.0f/sec)\033[K", n, float64(n)/secs)
 							} else {
-								fmt.Printf("\r  %d", n)
+								fmt.Printf("\r  %d\033[K", n)
 							}
 						}
 					}
@@ -204,7 +210,7 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			}
 			if provisioner != nil {
 				if failed > 0 {
-					fmt.Fprintf(os.Stderr, "\rWARNING: bulk repository stream incomplete: %d of %d resources uploaded\n", provisioned, provisioned+failed)
+					fmt.Fprintf(os.Stderr, "\rWARNING: bulk repository stream incomplete: %d of %d resources uploaded\033[K\n", provisioned, provisioned+failed)
 					for _, failure := range failures {
 						fmt.Fprintf(os.Stderr, "  - %s\n", failure.Describe())
 					}
@@ -219,9 +225,9 @@ func newBulkCmd(cfg *config) *cobra.Command {
 				// Clear the in-place progress line and print the final result.
 				elapsed := time.Since(start)
 				if secs := elapsed.Seconds(); secs > 0 {
-					fmt.Printf("\r%d resources uploaded (%.0f/sec)\n", provisioned, float64(provisioned)/secs)
+					fmt.Printf("\r%d resources uploaded (%.0f/sec)\033[K\n", provisioned, float64(provisioned)/secs)
 				} else {
-					fmt.Printf("\r%d resources uploaded\n", provisioned)
+					fmt.Printf("\r%d resources uploaded\033[K\n", provisioned)
 				}
 			}
 			if provisioner == nil {

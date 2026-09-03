@@ -639,11 +639,15 @@ func (p *ServerProvisioner) provisionBundle(ctx context.Context, instances []*mo
 // "transaction") containing one PUT entry per instance, and marshals it to JSON.
 // Each entry's request.url is the relative "ResourceType/localId" path, matching
 // the idempotent create-or-update behaviour of the individual PUT path.
+//
+// Every instance must be non-nil with a non-nil Resource so the Bundle has
+// exactly one entry per instance; parseBundleResponse maps entries back to
+// instances by position, so a skipped entry would misalign the outcomes.
 func buildBundle(bundleType string, instances []*model.ResourceInstance) ([]byte, error) {
 	entries := make([]any, 0, len(instances))
 	for _, inst := range instances {
 		if inst == nil || inst.Resource == nil {
-			continue
+			return nil, fmt.Errorf("build %s bundle: instance %v has no resource body", bundleType, inst)
 		}
 		entries = append(entries, map[string]any{
 			"request": map[string]any{
