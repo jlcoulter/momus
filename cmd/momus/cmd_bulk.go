@@ -133,15 +133,19 @@ func newBulkCmd(cfg *config) *cobra.Command {
 					provisioned += res.Provisioned
 					failed += res.Failed
 					failures = append(failures, res.Failures...)
-					// Live upload progress on stderr, overwritten in place. The
-					// total is unknown in streaming mode (per-type overrides and
-					// finalization batches vary the count), so show the running
-					// count and rate rather than a fraction.
+					// Live upload progress on stdout, overwritten in place. stdout
+					// is always free in provisioning mode (the NDJSON stream is
+					// discarded), even with --debug, whose request/response trace
+					// goes to stderr — so the progress bar stays visible above
+					// the trace. The total is unknown in streaming mode
+					// (per-type overrides and finalization batches vary the
+					// count), so show the running count and rate rather than a
+					// fraction.
 					elapsed := time.Since(start)
 					if secs := elapsed.Seconds(); secs > 0 {
-						fmt.Fprintf(os.Stderr, "\r  %d (%.0f/sec)", provisioned, float64(provisioned)/secs)
+						fmt.Printf("\r  %d (%.0f/sec)", provisioned, float64(provisioned)/secs)
 					} else {
-						fmt.Fprintf(os.Stderr, "\r  %d", provisioned)
+						fmt.Printf("\r  %d", provisioned)
 					}
 				}
 				// Write the batch to NDJSON. Finalization batches re-emit
@@ -188,9 +192,9 @@ func newBulkCmd(cfg *config) *cobra.Command {
 				// Clear the in-place progress line and print the final result.
 				elapsed := time.Since(start)
 				if secs := elapsed.Seconds(); secs > 0 {
-					fmt.Fprintf(os.Stderr, "\r%d resources uploaded (%.0f/sec)\n", provisioned, float64(provisioned)/secs)
+					fmt.Printf("\r%d resources uploaded (%.0f/sec)\n", provisioned, float64(provisioned)/secs)
 				} else {
-					fmt.Fprintf(os.Stderr, "\r%d resources uploaded\n", provisioned)
+					fmt.Printf("\r%d resources uploaded\n", provisioned)
 				}
 			}
 			if provisioner == nil {
