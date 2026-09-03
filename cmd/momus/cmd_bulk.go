@@ -69,11 +69,14 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			corpusGenerator := testbulk.NewCorpusGenerator(reg, cfg.Exhaustive)
 
 			var out io.Writer = os.Stdout
-			if cfg.BaseURL != "" && cfg.OutputPath == "" {
+			if cfg.BaseURL != "" {
+				// When provisioning directly to a server, the NDJSON stream is
+				// discarded rather than written to a file, even if --output was
+				// specified: the resources are uploaded, not persisted locally.
 				out = io.Discard
 			}
 			var f *os.File
-			if cfg.OutputPath != "" {
+			if cfg.OutputPath != "" && cfg.BaseURL == "" {
 				outputPath, err := resolveBulkOutputPath(cfg.OutputPath)
 				if err != nil {
 					return err
@@ -182,7 +185,7 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			if secs := elapsed.Seconds(); secs > 0 {
 				fmt.Printf("  %.0f resources/sec (generation)\n", float64(generated)/secs)
 			}
-			if cfg.OutputPath != "" {
+			if cfg.OutputPath != "" && cfg.BaseURL == "" {
 				fmt.Printf("Bulk data written to %s\n", cfg.OutputPath)
 			}
 			return nil
