@@ -70,6 +70,7 @@ type config struct {
 	BulkBatchSize     int      `mapstructure:"bulk_batch_size" flag:"batch-size"`
 	BulkPipelineDepth int      `mapstructure:"bulk_pipeline_depth" flag:"pipeline-depth"`
 	Concurrency       int      `mapstructure:"concurrency" flag:"concurrency"`
+	BundleMode        string   `mapstructure:"bundle_mode" flag:"bundle-mode"`
 	BulkPerTypeCounts []string `mapstructure:"bulk_per_type_counts" flag:"per-type"`
 
 	// Validate

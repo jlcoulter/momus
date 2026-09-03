@@ -3,6 +3,7 @@ package provisioning
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -750,5 +751,220 @@ func TestProvisionBatchLimitsConcurrency(t *testing.T) {
 	}
 	if maxActive < 2 {
 		t.Fatalf("expected some concurrency (saw %d), the limit test is not exercising parallelism", maxActive)
+	}
+}
+
+// makeTestInstances builds n independent Patient instances with deterministic
+// ids and bodies.
+func makeTestInstances(n int) []*model.ResourceInstance {
+	out := make([]*model.ResourceInstance, n)
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("pat-%d", i)
+		out[i] = &model.ResourceInstance{
+			LocalID:      id,
+			ResourceType: "Patient",
+			Resource:     map[string]any{"resourceType": "Patient", "id": id, "name": []any{map[string]any{"family": "X"}}},
+		}
+	}
+	return out
+}
+
+// TestBuildBundle verifies the FHIR Bundle JSON structure for PUT entries.
+func TestBuildBundle(t *testing.T) {
+	instances := makeTestInstances(2)
+	body, err := buildBundle(bundleModeTransaction, instances)
+	if err != nil {
+		t.Fatalf("buildBundle: %v", err)
+	}
+	var bundle struct {
+		ResourceType string `json:"resourceType"`
+		Type         string `json:"type"`
+		Entry        []struct {
+			Request struct {
+				Method string `json:"method"`
+				URL    string `json:"url"`
+			} `json:"request"`
+			Resource map[string]any `json:"resource"`
+		} `json:"entry"`
+	}
+	if err := json.Unmarshal(body, &bundle); err != nil {
+		t.Fatalf("unmarshal bundle: %v", err)
+	}
+	if bundle.ResourceType != "Bundle" {
+		t.Fatalf("resourceType = %q, want Bundle", bundle.ResourceType)
+	}
+	if bundle.Type != "transaction" {
+		t.Fatalf("type = %q, want transaction", bundle.Type)
+	}
+	if len(bundle.Entry) != 2 {
+		t.Fatalf("len(entry) = %d, want 2", len(bundle.Entry))
+	}
+	for i, e := range bundle.Entry {
+		if e.Request.Method != "PUT" {
+			t.Fatalf("entry %d method = %q, want PUT", i, e.Request.Method)
+		}
+		wantURL := "Patient/pat-" + fmt.Sprint(i)
+		if e.Request.URL != wantURL {
+			t.Fatalf("entry %d url = %q, want %q", i, e.Request.URL, wantURL)
+		}
+		if e.Resource["id"] != "pat-"+fmt.Sprint(i) {
+			t.Fatalf("entry %d resource id = %v, want pat-%d", i, e.Resource["id"], i)
+		}
+	}
+}
+
+// TestParseBundleResponse verifies per-entry outcome parsing for a batch
+// response with mixed success and failure.
+func TestParseBundleResponse(t *testing.T) {
+	instances := makeTestInstances(3)
+	body := []byte(`{
+		"resourceType": "Bundle",
+		"type": "batch-response",
+		"entry": [
+			{"response": {"status": "201 Created", "etag": "W/\"1\""}},
+			{"response": {"status": "422 Unprocessable Entity", "outcome": {"resourceType": "OperationOutcome", "issue": [{"severity": "error", "diagnostics": "bad"}]}}},
+			{"response": {"status": "200 OK"}}
+		]
+	}`)
+	outcomes, err := parseBundleResponse(body, instances, bundleModeBatch, http.StatusOK)
+	if err != nil {
+		t.Fatalf("parseBundleResponse: %v", err)
+	}
+	if len(outcomes) != 3 {
+		t.Fatalf("len(outcomes) = %d, want 3", len(outcomes))
+	}
+	if outcomes[0].err != nil {
+		t.Fatalf("entry 0 err = %v, want nil", outcomes[0].err)
+	}
+	if instances[0].Version != `W/"1"` {
+		t.Fatalf("entry 0 version = %q, want W/\"1\"", instances[0].Version)
+	}
+	if outcomes[1].err == nil {
+		t.Fatalf("entry 1 err = nil, want failure")
+	}
+	var pe *provisionError
+	if !errors.As(outcomes[1].err, &pe) {
+		t.Fatalf("entry 1 err type = %T, want *provisionError", outcomes[1].err)
+	}
+	if pe.status != 422 {
+		t.Fatalf("entry 1 status = %d, want 422", pe.status)
+	}
+	if outcomes[2].err != nil {
+		t.Fatalf("entry 2 err = %v, want nil", outcomes[2].err)
+	}
+}
+
+// TestProvisionBatchBundle verifies that batch mode sends a single POST with a
+// Bundle body per dependency level, and that per-entry failures are isolated.
+func TestProvisionBatchBundle(t *testing.T) {
+	var mu sync.Mutex
+	var posts int
+	var putCount int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			mu.Lock()
+			posts++
+			mu.Unlock()
+			var bundle struct {
+				Type  string `json:"type"`
+				Entry []any  `json:"entry"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&bundle)
+			if bundle.Type != "batch" {
+				t.Errorf("bundle type = %q, want batch", bundle.Type)
+			}
+			// Respond with a batch-response: all entries succeed.
+			entries := make([]any, len(bundle.Entry))
+			for i := range entries {
+				entries[i] = map[string]any{"response": map[string]any{"status": "201 Created"}}
+			}
+			w.Header().Set("Content-Type", "application/fhir+json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"resourceType": "Bundle", "type": "batch-response", "entry": entries})
+			return
+		}
+		mu.Lock()
+		putCount++
+		mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	instances := makeTestInstances(10)
+	p := New(server.URL, &Options{HTTPClient: server.Client(), BundleMode: bundleModeBatch})
+	res := p.ProvisionBatch(context.Background(), instances)
+	if !res.Complete() {
+		t.Fatalf("ProvisionBatch incomplete: %d failed", res.Failed)
+	}
+	if posts != 1 {
+		t.Fatalf("POST count = %d, want 1 (single bundle per level)", posts)
+	}
+	if putCount != 0 {
+		t.Fatalf("PUT count = %d, want 0 (bundle mode should not PUT)", putCount)
+	}
+}
+
+// TestProvisionBatchTransactionRollback verifies that a non-2xx overall response
+// in transaction mode marks every instance in the level as failed (all-or-nothing).
+func TestProvisionBatchTransactionRollback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(422)
+		_, _ = w.Write([]byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"error","diagnostics":"validation failed"}]}`))
+	}))
+	defer server.Close()
+
+	instances := makeTestInstances(5)
+	p := New(server.URL, &Options{HTTPClient: server.Client(), BundleMode: bundleModeTransaction})
+	res := p.ProvisionBatch(context.Background(), instances)
+	if res.Provisioned != 0 {
+		t.Fatalf("Provisioned = %d, want 0 (all-or-nothing rollback)", res.Provisioned)
+	}
+	if res.Failed != 5 {
+		t.Fatalf("Failed = %d, want 5", res.Failed)
+	}
+}
+
+// TestProvisionBatchSerialAlwaysIndividual verifies that serial (cyclic) levels
+// use individual PUTs even in bundle mode, since ordering matters.
+func TestProvisionBatchSerialAlwaysIndividual(t *testing.T) {
+	var mu sync.Mutex
+	var posts int
+	var puts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			mu.Lock()
+			posts++
+			mu.Unlock()
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		mu.Lock()
+		puts++
+		mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	// Two instances that reference each other form a cyclic level.
+	a := &model.ResourceInstance{LocalID: "a", ResourceType: "Patient", Resource: map[string]any{
+		"resourceType": "Patient", "id": "a",
+		"link": []any{map[string]any{"other": map[string]any{"reference": "Patient/b"}}},
+	}}
+	b := &model.ResourceInstance{LocalID: "b", ResourceType: "Patient", Resource: map[string]any{
+		"resourceType": "Patient", "id": "b",
+		"link": []any{map[string]any{"other": map[string]any{"reference": "Patient/a"}}},
+	}}
+	instances := []*model.ResourceInstance{a, b}
+	p := New(server.URL, &Options{HTTPClient: server.Client(), BundleMode: bundleModeTransaction})
+	res := p.ProvisionBatch(context.Background(), instances)
+	if !res.Complete() {
+		t.Fatalf("ProvisionBatch incomplete: %d failed", res.Failed)
+	}
+	if posts != 0 {
+		t.Fatalf("POST count = %d, want 0 (serial level must not bundle)", posts)
+	}
+	if puts != 2 {
+		t.Fatalf("PUT count = %d, want 2 (serial level uses individual PUTs)", puts)
 	}
 }

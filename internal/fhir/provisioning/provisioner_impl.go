@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -16,9 +17,19 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/model"
 )
 
+// Bundle mode values for Options.BundleMode.
+const (
+	// bundleModeIndividual sends one PUT per resource (the default).
+	bundleModeIndividual = "individual"
+	// bundleModeBatch sends one FHIR Batch Bundle POST per dependency level.
+	bundleModeBatch = "batch"
+	// bundleModeTransaction sends one FHIR Transaction Bundle POST per
+	// dependency level; the level is committed atomically (all-or-nothing).
+	bundleModeTransaction = "transaction"
+)
+
 // Options configures a ServerProvisioner.
-type Options struct {
-	// HTTPClient is used for requests. When nil a default client is used.
+type Options struct { // HTTPClient is used for requests. When nil a default client is used.
 	HTTPClient *http.Client
 	// Headers are added to every request.
 	Headers map[string]string
@@ -34,7 +45,14 @@ type Options struct {
 	// A value <= 0 means unlimited (one goroutine per resource per dependency
 	// level). It bounds server load for large batches: without a cap, a batch of
 	// many independent resources would open one connection per resource at once.
+	// It only applies to individual mode; bundle modes send one POST per level.
 	Concurrency int
+	// BundleMode controls how non-serial dependency levels are provisioned:
+	// "individual" (default) sends one PUT per resource; "batch" sends one FHIR
+	// Batch Bundle POST per level; "transaction" sends one FHIR Transaction
+	// Bundle POST per level (all-or-nothing). Serial levels (cyclic
+	// dependencies) always use individual PUTs, since ordering matters.
+	BundleMode string
 }
 
 // ServerProvisioner writes a Dataset to a FHIR server by PUTting each
@@ -340,50 +358,79 @@ func refTargetFailed(v any, failed map[string]bool) bool {
 // (serial=false) or one at a time in order (serial=true, used for cyclic levels
 // so targets precede dependents). It returns one outcome per id, in id order.
 //
+// For non-serial levels, when BundleMode is "batch" or "transaction", the whole
+// level is sent as a single FHIR Bundle POST instead of individual PUTs. Serial
+// levels always use individual PUTs, since ordering matters for cyclic
+// dependencies.
+//
 // Concurrency is bounded by p.options.Concurrency (when > 0): a semaphore caps
 // how many PUT requests run at once so a batch of many independent resources
 // does not open one connection per resource simultaneously and overwhelm the
-// server.
+// server. It only applies to individual mode.
 func (p *ServerProvisioner) provisionBatch(ctx context.Context, ds *model.Dataset, level provisionLevel) []provisionOutcome {
 	outcomes := make([]provisionOutcome, len(level.ids))
-	if level.serial {
-		for i, id := range level.ids {
-			instance := ds.Resources[id]
-			if instance == nil {
-				continue
-			}
-			outcomes[i] = provisionOutcome{id: instance.LocalID, instance: instance, err: p.provisionInstance(ctx, instance)}
-		}
-		return outcomes
-	}
-	var sem chan struct{}
-	concurrency := p.options.Concurrency
-	if concurrency < 1 {
-		concurrency = len(level.ids)
-	}
-	if concurrency > 0 {
-		sem = make(chan struct{}, concurrency)
-	}
-	var wg sync.WaitGroup
+	// Collect the non-nil instances for this level, preserving id order.
+	instances := make([]*model.ResourceInstance, 0, len(level.ids))
+	indices := make([]int, 0, len(level.ids))
 	for i, id := range level.ids {
 		instance := ds.Resources[id]
 		if instance == nil {
 			continue
 		}
-		wg.Add(1)
-		if sem != nil {
-			sem <- struct{}{}
-		}
-		go func(i int, instance *model.ResourceInstance) {
-			defer wg.Done()
-			if sem != nil {
-				defer func() { <-sem }()
-			}
-			outcomes[i] = provisionOutcome{id: instance.LocalID, instance: instance, err: p.provisionInstance(ctx, instance)}
-		}(i, instance)
+		instances = append(instances, instance)
+		indices = append(indices, i)
 	}
-	wg.Wait()
+	// Serial levels always use individual PUTs, one at a time in order
+	// (ordering matters for cyclic deps).
+	if level.serial {
+		for i, instance := range instances {
+			outcomes[indices[i]] = provisionOutcome{id: instance.LocalID, instance: instance, err: p.provisionInstance(ctx, instance)}
+		}
+		return outcomes
+	}
+	// Individual mode: concurrent PUTs, bounded by Concurrency.
+	if p.bundleMode() == bundleModeIndividual {
+		var sem chan struct{}
+		concurrency := p.options.Concurrency
+		if concurrency < 1 {
+			concurrency = len(instances)
+		}
+		if concurrency > 0 {
+			sem = make(chan struct{}, concurrency)
+		}
+		var wg sync.WaitGroup
+		for i, instance := range instances {
+			wg.Add(1)
+			if sem != nil {
+				sem <- struct{}{}
+			}
+			go func(i int, instance *model.ResourceInstance) {
+				defer wg.Done()
+				if sem != nil {
+					defer func() { <-sem }()
+				}
+				outcomes[indices[i]] = provisionOutcome{id: instance.LocalID, instance: instance, err: p.provisionInstance(ctx, instance)}
+			}(i, instance)
+		}
+		wg.Wait()
+		return outcomes
+	}
+	// Bundle mode: send the whole level as a single POST.
+	bundleOutcomes := p.provisionBundle(ctx, instances, p.bundleMode())
+	for i := range instances {
+		outcomes[indices[i]] = bundleOutcomes[i]
+	}
 	return outcomes
+}
+
+// bundleMode returns the effective bundle mode, defaulting to individual.
+func (p *ServerProvisioner) bundleMode() string {
+	switch p.options.BundleMode {
+	case bundleModeBatch, bundleModeTransaction:
+		return p.options.BundleMode
+	default:
+		return bundleModeIndividual
+	}
 }
 
 // recordInstanceBodyReferences scans every instance body in ds for "reference"
@@ -469,6 +516,7 @@ func (p *ServerProvisioner) provisionInstance(ctx context.Context, instance *mod
 		return err
 	}
 	req.Header.Set("Content-Type", "application/fhir+json")
+	req.Header.Set("Prefer", "return=minimal")
 	for k, v := range p.options.Headers {
 		req.Header.Set(k, v)
 	}
@@ -502,6 +550,184 @@ func (p *ServerProvisioner) provisionInstance(ctx context.Context, instance *mod
 	instance.ServerID = instance.LocalID
 	instance.Version = resp.Header.Get("ETag")
 	return nil
+}
+
+// provisionBundle uploads the given instances as a single FHIR Bundle POST to
+// the server root. bundleType is "batch" or "transaction". It returns one
+// outcome per instance, in input order.
+//
+// For "transaction", the level is committed atomically: a non-2xx overall
+// response means the whole transaction rolled back, so every instance is marked
+// failed. For "batch", each entry is processed independently and its own
+// response.status determines success or failure.
+func (p *ServerProvisioner) provisionBundle(ctx context.Context, instances []*model.ResourceInstance, bundleType string) []provisionOutcome {
+	outcomes := make([]provisionOutcome, len(instances))
+	if len(instances) == 0 {
+		return outcomes
+	}
+	body, err := buildBundle(bundleType, instances)
+	if err != nil {
+		for i, inst := range instances {
+			outcomes[i] = provisionOutcome{id: inst.LocalID, instance: inst, err: fmt.Errorf("build %s bundle: %w", bundleType, err)}
+		}
+		return outcomes
+	}
+	url := strings.TrimRight(p.baseURL, "/")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		for i, inst := range instances {
+			outcomes[i] = provisionOutcome{id: inst.LocalID, instance: inst, err: err}
+		}
+		return outcomes
+	}
+	req.Header.Set("Content-Type", "application/fhir+json")
+	req.Header.Set("Prefer", "return=minimal")
+	for k, v := range p.options.Headers {
+		req.Header.Set(k, v)
+	}
+	p.applyAuth(req)
+
+	var reqSeq int
+	if p.options.Tracer != nil {
+		reqSeq = p.options.Tracer.LogRequest(req, body)
+	}
+
+	resp, err := p.options.HTTPClient.Do(req)
+	if err != nil {
+		for i, inst := range instances {
+			outcomes[i] = provisionOutcome{id: inst.LocalID, instance: inst, err: fmt.Errorf("provision %s bundle: %w", bundleType, err)}
+		}
+		return outcomes
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		for i, inst := range instances {
+			outcomes[i] = provisionOutcome{id: inst.LocalID, instance: inst, err: fmt.Errorf("provision %s bundle: read response: %w", bundleType, err)}
+		}
+		return outcomes
+	}
+	if p.options.Tracer != nil {
+		p.options.Tracer.LogResponse(req, reqSeq, resp.StatusCode, resp.Header, respBody)
+	}
+
+	// Transaction mode is all-or-nothing: a non-2xx overall status means the
+	// whole level rolled back.
+	if bundleType == bundleModeTransaction && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+		pe := &provisionError{resourceType: "Bundle", localID: bundleType, status: resp.StatusCode, body: respBody}
+		for i, inst := range instances {
+			outcomes[i] = provisionOutcome{id: inst.LocalID, instance: inst, err: pe}
+		}
+		return outcomes
+	}
+
+	// Parse the response Bundle for per-entry outcomes.
+	parsed, err := parseBundleResponse(respBody, instances, bundleType, resp.StatusCode)
+	if err != nil {
+		// The response was not a parseable Bundle. For transaction mode this is
+		// a hard failure of the whole level; for batch mode, fall back to
+		// reporting every entry as failed with the parse error.
+		for i, inst := range instances {
+			outcomes[i] = provisionOutcome{id: inst.LocalID, instance: inst, err: fmt.Errorf("provision %s bundle: %w", bundleType, err)}
+		}
+		return outcomes
+	}
+	return parsed
+}
+
+// buildBundle constructs a FHIR Bundle of the given type ("batch" or
+// "transaction") containing one PUT entry per instance, and marshals it to JSON.
+// Each entry's request.url is the relative "ResourceType/localId" path, matching
+// the idempotent create-or-update behaviour of the individual PUT path.
+func buildBundle(bundleType string, instances []*model.ResourceInstance) ([]byte, error) {
+	entries := make([]any, 0, len(instances))
+	for _, inst := range instances {
+		if inst == nil || inst.Resource == nil {
+			continue
+		}
+		entries = append(entries, map[string]any{
+			"request": map[string]any{
+				"method": "PUT",
+				"url":    inst.ResourceType + "/" + inst.LocalID,
+			},
+			"resource": inst.Resource,
+		})
+	}
+	bundle := map[string]any{
+		"resourceType": "Bundle",
+		"type":         bundleType,
+		"entry":        entries,
+	}
+	return json.Marshal(bundle)
+}
+
+// parseBundleResponse parses a FHIR Bundle response and maps each entry's
+// outcome back to the corresponding instance (entries are in the same order as
+// the request). For batch mode, each entry's response.status is evaluated
+// independently. For transaction mode, the overall status is assumed 2xx (the
+// caller handles rollback), so every entry is a success.
+func parseBundleResponse(body []byte, instances []*model.ResourceInstance, bundleType string, overallStatus int) ([]provisionOutcome, error) {
+	outcomes := make([]provisionOutcome, len(instances))
+	if len(instances) == 0 {
+		return outcomes, nil
+	}
+	var resp struct {
+		ResourceType string `json:"resourceType"`
+		Type         string `json:"type"`
+		Entry        []struct {
+			Response *struct {
+				Status   string          `json:"status"`
+				Location string          `json:"location"`
+				ETag     string          `json:"etag"`
+				Outcome  json.RawMessage `json:"outcome"`
+			} `json:"response"`
+		} `json:"entry"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("parse bundle response: %w", err)
+	}
+	if resp.ResourceType != "Bundle" {
+		return nil, fmt.Errorf("expected Bundle response, got %q", resp.ResourceType)
+	}
+	// Map entries to instances by position. If the server returns fewer entries
+	// than requested, treat the missing tail as failures.
+	for i, inst := range instances {
+		if i >= len(resp.Entry) || resp.Entry[i].Response == nil {
+			outcomes[i] = provisionOutcome{id: inst.LocalID, instance: inst, err: fmt.Errorf("provision %s/%s: no response entry", inst.ResourceType, inst.LocalID)}
+			continue
+		}
+		entry := resp.Entry[i].Response
+		status := parseHTTPStatus(entry.Status)
+		if status < 200 || status >= 300 {
+			outcomes[i] = provisionOutcome{id: inst.LocalID, instance: inst, err: &provisionError{
+				resourceType: inst.ResourceType,
+				localID:      inst.LocalID,
+				status:       status,
+				body:         entry.Outcome,
+			}}
+			continue
+		}
+		inst.ServerID = inst.LocalID
+		if entry.ETag != "" {
+			inst.Version = entry.ETag
+		}
+		outcomes[i] = provisionOutcome{id: inst.LocalID, instance: inst}
+	}
+	return outcomes, nil
+}
+
+// parseHTTPStatus parses an HTTP status string like "201 Created" or "422
+// Unprocessable Entity" into its integer code. Returns 0 when unparseable.
+func parseHTTPStatus(s string) int {
+	fields := strings.Fields(s)
+	if len(fields) == 0 {
+		return 0
+	}
+	code, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return 0
+	}
+	return code
 }
 
 // provisionError carries the server's rejection of a single resource, including

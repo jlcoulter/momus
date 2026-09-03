@@ -246,6 +246,7 @@ func newBulkCmd(cfg *config) *cobra.Command {
 	cmd.Flags().IntVar(&cfg.BulkBatchSize, "batch-size", 100, "number of resource webs to emit per streaming batch; bounds peak memory")
 	cmd.Flags().IntVar(&cfg.BulkPipelineDepth, "pipeline-depth", 4, "buffered batches generated ahead of provisioning to overlap synthesis and upload")
 	cmd.Flags().IntVar(&cfg.Concurrency, "concurrency", 8, "maximum concurrent HTTP requests to the repository (<=0 = unlimited)")
+	cmd.Flags().StringVar(&cfg.BundleMode, "bundle-mode", "individual", "how to provision each dependency level: individual (one PUT per resource), batch (one FHIR Batch Bundle POST per level), or transaction (one FHIR Transaction Bundle POST per level; all-or-nothing)")
 	cmd.Flags().StringSliceVar(&cfg.BulkPerTypeCounts, "per-type", nil, "per-type resource counts as Type=Count (repeatable); overrides --count")
 	cmd.Flags().StringSliceVar(&cfg.IncludeResourceTypes, "include-resource", nil, "include only these resource types (repeatable); referenced target types are added automatically")
 	cmd.Flags().StringVar(&cfg.BaseURL, "base-url", "", "target FHIR repository base URL for streaming generated resources")
@@ -298,6 +299,7 @@ func newBulkProvisioner(cfg *config) *provisioning.ServerProvisioner {
 		BasicPassword: writeBasicPass,
 		Tracer:        newDebugTracer(cfg.Debug),
 		Concurrency:   concurrency,
+		BundleMode:    cfg.BundleMode,
 		HTTPClient:    client,
 	})
 }
