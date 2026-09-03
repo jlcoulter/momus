@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
@@ -1640,10 +1641,41 @@ func resolveBoundCoding(def *model.ElementDefinition, reg *registry.Registry) (g
 // fallback prefers an instance whose meta.profile matches the node's profile,
 // and otherwise uses the first example of the resource type, so generation only
 // emits the synthetic example.org fallback in genuinely exceptional cases.
+//
+// The result is deterministic for a given node and registry: the node's
+// definition, binding, profile URL, and the registry's example instances are all
+// immutable once the registry is built. Because ResolveProfile memoises its
+// results, the same ElementNode pointer is reused across every synthesised
+// instance, so the resolution is cached per (registry, node). This is the
+// dominant hot path for bulk corpus generation, where the same handful of bound
+// codings are resolved once per element node per instance.
+var boundCodingCache sync.Map // boundCodingCacheKey -> boundCodingCacheEntry
+
+type boundCodingCacheKey struct {
+	reg  *registry.Registry
+	node *model.ElementNode
+}
+
+type boundCodingCacheEntry struct {
+	coding generatedCoding
+	ok     bool
+}
+
 func resolveBoundCodingForNode(node *model.ElementNode, reg *registry.Registry) (generatedCoding, bool) {
 	if node == nil || node.Path == "" {
 		return generatedCoding{}, false
 	}
+	key := boundCodingCacheKey{reg: reg, node: node}
+	if cached, ok := boundCodingCache.Load(key); ok {
+		entry := cached.(boundCodingCacheEntry)
+		return entry.coding, entry.ok
+	}
+	coding, ok := resolveBoundCodingForNodeUncached(node, reg)
+	boundCodingCache.Store(key, boundCodingCacheEntry{coding: coding, ok: ok})
+	return coding, ok
+}
+
+func resolveBoundCodingForNodeUncached(node *model.ElementNode, reg *registry.Registry) (generatedCoding, bool) {
 	if node.Definition != nil {
 		if coding, ok := resolveBoundCoding(node.Definition, reg); ok {
 			return coding, true
