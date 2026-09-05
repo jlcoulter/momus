@@ -448,3 +448,97 @@ func TestResolveElementsKeepsIDBasedSliceChildrenDistinct(t *testing.T) {
 		t.Fatal("ID-based slice child Organization.extension:suppressed.url missing after merge")
 	}
 }
+
+// TestResolveProfileCachesResult verifies that ResolveProfile memoises its
+// result: a second call for the same URL returns the identical pointer rather
+// than re-resolving the profile.
+func TestResolveProfileCachesResult(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://hl7.org/fhir/StructureDefinition/Identifier",
+		Type: "Identifier",
+		Elements: []model.ElementDefinition{
+			{Path: "Identifier", Min: 0, Max: "*"},
+			{Path: "Identifier.system", Min: 0, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
+			{Path: "Identifier.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+
+	first, err := r.ResolveProfile("http://hl7.org/fhir/StructureDefinition/Identifier")
+	if err != nil {
+		t.Fatalf("first ResolveProfile: %v", err)
+	}
+	second, err := r.ResolveProfile("http://hl7.org/fhir/StructureDefinition/Identifier")
+	if err != nil {
+		t.Fatalf("second ResolveProfile: %v", err)
+	}
+	if first != second {
+		t.Fatal("ResolveProfile returned a different pointer on the second call; cache not hit")
+	}
+}
+
+// TestResolveElementsCachesResult verifies that ResolveElements memoises its
+// result: a second call for the same URL returns the identical slice rather
+// than re-resolving the element set.
+func TestResolveElementsCachesResult(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/org",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "1"},
+			{Path: "Organization.name", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+
+	first, err := r.ResolveElements("http://example.org/StructureDefinition/org")
+	if err != nil {
+		t.Fatalf("first ResolveElements: %v", err)
+	}
+	second, err := r.ResolveElements("http://example.org/StructureDefinition/org")
+	if err != nil {
+		t.Fatalf("second ResolveElements: %v", err)
+	}
+	if &first[0] != &second[0] {
+		t.Fatal("ResolveElements returned a different backing array on the second call; cache not hit")
+	}
+}
+
+// TestResolveProfileCacheConcurrent verifies that concurrent ResolveProfile
+// calls for the same URL are safe and return consistent results.
+func TestResolveProfileCacheConcurrent(t *testing.T) {
+	r := New()
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://hl7.org/fhir/StructureDefinition/Identifier",
+		Type: "Identifier",
+		Elements: []model.ElementDefinition{
+			{Path: "Identifier", Min: 0, Max: "*"},
+			{Path: "Identifier.system", Min: 0, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
+		},
+	})
+
+	const goroutines = 16
+	const iterations = 100
+	errCh := make(chan error, goroutines)
+	for g := 0; g < goroutines; g++ {
+		go func() {
+			for i := 0; i < iterations; i++ {
+				res, err := r.ResolveProfile("http://hl7.org/fhir/StructureDefinition/Identifier")
+				if err != nil {
+					errCh <- err
+					return
+				}
+				if res == nil || res.Root == nil {
+					errCh <- errors.New("ResolveProfile returned nil root")
+					return
+				}
+			}
+			errCh <- nil
+		}()
+	}
+	for g := 0; g < goroutines; g++ {
+		if err := <-errCh; err != nil {
+			t.Fatalf("concurrent ResolveProfile: %v", err)
+		}
+	}
+}

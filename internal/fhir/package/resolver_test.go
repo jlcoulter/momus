@@ -254,6 +254,25 @@ func TestResolveLocalPackageGraphFetchesMissingDependencyRemotely(t *testing.T) 
 	}
 }
 
+func TestResolveLocalPackageGraphWithoutDepsDirDoesNotWalkRootDir(t *testing.T) {
+	dir := t.TempDir()
+	rootPath := writePackageArchive(t, dir, "a.pkg", "1.0.0", nil)
+	blockedDir := filepath.Join(dir, "blocked")
+	if err := os.Mkdir(blockedDir, 0o000); err != nil {
+		t.Fatalf("failed to create blocked dir: %v", err)
+	}
+	defer os.Chmod(blockedDir, 0o755)
+
+	graph, err := ResolveLocalPackageGraphWithOptions(rootPath, ResolveOptions{DownloadDir: filepath.Join(dir, ".momus", "packages"), ConflictPolicy: ConflictPolicyRootWins})
+	if err != nil {
+		t.Fatalf("ResolveLocalPackageGraph returned error: %v", err)
+	}
+
+	got := packageIDs(graph)
+	want := []string{"a.pkg@1.0.0"}
+	assertStringSliceEqual(t, got, want)
+}
+
 func TestResolveLocalPackageGraphResolvesCurrentVersionRemotely(t *testing.T) {
 	dir := t.TempDir()
 	downloadDir := filepath.Join(dir, ".momus", "packages")

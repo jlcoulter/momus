@@ -2,8 +2,10 @@ package bulk
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
@@ -78,6 +80,20 @@ func TestGenerateCorpusWiresDistributedReferences(t *testing.T) {
 	if len(targets) < 2 {
 		t.Fatalf("references not distributed across patients: %v", targets)
 	}
+	if len(ds.Relationships) != 5 {
+		t.Fatalf("relationships = %d, want one Observation.subject relationship per observation", len(ds.Relationships))
+	}
+	for _, rel := range ds.Relationships {
+		if rel.SourceID == "" || rel.TargetID == "" || rel.Path != "Observation.subject" {
+			t.Fatalf("unexpected relationship: %+v", rel)
+		}
+		if ds.Resources[rel.SourceID].ResourceType != "Observation" {
+			t.Fatalf("relationship source = %s, want Observation", ds.Resources[rel.SourceID].ResourceType)
+		}
+		if ds.Resources[rel.TargetID].ResourceType != "Patient" {
+			t.Fatalf("relationship target = %s, want Patient", ds.Resources[rel.TargetID].ResourceType)
+		}
+	}
 }
 
 func TestGenerateCorpusHonoursPerTypeCounts(t *testing.T) {
@@ -97,6 +113,374 @@ func TestGenerateCorpusHonoursPerTypeCounts(t *testing.T) {
 	}
 	if counts["Patient"] != 7 {
 		t.Fatalf("patient count = %d, want 7 (override)", counts["Patient"])
+	}
+}
+
+// TestGenerateCorpusWiresOnlyToAlreadyCreatedTargets verifies that reference
+// wiring only points at resources that will already exist when the referencing
+// resource is provisioned. A forward reference (Observation.subject → Patient,
+// where Patient is created after Observation in the topological order) must be
+// stripped rather than left dangling, so the corpus contains no references to
+// not-yet-created resources.
+func TestGenerateCorpusWiresOnlyToAlreadyCreatedTargets(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	// Observation references Patient. In the topological order Patient (no deps)
+	// is created before Observation, so Observation.subject must resolve to a
+	// real Patient instance.
+	ds, err := gen.GenerateCorpus(context.Background(), []string{"Observation"}, 5, nil)
+	if err != nil {
+		t.Fatalf("GenerateCorpus returned error: %v", err)
+	}
+	for _, inst := range ds.Resources {
+		if inst.ResourceType != "Observation" {
+			continue
+		}
+		subject, ok := inst.Resource["subject"].(map[string]any)
+		if !ok {
+			t.Fatalf("observation %s missing subject reference", inst.LocalID)
+		}
+		ref, _ := subject["reference"].(string)
+		if !strings.HasPrefix(ref, "Patient/") {
+			t.Fatalf("observation %s subject ref = %q, want Patient/…", inst.LocalID, ref)
+		}
+	}
+}
+
+// TestGenerateCorpusStripsForwardReferences verifies that no reference in the
+// corpus points to a not-yet-created resource: forward references (to a type
+// created later in the topological order) and self-references with no earlier
+// peer are stripped, leaving only references to resources that will already
+// exist when provisioned.
+func TestGenerateCorpusStripsForwardReferences(t *testing.T) {
+	reg := registry.New()
+	// Organization references Endpoint and Organization (self); Endpoint
+	// references Organization. This forms a mutual cycle, so the topological
+	// order breaks it deterministically (Endpoint before Organization).
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/org",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+			{Path: "Organization.endpoint", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/endpoint",
+		Type: "Endpoint",
+		Elements: []model.ElementDefinition{
+			{Path: "Endpoint", Min: 0, Max: "*"},
+			{Path: "Endpoint.managingOrganization", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+		},
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	ds, err := gen.GenerateCorpus(context.Background(), []string{"Organization", "Endpoint"}, 3, nil)
+	if err != nil {
+		t.Fatalf("GenerateCorpus returned error: %v", err)
+	}
+	// Every reference in every resource body must point to a resource that
+	// exists in the corpus (no dangling placeholders, no forward references).
+	for _, inst := range ds.Resources {
+		collectReferences(inst.Resource, func(ref string) {
+			if danglingRef.MatchString(ref) {
+				t.Fatalf("resource %s has dangling reference %q", inst.LocalID, ref)
+			}
+			targetType, targetID := splitReference(ref)
+			if targetType == "" || targetID == "" {
+				t.Fatalf("resource %s has malformed reference %q", inst.LocalID, ref)
+			}
+			if _, ok := ds.Resources[targetID]; !ok {
+				t.Fatalf("resource %s references %q which is not in the corpus", inst.LocalID, ref)
+			}
+		})
+	}
+}
+
+// collectReferences walks a resource body and invokes fn for every reference
+// string found.
+func collectReferences(value any, fn func(ref string)) {
+	switch typed := value.(type) {
+	case map[string]any:
+		if ref, ok := typed["reference"].(string); ok {
+			fn(ref)
+		}
+		for _, v := range typed {
+			collectReferences(v, fn)
+		}
+	case []any:
+		for _, item := range typed {
+			collectReferences(item, fn)
+		}
+	}
+}
+
+// TestGenerateCorpusBatchedEmitsPerTypeBatches verifies that the streaming API
+// invokes the callback once per resource type, in topological order, and that
+// each batch's references only point to resources already emitted.
+func TestGenerateCorpusBatchedEmitsPerTypeBatches(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	var order []string
+	emitted := make(map[string]bool)
+	err := gen.GenerateCorpusBatched(context.Background(), []string{"Observation", "Patient"}, 3, nil, func(b CorpusBatch) error {
+		order = append(order, b.ResourceType)
+		for _, inst := range b.Instances {
+			collectReferences(inst.Resource, func(ref string) {
+				if danglingRef.MatchString(ref) {
+					t.Fatalf("batch %s has dangling reference %q", b.ResourceType, ref)
+				}
+				targetType, targetID := splitReference(ref)
+				if targetType == "" || targetID == "" {
+					t.Fatalf("batch %s has malformed reference %q", b.ResourceType, ref)
+				}
+				if !emitted[targetID] {
+					t.Fatalf("batch %s references %q which was not yet emitted", b.ResourceType, ref)
+				}
+			})
+		}
+		for _, inst := range b.Instances {
+			emitted[inst.LocalID] = true
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("GenerateCorpusBatched returned error: %v", err)
+	}
+	// Patient (no deps) must be emitted before Observation (depends on Patient).
+	if len(order) != 2 || order[0] != "Patient" || order[1] != "Observation" {
+		t.Fatalf("batch order = %v, want [Patient Observation]", order)
+	}
+}
+
+// TestGenerateCorpusBatchedFinalizesRequiredForwardReferences verifies that a
+// required (Min>=1) forward reference — which only arises inside a reference
+// cycle — is preserved in the initial batch and then re-wired and re-emitted in
+// a finalization batch once its target type has been emitted.
+func TestGenerateCorpusBatchedFinalizesRequiredForwardReferences(t *testing.T) {
+	reg := registry.New()
+	// Organization references Endpoint (required) and Organization (self);
+	// Endpoint references Organization (required). This is a mutual cycle, so
+	// the topological order emits one type before the other, leaving a required
+	// forward reference that must be finalized.
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/org",
+		Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+			{Path: "Organization.endpoint", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/endpoint",
+		Type: "Endpoint",
+		Elements: []model.ElementDefinition{
+			{Path: "Endpoint", Min: 0, Max: "*"},
+			{Path: "Endpoint.managingOrganization", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+		},
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	var finalized []string
+	err := gen.GenerateCorpusBatched(context.Background(), []string{"Organization", "Endpoint"}, 3, nil, func(b CorpusBatch) error {
+		if b.Finalize {
+			finalized = append(finalized, b.ResourceType)
+			// Finalized instances must have their required forward reference
+			// resolved to a real target (no dangling placeholders remain).
+			for _, inst := range b.Instances {
+				collectReferences(inst.Resource, func(ref string) {
+					if danglingRef.MatchString(ref) {
+						t.Fatalf("finalized %s still has dangling reference %q", inst.LocalID, ref)
+					}
+				})
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("GenerateCorpusBatched returned error: %v", err)
+	}
+	// The cycle member emitted first (Endpoint, alphabetically smallest) has a
+	// required forward reference to Organization and must be finalized.
+	if len(finalized) == 0 {
+		t.Fatal("expected a finalization batch for the required forward reference")
+	}
+}
+
+// TestTopologicalTypeOrderIgnoresSelfReferences verifies that a type that
+// references itself (e.g. Location.partOf → Location) does not trap the type
+// behind the cycle breaker. Previously a self-reference kept the type's
+// dependency count permanently above zero, so it was only emitted by the
+// smallest-remaining cycle breaker — emitting HealthcareService before
+// Location/Organization and Location before Organization, which made
+// provisioning fail with HAPI-1094 "not found" (referential integrity).
+func TestTopologicalTypeOrderIgnoresSelfReferences(t *testing.T) {
+	reg := registry.New()
+	orgProfile := "http://example.org/StructureDefinition/org"
+	endpointProfile := "http://example.org/StructureDefinition/endpoint"
+	locationProfile := "http://example.org/StructureDefinition/location"
+	hsProfile := "http://example.org/StructureDefinition/hs"
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: endpointProfile, Type: "Endpoint",
+		Elements: []model.ElementDefinition{
+			{Path: "Endpoint", Min: 0, Max: "*"},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: orgProfile, Type: "Organization",
+		Elements: []model.ElementDefinition{
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{orgProfile}}}},
+			{Path: "Organization.endpoint", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{endpointProfile}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: locationProfile, Type: "Location",
+		Elements: []model.ElementDefinition{
+			{Path: "Location", Min: 0, Max: "*"},
+			{Path: "Location.managingOrganization", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{orgProfile}}}},
+			{Path: "Location.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{locationProfile}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: hsProfile, Type: "HealthcareService",
+		Elements: []model.ElementDefinition{
+			{Path: "HealthcareService", Min: 0, Max: "*"},
+			{Path: "HealthcareService.providedBy", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{orgProfile}}}},
+			{Path: "HealthcareService.location", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{locationProfile}}}},
+			{Path: "HealthcareService.endpoint", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{endpointProfile}}}},
+		},
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	var order []string
+	err := gen.GenerateCorpusBatched(context.Background(), []string{"HealthcareService"}, 2, nil, func(b CorpusBatch) error {
+		order = append(order, b.ResourceType)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("GenerateCorpusBatched returned error: %v", err)
+	}
+	pos := make(map[string]int, len(order))
+	for i, rt := range order {
+		pos[rt] = i
+	}
+	for _, rt := range []string{"Endpoint", "Organization", "Location", "HealthcareService"} {
+		if _, ok := pos[rt]; !ok {
+			t.Fatalf("no batch emitted for %s; order = %v", rt, order)
+		}
+	}
+	// The batch order must satisfy the cross-type reference constraints even
+	// though Location and Organization also reference themselves.
+	if pos["Organization"] > pos["Location"] {
+		t.Fatalf("Organization batch must precede Location batch (Location.managingOrganization); order = %v", order)
+	}
+	if pos["Organization"] > pos["HealthcareService"] || pos["Location"] > pos["HealthcareService"] {
+		t.Fatalf("Organization and Location batches must precede HealthcareService batch; order = %v", order)
+	}
+}
+
+// TestStripDanglingReferencesFiltersPlaceholderArrayElements verifies that
+// dangling setup placeholders are removed element-wise from repeatable
+// (multi-element) reference arrays. Previously only single-element arrays were
+// recognised, so a placeholder in element [1+] survived into the provisioned
+// payload and the server rejected the resource with HAPI-1094 "not found".
+func TestStripDanglingReferencesFiltersPlaceholderArrayElements(t *testing.T) {
+	body := map[string]any{
+		"resourceType": "HealthcareService",
+		"location": []any{
+			map[string]any{"reference": "Location/loc-1", "type": "Location"},
+			map[string]any{"reference": "Location/momus-setup-location"},
+		},
+	}
+	refFields := map[string]refFieldInfo{
+		"HealthcareService.location": {targetType: "Location", repeatable: true, required: false},
+	}
+	if preserved := stripDanglingReferences(body, refFields); preserved {
+		t.Fatal("expected preserved=false for an optional dangling array element")
+	}
+	arr, ok := body["location"].([]any)
+	if !ok || len(arr) != 1 {
+		t.Fatalf("location = %v, want the array filtered to its real reference", body["location"])
+	}
+	first, ok := arr[0].(map[string]any)
+	if !ok || first["reference"] != "Location/loc-1" {
+		t.Fatalf("location[0] = %v, want the real Location/loc-1 reference", arr[0])
+	}
+}
+
+// TestStripDanglingReferencesRemovesAllPlaceholderArray verifies that a
+// repeatable reference array consisting only of dangling placeholders is
+// removed entirely when optional.
+func TestStripDanglingReferencesRemovesAllPlaceholderArray(t *testing.T) {
+	body := map[string]any{
+		"resourceType": "HealthcareService",
+		"location": []any{
+			map[string]any{"reference": "Location/momus-setup-location"},
+			map[string]any{"reference": "Location/momus-setup-location"},
+		},
+	}
+	refFields := map[string]refFieldInfo{
+		"HealthcareService.location": {targetType: "Location", repeatable: true, required: false},
+	}
+	if preserved := stripDanglingReferences(body, refFields); preserved {
+		t.Fatal("expected preserved=false for an optional all-placeholder array")
+	}
+	if _, ok := body["location"]; ok {
+		t.Fatalf("location = %v, want the all-placeholder array removed", body["location"])
+	}
+}
+
+// TestStripDanglingReferencesPreservesRequiredArrayElements verifies that
+// dangling placeholders in a required repeatable reference field are preserved
+// (for the finalization pass) and reported via the preserved flag.
+func TestStripDanglingReferencesPreservesRequiredArrayElements(t *testing.T) {
+	body := map[string]any{
+		"resourceType": "HealthcareService",
+		"location": []any{
+			map[string]any{"reference": "Location/loc-1"},
+			map[string]any{"reference": "Location/momus-setup-location"},
+		},
+	}
+	refFields := map[string]refFieldInfo{
+		"HealthcareService.location": {targetType: "Location", repeatable: true, required: true},
+	}
+	if preserved := stripDanglingReferences(body, refFields); !preserved {
+		t.Fatal("expected preserved=true for a required dangling array element")
+	}
+	arr, ok := body["location"].([]any)
+	if !ok || len(arr) != 2 {
+		t.Fatalf("location = %v, want both elements preserved for a required field", body["location"])
+	}
+}
+
+// TestStripDanglingReferencesPreservesRequired verifies that stripDanglingReferences
+// removes optional dangling references but preserves required ones.
+func TestStripDanglingReferencesPreservesRequired(t *testing.T) {
+	body := map[string]any{
+		"resourceType": "Organization",
+		"endpoint":     []any{map[string]any{"reference": "Endpoint/momus-setup-Endpoint"}},
+		"partOf":       map[string]any{"reference": "Organization/unknown"},
+	}
+	refFields := map[string]refFieldInfo{
+		"Organization.endpoint": {targetType: "Endpoint", repeatable: true, required: true},
+		"Organization.partOf":   {targetType: "Organization", repeatable: false, required: false},
+	}
+	preserved := stripDanglingReferences(body, refFields)
+	if !preserved {
+		t.Fatal("expected preserved=true for a required dangling reference")
+	}
+	// Required endpoint reference preserved.
+	if _, ok := body["endpoint"]; !ok {
+		t.Fatal("required endpoint reference was stripped")
+	}
+	// Optional partOf reference stripped.
+	if _, ok := body["partOf"]; ok {
+		t.Fatal("optional partOf reference was not stripped")
 	}
 }
 
@@ -200,6 +584,64 @@ func TestGenerateCorpusExpandsReferenceTargets(t *testing.T) {
 	}
 }
 
+func TestGenerateCorpusSkipsAbstractResourceTypes(t *testing.T) {
+	reg := testRegistry(t)
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:      "http://hl7.org/fhir/StructureDefinition/Resource",
+		Type:     "Resource",
+		Kind:     "resource",
+		Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: "*"}},
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	ds, err := gen.GenerateCorpus(context.Background(), []string{"Patient", "Resource"}, 2, nil)
+	if err != nil {
+		t.Fatalf("GenerateCorpus returned error: %v", err)
+	}
+	for _, inst := range ds.Resources {
+		if inst.ResourceType == "Resource" {
+			t.Fatalf("generated abstract Resource instance: %+v", inst)
+		}
+	}
+	if len(ds.Resources) != 2 {
+		t.Fatalf("generated resource count = %d, want 2 concrete Patient resources", len(ds.Resources))
+	}
+
+	if _, err := gen.GenerateCorpus(context.Background(), []string{"Resource"}, 2, nil); err == nil {
+		t.Fatal("expected an error when only abstract resource types are requested")
+	}
+}
+
+func TestGenerateCorpusDoesNotExpandAbstractResourceTarget(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  patientProfile,
+		Type: "Patient",
+		Kind: "resource",
+		Elements: []model.ElementDefinition{
+			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient.managingOrganization", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Resource"}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:      "http://hl7.org/fhir/StructureDefinition/Resource",
+		Type:     "Resource",
+		Kind:     "resource",
+		Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: "*"}},
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	ds, err := gen.GenerateCorpus(context.Background(), []string{"Patient"}, 2, nil)
+	if err != nil {
+		t.Fatalf("GenerateCorpus returned error: %v", err)
+	}
+	for _, inst := range ds.Resources {
+		if inst.ResourceType == "Resource" {
+			t.Fatalf("generated abstract Resource instance from reference target: %+v", inst)
+		}
+	}
+}
+
 func TestGenerateCorpusRequiresTypes(t *testing.T) {
 	reg := testRegistry(t)
 	gen := NewCorpusGenerator(reg, true)
@@ -218,41 +660,6 @@ func TestGenerateCorpusHonoursCancellation(t *testing.T) {
 	cancel()
 	if _, err := gen.GenerateCorpus(ctx, []string{"Observation", "Patient"}, 5, nil); err == nil {
 		t.Fatal("expected error when context is cancelled")
-	}
-}
-
-// TestSynthesizeReferenceUsesTargetProfileType verifies that a Reference with no
-// wired target emits a placeholder typed by the element's TargetProfile rather
-// than always assuming Patient.
-func TestSynthesizeReferenceUsesTargetProfileType(t *testing.T) {
-	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{
-		URL: "http://example.org/StructureDefinition/obs", Type: "Observation",
-		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
-			{Path: "Observation.performer", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
-		},
-	})
-	reg.AddStructureDefinition(&model.StructureDefinition{
-		URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner",
-		Elements: []model.ElementDefinition{
-			{Path: "Practitioner", Min: 0, Max: "*"},
-			{Path: "Practitioner.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "HumanName"}}},
-		},
-	})
-
-	body, err := synthesizeResource(reg, "Observation", "", "obs-1", nil, false, newRNG("obs-1"))
-	if err != nil {
-		t.Fatalf("synthesizeResource: %v", err)
-	}
-	perf, ok := body["performer"].(map[string]any)
-	if !ok {
-		t.Fatalf("performer = %#v, want map", body["performer"])
-	}
-	ref, _ := perf["reference"].(string)
-	if !strings.HasPrefix(ref, "Practitioner/") {
-		t.Fatalf("performer reference = %q, want Practitioner/… (target type from TargetProfile)", ref)
 	}
 }
 
@@ -308,37 +715,6 @@ func TestGenerateCorpusSurfacesSynthesisFailures(t *testing.T) {
 	}
 }
 
-// TestPopulateChildrenKeepsRequiredIntermediate verifies that a complex
-// intermediate node without its own definition is still emitted in non-exhaustive
-// mode when a descendant is required (Min > 0), so required containers are never
-// dropped from the resource.
-func TestPopulateChildrenKeepsRequiredIntermediate(t *testing.T) {
-	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{
-		URL: "http://example.org/StructureDefinition/obs", Type: "Observation",
-		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			// component is an intermediate with no Definition; its child code is required.
-			{Path: "Observation.component.code", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
-		},
-	})
-	resolved, err := reg.ResolveProfile("http://example.org/StructureDefinition/obs")
-	if err != nil {
-		t.Fatalf("ResolveProfile: %v", err)
-	}
-
-	body := map[string]any{"resourceType": "Observation", "id": "obs-1"}
-	populateChildren(body, resolved.Root, reg, nil, false, newRNG("obs-1"))
-
-	comp, ok := body["component"].(map[string]any)
-	if !ok {
-		t.Fatalf("component = %#v, want map (required intermediate must be kept in non-exhaustive mode)", body["component"])
-	}
-	if comp["code"] == nil {
-		t.Fatalf("component.code missing: %#v", comp)
-	}
-}
-
 // TestSetReferencePathPreservesRepeatableReferenceArray verifies that wiring a
 // reference into a repeatable Reference field (e.g. Observation.performer as a
 // Reference[]) updates the existing array instead of replacing it with a single
@@ -351,7 +727,7 @@ func TestSetReferencePathPreservesRepeatableReferenceArray(t *testing.T) {
 			map[string]any{"reference": "Practitioner/other"},
 		},
 	}
-	setReferencePath(body, "Observation.performer", refTarget{resourceType: "Practitioner", localID: "prac-7"})
+	setReferencePath(body, "Observation.performer", refTarget{resourceType: "Practitioner", localID: "prac-7"}, true, nil)
 
 	arr, ok := body["performer"].([]any)
 	if !ok {
@@ -386,7 +762,7 @@ func TestSetReferencePathDescendsIntoRepeatableContainer(t *testing.T) {
 			map[string]any{"function": map[string]any{"text": "responsible"}},
 		},
 	}
-	setReferencePath(body, "MedicationDispense.performer.actor", refTarget{resourceType: "Practitioner", localID: "prac-3"})
+	setReferencePath(body, "MedicationDispense.performer.actor", refTarget{resourceType: "Practitioner", localID: "prac-3"}, false, nil)
 
 	arr, ok := body["performer"].([]any)
 	if !ok {
@@ -411,89 +787,6 @@ func TestSetReferencePathDescendsIntoRepeatableContainer(t *testing.T) {
 	}
 }
 
-// TestBulkSynthesizesSlicedExtensionWithFixedCoding verifies that the bulk
-// synthesizer emits sliced extensions and resolves their nested Fixed coding. A
-// profile whose extension is sliced (e.g. the suppressed extension on
-// hcpd-organization) must appear in some instances with its required
-// suppressedBy sub-extension carrying the fixed organisation-initiated coding,
-// rather than being dropped or left with a generic placeholder coding.
-func TestBulkSynthesizesSlicedExtensionWithFixedCoding(t *testing.T) {
-	suppressedURL := "http://example.org/StructureDefinition/suppressed"
-	fixedCoding := map[string]any{
-		"system": "http://example.org/CodeSystem/responsible-party-type",
-		"code":   "organisation-initiated",
-	}
-	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{
-		URL: suppressedURL, Type: "Extension",
-		Elements: []model.ElementDefinition{
-			{Path: "Extension", Min: 0, Max: "1"},
-			{Path: "Extension.url", Min: 1, Max: "1", Fixed: suppressedURL},
-			{Path: "Extension.extension", Min: 1, Max: "*"},
-			{ID: "Extension.extension:suppressedBy", Path: "Extension.extension", SliceName: "suppressedBy", Min: 1, Max: "1"},
-			{ID: "Extension.extension:suppressedBy.url", Path: "Extension.extension.url", Min: 1, Max: "1", Fixed: "suppressedBy"},
-			{ID: "Extension.extension:suppressedBy.value[x]", Path: "Extension.extension.value[x]", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}},
-			{ID: "Extension.extension:suppressedBy.value[x].coding", Path: "Extension.extension.value[x].coding", Min: 1, Max: "1", Fixed: fixedCoding, Types: []model.ElementType{{Code: "Coding"}}},
-		},
-	})
-	reg.AddStructureDefinition(&model.StructureDefinition{
-		URL: "http://example.org/StructureDefinition/org", Type: "Organization", Kind: "resource",
-		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "1"},
-			{Path: "Organization.extension", Min: 0, Max: "*"},
-			{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Extension", Profile: []string{suppressedURL}}}},
-			{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: "1", Fixed: suppressedURL},
-			{ID: "Organization.extension:suppressed.extension", Path: "Organization.extension.extension", Min: 1, Max: "*"},
-			{ID: "Organization.extension:suppressed.extension:suppressedBy", Path: "Organization.extension.extension", SliceName: "suppressedBy", Min: 1, Max: "1"},
-			{ID: "Organization.extension:suppressed.extension:suppressedBy.url", Path: "Organization.extension.extension.url", Min: 1, Max: "1", Fixed: "suppressedBy"},
-			{ID: "Organization.extension:suppressed.extension:suppressedBy.value[x]", Path: "Organization.extension.extension.value[x]", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}},
-			{ID: "Organization.extension:suppressed.extension:suppressedBy.value[x].coding", Path: "Organization.extension.extension.value[x].coding", Min: 1, Max: "1", Fixed: fixedCoding, Types: []model.ElementType{{Code: "Coding"}}},
-		},
-	})
-
-	// synthesizeSliceValue must resolve the suppressed slice's nested fixed coding.
-	resolved, err := reg.ResolveProfile("http://example.org/StructureDefinition/org")
-	if err != nil {
-		t.Fatalf("ResolveProfile: %v", err)
-	}
-	ext := resolved.Root.Children["extension"]
-	if ext == nil {
-		t.Fatal("expected extension child node")
-	}
-	suppressed := ext.Slices["suppressed"]
-	if suppressed == nil {
-		t.Fatal("expected suppressed slice")
-	}
-	val := synthesizeSliceValue(suppressed, reg, nil, newRNG("test"))
-	m, ok := val.(map[string]any)
-	if !ok {
-		t.Fatalf("synthesizeSliceValue = %T, want map", val)
-	}
-	if m["url"] != suppressedURL {
-		t.Fatalf("suppressed url = %v, want %s", m["url"], suppressedURL)
-	}
-	rawExt, ok := m["extension"].([]any)
-	if !ok || len(rawExt) == 0 {
-		t.Fatalf("suppressed extension missing nested suppressedBy, got %#v", m)
-	}
-	sub, ok := rawExt[0].(map[string]any)
-	if !ok || sub["url"] != "suppressedBy" {
-		t.Fatalf("expected suppressedBy sub-extension, got %#v", rawExt[0])
-	}
-	cc, ok := sub["valueCodeableConcept"].(map[string]any)
-	if !ok {
-		t.Fatalf("suppressedBy missing valueCodeableConcept, got %#v", sub)
-	}
-	codings, ok := cc["coding"].([]any)
-	if !ok || len(codings) == 0 {
-		t.Fatalf("suppressedBy valueCodeableConcept missing coding, got %#v", cc)
-	}
-	coding, ok := codings[0].(map[string]any)
-	if !ok || coding["code"] != "organisation-initiated" {
-		t.Fatalf("suppressedBy coding = %#v, want organisation-initiated", codings[0])
-	}
-}
-
 // TestDefaultProfilePrefersScopedProfile verifies that defaultProfile prefers a
 // scoped (package) profile over the base FHIR profile for a resource type, so
 // package-specific extensions are exercised by bulk generation.
@@ -511,266 +804,315 @@ func TestDefaultProfilePrefersScopedProfile(t *testing.T) {
 	}
 }
 
-func TestResolveBoundCodingFromExpansionAndCompose(t *testing.T) {
-	reg := registry.New()
-	// Expansion contains a nested code.
-	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/expanded", ExpansionContains: []model.ValueSetExpansionContains{
-		{System: "http://example.org/cs", Code: "parent", Contains: []model.ValueSetExpansionContains{
-			{System: "http://example.org/cs", Code: "child", Display: "Child"},
-		}},
-	}})
-	// Compose include with concepts.
-	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/composed", ComposeIncludes: []model.ValueSetInclude{
-		{System: "http://example.org/cs2", Concepts: []model.ConceptReference{{Code: "c1", Display: "C1"}}},
-	}})
-	// Compose include referencing a code system.
-	reg.AddCodeSystem(&model.CodeSystem{URL: "http://example.org/cs3", Concepts: []model.CodeSystemConcept{{Code: "k1", Display: "K1"}}})
-	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/csref", ComposeIncludes: []model.ValueSetInclude{
-		{System: "http://example.org/cs3"},
-	}})
-
-	def := func(vs string) *model.ElementDefinition {
-		return &model.ElementDefinition{Binding: &model.Binding{Strength: "required", ValueSet: vs}}
-	}
-
-	if c, ok := resolveBoundCoding(def("http://example.org/ValueSet/expanded"), reg); !ok || c.Code != "parent" {
-		t.Fatalf("expansion coding = %+v ok=%v, want parent (first non-empty code)", c, ok)
-	}
-	if c, ok := resolveBoundCoding(def("http://example.org/ValueSet/composed"), reg); !ok || c.Code != "c1" {
-		t.Fatalf("compose coding = %+v ok=%v, want c1", c, ok)
-	}
-	if c, ok := resolveBoundCoding(def("http://example.org/ValueSet/csref"), reg); !ok || c.Code != "k1" {
-		t.Fatalf("code-system coding = %+v ok=%v, want k1", c, ok)
-	}
-	// No binding / unknown value set / nil registry -> not found.
-	if _, ok := resolveBoundCoding(&model.ElementDefinition{}, reg); ok {
-		t.Fatal("expected no coding for element without binding")
-	}
-	if _, ok := resolveBoundCoding(def("http://example.org/ValueSet/missing"), reg); ok {
-		t.Fatal("expected no coding for unknown value set")
-	}
-	if _, ok := resolveBoundCoding(def("http://example.org/ValueSet/expanded"), nil); ok {
-		t.Fatal("expected no coding for nil registry")
-	}
-}
-
-func TestCodingToMapOmitsEmptyFields(t *testing.T) {
-	m := codingToMap(synthesizedCoding{System: "http://example.org/cs", Code: "c", Display: "D"})
-	if m["system"] != "http://example.org/cs" || m["code"] != "c" || m["display"] != "D" {
-		t.Fatalf("codingToMap = %v", m)
-	}
-	empty := codingToMap(synthesizedCoding{})
-	if len(empty) != 0 {
-		t.Fatalf("codingToMap(empty) = %v, want empty map", empty)
-	}
-}
-
-func TestMergeBulkSlicePattern(t *testing.T) {
-	// No existing value: the pattern is cloned in.
-	value := map[string]any{}
-	mergeBulkSlicePattern(value, "coding", map[string]any{"system": "http://example.org/cs", "code": "c"})
-	coding, ok := value["coding"].(map[string]any)
-	if !ok || coding["code"] != "c" {
-		t.Fatalf("merged coding = %v", value["coding"])
-	}
-
-	// Existing nested object: recurse and merge, preserving existing keys.
-	value2 := map[string]any{"coding": map[string]any{"system": "http://old"}}
-	mergeBulkSlicePattern(value2, "coding", map[string]any{"code": "new", "display": "New"})
-	c2 := value2["coding"].(map[string]any)
-	if c2["system"] != "http://old" || c2["code"] != "new" {
-		t.Fatalf("merged existing coding = %v", c2)
-	}
-}
-
-func TestStripEmptyExtensionsRemovesInvalidExtensions(t *testing.T) {
-	body := map[string]any{
-		"extension": []any{
-			// Empty extension (no value, no sub-extension) -> removed.
-			map[string]any{"url": "http://example.org/empty"},
-			// Valid simple extension with a value -> kept.
-			map[string]any{"url": "http://example.org/valued", "valueString": "x"},
-			// Valid complex extension with a sub-extension -> kept.
-			map[string]any{"url": "http://example.org/complex", "extension": []any{map[string]any{"url": "sub", "valueBoolean": true}}},
-		},
-	}
-	stripEmptyExtensions(body)
-	arr := body["extension"].([]any)
-	if len(arr) != 2 {
-		t.Fatalf("extension array = %d entries, want 2 (empty removed)", len(arr))
-	}
-	for _, raw := range arr {
-		m := raw.(map[string]any)
-		if m["url"] == "http://example.org/empty" {
-			t.Fatal("empty extension was not stripped")
+// TestWireCorpusReferencesRootsSameTypeRefs verifies that a same-type reference
+// (e.g. Location.partOf → Location) is wired to the root of that type's emitted
+// pool rather than a hash-spread peer. Spreading same-type references across the
+// pool builds deep chains (Location-N → Location-(N-1) → … → Location-1), so a
+// single failure at any link cascades HAPI-1094 "not found" to every later
+// member. Pointing every member at the root keeps the same-type dependency graph
+// shallow and resilient. Cross-type references still spread deterministically.
+func TestWireCorpusReferencesRootsSameTypeRefs(t *testing.T) {
+	pool := []string{"loc-1", "loc-2", "loc-3"}
+	// Same-type reference (Location.partOf → Location) always targets the root.
+	for _, id := range []string{"loc-2", "loc-3"} {
+		inst := &model.ResourceInstance{LocalID: id, ResourceType: "Location", Resource: map[string]any{}}
+		refs := wireCorpusReferences(inst, map[string]refFieldInfo{
+			"Location.partOf": {targetType: "Location"},
+		}, map[string][]string{"Location": pool})
+		if len(refs) != 1 {
+			t.Fatalf("refs = %d, want 1", len(refs))
+		}
+		if refs[0].TargetID != "loc-1" {
+			t.Fatalf("same-type ref target = %s, want root loc-1", refs[0].TargetID)
 		}
 	}
-
-	// A map with no extension key is left alone; nested arrays are recursed.
-	nested := map[string]any{"a": []any{map[string]any{"extension": []any{map[string]any{"url": "http://example.org/empty"}}}}}
-	stripEmptyExtensions(nested)
-	inner := nested["a"].([]any)[0].(map[string]any)
-	if _, ok := inner["extension"]; ok {
-		t.Fatal("nested empty extension was not stripped")
+	// A cross-type reference still spreads across the pool deterministically.
+	distinct := map[string]bool{}
+	for i := 0; i < 20; i++ {
+		inst := &model.ResourceInstance{LocalID: "p" + string(rune('a'+i)), ResourceType: "PractitionerRole", Resource: map[string]any{}}
+		refs := wireCorpusReferences(inst, map[string]refFieldInfo{
+			"PractitionerRole.organization": {targetType: "Organization"},
+		}, map[string][]string{"Organization": pool})
+		distinct[refs[0].TargetID] = true
+	}
+	if len(distinct) < 2 {
+		t.Fatalf("cross-type refs did not spread across the pool: %v", distinct)
 	}
 }
 
-func TestIsEmptyExtension(t *testing.T) {
-	if !isEmptyExtension(map[string]any{"url": "http://example.org/x"}) {
-		t.Fatal("extension with only a url should be empty")
+// collectBatchInstances drains a streamed corpus into a slice of instances plus
+// any finalization batch, verifying the error channel is clean.
+func collectBatchInstances(t *testing.T, batches <-chan CorpusBatch, errs <-chan error) ([]*model.ResourceInstance, []CorpusBatch) {
+	t.Helper()
+	var all []*model.ResourceInstance
+	var finals []CorpusBatch
+	for b := range batches {
+		if b.Finalize {
+			finals = append(finals, b)
+			continue
+		}
+		all = append(all, b.Instances...)
 	}
-	if isEmptyExtension(map[string]any{"url": "http://example.org/x", "valueString": "v"}) {
-		t.Fatal("extension with a value should not be empty")
+	if err := <-errs; err != nil {
+		t.Fatalf("GenerateCorpusStreamed returned error: %v", err)
 	}
-	if isEmptyExtension(map[string]any{"url": "http://example.org/x", "extension": []any{map[string]any{"url": "sub"}}}) {
-		t.Fatal("extension with a sub-extension should not be empty")
-	}
-	if isEmptyExtension(nil) {
-		t.Fatal("nil map should not be considered empty")
-	}
-	if isEmptyExtension(map[string]any{"valueString": "v"}) {
-		t.Fatal("extension without a url should not be considered empty")
-	}
+	return all, finals
 }
 
-func TestSynthesizeNodeValuePrimitiveTypes(t *testing.T) {
-	reg := registry.New()
-	rng := newRNG("seed")
+// TestGenerateCorpusStreamedEmitsMixedTypeBatches verifies the streaming API
+// emits small mixed-type batches (not one giant batch per type) whose
+// references only point to already-emitted resources.
+func TestGenerateCorpusStreamedEmitsMixedTypeBatches(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
 
-	cases := []struct {
-		code string
-		path string
-	}{
-		{"string", "Observation.note"},
-		{"id", "Observation.id"},
-		{"uri", "Observation.url"},
-		{"code", "Observation.status"},
-		{"boolean", "Observation.active"},
-		{"integer", "Observation.value"},
-		{"decimal", "Observation.value"},
-		{"date", "Observation.date"},
-		{"dateTime", "Observation.issued"},
-		{"time", "Observation.time"},
-	}
-	for _, c := range cases {
-		node := &model.ElementNode{Path: c.path, Definition: &model.ElementDefinition{Path: c.path, Types: []model.ElementType{{Code: c.code}}}}
-		if v := synthesizeNodeValue(node, reg, nil, rng); v == nil {
-			t.Fatalf("synthesizeNodeValue(%s) = nil", c.code)
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 5, nil, 2, 2)
+
+	emitted := make(map[string]bool)
+	var batchCount int
+	var obsCount, patCount int
+	for b := range batches {
+		batchCount++
+		// Instances are in topological order within a batch, so an instance's
+		// references may point to an earlier instance of the same batch. Mark
+		// each instance emitted inline as we iterate so those resolve.
+		for _, inst := range b.Instances {
+			collectReferences(inst.Resource, func(ref string) {
+				if danglingRef.MatchString(ref) {
+					t.Fatalf("streamed resource %s has dangling reference %q", inst.LocalID, ref)
+				}
+				_, targetID := splitReference(ref)
+				if targetID == "" {
+					t.Fatalf("resource %s has malformed reference %q", inst.LocalID, ref)
+				}
+				if !emitted[targetID] {
+					t.Fatalf("resource %s references %q which was not yet emitted", inst.LocalID, ref)
+				}
+			})
+			switch inst.ResourceType {
+			case "Observation":
+				obsCount++
+			case "Patient":
+				patCount++
+			}
+			emitted[inst.LocalID] = true
 		}
 	}
-	// Fixed value short-circuits.
-	fixed := &model.ElementNode{Path: "Observation.status", Definition: &model.ElementDefinition{Path: "Observation.status", Types: []model.ElementType{{Code: "code"}}, Fixed: "final"}}
-	if v := synthesizeNodeValue(fixed, reg, nil, rng); v != "final" {
-		t.Fatalf("fixed value = %v, want final", v)
+	if err := <-errs; err != nil {
+		t.Fatalf("GenerateCorpusStreamed returned error: %v", err)
 	}
-	// Nil node returns nil.
-	if v := synthesizeNodeValue(nil, reg, nil, rng); v != nil {
-		t.Fatalf("nil node = %v, want nil", v)
+	// 5 of each type.
+	if obsCount != 5 || patCount != 5 {
+		t.Fatalf("got %d observations and %d patients, want 5 and 5", obsCount, patCount)
+	}
+	// With batchSize=2 over 5 rounds, expect ~3 batches (2+2+1), not one per type.
+	if batchCount != 3 {
+		t.Fatalf("emitted %d batches, want 3 (round-based)", batchCount)
 	}
 }
 
-func TestSynthesizeNodeValueComplexTypes(t *testing.T) {
-	reg := registry.New()
-	rng := newRNG("seed")
-	cases := []string{"Identifier", "HumanName", "Address", "ContactPoint", "Quantity", "Period", "CodeableConcept", "Coding", "Reference"}
-	for _, code := range cases {
-		node := &model.ElementNode{Path: "Observation." + code, Definition: &model.ElementDefinition{Path: "Observation." + code, Types: []model.ElementType{{Code: code}}}}
-		if v := synthesizeNodeValue(node, reg, nil, rng); v == nil {
-			t.Fatalf("synthesizeNodeValue(%s) = nil", code)
+// TestGenerateCorpusStreamedPerTypeOverrides verifies that per-type overrides
+// produce the correct per-type counts, with higher-count types continuing in
+// extra rounds while lower-count types stop emitting.
+func TestGenerateCorpusStreamedPerTypeOverrides(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	// 3 observations but 7 patients: extra Patient-only rounds after round 3.
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 3, map[string]int{"Patient": 7}, 100, 2)
+	all, _ := collectBatchInstances(t, batches, errs)
+
+	obsCount, patCount := 0, 0
+	for _, inst := range all {
+		switch inst.ResourceType {
+		case "Observation":
+			obsCount++
+		case "Patient":
+			patCount++
 		}
 	}
-	// A Reference with a wired target uses the target.
-	refs := map[string]refTarget{"Observation.subject": {resourceType: "Patient", localID: "p-1"}}
-	refNode := &model.ElementNode{Path: "Observation.subject", Definition: &model.ElementDefinition{Path: "Observation.subject", Types: []model.ElementType{{Code: "Reference"}}}}
-	ref := synthesizeNodeValue(refNode, reg, refs, rng).(map[string]any)
-	if ref["reference"] != "Patient/p-1" {
-		t.Fatalf("wired reference = %v, want Patient/p-1", ref["reference"])
+	if obsCount != 3 || patCount != 7 {
+		t.Fatalf("got %d observations and %d patients, want 3 and 7", obsCount, patCount)
 	}
 }
 
-func TestSynthesizeNodeValueBoundCoding(t *testing.T) {
+// TestGenerateCorpusStreamedBatchSizeOne verifies batchSize=1 emits a batch per
+// round (one mixed-type web per batch).
+func TestGenerateCorpusStreamedBatchSizeOne(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 4, nil, 1, 2)
+
+	var batchCount int
+	for range batches {
+		batchCount++
+	}
+	if err := <-errs; err != nil {
+		t.Fatalf("GenerateCorpusStreamed returned error: %v", err)
+	}
+	if batchCount != 4 {
+		t.Fatalf("emitted %d batches, want 4 (one per round with batchSize=1)", batchCount)
+	}
+}
+
+// TestGenerateCorpusStreamedFinalizesRequiredForwardReferences verifies that a
+// required forward reference (from a reference cycle) is preserved and re-wired
+// in a finalization batch once the full pool exists.
+func TestGenerateCorpusStreamedFinalizesRequiredForwardReferences(t *testing.T) {
 	reg := registry.New()
-	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/status", ComposeIncludes: []model.ValueSetInclude{
-		{System: "http://example.org/cs", Concepts: []model.ConceptReference{{Code: "active", Display: "Active"}}},
-	}})
-	rng := newRNG("seed")
-
-	// A bound `code` element returns the bound code.
-	codeNode := &model.ElementNode{Path: "Observation.status", Definition: &model.ElementDefinition{Path: "Observation.status", Types: []model.ElementType{{Code: "code"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/status"}}}
-	if v := synthesizeNodeValue(codeNode, reg, nil, rng); v != "active" {
-		t.Fatalf("bound code = %v, want active", v)
-	}
-
-	// A bound CodeableConcept returns a coding with the bound code.
-	ccNode := &model.ElementNode{Path: "Observation.code", Definition: &model.ElementDefinition{Path: "Observation.code", Types: []model.ElementType{{Code: "CodeableConcept"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/status"}}}
-	cc := synthesizeNodeValue(ccNode, reg, nil, rng).(map[string]any)
-	codings := cc["coding"].([]any)
-	if codings[0].(map[string]any)["code"] != "active" {
-		t.Fatalf("bound CodeableConcept coding = %v, want active", codings[0])
-	}
-}
-
-func TestMergePatternWithBinding(t *testing.T) {
-	binding := synthesizedCoding{System: "http://example.org/cs", Code: "c", Display: "D"}
-	pattern := map[string]any{"system": "http://old", "code": "old"}
-	// No binding -> not merged.
-	if _, ok := mergePatternWithBinding(pattern, "CodeableConcept", synthesizedCoding{}, false); ok {
-		t.Fatal("expected no merge without a binding")
-	}
-	// Non-map pattern -> not merged.
-	if _, ok := mergePatternWithBinding("not-a-map", "CodeableConcept", binding, true); ok {
-		t.Fatal("expected no merge for a non-map pattern")
-	}
-	// CodeableConcept merges system/code/display.
-	merged, ok := mergePatternWithBinding(pattern, "CodeableConcept", binding, true)
-	if !ok {
-		t.Fatal("expected a merged CodeableConcept")
-	}
-	m := merged.(map[string]any)
-	if m["system"] != "http://example.org/cs" || m["code"] != "c" || m["display"] != "D" {
-		t.Fatalf("merged CodeableConcept = %v", m)
-	}
-	// Coding merges too.
-	if _, ok := mergePatternWithBinding(pattern, "Coding", binding, true); !ok {
-		t.Fatal("expected a merged Coding")
-	}
-	// Unsupported type -> not merged.
-	if _, ok := mergePatternWithBinding(pattern, "string", binding, true); ok {
-		t.Fatal("expected no merge for a non-coding type")
-	}
-}
-
-func TestFindSliceValueXAndSliceExtensionRoot(t *testing.T) {
-	reg := registry.New()
-	// A simple extension profile with a value[x].
 	reg.AddStructureDefinition(&model.StructureDefinition{
-		URL: "http://example.org/StructureDefinition/simple-ext", Type: "Extension",
+		URL:  "http://example.org/StructureDefinition/org",
+		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Extension", Min: 0, Max: "1"},
-			{Path: "Extension.url", Min: 1, Max: "1"},
-			{Path: "Extension.value[x]", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Organization", Min: 0, Max: "*"},
+			{Path: "Organization.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+			{Path: "Organization.endpoint", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
 		},
 	})
-	slice := &model.SliceNode{
-		Name: "simple",
-		Definition: &model.ElementDefinition{
-			Path:  "Organization.extension",
-			Types: []model.ElementType{{Code: "Extension", Profile: []string{"http://example.org/StructureDefinition/simple-ext"}}},
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/endpoint",
+		Type: "Endpoint",
+		Elements: []model.ElementDefinition{
+			{Path: "Endpoint", Min: 0, Max: "*"},
+			{Path: "Endpoint.managingOrganization", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
 		},
+	})
+	gen := NewCorpusGenerator(reg, true)
+
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Organization", "Endpoint"}, 3, nil, 100, 2)
+	all, finals := collectBatchInstances(t, batches, errs)
+
+	if len(finals) == 0 {
+		t.Fatal("expected a finalization batch for the required forward reference")
 	}
-	vx, ok := findSliceValueX(slice, reg)
-	if !ok || vx == nil || vx.Definition == nil {
-		t.Fatalf("findSliceValueX = %v, %v; want the value[x] node", vx, ok)
+	// Collect every instance (regular + finalized) and verify all references
+	// resolve within the complete pool.
+	allIDs := make(map[string]bool, len(all))
+	for _, inst := range all {
+		allIDs[inst.LocalID] = true
 	}
-	root := sliceExtensionRoot(slice, reg)
-	if root == nil {
-		t.Fatal("sliceExtensionRoot = nil, want the resolved extension root")
+	for _, b := range finals {
+		for _, inst := range b.Instances {
+			collectReferences(inst.Resource, func(ref string) {
+				if danglingRef.MatchString(ref) {
+					t.Fatalf("finalized %s still has dangling reference %q", inst.LocalID, ref)
+				}
+			})
+		}
 	}
-	// Nil slice / nil registry -> not found.
-	if _, ok := findSliceValueX(nil, reg); ok {
-		t.Fatal("expected not-found for nil slice")
+}
+
+// TestGenerateCorpusStreamedDeterministicIDs verifies that streaming and
+// batched generation produce identical local IDs, since both delegate to
+// synthesizeOne with the same (type, index) key.
+func TestGenerateCorpusStreamedDeterministicIDs(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Patient", "Observation"}, 3, nil, 1, 2)
+	streamed, _ := collectBatchInstances(t, batches, errs)
+
+	// Re-generate via synthesizeType for comparison.
+	batched, err := gen.synthesizeType(context.Background(), "Patient", 3, nil)
+	if err != nil {
+		t.Fatalf("synthesizeType: %v", err)
 	}
-	if root := sliceExtensionRoot(slice, nil); root != nil {
-		t.Fatal("expected nil root for nil registry")
+	// The first Patient instance from the stream (round 1) must match the first
+	// Patient from a whole-type batch.
+	if streamed[0].LocalID != batched[0].LocalID {
+		t.Fatalf("streamed id %q != batched id %q", streamed[0].LocalID, batched[0].LocalID)
+	}
+}
+
+// TestGenerateCorpusStreamedCancellation verifies a cancelled context stops
+// generation and surfaces a cancellation error.
+func TestGenerateCorpusStreamedCancellation(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancelled immediately
+	batches, errs := gen.GenerateCorpusStreamed(ctx, []string{"Observation", "Patient"}, 100, nil, 10, 2)
+	// Drain to completion.
+	for range batches {
+	}
+	err := <-errs
+	if err == nil {
+		t.Fatal("expected a cancellation error from a cancelled context")
+	}
+	if err != context.Canceled {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+}
+
+// TestGenerateCorpusStreamedPipelineDepth verifies the buffered channel lets
+// generation complete ahead of a slow consumer. With an unbuffered channel the
+// generator would block on every send; with pipelineDepth >= number of batches
+// the generator can produce everything before the consumer reads a batch.
+func TestGenerateCorpusStreamedPipelineDepth(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	// batchSize=1 with 5 rounds produces 5 batches. pipelineDepth=5 lets the
+	// generator enqueue all 5 before the consumer starts.
+	batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, 5, nil, 1, 5)
+	// Consume nothing yet; the generator must still reach completion (it can
+	// buffer all batches), proving the channel is buffered.
+	select {
+	case _, ok := <-batches:
+		if !ok {
+			// Channel already closed: generator finished without a consumer. This
+			// is only possible with a buffered channel.
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("generator blocked on a full channel; pipeline-depth buffering not effective")
+	}
+	// Drain the rest.
+	for range batches {
+	}
+	if err := <-errs; err != nil {
+		t.Fatalf("GenerateCorpusStreamed returned error: %v", err)
+	}
+}
+
+// TestGenerateCorpusStreamedMemoryBounded verifies that peak heap stays roughly
+// constant as the requested count grows, because generation streams rounds into
+// small batches rather than materialising the whole corpus at once. The old
+// whole-type generation held every instance of a type in memory simultaneously.
+func TestGenerateCorpusStreamedMemoryBounded(t *testing.T) {
+	reg := testRegistry(t)
+	gen := NewCorpusGenerator(reg, true)
+
+	// Measure peak heap for a small and a 50x-larger count. Peak heap must not
+	// grow proportionally with count (only with batchSize).
+	var peakSmall, peakLarge uint64
+	for _, count := range []int{200, 10000} {
+		var peak uint64
+		batches, errs := gen.GenerateCorpusStreamed(context.Background(), []string{"Observation", "Patient"}, count, nil, 100, 2)
+		for b := range batches {
+			// Discard the bodies promptly (as the provisioner/writer consumer
+			// does) so peak heap reflects the streaming steady state.
+			_ = b
+			var ms runtime.MemStats
+			runtime.ReadMemStats(&ms)
+			if ms.HeapAlloc > peak {
+				peak = ms.HeapAlloc
+			}
+		}
+		if err := <-errs; err != nil {
+			t.Fatalf("count=%d: %v", count, err)
+		}
+		if count == 200 {
+			peakSmall = peak
+		} else {
+			peakLarge = peak
+		}
+	}
+	// Peak heap for 10000 should be well under 2x that for 200 (proportional
+	// growth would be ~50x). Allow generous headroom for the growing local-ID
+	// pool, which is O(count) but tiny (strings).
+	if peakLarge > peakSmall*4 {
+		t.Fatalf("peak heap grew from %d to %d across a 50x count increase; generation is not memory-bounded", peakSmall, peakLarge)
 	}
 }

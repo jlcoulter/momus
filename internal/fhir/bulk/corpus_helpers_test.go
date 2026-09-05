@@ -36,6 +36,26 @@ func TestSanitizeID(t *testing.T) {
 	}
 }
 
+func TestIsConcreteResourceTypeExcludesParameters(t *testing.T) {
+	// Parameters is an operational type (operation request/response payloads),
+	// not a resource that is provisioned to a server as seed data. Even though a
+	// package may ship a StructureDefinition for it (e.g. HCPD's
+	// hcpd-export-request-parameters), it must never be generated into the corpus.
+	if isConcreteResourceType("Parameters") {
+		t.Fatal("isConcreteResourceType(Parameters) should be false")
+	}
+	// The abstract base types remain excluded.
+	for _, rt := range []string{"Resource", "DomainResource", "CanonicalResource", "MetadataResource"} {
+		if isConcreteResourceType(rt) {
+			t.Fatalf("isConcreteResourceType(%s) should be false", rt)
+		}
+	}
+	// A real resource type stays concrete.
+	if !isConcreteResourceType("Practitioner") {
+		t.Fatal("isConcreteResourceType(Practitioner) should be true")
+	}
+}
+
 func TestResourceTypeOfProfile(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Organization", Type: "Organization", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: "1"}}})
@@ -68,25 +88,35 @@ func TestReferenceTargetType(t *testing.T) {
 func TestDescendForReference(t *testing.T) {
 	// Missing key -> map created.
 	parent := map[string]any{}
-	got := descendForReference(parent, "subject")
+	got := descendForReference(parent, "subject", nil)
 	if _, ok := parent["subject"].(map[string]any); !ok {
 		t.Fatalf("descend missing = %v", parent)
 	}
+	// Missing repeatable key -> array created.
+	parent = map[string]any{}
+	repeatableEntity := &model.ElementNode{
+		Name: "entity", Path: "Provenance.entity",
+		Definition: &model.ElementDefinition{Path: "Provenance.entity", Min: 0, Max: "*"},
+	}
+	got = descendForReference(parent, "entity", repeatableEntity)
+	if _, ok := parent["entity"].([]any); !ok {
+		t.Fatalf("descend missing repeatable = %v", parent)
+	}
 	// Array descends into first element.
 	parent = map[string]any{"author": []any{map[string]any{"display": "x"}}}
-	got = descendForReference(parent, "author")
+	got = descendForReference(parent, "author", nil)
 	if got["display"] != "x" {
 		t.Fatalf("descend array = %v", got)
 	}
 	// Empty array creates element.
 	parent = map[string]any{"author": []any{}}
-	got = descendForReference(parent, "author")
+	got = descendForReference(parent, "author", nil)
 	if parent["author"].([]any)[0] == nil {
 		t.Fatalf("descend empty array = %v", parent)
 	}
 	// Non-map array element replaced.
 	parent = map[string]any{"author": []any{"str"}}
-	got = descendForReference(parent, "author")
+	got = descendForReference(parent, "author", nil)
 	if parent["author"].([]any)[0].(map[string]any) == nil {
 		t.Fatalf("descend non-map = %v", parent)
 	}
@@ -96,27 +126,65 @@ func TestSetReferenceLeaf(t *testing.T) {
 	target := refTarget{resourceType: "Patient", localID: "p-1"}
 	// Existing map.
 	obj := map[string]any{"subject": map[string]any{"reference": "old"}}
-	setReferenceLeaf(obj, "subject", target)
+	setReferenceLeaf(obj, "subject", target, false)
 	if obj["subject"].(map[string]any)["reference"] != "Patient/p-1" {
 		t.Fatalf("setReferenceLeaf(map) = %v", obj)
 	}
 	// Existing array.
 	obj = map[string]any{"author": []any{map[string]any{"reference": "old"}}}
-	setReferenceLeaf(obj, "author", target)
+	setReferenceLeaf(obj, "author", target, false)
 	if obj["author"].([]any)[0].(map[string]any)["reference"] != "Patient/p-1" {
 		t.Fatalf("setReferenceLeaf(array) = %v", obj)
 	}
 	// Empty array.
 	obj = map[string]any{"author": []any{}}
-	setReferenceLeaf(obj, "author", target)
+	setReferenceLeaf(obj, "author", target, false)
 	if obj["author"].([]any)[0].(map[string]any)["reference"] != "Patient/p-1" {
 		t.Fatalf("setReferenceLeaf(empty array) = %v", obj)
 	}
 	// Scalar.
 	obj = map[string]any{"subject": "scalar"}
-	setReferenceLeaf(obj, "subject", target)
+	setReferenceLeaf(obj, "subject", target, false)
 	if obj["subject"].(map[string]any)["reference"] != "Patient/p-1" {
 		t.Fatalf("setReferenceLeaf(scalar) = %v", obj)
+	}
+	// Absent repeatable field -> array is created.
+	obj = map[string]any{}
+	setReferenceLeaf(obj, "endpoint", target, true)
+	if arr, ok := obj["endpoint"].([]any); !ok || len(arr) != 1 || arr[0].(map[string]any)["reference"] != "Patient/p-1" {
+		t.Fatalf("setReferenceLeaf(repeatable) = %v", obj)
+	}
+	// Absent singular field -> scalar object is created.
+	obj = map[string]any{}
+	setReferenceLeaf(obj, "managingOrganization", target, false)
+	if m, ok := obj["managingOrganization"].(map[string]any); !ok || m["reference"] != "Patient/p-1" {
+		t.Fatalf("setReferenceLeaf(singular) = %v", obj)
+	}
+}
+
+// TestPrimitiveReferenceValueRespectsPattern verifies that a required primitive
+// sibling whose element definition carries a fixed/pattern value (e.g.
+// Provenance.entity.role has patternCode "source") is synthesised with that
+// value, not with the element's path segment. Emitting the path segment ("role")
+// makes HAPI reject the resource with "Unknown ProvenanceEntityRole code 'role'".
+func TestPrimitiveReferenceValueRespectsPattern(t *testing.T) {
+	// A code element with a pattern value must use the pattern, not the path leaf.
+	def := &model.ElementDefinition{Path: "Provenance.entity.role", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}, Pattern: "source"}
+	val, ok := primitiveReferenceValue(def)
+	if !ok || val != "source" {
+		t.Fatalf("primitiveReferenceValue(pattern) = %v, %v; want source, true", val, ok)
+	}
+	// A code element with a fixed value must use the fixed value.
+	def = &model.ElementDefinition{Path: "Provenance.entity.role", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}, Fixed: "derivation"}
+	val, ok = primitiveReferenceValue(def)
+	if !ok || val != "derivation" {
+		t.Fatalf("primitiveReferenceValue(fixed) = %v, %v; want derivation, true", val, ok)
+	}
+	// Without a fixed/pattern value, the path leaf is the fallback.
+	def = &model.ElementDefinition{Path: "Provenance.entity.role", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}}
+	val, ok = primitiveReferenceValue(def)
+	if !ok || val != "role" {
+		t.Fatalf("primitiveReferenceValue(no pattern) = %v, %v; want role, true", val, ok)
 	}
 }
 
@@ -131,20 +199,56 @@ func TestHashCorpus(t *testing.T) {
 
 func TestWireCorpusReferences(t *testing.T) {
 	// Nil / empty resource is a no-op.
-	wireCorpusReferences(nil, map[string]string{}, nil)
-	wireCorpusReferences(&model.ResourceInstance{}, map[string]string{}, nil)
+	wireCorpusReferences(nil, map[string]refFieldInfo{}, nil)
+	wireCorpusReferences(&model.ResourceInstance{}, map[string]refFieldInfo{}, nil)
 	// A ref field with an empty pool is skipped.
 	inst := &model.ResourceInstance{LocalID: "o1", Resource: map[string]any{}}
-	wireCorpusReferences(inst, map[string]string{"Observation.subject": "Patient"}, map[string][]string{"Patient": {}})
+	wireCorpusReferences(inst, map[string]refFieldInfo{"Observation.subject": {targetType: "Patient"}}, map[string][]string{"Patient": {}})
 	if len(inst.Resource) != 0 {
 		t.Fatalf("empty pool should not wire: %v", inst.Resource)
 	}
 	// A ref field with a non-empty pool wires the reference.
 	inst = &model.ResourceInstance{LocalID: "o1", Resource: map[string]any{}}
-	wireCorpusReferences(inst, map[string]string{"Observation.subject": "Patient"}, map[string][]string{"Patient": {"p1", "p2"}})
+	wireCorpusReferences(inst, map[string]refFieldInfo{"Observation.subject": {targetType: "Patient"}}, map[string][]string{"Patient": {"p1", "p2"}})
 	subject := inst.Resource["subject"].(map[string]any)
 	if !strings.HasPrefix(subject["reference"].(string), "Patient/") {
 		t.Fatalf("wired reference = %v", subject["reference"])
+	}
+}
+
+// TestWireCorpusReferencesSyncsReferenceType verifies that wiring a reference
+// updates the Reference.type to the actual target resource type, so a stale type
+// synthesised for an abstract target (e.g. "Organization" when Provenance.
+// entity.what falls back for a Reference(Resource) target) never survives after
+// the reference is rewired to a concrete Practitioner/Organization instance.
+// Leaving the stale type makes the server reject the resource with
+// "Invalid Resource target type. Found Organization, but expected one of
+// (Practitioner)".
+func TestWireCorpusReferencesSyncsReferenceType(t *testing.T) {
+	// A body whose what reference carries a stale "Organization" type (the
+	// fallback for an abstract Reference(Resource) target).
+	inst := &model.ResourceInstance{LocalID: "prov-1", Resource: map[string]any{
+		"entity": []any{
+			map[string]any{"role": "source", "what": map[string]any{"reference": "Practitioner/momus-setup-practitioner", "type": "Organization"}},
+		},
+	}}
+	wireCorpusReferences(inst, map[string]refFieldInfo{
+		"Provenance.entity.what": {targetType: "Practitioner", repeatable: false},
+	}, map[string][]string{"Practitioner": {"pr-1"}})
+
+	entities, ok := inst.Resource["entity"].([]any)
+	if !ok || len(entities) == 0 {
+		t.Fatalf("expected entity array, got %#v", inst.Resource["entity"])
+	}
+	what, ok := entities[0].(map[string]any)["what"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected what reference map, got %#v", entities[0])
+	}
+	if what["reference"] != "Practitioner/pr-1" {
+		t.Fatalf("wired reference = %v, want Practitioner/pr-1", what["reference"])
+	}
+	if typ, _ := what["type"].(string); typ != "Practitioner" {
+		t.Fatalf("reference type = %v, want Practitioner (must be synced to target)", what["type"])
 	}
 }
 
@@ -153,11 +257,107 @@ func TestReferenceFields(t *testing.T) {
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/obs", Type: "Observation", Elements: []model.ElementDefinition{
 		{Path: "Observation", Min: 0, Max: "*"},
 		{Path: "Observation.subject", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
+		{Path: "Observation.performer", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
 	}})
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{{Path: "Patient", Min: 0, Max: "*"}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: "*"}}})
 	g := NewCorpusGenerator(reg, false)
 	fields := g.referenceFields("Observation")
-	if fields["Observation.subject"] != "Patient" {
-		t.Fatalf("referenceFields = %v", fields)
+	// Singular reference field: not repeatable.
+	if info, ok := fields["Observation.subject"]; !ok || info.targetType != "Patient" || info.repeatable {
+		t.Fatalf("subject field = %v, want Patient (non-repeatable)", fields["Observation.subject"])
+	}
+	// Repeatable reference field (Max *): repeatable.
+	if info, ok := fields["Observation.performer"]; !ok || info.targetType != "Practitioner" || !info.repeatable {
+		t.Fatalf("performer field = %v, want Practitioner (repeatable)", fields["Observation.performer"])
+	}
+}
+
+func TestCollectExampleReferenceTargetsUsesFullPath(t *testing.T) {
+	raw := map[string]any{
+		"target": []any{map[string]any{"reference": "Patient/p-1"}},
+		"entity": []any{
+			map[string]any{"what": map[string]any{"reference": "Organization/o-1"}},
+		},
+		"agent": []any{
+			map[string]any{"who": map[string]any{"reference": "Practitioner/pr-1"}},
+		},
+	}
+	out := map[string]string{}
+	collectExampleReferenceTargets(raw, "Provenance", out)
+	// Nested references must carry their full backbone path, not the leaf only,
+	// so wiring places them inside entity/agent rather than at the root.
+	if got, ok := out["Provenance.entity.what"]; !ok || got != "Organization" {
+		t.Fatalf("entity.what = %v, want Organization at Provenance.entity.what (got key %v)", got, out)
+	}
+	if got, ok := out["Provenance.agent.who"]; !ok || got != "Practitioner" {
+		t.Fatalf("agent.who = %v, want Practitioner at Provenance.agent.who (got key %v)", got, out)
+	}
+	if got, ok := out["Provenance.target"]; !ok || got != "Patient" {
+		t.Fatalf("target = %v, want Patient at Provenance.target", got)
+	}
+	// The leaf-only keys must not be present.
+	if _, ok := out["Provenance.what"]; ok {
+		t.Fatal("must not record a top-level Provenance.what leaf key")
+	}
+}
+
+// TestWireCorpusReferencesCreatesRepeatableBackbone verifies that when a
+// reference field is nested inside an absent repeatable BackboneElement (e.g.
+// Provenance.entity, Max "*"), wiring creates the backbone as a single-element
+// array carrying the reference AND the backbone's other required child fields
+// (e.g. Provenance.entity.role, Min 1). Emitting entity as a bare object with no
+// role makes HAPI reject the resource ("The property entity must be a JSON
+// Array" and "Provenance.entity.role: minimum required = 1").
+func TestWireCorpusReferencesCreatesRepeatableBackbone(t *testing.T) {
+	reg := registry.New()
+	provURL := "http://example.org/StructureDefinition/provenance"
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: provURL, Type: "Provenance", Kind: "resource",
+		Elements: []model.ElementDefinition{
+			{Path: "Provenance", Min: 0, Max: "*"},
+			{Path: "Provenance.recorded", Min: 1, Max: "1", Types: []model.ElementType{{Code: "instant"}}},
+			{Path: "Provenance.entity", Min: 0, Max: "*", Types: []model.ElementType{{Code: "BackboneElement"}}},
+			{Path: "Provenance.entity.role", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+			{Path: "Provenance.entity.what", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
+		},
+	})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: "*"}, {Path: "Practitioner.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}}}})
+
+	g := NewCorpusGenerator(reg, true)
+	refFields := g.referenceFields("Provenance")
+
+	// A Provenance body where the optional entity backbone was omitted during
+	// synthesis (exhaustive RNG skip).
+	inst := &model.ResourceInstance{LocalID: "prov-1", Resource: map[string]any{
+		"resourceType": "Provenance",
+		"recorded":     "2024-01-01T00:00:00Z",
+	}}
+	wireCorpusReferences(inst, refFields, map[string][]string{"Practitioner": {"pr-1"}})
+
+	raw, ok := inst.Resource["entity"]
+	if !ok {
+		t.Fatal("entity backbone was not created during wiring")
+	}
+	entities, ok := raw.([]any)
+	if !ok {
+		t.Fatalf("Provenance.entity must be a JSON Array, got %T: %#v", raw, raw)
+	}
+	if len(entities) == 0 {
+		t.Fatal("Provenance.entity array must contain one member")
+	}
+	entity, ok := entities[0].(map[string]any)
+	if !ok {
+		t.Fatalf("entity member must be a map, got %T", entities[0])
+	}
+	if entity["role"] == nil {
+		t.Fatalf("Provenance.entity.role is required (Min 1) but was not populated: %#v", entity)
+	}
+	what, ok := entity["what"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected what reference, got %#v", entity)
+	}
+	if what["reference"] != "Practitioner/pr-1" {
+		t.Fatalf("wired what reference = %v, want Practitioner/pr-1", what["reference"])
 	}
 }

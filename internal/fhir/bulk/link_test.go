@@ -86,6 +86,37 @@ func TestLinkRewiresDanglingToSingleAvailableTarget(t *testing.T) {
 	}
 }
 
+func TestLinkRewiresSetupPlaceholderReferences(t *testing.T) {
+	// The shared generation core (generation.SynthesizeBody) emits references to
+	// setup resources (Type/momus-setup-Type) via referencePlaceholder. In a bulk
+	// corpus these are dangling and must be rewired to a real pool member.
+	datasets := []*model.Dataset{
+		{Resources: map[string]*model.ResourceInstance{
+			"momus-Observation-1": instance("momus-Observation-1", "Observation", map[string]any{"resourceType": "Observation", "id": "momus-Observation-1", "subject": map[string]any{"reference": "Patient/momus-setup-patient"}}),
+			"momus-Patient-1":     instance("momus-Patient-1", "Patient", map[string]any{"resourceType": "Patient", "id": "momus-Patient-1"}),
+		}},
+	}
+
+	out := Link(datasets)
+	var obs *model.ResourceInstance
+	for _, inst := range out {
+		if inst.ResourceType == "Observation" {
+			obs = inst
+			break
+		}
+	}
+	if obs == nil {
+		t.Fatal("expected an Observation instance in linked output")
+	}
+	subject, ok := obs.Resource["subject"].(map[string]any)
+	if !ok {
+		t.Fatalf("subject = %v, want a reference map", obs.Resource["subject"])
+	}
+	if got := subject["reference"]; got != "Patient/momus-Patient-1" {
+		t.Fatalf("setup placeholder ref not rewired: %v", got)
+	}
+}
+
 func TestLinkIsDeterministicAndIgnoresURLs(t *testing.T) {
 	datasets := []*model.Dataset{
 		{Resources: map[string]*model.ResourceInstance{
