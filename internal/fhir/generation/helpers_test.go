@@ -5,6 +5,9 @@ import (
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 // TestCollectionHasFieldValue verifies the collection membership check used by
@@ -274,17 +277,17 @@ func TestGenerateMatchingCollectionCandidate(t *testing.T) {
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: "http://example.org/StructureDefinition/cc", Type: "CodeableConcept",
 		Elements: []model.ElementDefinition{
-			{Path: "CodeableConcept", Min: 0, Max: "*"},
+			{Path: "CodeableConcept", Min: 0, Max: fhir.MaxUnbounded},
 			{
 				Path:  "CodeableConcept.coding",
 				Min:   1,
-				Max:   "*",
+				Max:   fhir.MaxUnbounded,
 				Types: []model.ElementType{{Code: "Coding"}},
 			},
 			{
 				Path:  "CodeableConcept.coding.code",
 				Min:   1,
-				Max:   "1",
+				Max:   1,
 				Types: []model.ElementType{{Code: "code"}},
 			},
 		},
@@ -295,8 +298,8 @@ func TestGenerateMatchingCollectionCandidate(t *testing.T) {
 			Path: "Observation.code",
 			Types: []model.ElementType{
 				{
-					Code:    "CodeableConcept",
-					Profile: []string{"http://example.org/StructureDefinition/cc"},
+					Code:     "CodeableConcept",
+					Profiles: []string{"http://example.org/StructureDefinition/cc"},
 				},
 			},
 		},
@@ -350,22 +353,22 @@ func TestBoundCodingSystem(t *testing.T) {
 	reg.AddValueSet(
 		&model.ValueSet{
 			URL: "http://example.org/ValueSet/status",
-			ComposeIncludes: []model.ValueSetInclude{
+			Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{
 				{
 					System:   "http://example.org/cs",
-					Concepts: []model.ConceptReference{{Code: "active"}},
+					Concept: []model.ConceptReference{{Code: "active"}},
 				},
-			},
+			}},
 		},
 	)
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: "http://example.org/StructureDefinition/endpoint", Type: "Endpoint",
 		Elements: []model.ElementDefinition{
-			{Path: "Endpoint", Min: 0, Max: "*"},
+			{Path: "Endpoint", Min: 0, Max: fhir.MaxUnbounded},
 			{
 				Path:  "Endpoint.status",
 				Min:   1,
-				Max:   "1",
+				Max:   1,
 				Types: []model.ElementType{{Code: "code"}},
 				Binding: &model.Binding{
 					Strength: "required",

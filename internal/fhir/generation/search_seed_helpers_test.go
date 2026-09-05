@@ -6,6 +6,9 @@ import (
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 func TestIsFunctionName(t *testing.T) {
@@ -160,8 +163,8 @@ func TestApplyCompositeMatch(t *testing.T) {
 func TestApplyCompositeMatchPadsAndBranches(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.active", Min: 0, Max: 1, Types: []model.ElementType{{Code: "boolean"}}},
 	}})
 	// More parts than paths -> last path is padded, so all parts land on it.
 	body := map[string]any{}
@@ -237,12 +240,12 @@ func TestDescendContainer(t *testing.T) {
 func TestResolveNestedLeafTypeFailures(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Identifier", Type: "Identifier", Elements: []model.ElementDefinition{
-		{Path: "Identifier", Min: 0, Max: "*"},
-		{Path: "Identifier.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Identifier.value", Min: 0, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 	}})
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.identifier", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Identifier"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.identifier", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Identifier"}}},
 	}})
 	resolved, err := reg.ResolveProfile("http://example.org/StructureDefinition/patient")
 	if err != nil {
@@ -260,8 +263,8 @@ func TestResolveNestedLeafTypeFailures(t *testing.T) {
 	// Unknown top-level container.
 	reg2 := registry.New()
 	reg2.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.id", Min: 0, Max: "1", Types: []model.ElementType{{Code: "id"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.id", Min: 0, Max: 1, Types: []model.ElementType{{Code: "id"}}},
 	}})
 	resolved2, _ := reg2.ResolveProfile("http://example.org/StructureDefinition/patient")
 	if _, _, found := resolveNestedLeafType(resolved2, "Patient", "id.value", reg2); found {

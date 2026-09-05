@@ -6,6 +6,9 @@ import (
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 func TestSplitReference(t *testing.T) {
@@ -58,7 +61,7 @@ func TestIsConcreteResourceTypeExcludesParameters(t *testing.T) {
 
 func TestResourceTypeOfProfile(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Organization", Type: "Organization", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: "1"}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Organization", Type: "Organization", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: 1}}})
 	if got := resourceTypeOfProfile(reg, "http://example.org/StructureDefinition/Organization|4.0.1"); got != "Organization" {
 		t.Fatalf("resourceTypeOfProfile = %q", got)
 	}
@@ -75,7 +78,7 @@ func TestResourceTypeOfProfile(t *testing.T) {
 
 func TestReferenceTargetType(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Patient", Type: "Patient", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Patient", Min: 0, Max: "*"}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Patient", Type: "Patient", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded}}})
 	def := &model.ElementDefinition{TargetProfile: []string{"http://example.org/StructureDefinition/Patient"}}
 	if got := referenceTargetType(def, reg); got != "Patient" {
 		t.Fatalf("referenceTargetType = %q", got)
@@ -96,7 +99,7 @@ func TestDescendForReference(t *testing.T) {
 	parent = map[string]any{}
 	repeatableEntity := &model.ElementNode{
 		Name: "entity", Path: "Provenance.entity",
-		Definition: &model.ElementDefinition{Path: "Provenance.entity", Min: 0, Max: "*"},
+		Definition: &model.ElementDefinition{Path: "Provenance.entity", Min: 0, Max: fhir.MaxUnbounded},
 	}
 	got = descendForReference(parent, "entity", repeatableEntity)
 	if _, ok := parent["entity"].([]any); !ok {
@@ -169,19 +172,19 @@ func TestSetReferenceLeaf(t *testing.T) {
 // makes HAPI reject the resource with "Unknown ProvenanceEntityRole code 'role'".
 func TestPrimitiveReferenceValueRespectsPattern(t *testing.T) {
 	// A code element with a pattern value must use the pattern, not the path leaf.
-	def := &model.ElementDefinition{Path: "Provenance.entity.role", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}, Pattern: "source"}
+	def := &model.ElementDefinition{Path: "Provenance.entity.role", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}, Pattern: "source"}
 	val, ok := primitiveReferenceValue(def)
 	if !ok || val != "source" {
 		t.Fatalf("primitiveReferenceValue(pattern) = %v, %v; want source, true", val, ok)
 	}
 	// A code element with a fixed value must use the fixed value.
-	def = &model.ElementDefinition{Path: "Provenance.entity.role", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}, Fixed: "derivation"}
+	def = &model.ElementDefinition{Path: "Provenance.entity.role", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}, Fixed: "derivation"}
 	val, ok = primitiveReferenceValue(def)
 	if !ok || val != "derivation" {
 		t.Fatalf("primitiveReferenceValue(fixed) = %v, %v; want derivation, true", val, ok)
 	}
 	// Without a fixed/pattern value, the path leaf is the fallback.
-	def = &model.ElementDefinition{Path: "Provenance.entity.role", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}}
+	def = &model.ElementDefinition{Path: "Provenance.entity.role", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}}
 	val, ok = primitiveReferenceValue(def)
 	if !ok || val != "role" {
 		t.Fatalf("primitiveReferenceValue(no pattern) = %v, %v; want role, true", val, ok)
@@ -255,12 +258,12 @@ func TestWireCorpusReferencesSyncsReferenceType(t *testing.T) {
 func TestReferenceFields(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/obs", Type: "Observation", Elements: []model.ElementDefinition{
-		{Path: "Observation", Min: 0, Max: "*"},
-		{Path: "Observation.subject", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
-		{Path: "Observation.performer", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
+		{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Observation.subject", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
+		{Path: "Observation.performer", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
 	}})
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{{Path: "Patient", Min: 0, Max: "*"}}})
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: "*"}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: fhir.MaxUnbounded}}})
 	g := NewCorpusGenerator(reg, false)
 	fields := g.referenceFields("Observation")
 	// Singular reference field: not repeatable.
@@ -315,14 +318,14 @@ func TestWireCorpusReferencesCreatesRepeatableBackbone(t *testing.T) {
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: provURL, Type: "Provenance", Kind: "resource",
 		Elements: []model.ElementDefinition{
-			{Path: "Provenance", Min: 0, Max: "*"},
-			{Path: "Provenance.recorded", Min: 1, Max: "1", Types: []model.ElementType{{Code: "instant"}}},
-			{Path: "Provenance.entity", Min: 0, Max: "*", Types: []model.ElementType{{Code: "BackboneElement"}}},
-			{Path: "Provenance.entity.role", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
-			{Path: "Provenance.entity.what", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
+			{Path: "Provenance", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Provenance.recorded", Min: 1, Max: 1, Types: []model.ElementType{{Code: "instant"}}},
+			{Path: "Provenance.entity", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "BackboneElement"}}},
+			{Path: "Provenance.entity.role", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}},
+			{Path: "Provenance.entity.what", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
 		},
 	})
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: "*"}, {Path: "Practitioner.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: fhir.MaxUnbounded}, {Path: "Practitioner.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}}}})
 
 	g := NewCorpusGenerator(reg, true)
 	refFields := g.referenceFields("Provenance")

@@ -7,6 +7,9 @@ import (
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 func buildBuilderRegistry() *registry.Registry {
@@ -15,20 +18,20 @@ func buildBuilderRegistry() *registry.Registry {
 		URL:  "http://example.org/StructureDefinition/patient",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
-			{Path: "Patient.gender", Min: 0, Max: "1", Types: []model.ElementType{{Code: "code"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/gender"}},
-			{Path: "Patient.birthDate", Min: 0, Max: "1", Types: []model.ElementType{{Code: "date"}}},
-			{Path: "Patient.name", Min: 0, Max: "*", Types: []model.ElementType{{Code: "string"}}},
-			{Path: "Patient.photo", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Attachment"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.active", Min: 0, Max: 1, Types: []model.ElementType{{Code: "boolean"}}},
+			{Path: "Patient.gender", Min: 0, Max: 1, Types: []model.ElementType{{Code: "code"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/gender"}},
+			{Path: "Patient.birthDate", Min: 0, Max: 1, Types: []model.ElementType{{Code: "date"}}},
+			{Path: "Patient.name", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Patient.photo", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Attachment"}}},
 		},
 	})
 	reg.AddValueSet(&model.ValueSet{
 		URL: "http://example.org/ValueSet/gender",
-		ComposeIncludes: []model.ValueSetInclude{{
+		Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{{
 			System:   "http://hl7.org/fhir/administrative-gender",
-			Concepts: []model.ConceptReference{{Code: "male"}},
-		}},
+			Concept: []model.ConceptReference{{Code: "male"}},
+		}}},
 	})
 	reg.AddSearchParameter(&model.SearchParameter{Code: "active", Base: []string{"Patient"}, Type: "boolean", Expression: "Patient.active"})
 	reg.AddSearchParameter(&model.SearchParameter{Code: "gender", Base: []string{"Patient"}, Type: "token", Expression: "Patient.gender"})
@@ -150,9 +153,9 @@ func TestElementSearchValue(t *testing.T) {
 	}
 	// A code element with a bound coding resolves to the bound code.
 	boundReg := registry.New()
-	boundReg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/gender", ComposeIncludes: []model.ValueSetInclude{{
-		System: "http://hl7.org/fhir/administrative-gender", Concepts: []model.ConceptReference{{Code: "male"}},
-	}}})
+	boundReg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/gender", Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{{
+		System: "http://hl7.org/fhir/administrative-gender", Concept: []model.ConceptReference{{Code: "male"}},
+	}}}})
 	def = &model.ElementDefinition{Path: "Patient.gender", Types: []model.ElementType{{Code: "code"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/gender"}}
 	if got := elementSearchValue(def, boundReg); got != "male" {
 		t.Fatalf("bound code elementSearchValue = %q, want male", got)
@@ -191,11 +194,11 @@ func TestSearchValidNonMatchValue(t *testing.T) {
 func TestSearchAcceptValueMoreBranches(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.generalPractitioner", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
-		{Path: "Patient.photo", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Attachment"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.generalPractitioner", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
+		{Path: "Patient.photo", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Attachment"}}},
 	}})
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: "*"}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: fhir.MaxUnbounded}}})
 	reg.AddSearchParameter(&model.SearchParameter{Code: "general-practitioner", Base: []string{"Patient"}, Type: "reference", Expression: "Patient.generalPractitioner"})
 	reg.AddSearchParameter(&model.SearchParameter{Code: "photo", Base: []string{"Patient"}, Type: "reference", Expression: "Patient.photo"})
 

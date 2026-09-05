@@ -15,17 +15,15 @@ import (
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
-func allowsMultiple(maxValue string) bool {
-	if maxValue == "*" {
+func allowsMultiple(maxValue fhir.Max) bool {
+	if maxValue == fhir.MaxUnbounded {
 		return true
 	}
-	n, err := strconv.Atoi(maxValue)
-	if err != nil {
-		return false
-	}
-	return n > 1
+	return maxValue > 1
 }
 
 func elementAllowsMultiple(def *model.ElementDefinition) bool {
@@ -35,7 +33,10 @@ func elementAllowsMultiple(def *model.ElementDefinition) bool {
 	if allowsMultiple(def.Max) {
 		return true
 	}
-	return allowsMultiple(def.BaseMax)
+	if def.BaseMax != nil {
+		return allowsMultiple(*def.BaseMax)
+	}
+	return false
 }
 
 // maxCardinality returns the element's maximum cardinality as an int, or -1 when
@@ -46,17 +47,13 @@ func maxCardinality(def *model.ElementDefinition) int {
 		return -1
 	}
 	max := def.Max
-	if max == "" {
-		max = def.BaseMax
+	if max == 0 && def.BaseMax != nil {
+		max = *def.BaseMax
 	}
-	if max == "*" {
+	if max == fhir.MaxUnbounded {
 		return -1
 	}
-	n, err := strconv.Atoi(max)
-	if err != nil {
-		return -1
-	}
-	return n
+	return int(max)
 }
 
 // optionalInclusionProbability is the chance that an optional (Min == 0)
@@ -617,7 +614,7 @@ func hasProfileTypes(def *model.ElementDefinition) bool {
 		return false
 	}
 	for _, et := range def.Types {
-		if len(et.Profile) > 0 {
+		if len(et.Profiles) > 0 {
 			return true
 		}
 	}
@@ -784,7 +781,7 @@ func generateSliceValue(slice *model.SliceNode, reg *registry.Registry) (any, bo
 		return nil, false
 	}
 	synthetic := &model.ElementNode{
-		Name:       slice.Definition.Name,
+		Name:       lastPathSegment(slice.Definition.Path),
 		Path:       slice.Definition.Path,
 		Definition: slice.Definition,
 		ProfileURL: slice.ProfileURL,
@@ -848,11 +845,11 @@ func findSliceValueX(slice *model.SliceNode, reg *registry.Registry) (*model.Ele
 	}
 	// A complex extension carries sub-extension content and must not receive a
 	// value[x] (its value[x] is Max 0). Only genuinely simple extensions get one.
-	if extChild, ok := root.Children["extension"]; ok && extChild != nil && extChild.Definition != nil && extChild.Definition.Max != "0" {
+	if extChild, ok := root.Children["extension"]; ok && extChild != nil && extChild.Definition != nil && extChild.Definition.Max != 0 {
 		return nil, false
 	}
 	vx, ok := root.Children["value[x]"]
-	if !ok || vx == nil || vx.Definition == nil || vx.Definition.Max == "0" {
+	if !ok || vx == nil || vx.Definition == nil || vx.Definition.Max == 0 {
 		return nil, false
 	}
 	return vx, true
@@ -866,10 +863,10 @@ func sliceExtensionRoot(slice *model.SliceNode, reg *registry.Registry) *model.E
 	}
 	if c, ok := slice.Children["value[x]"]; ok && c != nil && c.Definition != nil {
 		// Use a synthetic root if the slice already carries its value[x] child.
-		return &model.ElementNode{Name: slice.Definition.Name, Path: slice.Definition.Path, Definition: slice.Definition, Children: slice.Children}
+		return &model.ElementNode{Name: lastPathSegment(slice.Definition.Path), Path: slice.Definition.Path, Definition: slice.Definition, Children: slice.Children}
 	}
 	for _, et := range slice.Definition.Types {
-		for _, p := range et.Profile {
+		for _, p := range et.Profiles {
 			resolved, err := reg.ResolveProfile(normalizeCanonical(p))
 			if err != nil || resolved == nil || resolved.Root == nil {
 				continue
@@ -1165,7 +1162,7 @@ func generateDatatypeValueFromProfiles(types []model.ElementType, reg *registry.
 	// variants on Organization.identifier), and merging them produces a value
 	// that conforms to none.
 	for _, et := range types {
-		for _, profileURL := range et.Profile {
+		for _, profileURL := range et.Profiles {
 			value, ok := generateDatatypeValueFromProfile(profileURL, reg)
 			if ok {
 				if _, ok := value.(map[string]any); ok {
@@ -1367,7 +1364,7 @@ func enrichGeneratedValueWithTypeProfiles(value any, def *model.ElementDefinitio
 	// not merge all profiles: an element that lists several (e.g. all the AU
 	// Identifier variants) must be generated from one, not a Frankenstein of all.
 	for _, et := range def.Types {
-		for _, profileURL := range et.Profile {
+		for _, profileURL := range et.Profiles {
 			resolved, err := reg.ResolveProfile(normalizeCanonical(profileURL))
 			if err != nil || resolved == nil || resolved.Root == nil {
 				continue
@@ -1611,11 +1608,19 @@ func resolveBoundCoding(def *model.ElementDefinition, reg *registry.Registry) (g
 	if !ok || vs == nil {
 		return generatedCoding{}, false
 	}
-	if coding, ok := firstExpansionCoding(vs.ExpansionContains); ok {
+	var expansion []model.ValueSetExpansionContains
+	if vs.Expansion != nil {
+		expansion = vs.Expansion.Contains
+	}
+	if coding, ok := firstExpansionCoding(expansion); ok {
 		return coding, true
 	}
-	for _, include := range vs.ComposeIncludes {
-		for _, concept := range include.Concepts {
+	var includes []model.ValueSetInclude
+	if vs.Compose != nil {
+		includes = vs.Compose.Include
+	}
+	for _, include := range includes {
+		for _, concept := range include.Concept {
 			if isMeaningfulCoding(concept.Code, concept.Display) {
 				return generatedCoding{System: include.System, Code: concept.Code, Display: concept.Display}, true
 			}

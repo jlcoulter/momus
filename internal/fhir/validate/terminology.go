@@ -62,19 +62,23 @@ func extractCodes(val any) []codeRef {
 // for a code-typed element), only the code is matched against every include
 // regardless of system.
 func valueSetContains(vs *model.ValueSet, system, code string) bool {
-	for _, inc := range vs.ComposeIncludes {
-		if system != "" && inc.System != "" && inc.System != system {
-			continue
-		}
-		for _, c := range inc.Concepts {
-			if c.Code == code {
-				return true
+	if vs.Compose != nil {
+		for _, inc := range vs.Compose.Include {
+			if system != "" && inc.System != "" && inc.System != system {
+				continue
+			}
+			for _, c := range inc.Concept {
+				if c.Code == code {
+					return true
+				}
 			}
 		}
 	}
-	for _, c := range vs.ExpansionContains {
-		if c.Code == code {
-			return true
+	if vs.Expansion != nil {
+		for _, c := range vs.Expansion.Contains {
+			if c.Code == code {
+				return true
+			}
 		}
 	}
 	return false

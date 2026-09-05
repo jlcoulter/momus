@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 // TestResolveProfileResolvesParentChain verifies that ResolveProfile merges the
@@ -92,9 +95,9 @@ func TestResolveProfileResolvesParentChain(t *testing.T) {
 		URL:  "http://hl7.org/fhir/StructureDefinition/Identifier",
 		Type: "Identifier",
 		Elements: []model.ElementDefinition{
-			{Path: "Identifier", Min: 0, Max: "*"},
-			{Path: "Identifier.system", Min: 0, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
-			{Path: "Identifier.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Identifier.system", Min: 0, Max: 1, Types: []model.ElementType{{Code: "uri"}}},
+			{Path: "Identifier.value", Min: 0, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 		},
 	})
 	r.AddStructureDefinition(&model.StructureDefinition{
@@ -102,9 +105,9 @@ func TestResolveProfileResolvesParentChain(t *testing.T) {
 		Type:           "Identifier",
 		BaseDefinition: "http://hl7.org/fhir/StructureDefinition/Identifier",
 		Elements: []model.ElementDefinition{
-			{Path: "Identifier", Min: 0, Max: "*"},
-			{Path: "Identifier.system", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://hl7.org.au/id/abn"},
-			{Path: "Identifier.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}, Constraints: []model.ElementConstraint{{Key: "inv-abn-0", Severity: "error", Expression: "value.matches('^([0-9]{11})$')"}}},
+			{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Identifier.system", Min: 1, Max: 1, Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://hl7.org.au/id/abn"},
+			{Path: "Identifier.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}, Constraints: []model.ElementConstraint{{Key: "inv-abn-0", Severity: "error", Expression: "value.matches('^([0-9]{11})$')"}}},
 		},
 	})
 
@@ -310,11 +313,11 @@ func TestRegistryResolveProfileBuildsElementTree(t *testing.T) {
 		Type: "Observation",
 		Name: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Name: "Observation"},
-			{Path: "Observation.component", Name: "component"},
-			{Path: "Observation.component.code", Name: "code"},
-			{Path: "Observation.component.code.coding", Name: "coding"},
-			{Path: "Observation.component.code.coding.code", Name: "code"},
+			{Path: "Observation"},
+			{Path: "Observation.component"},
+			{Path: "Observation.component.code"},
+			{Path: "Observation.component.code.coding"},
+			{Path: "Observation.component.code.coding.code"},
 		},
 	})
 
@@ -410,10 +413,10 @@ func TestResolveElementsKeepsIDBasedSliceChildrenDistinct(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/base-org",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "1"},
-			{Path: "Organization.extension", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Extension"}}},
+			{Path: "Organization", Min: 0, Max: 1},
+			{Path: "Organization.extension", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Extension"}}},
 			// The base element that the child's ID-based slice child shares a path with.
-			{Path: "Organization.extension.url", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
+			{Path: "Organization.extension.url", Min: 1, Max: 1, Types: []model.ElementType{{Code: "uri"}}},
 		},
 	})
 	r.AddStructureDefinition(&model.StructureDefinition{
@@ -421,10 +424,10 @@ func TestResolveElementsKeepsIDBasedSliceChildrenDistinct(t *testing.T) {
 		Type:           "Organization",
 		BaseDefinition: "http://example.org/StructureDefinition/base-org",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization.extension", Min: 0, Max: "*"},
-			{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 0, Max: "1"},
+			{Path: "Organization.extension", Min: 0, Max: fhir.MaxUnbounded},
+			{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 0, Max: 1},
 			// A slice child whose slice context lives only in its ID (no SliceName).
-			{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: "1", Fixed: "http://example.org/suppressed"},
+			{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: 1, Fixed: "http://example.org/suppressed"},
 		},
 	})
 
@@ -434,7 +437,7 @@ func TestResolveElementsKeepsIDBasedSliceChildrenDistinct(t *testing.T) {
 	}
 	var hasBaseURL, hasSliceURL bool
 	for _, el := range els {
-		if el.Path == "Organization.extension.url" && el.ID == "" && el.Fixed == nil {
+		if el.Path == "Organization.extension.url" && el.SliceName == "" && el.Fixed == nil {
 			hasBaseURL = true
 		}
 		if el.ID == "Organization.extension:suppressed.url" && el.Fixed == "http://example.org/suppressed" {
@@ -458,9 +461,9 @@ func TestResolveProfileCachesResult(t *testing.T) {
 		URL:  "http://hl7.org/fhir/StructureDefinition/Identifier",
 		Type: "Identifier",
 		Elements: []model.ElementDefinition{
-			{Path: "Identifier", Min: 0, Max: "*"},
-			{Path: "Identifier.system", Min: 0, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
-			{Path: "Identifier.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Identifier.system", Min: 0, Max: 1, Types: []model.ElementType{{Code: "uri"}}},
+			{Path: "Identifier.value", Min: 0, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 		},
 	})
 
@@ -486,8 +489,8 @@ func TestResolveElementsCachesResult(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/org",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "1"},
-			{Path: "Organization.name", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Organization", Min: 0, Max: 1},
+			{Path: "Organization.name", Min: 0, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 		},
 	})
 
@@ -512,8 +515,8 @@ func TestResolveProfileCacheConcurrent(t *testing.T) {
 		URL:  "http://hl7.org/fhir/StructureDefinition/Identifier",
 		Type: "Identifier",
 		Elements: []model.ElementDefinition{
-			{Path: "Identifier", Min: 0, Max: "*"},
-			{Path: "Identifier.system", Min: 0, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
+			{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Identifier.system", Min: 0, Max: 1, Types: []model.ElementType{{Code: "uri"}}},
 		},
 	})
 

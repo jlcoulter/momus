@@ -6,6 +6,9 @@ import (
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 const invProfile = "http://example.org/StructureDefinition/patient-inv"
@@ -16,8 +19,8 @@ func TestValidateInvariantViolated(t *testing.T) {
 		URL:  invProfile,
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 0, Max: "*", Types: []model.ElementType{{Code: "HumanName"}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}},
 				Constraints: []model.ElementConstraint{{Key: "pt-1", Severity: "error", Expression: "family.exists()", Human: "name must have a family"}}},
 		},
 	})
@@ -46,9 +49,9 @@ func TestValidateInvariantAbsentElementDoesNotFire(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/ext-sd",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "*"},
-			{Path: "Organization.contact", Min: 0, Max: "*", Types: []model.ElementType{{Code: "BackboneElement"}}},
-			{Path: "Organization.contact.extension", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Extension"}},
+			{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Organization.contact", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "BackboneElement"}}},
+			{Path: "Organization.contact.extension", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Extension"}},
 				Constraints: []model.ElementConstraint{{Key: "ext-1", Severity: "error", Human: "Must have either extensions or value[x]", Expression: "extension.exists() != value.exists()"}}},
 		},
 	})
@@ -73,8 +76,8 @@ func TestValidateInvariantSatisfied(t *testing.T) {
 		URL:  invProfile,
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 0, Max: "*", Types: []model.ElementType{{Code: "HumanName"}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}},
 				Constraints: []model.ElementConstraint{{Key: "pat-1", Severity: "error", Expression: "family.exists()", Human: "name must have a family"}}},
 		},
 	})
@@ -98,8 +101,8 @@ func TestValidateInvariantSkipsWarningAndUnknown(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/warn-inv",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.value", Min: 0, Max: 1, Types: []model.ElementType{{Code: "string"}},
 				Constraints: []model.ElementConstraint{
 					{Key: "warn-1", Severity: "warning", Expression: "false", Human: "warning only"},
 					{Key: "err-1", Severity: "error", Expression: "unsupportedFn()", Human: "out of scope"},

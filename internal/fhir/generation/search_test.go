@@ -9,6 +9,9 @@ import (
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 func TestBuildSearchModifierAndCombinationQueries(t *testing.T) {
@@ -61,9 +64,9 @@ func TestSearchCombinationUsesPerCodeValues(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/patient",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 0, Max: "*", Types: []model.ElementType{{Code: "string"}}},
-			{Path: "Patient.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Patient.active", Min: 0, Max: 1, Types: []model.ElementType{{Code: "boolean"}}},
 		},
 	})
 	reg.AddSearchParameter(&model.SearchParameter{Code: "name", Base: []string{"Patient"}, Type: "string", Expression: "Patient.name"})

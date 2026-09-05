@@ -6,6 +6,9 @@ import (
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 func TestReferenceResourceType(t *testing.T) {
@@ -553,7 +556,7 @@ func TestPrefersContractValueAndHasContractSignal(t *testing.T) {
 }
 
 func TestHasProfileTypes(t *testing.T) {
-	if !hasProfileTypes(&model.ElementDefinition{Types: []model.ElementType{{Profile: []string{"http://x"}}}}) {
+	if !hasProfileTypes(&model.ElementDefinition{Types: []model.ElementType{{Profiles: []string{"http://x"}}}}) {
 		t.Fatal("profile types should be detected")
 	}
 	if hasProfileTypes(nil) || hasProfileTypes(&model.ElementDefinition{Types: []model.ElementType{{Code: "string"}}}) {
@@ -605,17 +608,18 @@ func TestElementAllowsMultiple(t *testing.T) {
 	if elementAllowsMultiple(nil) {
 		t.Fatal("elementAllowsMultiple(nil) should be false")
 	}
-	if !elementAllowsMultiple(&model.ElementDefinition{Max: "*"}) {
+	if !elementAllowsMultiple(&model.ElementDefinition{Max: fhir.MaxUnbounded}) {
 		t.Fatal("Max=* should allow multiple")
 	}
-	if !elementAllowsMultiple(&model.ElementDefinition{Max: "2"}) {
+	if !elementAllowsMultiple(&model.ElementDefinition{Max: 2}) {
 		t.Fatal("Max=2 should allow multiple")
 	}
-	if elementAllowsMultiple(&model.ElementDefinition{Max: "1"}) {
+	if elementAllowsMultiple(&model.ElementDefinition{Max: 1}) {
 		t.Fatal("Max=1 should not allow multiple")
 	}
 	// Falls back to BaseMax.
-	if !elementAllowsMultiple(&model.ElementDefinition{Max: "1", BaseMax: "*"}) {
+	ub := fhir.MaxUnbounded
+	if !elementAllowsMultiple(&model.ElementDefinition{Max: 1, BaseMax: &ub}) {
 		t.Fatal("BaseMax=* should allow multiple")
 	}
 }
@@ -626,28 +630,28 @@ func TestSliceExtensionRootAndFindSliceValueXBranches(t *testing.T) {
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: "http://example.org/StructureDefinition/simple-ext", Type: "Extension",
 		Elements: []model.ElementDefinition{
-			{Path: "Extension", Min: 0, Max: "1"},
-			{Path: "Extension.url", Min: 1, Max: "1"},
-			{Path: "Extension.value[x]", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Extension", Min: 0, Max: 1},
+			{Path: "Extension.url", Min: 1, Max: 1},
+			{Path: "Extension.value[x]", Min: 0, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 		},
 	})
 	// A complex extension (value[x] is Max 0, has sub-extensions).
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: "http://example.org/StructureDefinition/complex-ext", Type: "Extension",
 		Elements: []model.ElementDefinition{
-			{Path: "Extension", Min: 0, Max: "1"},
-			{Path: "Extension.url", Min: 1, Max: "1"},
-			{Path: "Extension.extension", Min: 1, Max: "*"},
-			{Path: "Extension.value[x]", Min: 0, Max: "0"},
+			{Path: "Extension", Min: 0, Max: 1},
+			{Path: "Extension.url", Min: 1, Max: 1},
+			{Path: "Extension.extension", Min: 1, Max: fhir.MaxUnbounded},
+			{Path: "Extension.value[x]", Min: 0, Max: 0},
 		},
 	})
 
 	// A slice whose definition carries its own value[x] child uses a synthetic root.
 	slice := &model.SliceNode{
 		Name:       "own",
-		Definition: &model.ElementDefinition{Path: "x.extension", Name: "ext"},
+		Definition: &model.ElementDefinition{Path: "x.extension"},
 		Children: map[string]*model.ElementNode{
-			"value[x]": {Definition: &model.ElementDefinition{Path: "x.value[x]", Max: "1"}},
+			"value[x]": {Definition: &model.ElementDefinition{Path: "x.value[x]", Max: 1}},
 		},
 	}
 	root := sliceExtensionRoot(slice, reg)
@@ -656,7 +660,7 @@ func TestSliceExtensionRootAndFindSliceValueXBranches(t *testing.T) {
 	}
 	// Complex extension: findSliceValueX returns false.
 	complexSlice := &model.SliceNode{Definition: &model.ElementDefinition{
-		Types: []model.ElementType{{Code: "Extension", Profile: []string{"http://example.org/StructureDefinition/complex-ext"}}},
+		Types: []model.ElementType{{Code: "Extension", Profiles: []string{"http://example.org/StructureDefinition/complex-ext"}}},
 	}}
 	if _, ok := findSliceValueX(complexSlice, reg); ok {
 		t.Fatal("findSliceValueX(complex) should be false")
@@ -803,13 +807,13 @@ func TestEnsureSimpleExtensionValue(t *testing.T) {
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: "http://example.org/StructureDefinition/simple-ext", Type: "Extension",
 		Elements: []model.ElementDefinition{
-			{Path: "Extension", Min: 0, Max: "1"},
-			{Path: "Extension.url", Min: 1, Max: "1"},
-			{Path: "Extension.value[x]", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Extension", Min: 0, Max: 1},
+			{Path: "Extension.url", Min: 1, Max: 1},
+			{Path: "Extension.value[x]", Min: 0, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 		},
 	})
 	slice := &model.SliceNode{Definition: &model.ElementDefinition{
-		Types: []model.ElementType{{Code: "Extension", Profile: []string{"http://example.org/StructureDefinition/simple-ext"}}},
+		Types: []model.ElementType{{Code: "Extension", Profiles: []string{"http://example.org/StructureDefinition/simple-ext"}}},
 	}}
 	// Nil guards.
 	ensureSimpleExtensionValue(nil, slice, reg)
@@ -959,7 +963,7 @@ func TestStripFixedCodingMarkers(t *testing.T) {
 // profile (a "concurrent map writes" panic).
 func TestWrapFixedSliceDoesNotAliasProfileValue(t *testing.T) {
 	fixed := map[string]any{"system": "http://cs", "code": "C", "display": "D"}
-	def := &model.ElementDefinition{Path: "X.coding", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Coding"}}, Fixed: fixed}
+	def := &model.ElementDefinition{Path: "X.coding", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Coding"}}, Fixed: fixed}
 	got := wrapFixedSlice(nil, def, fixed)
 	gotMap, ok := got.(map[string]any)
 	if !ok {
@@ -1058,7 +1062,7 @@ func TestFixedCodeableConceptCodingStaysDisplayless(t *testing.T) {
 	reg := registry.New()
 	reg.AddCodeSystem(&model.CodeSystem{URL: "http://terminology.hl7.org/CodeSystem/v2-0203", Concepts: []model.CodeSystemConcept{{Code: "PRN", Display: "Provider number"}}})
 	fixed := map[string]any{"coding": []any{map[string]any{"system": "http://terminology.hl7.org/CodeSystem/v2-0203", "code": "PRN"}}}
-	node := &model.ElementNode{Definition: &model.ElementDefinition{Path: "Identifier.type", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}, Fixed: fixed}}
+	node := &model.ElementNode{Definition: &model.ElementDefinition{Path: "Identifier.type", Min: 1, Max: 1, Types: []model.ElementType{{Code: "CodeableConcept"}}, Fixed: fixed}}
 	got, ok := generateSingleValue(node, reg)
 	if !ok {
 		t.Fatal("generateSingleValue should return a value")
@@ -1078,7 +1082,7 @@ func TestFixedCodeableConceptCodingStaysDisplayless(t *testing.T) {
 
 func TestNormalizeReferenceType(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Organization", Type: "Organization", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: "*"}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Organization", Type: "Organization", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded}}})
 	// Nil guards.
 	normalizeReferenceType(nil, nil, reg)
 	// Reference-derived type.
@@ -1151,10 +1155,10 @@ func TestDependencyReferenceElementName(t *testing.T) {
 	}
 	// A profile that references the dependency via a Reference element.
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.generalPractitioner", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.generalPractitioner", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/practitioner"}}}},
 	}})
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: "*"}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: fhir.MaxUnbounded}}})
 	if got := dependencyReferenceElementName("Patient", "http://example.org/StructureDefinition/patient", "Practitioner", reg); got != "generalPractitioner" {
 		t.Fatalf("dependencyReferenceElementName = %q, want generalPractitioner", got)
 	}
@@ -1175,8 +1179,8 @@ func TestGenerateDatatypeValueFromProfile(t *testing.T) {
 	}
 	// A profile that generates a value.
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/identifier", Type: "Identifier", Elements: []model.ElementDefinition{
-		{Path: "Identifier", Min: 0, Max: "*"},
-		{Path: "Identifier.system", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
+		{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Identifier.system", Min: 1, Max: 1, Types: []model.ElementType{{Code: "uri"}}},
 	}})
 	v, ok := generateDatatypeValueFromProfile("http://example.org/StructureDefinition/identifier", reg)
 	if !ok || v == nil {
@@ -1260,11 +1264,11 @@ func TestSliceHelperFunctions(t *testing.T) {
 		t.Fatalf("wrapFixedSlice(array) = %v", got)
 	}
 	// wrapFixedSlice: repeatable element -> wraps.
-	if got := wrapFixedSlice(nil, &model.ElementDefinition{Max: "*"}, "x"); got.([]any)[0] != "x" {
+	if got := wrapFixedSlice(nil, &model.ElementDefinition{Max: fhir.MaxUnbounded}, "x"); got.([]any)[0] != "x" {
 		t.Fatalf("wrapFixedSlice(repeatable) = %v", got)
 	}
 	// wrapFixedSlice: scalar element -> returns scalar.
-	if got := wrapFixedSlice(nil, &model.ElementDefinition{Max: "1"}, "x"); got != "x" {
+	if got := wrapFixedSlice(nil, &model.ElementDefinition{Max: 1}, "x"); got != "x" {
 		t.Fatalf("wrapFixedSlice(scalar) = %v", got)
 	}
 	// mergeSlicePattern: no existing value -> clone pattern.
@@ -1310,7 +1314,7 @@ func TestResolveBoundCodingPath(t *testing.T) {
 		t.Fatal("resolveBoundCoding(unknown vs) should be false")
 	}
 	// Compose include referencing a code system.
-	reg.AddValueSet(&model.ValueSet{URL: "http://vs", ComposeIncludes: []model.ValueSetInclude{{System: "http://cs"}}})
+	reg.AddValueSet(&model.ValueSet{URL: "http://vs", Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{{System: "http://cs"}}}})
 	reg.AddCodeSystem(&model.CodeSystem{URL: "http://cs", Concepts: []model.CodeSystemConcept{{Code: "k", Display: "Key"}}})
 	c, ok := resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{ValueSet: "http://vs"}}, reg)
 	if !ok || c.Code != "k" {
@@ -1318,21 +1322,21 @@ func TestResolveBoundCodingPath(t *testing.T) {
 	}
 	// Expansion contains.
 	reg2 := registry.New()
-	reg2.AddValueSet(&model.ValueSet{URL: "http://expanded", ExpansionContains: []model.ValueSetExpansionContains{{Code: "XX"}, {Code: "real", Display: "Real"}}})
+	reg2.AddValueSet(&model.ValueSet{URL: "http://expanded", Expansion: &model.ValueSetExpansion{Contains: []model.ValueSetExpansionContains{{Code: "XX"}, {Code: "real", Display: "Real"}}}})
 	c, ok = resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{ValueSet: "http://expanded"}}, reg2)
 	if !ok || c.Code != "real" {
 		t.Fatalf("resolveBoundCoding(expansion) = %+v, %v", c, ok)
 	}
 	// Compose concepts.
 	reg3 := registry.New()
-	reg3.AddValueSet(&model.ValueSet{URL: "http://composed", ComposeIncludes: []model.ValueSetInclude{{System: "http://sys", Concepts: []model.ConceptReference{{Code: "direct", Display: "Direct"}}}}})
+	reg3.AddValueSet(&model.ValueSet{URL: "http://composed", Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{{System: "http://sys", Concept: []model.ConceptReference{{Code: "direct", Display: "Direct"}}}}}})
 	c, ok = resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{ValueSet: "http://composed"}}, reg3)
 	if !ok || c.Code != "direct" {
 		t.Fatalf("resolveBoundCoding(composed) = %+v, %v", c, ok)
 	}
 	// Only placeholder codes -> not found.
 	reg4 := registry.New()
-	reg4.AddValueSet(&model.ValueSet{URL: "http://placeholders", ComposeIncludes: []model.ValueSetInclude{{System: "http://sys", Concepts: []model.ConceptReference{{Code: "XX"}}}}})
+	reg4.AddValueSet(&model.ValueSet{URL: "http://placeholders", Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{{System: "http://sys", Concept: []model.ConceptReference{{Code: "XX"}}}}}})
 	if _, ok := resolveBoundCoding(&model.ElementDefinition{Binding: &model.Binding{ValueSet: "http://placeholders"}}, reg4); ok {
 		t.Fatal("resolveBoundCoding(placeholders) should be false")
 	}

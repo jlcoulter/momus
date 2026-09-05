@@ -7,6 +7,9 @@ import (
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 func TestDeriveMVPPlanPatientNameOneToMany(t *testing.T) {
@@ -15,16 +18,16 @@ func TestDeriveMVPPlanPatientNameOneToMany(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/patient-profile",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "*"},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded},
 		},
 	})
 	r.AddStructureDefinition(&model.StructureDefinition{
 		URL:  "http://example.org/StructureDefinition/observation-profile",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.status", Min: 1, Max: "1"},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.status", Min: 1, Max: 1},
 		},
 	})
 
@@ -53,11 +56,11 @@ func TestDeriveMVPPlanPatientNameOptionalSingle(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/patient-profile",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 			// A required element survives pruning so the plan is still produced,
 			// while the optional name element is pruned and recorded as such.
-			{Path: "Patient.identifier", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Identifier"}}},
-			{Path: "Patient.name", Min: 0, Max: "1", Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient.identifier", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Identifier"}}},
+			{Path: "Patient.name", Min: 0, Max: 1, Types: []model.ElementType{{Code: "HumanName"}}},
 		},
 	})
 
@@ -79,8 +82,8 @@ func TestDeriveMVPPlanDerivesWithoutPatientProfiles(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/observation-profile",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.status", Min: 1, Max: "1"},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.status", Min: 1, Max: 1},
 		},
 	})
 
@@ -99,8 +102,8 @@ func TestDerivePlanIncludeOptional(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/patient-profile",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 0, Max: "1"},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 0, Max: 1},
 		},
 	})
 
@@ -122,18 +125,18 @@ func TestDerivePlanScopeAndPruningOptions(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/patient-profile",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.identifier", Min: 0, Max: "*", MustSupport: true},
-			{Path: "Patient.meta", Min: 0, Max: "1", MustSupport: true},
-			{Path: "Patient.name", Min: 1, Max: "*"},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.identifier", Min: 0, Max: fhir.MaxUnbounded, MustSupport: true},
+			{Path: "Patient.meta", Min: 0, Max: 1, MustSupport: true},
+			{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded},
 		},
 	})
 	r.AddStructureDefinition(&model.StructureDefinition{
 		URL:  "http://example.org/StructureDefinition/observation-profile",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.status", Min: 1, Max: "1", MustSupport: true},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.status", Min: 1, Max: 1, MustSupport: true},
 		},
 	})
 
@@ -167,8 +170,8 @@ func TestDerivePlanSkipsNonResourceStructureDefinitions(t *testing.T) {
 		Type: "Patient",
 		Kind: "resource",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "1"},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: 1},
 		},
 	})
 	r.AddStructureDefinition(&model.StructureDefinition{
@@ -176,8 +179,8 @@ func TestDerivePlanSkipsNonResourceStructureDefinitions(t *testing.T) {
 		Type: "Extension",
 		Kind: "complex-type",
 		Elements: []model.ElementDefinition{
-			{Path: "Extension", Min: 0, Max: "*"},
-			{Path: "Extension.valueString", Min: 0, Max: "1"},
+			{Path: "Extension", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Extension.valueString", Min: 0, Max: 1},
 		},
 	})
 
@@ -202,11 +205,11 @@ func TestDerivePlanIncludesDependencyTargetsFromElementMetadata(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/observation-profile",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
 			{
 				Path: "Observation.subject",
 				Min:  1,
-				Max:  "1",
+				Max:  1,
 				Types: []model.ElementType{
 					{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Patient|4.0.1"}},
 				},
@@ -240,15 +243,15 @@ func TestDerivePlanPrunesOptionalReferenceDependencies(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/location-profile",
 		Type: "Location",
 		Elements: []model.ElementDefinition{
-			{Path: "Location", Min: 0, Max: "*"},
-			{Path: "Location.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
-			{Path: "Location.managingOrganization", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Organization|4.0.1"}}}},
+			{Path: "Location", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Location.name", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Location.managingOrganization", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Organization|4.0.1"}}}},
 		},
 	})
 	r.AddStructureDefinition(&model.StructureDefinition{
 		URL:      "http://hl7.org/fhir/StructureDefinition/Organization",
 		Type:     "Organization",
-		Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: "*"}},
+		Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded}},
 	})
 
 	plan, err := DerivePlan(r, coverage.DeriveOptions{IncludeOptional: false})
@@ -293,12 +296,12 @@ func TestDerivePlanEmitMultiDomainObligations(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/observation",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 			{
 				Path:  "Observation.status",
 				Min:   1,
-				Max:   "1",
+				Max:   1,
 				Types: []model.ElementType{{Code: "code"}},
 				Binding: &model.Binding{
 					Strength: "required",
@@ -306,7 +309,7 @@ func TestDerivePlanEmitMultiDomainObligations(t *testing.T) {
 				},
 				Constraints: []model.ElementConstraint{{Key: "obs-1", Severity: "error", Expression: "status.exists()"}},
 			},
-			{Path: "Observation.subject", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Patient|4.0.1"}}}},
+			{Path: "Observation.subject", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Patient|4.0.1"}}}},
 		},
 	})
 
@@ -362,8 +365,8 @@ func TestDerivePlanAnchorsRequirementToConstraintID(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/observation",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 		},
 	})
 
@@ -389,9 +392,9 @@ func TestDerivePlanRequiredSliceStructureObligation(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/patient",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.contact", Min: 0, Max: "*"},
-			{Path: "Patient.contact", Min: 1, Max: "1", SliceName: "primary"},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.contact", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.contact", Min: 1, Max: 1, SliceName: "primary"},
 		},
 	})
 
@@ -423,9 +426,9 @@ func TestDerivePlanSliceDoesNotOverrideBaseCardinality(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/patient",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.contact", Min: 0, Max: "*"},
-			{Path: "Patient.contact", Min: 1, Max: "1", SliceName: "primary"},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.contact", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.contact", Min: 1, Max: 1, SliceName: "primary"},
 		},
 	})
 
@@ -454,9 +457,9 @@ func TestDerivePlanOptionalSliceDoesNotSuppressRequiredBase(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/patient",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.contact", Min: 1, Max: "*"},
-			{Path: "Patient.contact", Min: 0, Max: "1", SliceName: "optional"},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.contact", Min: 1, Max: fhir.MaxUnbounded},
+			{Path: "Patient.contact", Min: 0, Max: 1, SliceName: "optional"},
 		},
 	})
 
@@ -481,8 +484,8 @@ func TestDerivePlanScopedToRootPackage(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/root-patient",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 		},
 	})
 	// Parent/core package profile that must NOT be a test subject.
@@ -490,8 +493,8 @@ func TestDerivePlanScopedToRootPackage(t *testing.T) {
 		URL:  "http://hl7.org/fhir/StructureDefinition/Observation",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.status", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}},
 		},
 	})
 
@@ -530,8 +533,8 @@ func TestDerivePlanInheritsParentElementsThroughRegistry(t *testing.T) {
 		Type: "Patient",
 		Kind: "resource",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 		},
 	})
 	r.AddStructureDefinition(&model.StructureDefinition{
@@ -542,8 +545,8 @@ func TestDerivePlanInheritsParentElementsThroughRegistry(t *testing.T) {
 		// Differential-only: no Patient.name element, so the parent must supply
 		// it through the registry's parent-chain merge.
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.identifier", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Identifier"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.identifier", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Identifier"}}},
 		},
 	})
 
@@ -580,8 +583,8 @@ func TestDerivePlanChoiceElementEmitsPerDatatypeObligations(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/observation",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.value", Min: 1, Max: "1", Types: []model.ElementType{
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.value", Min: 1, Max: 1, Types: []model.ElementType{
 				{Code: "string"},
 				{Code: "integer"},
 				{Code: "dateTime"},
@@ -618,8 +621,8 @@ func TestDerivePlanErrorsWhenAllElementsPruned(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/patient-profile",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "1", MustSupport: false},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: 1, MustSupport: false},
 		},
 	})
 

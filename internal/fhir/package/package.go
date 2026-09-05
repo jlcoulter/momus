@@ -16,9 +16,12 @@ import (
 	"log/slog"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 // Package is a loaded FHIR package.
@@ -341,103 +344,58 @@ func decodeResource(data []byte) (any, error) {
 
 	switch env.ResourceType {
 	case "StructureDefinition":
-		var sd structureDefinitionJSON
-		if err := json.Unmarshal(data, &sd); err != nil {
+		var fhirSD fhir.StructureDefinition
+		if err := json.Unmarshal(data, &fhirSD); err != nil {
 			return nil, err
 		}
-		elements := sd.Snapshot.Element
-		if len(elements) == 0 {
-			elements = sd.Differential.Element
+		sd := &model.StructureDefinition{
+			URL:            fhirSD.URL,
+			Name:           fhirSD.Name,
+			Title:          fhirSD.Title,
+			Type:           fhirSD.Type,
+			BaseDefinition: fhirSD.BaseDefinition,
+			Kind:           fhirSD.Kind,
+			Derivation:     fhirSD.Derivation,
+			HasSnapshot:    fhirSD.Snapshot != nil,
 		}
-		return &model.StructureDefinition{
-			URL:            sd.URL,
-			Version:        sd.Version,
-			Name:           sd.Name,
-			Title:          sd.Title,
-			Type:           sd.Type,
-			BaseDefinition: sd.BaseDefinition,
-			Kind:           sd.Kind,
-			Derivation:     sd.Derivation,
-			Elements:       decodeElementDefinitions(elements),
-		}, nil
+		if fhirSD.Snapshot != nil {
+			for _, raw := range fhirSD.Snapshot.Elements {
+				if e, err := fhir.ConvertElement(raw); err == nil {
+					sd.Elements = append(sd.Elements, e)
+				}
+			}
+		} else if fhirSD.Differential != nil {
+			for _, raw := range fhirSD.Differential.Elements {
+				if e, err := fhir.ConvertElement(raw); err == nil {
+					sd.Elements = append(sd.Elements, e)
+				}
+			}
+		}
+		return sd, nil
 	case "ValueSet":
-		var vs valueSetJSON
+		var vs model.ValueSet
 		if err := json.Unmarshal(data, &vs); err != nil {
 			return nil, err
 		}
-		includes := make([]model.ValueSetInclude, 0, len(vs.Compose.Include))
-		for _, include := range vs.Compose.Include {
-			concepts := make([]model.ConceptReference, 0, len(include.Concept))
-			for _, concept := range include.Concept {
-				concepts = append(concepts, model.ConceptReference{Code: concept.Code, Display: concept.Display})
-			}
-			includes = append(includes, model.ValueSetInclude{System: include.System, Concepts: concepts})
-		}
-		return &model.ValueSet{
-			URL:               vs.URL,
-			Version:           vs.Version,
-			Name:              vs.Name,
-			Status:            vs.Status,
-			ComposeIncludes:   includes,
-			ExpansionContains: decodeExpansionContains(vs.Expansion.Contains),
-		}, nil
+		return &vs, nil
 	case "CodeSystem":
-		var cs codeSystemJSON
+		var cs model.CodeSystem
 		if err := json.Unmarshal(data, &cs); err != nil {
 			return nil, err
 		}
-		return &model.CodeSystem{URL: cs.URL, Version: cs.Version, Name: cs.Name, Status: cs.Status, Concepts: decodeCodeSystemConcepts(cs.Concept)}, nil
+		return &cs, nil
 	case "CapabilityStatement":
-		var cs capabilityStatementJSON
+		var cs model.CapabilityStatement
 		if err := json.Unmarshal(data, &cs); err != nil {
 			return nil, err
 		}
-		rest := make([]model.CapabilityStatementRest, 0, len(cs.Rest))
-		for _, restBlock := range cs.Rest {
-			resources := make([]model.CapabilityStatementRestResource, 0, len(restBlock.Resource))
-			for _, resource := range restBlock.Resource {
-				interactions := make([]model.CapabilityStatementInteraction, 0, len(resource.Interaction))
-				for _, interaction := range resource.Interaction {
-					interactions = append(interactions, model.CapabilityStatementInteraction{Code: interaction.Code})
-				}
-				operations := make([]model.CapabilityStatementOperation, 0, len(resource.Operation))
-				for _, operation := range resource.Operation {
-					operations = append(operations, model.CapabilityStatementOperation{Name: operation.Name, Definition: operation.Definition})
-				}
-				resources = append(resources, model.CapabilityStatementRestResource{
-					Type:             resource.Type,
-					Profile:          resource.Profile,
-					SupportedProfile: resource.SupportedProfile,
-					Interaction:      interactions,
-					Operation:        operations,
-				})
-			}
-			rest = append(rest, model.CapabilityStatementRest{
-				Mode:     restBlock.Mode,
-				Resource: resources,
-			})
-		}
-		return &model.CapabilityStatement{
-			URL:         cs.URL,
-			Version:     cs.Version,
-			Name:        cs.Name,
-			Status:      cs.Status,
-			FhirVersion: cs.FhirVersion,
-			Rest:        rest,
-		}, nil
+		return &cs, nil
 	case "SearchParameter":
-		var sp searchParameterJSON
+		var sp model.SearchParameter
 		if err := json.Unmarshal(data, &sp); err != nil {
 			return nil, err
 		}
-		return &model.SearchParameter{
-			URL:        sp.URL,
-			Name:       sp.Name,
-			Code:       sp.Code,
-			Base:       sp.Base,
-			Type:       sp.Type,
-			Expression: sp.Expression,
-		}, nil
+		return &sp, nil
 	default:
 		// Any other resource type is an instance resource (e.g. an example
 		// Patient, Practitioner, or PractitionerRole shipped in the package).
@@ -484,10 +442,8 @@ func decodeElementDefinitions(rawElements []map[string]any) []model.ElementDefin
 		def := model.ElementDefinition{
 			ID:          stringField(elem, "id"),
 			Path:        stringField(elem, "path"),
-			Name:        lastPathPart(stringField(elem, "path")),
 			Min:         intField(elem, "min"),
-			Max:         stringField(elem, "max"),
-			BaseMax:     stringField(mapField(elem, "base"), "max"),
+			Max:         parseMax(stringField(elem, "max")),
 			MustSupport: boolField(elem, "mustSupport"),
 			SliceName:   stringField(elem, "sliceName"),
 		}
@@ -500,7 +456,7 @@ func decodeElementDefinitions(rawElements []map[string]any) []model.ElementDefin
 				}
 				def.Types = append(def.Types, model.ElementType{
 					Code:          stringField(m, "code"),
-					Profile:       stringSliceField(m, "profile"),
+					Profiles:      stringSliceField(m, "profile"),
 					TargetProfile: stringSliceField(m, "targetProfile"),
 				})
 			}
@@ -536,6 +492,18 @@ func decodeElementDefinitions(rawElements []map[string]any) []model.ElementDefin
 		defs = append(defs, def)
 	}
 	return defs
+}
+
+// parseMax converts a FHIR "max" string ("*", "1", "0") into a fhir.Max value.
+func parseMax(s string) fhir.Max {
+	if s == "*" {
+		return fhir.MaxUnbounded
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return fhir.Max(n)
 }
 
 func decodeConstraints(rawConstraints []any) []model.ElementConstraint {

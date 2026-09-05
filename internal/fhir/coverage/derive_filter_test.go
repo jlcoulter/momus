@@ -6,6 +6,9 @@ import (
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 // filterTestRegistry builds a registry that derives obligations across several
@@ -17,8 +20,8 @@ func filterTestRegistry() *registry.Registry {
 		URL:  "http://example.org/StructureDefinition/patient-profile",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 		},
 	})
 	r.AddSearchParameter(&model.SearchParameter{
@@ -108,11 +111,11 @@ func TestDerivePlanExcludeExtensionURLs(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/org-profile",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "*"},
-			{Path: "Organization.name", Min: 1, Max: "1"},
+			{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Organization.name", Min: 1, Max: 1},
 			// The suppression extension slice and its required descendants.
-			{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Extension", Profile: []string{suppressedURL}}}},
-			{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: "1"},
+			{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Extension", Profiles: []string{suppressedURL}}}},
+			{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: 1},
 		},
 	})
 

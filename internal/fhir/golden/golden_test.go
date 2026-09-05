@@ -14,6 +14,9 @@ import (
 	fhirgeneration "github.com/jlcoulter/momus/internal/fhir/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 // TestGoldenAll runs the golden-matrix self-test against every reference
@@ -76,8 +79,8 @@ func TestProvisionSeedNon2xx(t *testing.T) {
 
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 	}})
 	plan, err := fhircoverage.DerivePlan(reg, coverage.DeriveOptions{})
 	if err != nil {

@@ -6,6 +6,9 @@ import (
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 func TestDerivePlanAddsSearchModifierAndCombination(t *testing.T) {
@@ -14,8 +17,8 @@ func TestDerivePlanAddsSearchModifierAndCombination(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/org-profile",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "*"},
-			{Path: "Organization.name", Min: 1, Max: "1"},
+			{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Organization.name", Min: 1, Max: 1},
 		},
 	})
 	r.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Resource-id", Name: "_id", Code: "_id", Base: []string{"Resource"}, Type: "token"})
@@ -66,8 +69,8 @@ func TestDerivePlanAddsSearchObligations(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/org-profile",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "*"},
-			{Path: "Organization.name", Min: 1, Max: "1"},
+			{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Organization.name", Min: 1, Max: 1},
 		},
 	})
 	r.AddSearchParameter(&model.SearchParameter{
@@ -120,8 +123,8 @@ func TestDerivePlanUniversalSearchCodesRequireCapabilityDeclaration(t *testing.T
 		URL:  "http://example.org/StructureDefinition/org-profile",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "*"},
-			{Path: "Organization.name", Min: 1, Max: "1"},
+			{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Organization.name", Min: 1, Max: 1},
 		},
 	})
 	r.AddSearchParameter(&model.SearchParameter{
@@ -196,8 +199,8 @@ func TestDerivePlanIncludeUniversalSearchParams(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/org-profile",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "*"},
-			{Path: "Organization.name", Min: 1, Max: "1"},
+			{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Organization.name", Min: 1, Max: 1},
 		},
 	})
 	r.AddSearchParameter(&model.SearchParameter{

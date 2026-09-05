@@ -10,6 +10,9 @@ import (
 	fhircoverage "github.com/jlcoulter/momus/internal/fhir/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 const interactionProfile = "http://example.org/StructureDefinition/patient"
@@ -50,9 +53,9 @@ func interactionRegistry() *registry.Registry {
 		URL:  interactionProfile,
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
-			{Path: "Patient.birthDate", Min: 1, Max: "1", Types: []model.ElementType{{Code: "date"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient.birthDate", Min: 1, Max: 1, Types: []model.ElementType{{Code: "date"}}},
 		},
 	})
 	return r
@@ -211,10 +214,10 @@ func TestGenerateFromCoveragePlanStrengthTwoEndToEnd(t *testing.T) {
 		URL:  interactionProfile,
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
-			{Path: "Patient.birthDate", Min: 1, Max: "1", Types: []model.ElementType{{Code: "date"}}},
-			{Path: "Patient.gender", Min: 0, Max: "1", Types: []model.ElementType{{Code: "code"}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient.birthDate", Min: 1, Max: 1, Types: []model.ElementType{{Code: "date"}}},
+			{Path: "Patient.gender", Min: 0, Max: 1, Types: []model.ElementType{{Code: "code"}},
 				Binding: &model.Binding{Strength: "required", ValueSet: "http://hl7.org/fhir/ValueSet/administrative-gender"}},
 		},
 	})

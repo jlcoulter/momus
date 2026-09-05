@@ -6,6 +6,9 @@ import (
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 func TestDerivePlanAddsCustomOperationObligation(t *testing.T) {
@@ -14,8 +17,8 @@ func TestDerivePlanAddsCustomOperationObligation(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/org-profile",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "*"},
-			{Path: "Organization.name", Min: 1, Max: "1"},
+			{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Organization.name", Min: 1, Max: 1},
 		},
 	})
 	r.AddCapabilityStatement(&model.CapabilityStatement{
@@ -49,8 +52,8 @@ func TestDerivePlanAddsOperationAndStateObligations(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/org-profile",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "*"},
-			{Path: "Organization.name", Min: 1, Max: "1"},
+			{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Organization.name", Min: 1, Max: 1},
 		},
 	})
 

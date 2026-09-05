@@ -9,6 +9,9 @@ import (
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 func TestBuildSetupDatasetAddsSearchMatchSeed(t *testing.T) {
@@ -18,11 +21,11 @@ func TestBuildSetupDatasetAddsSearchMatchSeed(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.name",
 					Min:   1,
-					Max:   "*",
+					Max: fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "HumanName"}},
 				},
 			},
@@ -82,11 +85,11 @@ func TestBuildSetupDatasetAddsIDSearchSeed(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.name",
 					Min:   1,
-					Max:   "*",
+					Max: fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "HumanName"}},
 				},
 			},
@@ -175,12 +178,12 @@ func TestSearchSeedUsesValidBoundCode(t *testing.T) {
 	reg.AddValueSet(
 		&model.ValueSet{
 			URL: "http://hl7.org/fhir/ValueSet/endpoint-status",
-			ComposeIncludes: []model.ValueSetInclude{
+			Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{
 				{
 					System:   "http://hl7.org/fhir/ValueSet/endpoint-status",
-					Concepts: []model.ConceptReference{{Code: "active"}, {Code: "off"}},
+					Concept: []model.ConceptReference{{Code: "active"}, {Code: "off"}},
 				},
-			},
+			}},
 		},
 	)
 	reg.AddStructureDefinition(
@@ -188,11 +191,11 @@ func TestSearchSeedUsesValidBoundCode(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/endpoint",
 			Type: "Endpoint",
 			Elements: []model.ElementDefinition{
-				{Path: "Endpoint", Min: 0, Max: "*"},
+				{Path: "Endpoint", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Endpoint.status",
 					Min:   1,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "code"}},
 					Binding: &model.Binding{
 						Strength: "required",
@@ -202,7 +205,7 @@ func TestSearchSeedUsesValidBoundCode(t *testing.T) {
 				{
 					Path:  "Endpoint.connectionType",
 					Min:   1,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "Coding"}},
 				},
 			},
@@ -307,12 +310,12 @@ func TestSearchSeedUsesValidBoundCodeableConcept(t *testing.T) {
 	reg.AddValueSet(
 		&model.ValueSet{
 			URL: "http://example.org/ValueSet/spc",
-			ComposeIncludes: []model.ValueSetInclude{
+			Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{
 				{
 					System:   "http://example.org/cs/spc",
-					Concepts: []model.ConceptReference{{Code: "spc1"}},
+					Concept: []model.ConceptReference{{Code: "spc1"}},
 				},
-			},
+			}},
 		},
 	)
 	reg.AddStructureDefinition(
@@ -320,17 +323,17 @@ func TestSearchSeedUsesValidBoundCodeableConcept(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/hs",
 			Type: "HealthcareService",
 			Elements: []model.ElementDefinition{
-				{Path: "HealthcareService", Min: 0, Max: "*"},
+				{Path: "HealthcareService", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "HealthcareService.active",
 					Min:   1,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 				{
 					Path:  "HealthcareService.serviceProvisionCode",
 					Min:   0,
-					Max:   "*",
+					Max: fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "CodeableConcept"}},
 					Binding: &model.Binding{
 						Strength: "required",
@@ -400,17 +403,17 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/org",
 			Type: "Organization",
 			Elements: []model.ElementDefinition{
-				{Path: "Organization", Min: 0, Max: "*"},
+				{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Organization.name",
 					Min:   1,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "string"}},
 				},
 				{
 					Path:  "Organization.address",
 					Min:   1,
-					Max:   "*",
+					Max: fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Address"}},
 				},
 				{
@@ -418,7 +421,7 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 					Path:      "Organization.address",
 					SliceName: "physical",
 					Min:       1,
-					Max:       "1",
+					Max: 1,
 					Types:     []model.ElementType{{Code: "Address"}},
 				},
 				{
@@ -426,7 +429,7 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 					Path:      "Organization.address.type",
 					SliceName: "",
 					Min:       1,
-					Max:       "1",
+					Max: 1,
 					Types:     []model.ElementType{{Code: "code"}},
 					Pattern:   "physical",
 				},
@@ -498,11 +501,11 @@ func TestSetDateLeafPeriodElement(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/practitionerrole",
 			Type: "PractitionerRole",
 			Elements: []model.ElementDefinition{
-				{Path: "PractitionerRole", Min: 0, Max: "*"},
+				{Path: "PractitionerRole", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "PractitionerRole.period",
 					Min:   0,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "Period"}},
 				},
 			},
@@ -523,11 +526,11 @@ func TestSearchSeedSetsIdentifierValue(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.identifier",
 					Min:   0,
-					Max:   "*",
+					Max: fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Identifier"}},
 				},
 			},
@@ -618,11 +621,11 @@ func TestResolveNestedLeafType(t *testing.T) {
 			URL:  "http://hl7.org/fhir/StructureDefinition/Identifier",
 			Type: "Identifier",
 			Elements: []model.ElementDefinition{
-				{Path: "Identifier", Min: 0, Max: "*"},
+				{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Identifier.value",
 					Min:   0,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "string"}},
 				},
 			},
@@ -634,11 +637,11 @@ func TestResolveNestedLeafType(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.identifier",
 					Min:   0,
-					Max:   "*",
+					Max: fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Identifier"}},
 				},
 			},
@@ -697,17 +700,17 @@ func TestSearchLeafType(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.active",
 					Min:   0,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 				{
 					Path:  "Patient.deceased",
 					Min:   0,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 			},
@@ -736,41 +739,41 @@ func TestApplySearchMatchBranchCoverage(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.name",
 					Min:   0,
-					Max:   "*",
+					Max: fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "HumanName"}},
 				},
 				{
 					Path:  "Patient.address",
 					Min:   0,
-					Max:   "*",
+					Max: fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Address"}},
 				},
 				{
 					Path:  "Patient.telecom",
 					Min:   0,
-					Max:   "*",
+					Max: fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "ContactPoint"}},
 				},
 				{
 					Path:  "Patient.generalPractitioner",
 					Min:   0,
-					Max:   "*",
+					Max: fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Reference"}},
 				},
 				{
 					Path:  "Patient.valueQuantity",
 					Min:   0,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "Quantity"}},
 				},
 				{
 					Path:  "Patient.score",
 					Min:   0,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "integer"}},
 				},
 			},
@@ -843,29 +846,29 @@ func TestApplySearchMatchSpecialDateComposite(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/location",
 			Type: "Location",
 			Elements: []model.ElementDefinition{
-				{Path: "Location", Min: 0, Max: "*"},
+				{Path: "Location", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Location.position",
 					Min:   0,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "BackboneElement"}},
 				},
 				{
 					Path:  "Location.position.latitude",
 					Min:   1,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "decimal"}},
 				},
 				{
 					Path:  "Location.position.longitude",
 					Min:   1,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "decimal"}},
 				},
 				{
 					Path:  "Location.recorded",
 					Min:   0,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "instant"}},
 				},
 			},
@@ -904,11 +907,11 @@ func TestSearchSeedSkipsNonMatchableSearch(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.active",
 					Min:   1,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 			},
@@ -1083,17 +1086,17 @@ func TestApplyCompositeMatchTypeBranches(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/observation",
 			Type: "Observation",
 			Elements: []model.ElementDefinition{
-				{Path: "Observation", Min: 0, Max: "*"},
+				{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Observation.active",
 					Min:   0,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 				{
 					Path:  "Observation.value",
 					Min:   0,
-					Max:   "1",
+					Max: 1,
 					Types: []model.ElementType{{Code: "Quantity"}},
 				},
 			},

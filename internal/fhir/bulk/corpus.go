@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"hash/fnv"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/jlcoulter/momus/internal/fhir/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 // CorpusGenerator produces a realistic corpus of random resources for bulk
@@ -124,18 +125,20 @@ func elementAllowsMultiple(def *model.ElementDefinition) bool {
 	if def == nil {
 		return false
 	}
-	return allowsMultiple(def.Max) || allowsMultiple(def.BaseMax)
-}
-
-func allowsMultiple(maxValue string) bool {
-	if maxValue == "*" {
+	if allowsMultiple(def.Max) {
 		return true
 	}
-	n, err := strconv.Atoi(maxValue)
-	if err != nil {
-		return false
+	if def.BaseMax != nil {
+		return allowsMultiple(*def.BaseMax)
 	}
-	return n > 1
+	return false
+}
+
+func allowsMultiple(maxValue fhir.Max) bool {
+	if maxValue == fhir.MaxUnbounded {
+		return true
+	}
+	return maxValue > 1
 }
 
 // elementRequired reports whether an element must appear at least once (Min >= 1).
@@ -1069,7 +1072,7 @@ func populateRequiredSiblings(m map[string]any, node *model.ElementNode) {
 			continue
 		}
 		def := child.Definition
-		if def.Min < 1 || def.Max == "0" {
+		if def.Min < 1 || def.Max == 0 {
 			continue
 		}
 		if _, exists := m[name]; exists {

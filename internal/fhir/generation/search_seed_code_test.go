@@ -6,6 +6,9 @@ import (
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 // TestSearchSeedKeepsCodingPrimitive verifies that a token search on a `Coding`
@@ -15,9 +18,9 @@ import (
 func TestSearchSeedKeepsCodingPrimitive(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/endpoint", Type: "Endpoint", Elements: []model.ElementDefinition{
-		{Path: "Endpoint", Min: 0, Max: "*"},
-		{Path: "Endpoint.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
-		{Path: "Endpoint.connectionType", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Coding"}}},
+		{Path: "Endpoint", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Endpoint.status", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Endpoint.connectionType", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Coding"}}},
 	}})
 	reg.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Endpoint-connection-type", Name: "connection-type", Code: "connection-type", Base: []string{"Endpoint"}, Type: "token", Expression: "Endpoint.connectionType"})
 
@@ -54,10 +57,10 @@ func TestSearchSeedKeepsCodingPrimitive(t *testing.T) {
 func TestSearchSeedKeepsRepeatableCodeableConcept(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/endpoint", Type: "Endpoint", Elements: []model.ElementDefinition{
-		{Path: "Endpoint", Min: 0, Max: "*"},
-		{Path: "Endpoint.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
-		{Path: "Endpoint.connectionType", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Coding"}}},
-		{Path: "Endpoint.payloadType", Min: 1, Max: "*", Types: []model.ElementType{{Code: "CodeableConcept"}}},
+		{Path: "Endpoint", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Endpoint.status", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Endpoint.connectionType", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Coding"}}},
+		{Path: "Endpoint.payloadType", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "CodeableConcept"}}},
 	}})
 	reg.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Endpoint-payload-type", Name: "payload-type", Code: "payload-type", Base: []string{"Endpoint"}, Type: "token", Expression: "Endpoint.payloadType"})
 
@@ -103,10 +106,10 @@ func TestSearchSeedKeepsRepeatableCodeableConcept(t *testing.T) {
 func TestSearchSeedKeepsRepeatableCodePrimitive(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/endpoint", Type: "Endpoint", Elements: []model.ElementDefinition{
-		{Path: "Endpoint", Min: 0, Max: "*"},
-		{Path: "Endpoint.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
-		{Path: "Endpoint.connectionType", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Coding"}}},
-		{Path: "Endpoint.payloadMimeType", Min: 0, Max: "*", Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Endpoint", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Endpoint.status", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Endpoint.connectionType", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Coding"}}},
+		{Path: "Endpoint.payloadMimeType", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "code"}}},
 	}})
 	reg.AddSearchParameter(&model.SearchParameter{URL: "http://hl7.org/fhir/SearchParameter/Endpoint-payload-mimetype", Name: "payload-mimetype", Code: "payload-mimetype", Base: []string{"Endpoint"}, Type: "token", Expression: "Endpoint.payloadMimeType"})
 

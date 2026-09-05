@@ -7,6 +7,9 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 	"github.com/jlcoulter/momus/internal/fhir/validate"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 func TestValidateSamples(t *testing.T) {
@@ -16,8 +19,8 @@ func TestValidateSamples(t *testing.T) {
 		URL:  profileURL,
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 		},
 	})
 	v := validate.New(r)

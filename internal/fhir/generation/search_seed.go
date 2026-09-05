@@ -9,6 +9,8 @@ import (
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 // appendSearchSeedResources adds seed resources that let search-accept
@@ -448,7 +450,7 @@ func searchLeafType(
 		for _, key := range keys {
 			node, ok := resolved.Elements[key]
 			if ok && node != nil && node.Definition != nil && len(node.Definition.Types) > 0 {
-				return node.Definition.Types[0].Code, node.Definition.Max == "*"
+				return node.Definition.Types[0].Code, node.Definition.Max == fhir.MaxUnbounded
 			}
 		}
 		// Nested datatype path: walk segments, resolving each container's type,
@@ -497,7 +499,7 @@ func resolveNestedLeafType(
 		}
 		if i == len(segments)-1 {
 			if len(node.Definition.Types) > 0 {
-				return node.Definition.Types[0].Code, node.Definition.Max == "*", true
+				return node.Definition.Types[0].Code, node.Definition.Max == fhir.MaxUnbounded, true
 			}
 			return "", false, false
 		}

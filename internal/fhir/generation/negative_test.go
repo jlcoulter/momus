@@ -7,6 +7,9 @@ import (
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 func TestDeletePathNested(t *testing.T) {
@@ -200,8 +203,8 @@ func TestNegativeMutationSkippedWhenElementAbsent(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/observation",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 		},
 	})
 	plan2, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{

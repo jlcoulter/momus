@@ -6,6 +6,9 @@ import (
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 const patientProfile = "http://example.org/StructureDefinition/patient"
@@ -18,19 +21,19 @@ func buildPatientRegistry() *registry.Registry {
 		URL:  patientProfile,
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
-			{Path: "Patient.birthDate", Min: 0, Max: "1", Types: []model.ElementType{{Code: "date"}}},
-			{Path: "Patient.gender", Min: 0, Max: "1", Types: []model.ElementType{{Code: "code"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/gender"}},
-			{Path: "Patient.status", Min: 0, Max: "1", Types: []model.ElementType{{Code: "code"}}, Fixed: "active"},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient.birthDate", Min: 0, Max: 1, Types: []model.ElementType{{Code: "date"}}},
+			{Path: "Patient.gender", Min: 0, Max: 1, Types: []model.ElementType{{Code: "code"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/gender"}},
+			{Path: "Patient.status", Min: 0, Max: 1, Types: []model.ElementType{{Code: "code"}}, Fixed: "active"},
 		},
 	})
 	r.AddValueSet(&model.ValueSet{
 		URL: "http://example.org/ValueSet/gender",
-		ComposeIncludes: []model.ValueSetInclude{{
-			System:   "http://hl7.org/fhir/administrative-gender",
-			Concepts: []model.ConceptReference{{Code: "male"}, {Code: "female"}},
-		}},
+		Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{{
+			System:  "http://hl7.org/fhir/administrative-gender",
+			Concept: []model.ConceptReference{{Code: "male"}, {Code: "female"}},
+		}}},
 	})
 	return r
 }
@@ -176,8 +179,8 @@ func TestValidatePatternMatchAndMismatch(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/pattern-profile",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.code", Min: 0, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}, Pattern: map[string]any{"coding": []any{map[string]any{"system": "http://example.org/sys"}}}},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.code", Min: 0, Max: 1, Types: []model.ElementType{{Code: "CodeableConcept"}}, Pattern: map[string]any{"coding": []any{map[string]any{"system": "http://example.org/sys"}}}},
 		},
 	})
 	v := New(r)
@@ -256,10 +259,10 @@ func TestValidateMaxCardinalityPerArrayInstance(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/params",
 		Type: "Parameters",
 		Elements: []model.ElementDefinition{
-			{Path: "Parameters", Min: 0, Max: "*"},
-			{Path: "Parameters.parameter", Min: 0, Max: "*", Types: []model.ElementType{{Code: "BackboneElement"}}},
-			{Path: "Parameters.parameter.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
-			{Path: "Parameters.parameter.value[x]", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Parameters", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Parameters.parameter", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "BackboneElement"}}},
+			{Path: "Parameters.parameter.name", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}},
+			{Path: "Parameters.parameter.value[x]", Min: 0, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 		},
 	})
 	v := New(r)
@@ -283,22 +286,20 @@ func TestValidateMaxCardinalityPerArrayInstance(t *testing.T) {
 
 func TestParseMax(t *testing.T) {
 	cases := []struct {
-		max     string
+		max     fhir.Max
 		bounded bool
 		want    int
 	}{
-		{"1", true, 1},
-		{"0", true, 0},
-		{"5", true, 5},
-		{"*", false, 0},
-		{"", false, 0},
-		{"abc", false, 0},
-		{"-1", false, 0},
+		{1, true, 1},
+		{0, true, 0},
+		{5, true, 5},
+		{fhir.MaxUnbounded, false, 0},
+		{-2, false, 0},
 	}
 	for _, c := range cases {
 		got, bounded := parseMax(c.max)
 		if bounded != c.bounded || (bounded && got != c.want) {
-			t.Errorf("parseMax(%q) = (%d, %v), want (%d, %v)", c.max, got, bounded, c.want, c.bounded)
+			t.Errorf("parseMax(%v) = (%d, %v), want (%d, %v)", c.max, got, bounded, c.want, c.bounded)
 		}
 	}
 }

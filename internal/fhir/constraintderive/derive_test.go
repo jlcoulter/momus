@@ -8,6 +8,9 @@ import (
 	"github.com/jlcoulter/momus/internal/core/constraint"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+
 )
 
 const profileURL = "http://example.org/StructureDefinition/observation"
@@ -19,12 +22,11 @@ func testRegistry() *registry.Registry {
 		Type: "Observation",
 		Name: "ObservationProfile",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
 			{
 				Path:  "Observation.status",
-				Name:  "status",
 				Min:   1,
-				Max:   "1",
+				Max:   1,
 				Types: []model.ElementType{{Code: "code"}},
 				Binding: &model.Binding{
 					Strength: "required",
@@ -39,25 +41,22 @@ func testRegistry() *registry.Registry {
 			},
 			{
 				Path:    "Observation.birthDate",
-				Name:    "birthDate",
 				Min:     0,
-				Max:     "1",
+				Max:     1,
 				Types:   []model.ElementType{{Code: "date"}},
 				Pattern: "2024-01-01",
 			},
 			{
 				Path:          "Observation.subject",
-				Name:          "subject",
 				Min:           0,
-				Max:           "1",
+				Max:           1,
 				Types:         []model.ElementType{{Code: "Reference"}},
 				TargetProfile: []string{"http://example.org/StructureDefinition/patient"},
 			},
 			{
 				Path:  "Observation.code",
-				Name:  "code",
 				Min:   1,
-				Max:   "*",
+				Max:   fhir.MaxUnbounded,
 				Types: []model.ElementType{{Code: "CodeableConcept"}},
 				Fixed: "value-placeholder",
 			},
@@ -274,8 +273,8 @@ func TestDeriveScopedMergesParentChain(t *testing.T) {
 		Type: "Patient",
 		Kind: "resource",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 		},
 	})
 	r.AddStructureDefinition(&model.StructureDefinition{
@@ -286,7 +285,7 @@ func TestDeriveScopedMergesParentChain(t *testing.T) {
 		// Differential-only: no Patient.name and no root Patient element, so the
 		// parent must supply them through the registry.
 		Elements: []model.ElementDefinition{
-			{Path: "Patient.identifier", Min: 1, Max: "1"},
+			{Path: "Patient.identifier", Min: 1, Max: 1},
 		},
 	})
 
