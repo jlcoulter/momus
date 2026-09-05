@@ -4,8 +4,8 @@ go 1.27.0
 
 require (
 	github.com/go-chi/chi/v5 v5.3.2
-	github.com/jlcoulter/fhir-generator v0.0.0-20260905095422-4eb321e9951c
-	github.com/jlcoulter/fhir-registry v0.0.0-20260905045426-9c970d4a441f
+	github.com/jlcoulter/fhir-generator v0.1.0
+	github.com/jlcoulter/fhir-registry v0.1.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 )
