@@ -8,7 +8,6 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 
 	fhir "github.com/jlcoulter/fhir-registry"
-
 )
 
 // TestSearchSeedKeepsCodingPrimitive verifies that a token search on a `Coding`

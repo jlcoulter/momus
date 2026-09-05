@@ -12,7 +12,6 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 
 	fhir "github.com/jlcoulter/fhir-registry"
-
 )
 
 const interactionProfile = "http://example.org/StructureDefinition/patient"

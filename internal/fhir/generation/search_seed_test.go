@@ -11,7 +11,6 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 
 	fhir "github.com/jlcoulter/fhir-registry"
-
 )
 
 func TestBuildSetupDatasetAddsSearchMatchSeed(t *testing.T) {
@@ -25,7 +24,7 @@ func TestBuildSetupDatasetAddsSearchMatchSeed(t *testing.T) {
 				{
 					Path:  "Patient.name",
 					Min:   1,
-					Max: fhir.MaxUnbounded,
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "HumanName"}},
 				},
 			},
@@ -89,7 +88,7 @@ func TestBuildSetupDatasetAddsIDSearchSeed(t *testing.T) {
 				{
 					Path:  "Patient.name",
 					Min:   1,
-					Max: fhir.MaxUnbounded,
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "HumanName"}},
 				},
 			},
@@ -180,7 +179,7 @@ func TestSearchSeedUsesValidBoundCode(t *testing.T) {
 			URL: "http://hl7.org/fhir/ValueSet/endpoint-status",
 			Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{
 				{
-					System:   "http://hl7.org/fhir/ValueSet/endpoint-status",
+					System:  "http://hl7.org/fhir/ValueSet/endpoint-status",
 					Concept: []model.ConceptReference{{Code: "active"}, {Code: "off"}},
 				},
 			}},
@@ -195,7 +194,7 @@ func TestSearchSeedUsesValidBoundCode(t *testing.T) {
 				{
 					Path:  "Endpoint.status",
 					Min:   1,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "code"}},
 					Binding: &model.Binding{
 						Strength: "required",
@@ -205,7 +204,7 @@ func TestSearchSeedUsesValidBoundCode(t *testing.T) {
 				{
 					Path:  "Endpoint.connectionType",
 					Min:   1,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "Coding"}},
 				},
 			},
@@ -312,7 +311,7 @@ func TestSearchSeedUsesValidBoundCodeableConcept(t *testing.T) {
 			URL: "http://example.org/ValueSet/spc",
 			Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{
 				{
-					System:   "http://example.org/cs/spc",
+					System:  "http://example.org/cs/spc",
 					Concept: []model.ConceptReference{{Code: "spc1"}},
 				},
 			}},
@@ -327,13 +326,13 @@ func TestSearchSeedUsesValidBoundCodeableConcept(t *testing.T) {
 				{
 					Path:  "HealthcareService.active",
 					Min:   1,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 				{
 					Path:  "HealthcareService.serviceProvisionCode",
 					Min:   0,
-					Max: fhir.MaxUnbounded,
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "CodeableConcept"}},
 					Binding: &model.Binding{
 						Strength: "required",
@@ -407,13 +406,13 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 				{
 					Path:  "Organization.name",
 					Min:   1,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "string"}},
 				},
 				{
 					Path:  "Organization.address",
 					Min:   1,
-					Max: fhir.MaxUnbounded,
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Address"}},
 				},
 				{
@@ -421,7 +420,7 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 					Path:      "Organization.address",
 					SliceName: "physical",
 					Min:       1,
-					Max: 1,
+					Max:       1,
 					Types:     []model.ElementType{{Code: "Address"}},
 				},
 				{
@@ -429,7 +428,7 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 					Path:      "Organization.address.type",
 					SliceName: "",
 					Min:       1,
-					Max: 1,
+					Max:       1,
 					Types:     []model.ElementType{{Code: "code"}},
 					Pattern:   "physical",
 				},
@@ -505,7 +504,7 @@ func TestSetDateLeafPeriodElement(t *testing.T) {
 				{
 					Path:  "PractitionerRole.period",
 					Min:   0,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "Period"}},
 				},
 			},
@@ -530,7 +529,7 @@ func TestSearchSeedSetsIdentifierValue(t *testing.T) {
 				{
 					Path:  "Patient.identifier",
 					Min:   0,
-					Max: fhir.MaxUnbounded,
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Identifier"}},
 				},
 			},
@@ -625,7 +624,7 @@ func TestResolveNestedLeafType(t *testing.T) {
 				{
 					Path:  "Identifier.value",
 					Min:   0,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "string"}},
 				},
 			},
@@ -641,7 +640,7 @@ func TestResolveNestedLeafType(t *testing.T) {
 				{
 					Path:  "Patient.identifier",
 					Min:   0,
-					Max: fhir.MaxUnbounded,
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Identifier"}},
 				},
 			},
@@ -704,13 +703,13 @@ func TestSearchLeafType(t *testing.T) {
 				{
 					Path:  "Patient.active",
 					Min:   0,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 				{
 					Path:  "Patient.deceased",
 					Min:   0,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 			},
@@ -743,37 +742,37 @@ func TestApplySearchMatchBranchCoverage(t *testing.T) {
 				{
 					Path:  "Patient.name",
 					Min:   0,
-					Max: fhir.MaxUnbounded,
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "HumanName"}},
 				},
 				{
 					Path:  "Patient.address",
 					Min:   0,
-					Max: fhir.MaxUnbounded,
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Address"}},
 				},
 				{
 					Path:  "Patient.telecom",
 					Min:   0,
-					Max: fhir.MaxUnbounded,
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "ContactPoint"}},
 				},
 				{
 					Path:  "Patient.generalPractitioner",
 					Min:   0,
-					Max: fhir.MaxUnbounded,
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Reference"}},
 				},
 				{
 					Path:  "Patient.valueQuantity",
 					Min:   0,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "Quantity"}},
 				},
 				{
 					Path:  "Patient.score",
 					Min:   0,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "integer"}},
 				},
 			},
@@ -850,25 +849,25 @@ func TestApplySearchMatchSpecialDateComposite(t *testing.T) {
 				{
 					Path:  "Location.position",
 					Min:   0,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "BackboneElement"}},
 				},
 				{
 					Path:  "Location.position.latitude",
 					Min:   1,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "decimal"}},
 				},
 				{
 					Path:  "Location.position.longitude",
 					Min:   1,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "decimal"}},
 				},
 				{
 					Path:  "Location.recorded",
 					Min:   0,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "instant"}},
 				},
 			},
@@ -911,7 +910,7 @@ func TestSearchSeedSkipsNonMatchableSearch(t *testing.T) {
 				{
 					Path:  "Patient.active",
 					Min:   1,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 			},
@@ -1090,13 +1089,13 @@ func TestApplyCompositeMatchTypeBranches(t *testing.T) {
 				{
 					Path:  "Observation.active",
 					Min:   0,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 				{
 					Path:  "Observation.value",
 					Min:   0,
-					Max: 1,
+					Max:   1,
 					Types: []model.ElementType{{Code: "Quantity"}},
 				},
 			},

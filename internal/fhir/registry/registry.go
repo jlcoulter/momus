@@ -67,8 +67,8 @@ type Registry struct {
 // New returns an empty Registry.
 func New() *Registry {
 	return &Registry{
-		fhir:                       fhir.NewRegistry(),
-		momusSDs:                   make(map[string]*model.StructureDefinition),
+		fhir:                        fhir.NewRegistry(),
+		momusSDs:                    make(map[string]*model.StructureDefinition),
 		rootCapabilityStatementURLs: make(map[string]struct{}),
 	}
 }

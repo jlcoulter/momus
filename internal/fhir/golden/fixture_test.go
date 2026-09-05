@@ -9,7 +9,6 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/validate"
 
 	fhir "github.com/jlcoulter/fhir-registry"
-
 )
 
 func TestValidateSamples(t *testing.T) {

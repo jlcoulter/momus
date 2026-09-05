@@ -16,7 +16,6 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 
 	fhir "github.com/jlcoulter/fhir-registry"
-
 )
 
 // TestGoldenAll runs the golden-matrix self-test against every reference

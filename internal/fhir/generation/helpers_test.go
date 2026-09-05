@@ -7,7 +7,6 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 
 	fhir "github.com/jlcoulter/fhir-registry"
-
 )
 
 // TestCollectionHasFieldValue verifies the collection membership check used by
@@ -355,7 +354,7 @@ func TestBoundCodingSystem(t *testing.T) {
 			URL: "http://example.org/ValueSet/status",
 			Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{
 				{
-					System:   "http://example.org/cs",
+					System:  "http://example.org/cs",
 					Concept: []model.ConceptReference{{Code: "active"}},
 				},
 			}},

@@ -9,7 +9,6 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 
 	fhir "github.com/jlcoulter/fhir-registry"
-
 )
 
 func buildBuilderRegistry() *registry.Registry {
@@ -29,7 +28,7 @@ func buildBuilderRegistry() *registry.Registry {
 	reg.AddValueSet(&model.ValueSet{
 		URL: "http://example.org/ValueSet/gender",
 		Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{{
-			System:   "http://hl7.org/fhir/administrative-gender",
+			System:  "http://hl7.org/fhir/administrative-gender",
 			Concept: []model.ConceptReference{{Code: "male"}},
 		}}},
 	})

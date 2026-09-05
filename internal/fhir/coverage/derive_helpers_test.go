@@ -8,7 +8,6 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 
 	fhir "github.com/jlcoulter/fhir-registry"
-
 )
 
 func TestCanonicalToResourceType(t *testing.T) {

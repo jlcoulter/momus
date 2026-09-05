@@ -13,7 +13,6 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 
 	fhir "github.com/jlcoulter/fhir-registry"
-
 )
 
 // TestResolveBoundCodingFallsBackToExample verifies that when the bound
@@ -1324,7 +1323,7 @@ func TestSliceFallbackAppliesSliceConstraints(t *testing.T) {
 					Path:      "Practitioner.telecom",
 					SliceName: "personalPhoneNumber",
 					Min:       min,
-					Max: 1,
+					Max:       1,
 					Types:     []model.ElementType{{Code: "ContactPoint"}},
 				},
 				Children: map[string]*model.ElementNode{
@@ -1400,7 +1399,7 @@ func TestRepeatedValueRespectsParentMax(t *testing.T) {
 				Path:      "Practitioner.qualification.identifier",
 				SliceName: name,
 				Min:       0,
-				Max: 1,
+				Max:       1,
 				Types:     []model.ElementType{{Code: "Identifier"}},
 			},
 			Children: map[string]*model.ElementNode{

@@ -7,7 +7,6 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/model"
 
 	fhir "github.com/jlcoulter/fhir-registry"
-
 )
 
 // TestResolveProfileResolvesParentChain verifies that ResolveProfile merges the

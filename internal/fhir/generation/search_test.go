@@ -11,7 +11,6 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/registry"
 
 	fhir "github.com/jlcoulter/fhir-registry"
-
 )
 
 func TestBuildSearchModifierAndCombinationQueries(t *testing.T) {
