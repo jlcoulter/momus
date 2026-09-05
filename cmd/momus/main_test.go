@@ -5,9 +5,11 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/core/runner"
 	"github.com/jlcoulter/momus/internal/fhir/model"
+	"github.com/jlcoulter/momus/internal/fhir/provisioning"
 )
 
 func TestParsePerTypeCounts(t *testing.T) {
@@ -264,16 +267,30 @@ func TestWriteDebugBulk(t *testing.T) {
 	}
 
 	// Disabled: no file written.
-	if err := writeDebugBulk(false, instances); err != nil {
-		t.Fatalf("writeDebugBulk(false) returned error: %v", err)
+	dbw, err := newDebugBulkWriter(false)
+	if err != nil {
+		t.Fatalf("newDebugBulkWriter(false) returned error: %v", err)
+	}
+	if dbw != nil {
+		t.Fatal("expected nil writer when debug disabled")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "bulk.ndjson")); !os.IsNotExist(err) {
 		t.Fatalf("expected no bulk file when debug disabled")
 	}
 
-	// Enabled: NDJSON written.
-	if err := writeDebugBulk(true, instances); err != nil {
-		t.Fatalf("writeDebugBulk(true) returned error: %v", err)
+	// Enabled: NDJSON written on close.
+	dbw, err = newDebugBulkWriter(true)
+	if err != nil {
+		t.Fatalf("newDebugBulkWriter(true) returned error: %v", err)
+	}
+	if dbw == nil {
+		t.Fatal("expected non-nil writer when debug enabled")
+	}
+	if err := dbw.WriteInstances(instances); err != nil {
+		t.Fatalf("debug bulk WriteInstances returned error: %v", err)
+	}
+	if err := dbw.Close(); err != nil {
+		t.Fatalf("debug bulk Close returned error: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "bulk.ndjson"))
 	if err != nil {
@@ -281,5 +298,71 @@ func TestWriteDebugBulk(t *testing.T) {
 	}
 	if string(data) != "{\"id\":\"p1\",\"resourceType\":\"Patient\"}\n" {
 		t.Fatalf("bulk debug output = %q", data)
+	}
+}
+
+func TestResolveBulkOutputPath(t *testing.T) {
+	dir := t.TempDir()
+
+	got, err := resolveBulkOutputPath(dir)
+	if err != nil {
+		t.Fatalf("resolveBulkOutputPath(existing dir): %v", err)
+	}
+	if got != filepath.Join(dir, "bulk.ndjson") {
+		t.Fatalf("existing dir output = %q, want %q", got, filepath.Join(dir, "bulk.ndjson"))
+	}
+
+	got, err = resolveBulkOutputPath(filepath.Join(dir, "nested") + string(os.PathSeparator))
+	if err != nil {
+		t.Fatalf("resolveBulkOutputPath(trailing separator): %v", err)
+	}
+	if got != filepath.Join(dir, "nested", "bulk.ndjson") {
+		t.Fatalf("trailing separator output = %q, want %q", got, filepath.Join(dir, "nested", "bulk.ndjson"))
+	}
+
+	filePath := filepath.Join(dir, "data.ndjson")
+	got, err = resolveBulkOutputPath(filePath)
+	if err != nil {
+		t.Fatalf("resolveBulkOutputPath(file): %v", err)
+	}
+	if got != filePath {
+		t.Fatalf("file output = %q, want %q", got, filePath)
+	}
+}
+
+func TestStreamBulkDatasetWritesTargetsBeforeDependents(t *testing.T) {
+	var mu sync.Mutex
+	created := make(map[string]bool)
+	var order []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		order = append(order, r.URL.Path)
+		if r.URL.Path == "/Observation/obs" && !created["/Patient/pat"] {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"error","diagnostics":"missing patient"}]}`))
+			return
+		}
+		created[r.URL.Path] = true
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	dataset := &model.Dataset{
+		Resources: map[string]*model.ResourceInstance{
+			"obs": {LocalID: "obs", ResourceType: "Observation", Resource: map[string]any{
+				"resourceType": "Observation", "id": "obs", "subject": map[string]any{"reference": "Patient/pat"},
+			}},
+			"pat": {LocalID: "pat", ResourceType: "Patient", Resource: map[string]any{"resourceType": "Patient", "id": "pat"}},
+		},
+		Relationships: []model.Reference{{SourceID: "obs", Path: "Observation.subject", TargetID: "pat"}},
+	}
+
+	res := provisioning.New(server.URL, nil).ProvisionAll(t.Context(), dataset)
+	if !res.Complete() {
+		t.Fatalf("ProvisionAll incomplete: %d failed", res.Failed)
+	}
+	if len(order) != 2 || order[0] != "/Patient/pat" || order[1] != "/Observation/obs" {
+		t.Fatalf("write order = %v, want target before dependent", order)
 	}
 }

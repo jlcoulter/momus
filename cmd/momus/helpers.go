@@ -425,29 +425,55 @@ func writeDebugOutput(debug bool, stage string, data []byte) error {
 	return nil
 }
 
-// writeDebugBulk writes NDJSON bulk instances to the debug output directory
-// when debug mode is enabled. It is a no-op otherwise.
-func writeDebugBulk(debug bool, instances []*model.ResourceInstance) error {
+// debugBulkWriter streams NDJSON bulk instances to the debug output directory.
+// It is nil when debug mode is disabled, so callers can guard writes with a
+// nil check and stream each batch as it is produced rather than accumulating
+// the whole corpus in memory.
+type debugBulkWriter struct {
+	w    *testbulk.Writer
+	f    *os.File
+	path string
+}
+
+// newDebugBulkWriter opens the debug bulk output file for streaming writes and
+// returns a nil writer when debug mode is disabled. The caller must Close the
+// returned writer when finished.
+func newDebugBulkWriter(debug bool) (*debugBulkWriter, error) {
 	if !debug {
-		return nil
+		return nil, nil
 	}
 	path := filepath.Join(debugOutputDir, "bulk.ndjson")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create debug bulk dir: %w", err)
+		return nil, fmt.Errorf("create debug bulk dir: %w", err)
 	}
 	f, err := os.Create(path)
 	if err != nil {
-		return fmt.Errorf("create debug bulk file %s: %w", path, err)
+		return nil, fmt.Errorf("create debug bulk file %s: %w", path, err)
 	}
-	defer f.Close()
-	w := testbulk.NewWriter(f)
-	if err := w.WriteInstances(instances); err != nil {
-		return fmt.Errorf("write debug bulk output %s: %w", path, err)
+	return &debugBulkWriter{w: testbulk.NewWriter(f), f: f, path: path}, nil
+}
+
+func (d *debugBulkWriter) WriteInstances(instances []*model.ResourceInstance) error {
+	if d == nil {
+		return nil
 	}
-	if err := w.Close(); err != nil {
-		return fmt.Errorf("flush debug bulk output %s: %w", path, err)
+	if err := d.w.WriteInstances(instances); err != nil {
+		return fmt.Errorf("write debug bulk output %s: %w", d.path, err)
 	}
-	fmt.Fprintf(os.Stderr, "debug: wrote %s\n", path)
+	return nil
+}
+
+func (d *debugBulkWriter) Close() error {
+	if d == nil {
+		return nil
+	}
+	if err := d.w.Close(); err != nil {
+		return fmt.Errorf("flush debug bulk output %s: %w", d.path, err)
+	}
+	if err := d.f.Close(); err != nil {
+		return fmt.Errorf("close debug bulk output %s: %w", d.path, err)
+	}
+	fmt.Fprintf(os.Stderr, "debug: wrote %s\n", d.path)
 	return nil
 }
 

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 
 	fhirpackage "github.com/jlcoulter/momus/internal/fhir/package"
 	"github.com/jlcoulter/momus/internal/home"
@@ -17,17 +16,13 @@ func newResolveCmd(cfg *config) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rootPath := args[0]
-			searchDir := cfg.DepsDir
-			if searchDir == "" {
-				searchDir = filepath.Dir(rootPath)
-			}
 			cacheDir := cfg.DownloadDir
 			if cacheDir == "" {
 				cacheDir = home.PackageCacheDir()
 			}
 
 			graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
-				DepsDir:        searchDir,
+				DepsDir:        cfg.DepsDir,
 				DownloadDir:    cacheDir,
 				ConflictPolicy: fhirpackage.ConflictPolicy(cfg.ConflictPolicy),
 			})
@@ -43,6 +38,10 @@ func newResolveCmd(cfg *config) *cobra.Command {
 				totalResources += len(p.Resources)
 			}
 
+			searchDir := cfg.DepsDir
+			if searchDir == "" {
+				searchDir = "package cache"
+			}
 			fmt.Printf("Resolved %d packages from %s using download dir %s with %d total resources\n", len(graph.Packages), searchDir, cacheDir, totalResources)
 			for _, p := range graph.Packages {
 				fmt.Printf("- %s@%s (deps=%d, resources=%d)\n", p.Name, p.Version, len(p.Dependencies), len(p.Resources))

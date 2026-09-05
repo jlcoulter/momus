@@ -57,6 +57,17 @@ type Registry struct {
 	// package's own server CapabilityStatement declares it serves, rather than
 	// unioning every dependency's CapabilityStatement.
 	rootCapabilityStatementURLs map[string]struct{}
+
+	// resolvedProfiles memoises ResolveProfile results by canonical URL. The
+	// registry is effectively immutable after construction, so a resolved
+	// profile is deterministic and safe to share across concurrent readers.
+	// This is the dominant hot path for bulk corpus generation, where the same
+	// handful of profiles are resolved once per resource instance.
+	resolvedProfiles sync.Map // url -> *model.ResolvedProfile
+
+	// resolvedElements memoises ResolveElements results by canonical URL, for
+	// the same reason as resolvedProfiles.
+	resolvedElements sync.Map // url -> []model.ElementDefinition
 }
 
 // New returns an empty Registry.
@@ -433,12 +444,19 @@ func (r *Registry) ProfilesForResource(resourceType string) []*model.StructureDe
 // This is a minimal implementation; profile inheritance and slicing
 // resolution will be extended later.
 func (r *Registry) ResolveProfile(url string) (*model.ResolvedProfile, error) {
+	if cached, ok := r.resolvedProfiles.Load(url); ok {
+		return cached.(*model.ResolvedProfile), nil
+	}
 	sd, ok := r.StructureDefinition(url)
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrNotFound, url)
 	}
 	elements := r.resolveElements(sd, make(map[string]bool))
-	return model.NewResolvedProfile(sd.URL, sd.Type, elements), nil
+	rp := model.NewResolvedProfile(sd.URL, sd.Type, elements)
+	if rp != nil {
+		r.resolvedProfiles.Store(url, rp)
+	}
+	return rp, nil
 }
 
 // ResolveElements returns the flat, parent-merged ElementDefinition list for
@@ -450,11 +468,16 @@ func (r *Registry) ResolveProfile(url string) (*model.ResolvedProfile, error) {
 //
 // Returns ErrNotFound when url is not indexed.
 func (r *Registry) ResolveElements(url string) ([]model.ElementDefinition, error) {
+	if cached, ok := r.resolvedElements.Load(url); ok {
+		return cached.([]model.ElementDefinition), nil
+	}
 	sd, ok := r.StructureDefinition(url)
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrNotFound, url)
 	}
-	return r.resolveElements(sd, make(map[string]bool)), nil
+	elements := r.resolveElements(sd, make(map[string]bool))
+	r.resolvedElements.Store(url, elements)
+	return elements, nil
 }
 
 // resolveElements returns the full element set for sd by resolving its parent

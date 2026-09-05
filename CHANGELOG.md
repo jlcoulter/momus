@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/jlcoulter/momus/compare/v1.8.0...v1.9.0) (2026-09-05)
+
+
+### Features
+
+* karate test gen and fix bulk upload ([#33](https://github.com/jlcoulter/momus/issues/33)) ([7cc3947](https://github.com/jlcoulter/momus/commit/7cc3947eb9933031ad160eac0adceff37c6deda8))
+
 ## [1.8.0](https://github.com/jlcoulter/momus/compare/v1.7.0...v1.8.0) (2026-08-26)
 
 

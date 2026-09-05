@@ -195,3 +195,70 @@ func TestTrackPruned(t *testing.T) {
 		t.Fatal("empty reason should not be tracked")
 	}
 }
+
+func TestExtensionSlicePrefixes(t *testing.T) {
+	suppressedURL := "http://example.org/StructureDefinition/suppressed"
+	elements := []model.ElementDefinition{
+		{Path: "Organization.extension", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Extension"}}},
+		{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Extension", Profile: []string{suppressedURL}}}},
+		{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: "1"},
+		{ID: "Organization.extension:other", Path: "Organization.extension", SliceName: "other", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Extension", Profile: []string{"https://example.org/StructureDefinition/other"}}}},
+	}
+
+	// Empty exclusion list yields no prefixes.
+	if got := extensionSlicePrefixes(elements, nil); got != nil {
+		t.Fatalf("extensionSlicePrefixes(nil) = %v, want nil", got)
+	}
+
+	got := extensionSlicePrefixes(elements, []string{suppressedURL})
+	if len(got) != 2 || got[0] != "Organization.extension:suppressed" || got[1] != "Organization.extension:suppressed." {
+		t.Fatalf("extensionSlicePrefixes = %v, want [Organization.extension:suppressed Organization.extension:suppressed.]", got)
+	}
+}
+
+func TestIsExcludedExtensionElement(t *testing.T) {
+	prefixes := []string{"Organization.extension:suppressed."}
+
+	if !isExcludedExtensionElement(model.ElementDefinition{ID: "Organization.extension:suppressed.url"}, prefixes) {
+		t.Fatal("descendant element should be excluded")
+	}
+	if !isExcludedExtensionElement(model.ElementDefinition{ID: "Organization.extension:suppressed.extension:sub.url"}, prefixes) {
+		t.Fatal("nested descendant element should be excluded")
+	}
+	if isExcludedExtensionElement(model.ElementDefinition{ID: "Organization.extension:other.url"}, prefixes) {
+		t.Fatal("unrelated slice element should not be excluded")
+	}
+	if isExcludedExtensionElement(model.ElementDefinition{ID: "Organization.name"}, prefixes) {
+		t.Fatal("non-extension element should not be excluded")
+	}
+	if isExcludedExtensionElement(model.ElementDefinition{ID: "Organization.extension:suppressed.url"}, nil) {
+		t.Fatal("no prefixes means nothing excluded")
+	}
+}
+
+func TestElementIsExcludedExtension(t *testing.T) {
+	// Keys are normalized via normalizeCanonicalURL (lowercased, version/fragment
+	// stripped); mirror that here.
+	excluded := map[string]struct{}{"https://example.org/structuredefinition/suppressed": {}}
+
+	if !elementIsExcludedExtension(model.ElementDefinition{
+		Types: []model.ElementType{{Code: "Extension", Profile: []string{"https://example.org/StructureDefinition/suppressed"}}},
+	}, excluded) {
+		t.Fatal("matching extension profile should be excluded")
+	}
+	if elementIsExcludedExtension(model.ElementDefinition{
+		Types: []model.ElementType{{Code: "Extension", Profile: []string{"https://example.org/StructureDefinition/other"}}},
+	}, excluded) {
+		t.Fatal("non-matching extension profile should not be excluded")
+	}
+	if elementIsExcludedExtension(model.ElementDefinition{
+		Types: []model.ElementType{{Code: "string"}},
+	}, excluded) {
+		t.Fatal("non-extension element should not be excluded")
+	}
+	if !elementIsExcludedExtension(model.ElementDefinition{
+		Types: []model.ElementType{{Code: "Extension", Profile: []string{"https://example.org/StructureDefinition/suppressed|26.0.0"}}},
+	}, excluded) {
+		t.Fatal("version-suffixed matching profile should be excluded")
+	}
+}

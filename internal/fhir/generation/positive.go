@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
@@ -35,6 +36,27 @@ func elementAllowsMultiple(def *model.ElementDefinition) bool {
 		return true
 	}
 	return allowsMultiple(def.BaseMax)
+}
+
+// maxCardinality returns the element's maximum cardinality as an int, or -1 when
+// it is unbounded ("*"). It is used to cap how many values a repeated element
+// may emit so the parent's Max constraint is never violated.
+func maxCardinality(def *model.ElementDefinition) int {
+	if def == nil {
+		return -1
+	}
+	max := def.Max
+	if max == "" {
+		max = def.BaseMax
+	}
+	if max == "*" {
+		return -1
+	}
+	n, err := strconv.Atoi(max)
+	if err != nil {
+		return -1
+	}
+	return n
 }
 
 // optionalInclusionProbability is the chance that an optional (Min == 0)
@@ -252,22 +274,23 @@ func buildBodyTemplate(req coverage.CoverageRequirement, id string, profileURLs 
 	// resource, with an optional negative mutation applied only when the test
 	// expects the server to reject it. The bool reports whether the mutation
 	// produced a concrete violation (false when the target element is absent).
-	body := synthesizeBody(req.ResourceType, id, profileURLs, primaryProfileURL, deps, reg, exhaustive)
+	body := SynthesizeBody(req.ResourceType, id, profileURLs, primaryProfileURL, deps, reg, exhaustive)
 	applied := applyNegativeMutation(body, req, reg)
 	return body, applied
 }
 
 func buildSetupBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
-	return synthesizeBody(resourceType, id, profileURLs, primaryProfileURL, deps, reg, exhaustive)
+	return SynthesizeBody(resourceType, id, profileURLs, primaryProfileURL, deps, reg, exhaustive)
 }
 
-// synthesizeBody is the single registry-driven body-data core used for all
-// generated data — provisioned seed resources and test-case payloads alike. It
-// depends on the registry as the source of truth: it walks the resolved profile
-// to populate required (and, when exhaustive, optional) elements, resolves
-// bindings to real codes, and applies resource-specific normalisation. Keeping
-// one core means test data and provisioned data cannot drift apart.
-func synthesizeBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
+// SynthesizeBody is the single registry-driven body-data core used for all
+// generated data — provisioned seed resources, test-case payloads, and the bulk
+// corpus alike. It depends on the registry as the source of truth: it walks the
+// resolved profile to populate required (and, when exhaustive, optional)
+// elements, resolves bindings to real codes, and applies resource-specific
+// normalisation. Keeping one core means test data, provisioned data, and bulk
+// data cannot drift apart.
+func SynthesizeBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
 	body := baseBodyTemplate(resourceType, id, profileURLs, deps, reg, primaryProfileURL)
 	enrichBodyFromProfile(body, primaryProfileURL, reg)
 	if exhaustive {
@@ -296,6 +319,24 @@ func synthesizeBody(resourceType, id string, profileURLs []string, primaryProfil
 	// optional sub-slices were not generated are simply omitted.
 	stripEmptyExtensions(body)
 	return body
+}
+
+// NormalizeGeneratedResource applies the same post-generation normalisation
+// passes that synthesizeBody applies to seed data and test-case payloads, so
+// resources produced by other generators (e.g. the bulk corpus) conform to the
+// same profiles and pass server validation. It strips self-references, resolves
+// coding displays, removes internal fixed-coding markers, applies
+// resource-specific normalisation, and drops empty extensions.
+func NormalizeGeneratedResource(body map[string]any, resourceType, id string, reg *registry.Registry) {
+	if body == nil {
+		return
+	}
+	stripSelfReferences(body, resourceType+"/"+id)
+	normalizeGeneratedPayload(body)
+	normalizeResourceSpecificPayload(body)
+	normalisePayloadCodingDisplays(body, reg)
+	stripFixedCodingMarkers(body)
+	stripEmptyExtensions(body)
 }
 
 // stripSelfReferences removes any FHIR Reference object (a map containing a
@@ -662,6 +703,12 @@ func generateRequiredValue(node *model.ElementNode, reg *registry.Registry, rng 
 
 func generateRepeatedValue(node *model.ElementNode, reg *registry.Registry, rng *rand.Rand) (any, bool) {
 	values := make([]any, 0)
+	// The parent element's Max cardinality caps how many values may be emitted,
+	// even when several optional slices could each contribute one. E.g. HCPD
+	// Practitioner.qualification.identifier has Max "1" with two optional slices;
+	// generating both violates the parent's max and a conformant server rejects
+	// the resource ("max allowed = 1, but found 2").
+	max := maxCardinality(node.Definition)
 	sliceNames := make([]string, 0, len(node.Slices))
 	for name := range node.Slices {
 		sliceNames = append(sliceNames, name)
@@ -685,9 +732,15 @@ func generateRepeatedValue(node *model.ElementNode, reg *registry.Registry, rng 
 			count = 1
 		}
 		for i := 0; i < count; i++ {
+			if max >= 0 && len(values) >= max {
+				break
+			}
 			if value, ok := generateSliceValue(slice, reg); ok {
 				values = append(values, value)
 			}
+		}
+		if max >= 0 && len(values) >= max {
+			break
 		}
 	}
 	for len(values) < coregen.Max(node.Definition.Min, 1) {
@@ -1039,6 +1092,12 @@ func sortedNodeChildren(node *model.ElementNode) []string {
 // repeatable), the fixed value is wrapped in a single-element array so the
 // existing array shape is preserved.
 func wrapFixedSlice(current any, def *model.ElementDefinition, fixed any) any {
+	// The fixed value is the profile's shared element definition data. It must
+	// never be returned (or wrapped) by reference: the caller mutates the result
+	// (markFixedCoding strips display/text and adds a marker), and aliasing the
+	// profile's map would race across concurrent synthesis of the same slice.
+	// Deep-clone so each generated instance owns its own copy.
+	fixed = cloneValue(fixed)
 	if _, isArray := current.([]any); isArray {
 		return []any{fixed}
 	}
@@ -1058,11 +1117,14 @@ func sortedSliceChildren(slice *model.SliceNode) []string {
 }
 
 // mergeSlicePattern merges a pattern object into value at prop, recursing into
-// nested objects and arrays so a patterned Coding/CodeableConcept lands.
+// nested objects and arrays so a patterned Coding/CodeableConcept lands. The
+// pattern is the profile's shared element definition data; it is deep-cloned so
+// the generated value never aliases it (the value is later mutated by
+// markFixedCoding, which would race across concurrent synthesis).
 func mergeSlicePattern(value map[string]any, prop string, pattern map[string]any) {
 	current, ok := value[prop].(map[string]any)
 	if !ok {
-		value[prop] = cloneMap(pattern)
+		value[prop] = cloneValue(pattern).(map[string]any)
 		return
 	}
 	for k, v := range pattern {
@@ -1072,7 +1134,7 @@ func mergeSlicePattern(value map[string]any, prop string, pattern map[string]any
 				continue
 			}
 		}
-		current[k] = v
+		current[k] = cloneValue(v)
 	}
 }
 
@@ -1121,17 +1183,34 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 	}
 	typeCode := primaryTypeCode(node.Definition)
 	if node.Definition.Fixed != nil {
-		return node.Definition.Fixed, true
+		// The fixed value is the profile's shared element definition data. It is
+		// deep-cloned so the returned value never aliases it: the caller mutates
+		// the result (markFixedCoding, stripFixedCodingMarkers, normaliseCoding),
+		// and aliasing would race across concurrent synthesis of the same element.
+		cloned := cloneValue(node.Definition.Fixed)
+		// A fixed CodeableConcept/Coding may carry only system+code; mark it so
+		// the display/text normalisation passes never add a display to it (HAPI
+		// rejects a display on a fixed value that defines only system+code).
+		if typeCode == "CodeableConcept" || typeCode == "Coding" {
+			markFixedCoding(cloned)
+		}
+		return cloned, true
 	}
 	boundCoding, hasBoundCoding := resolveBoundCodingForNode(node, reg)
 	if node.Definition.Pattern != nil {
 		if merged, ok := mergePatternWithBinding(node.Definition.Pattern, typeCode, boundCoding, hasBoundCoding); ok {
 			return merged, true
 		}
-		return node.Definition.Pattern, true
+		cloned := cloneValue(node.Definition.Pattern)
+		if typeCode == "CodeableConcept" || typeCode == "Coding" {
+			markFixedCoding(cloned)
+		}
+		return cloned, true
 	}
 	if len(node.Definition.Examples) > 0 {
-		return node.Definition.Examples[0], true
+		// Examples are the profile's shared element definition data; deep-clone
+		// so the returned value never aliases it (the caller mutates the result).
+		return cloneValue(node.Definition.Examples[0]), true
 	}
 	switch typeCode {
 	case "string", "markdown", "id":
@@ -1562,10 +1641,41 @@ func resolveBoundCoding(def *model.ElementDefinition, reg *registry.Registry) (g
 // fallback prefers an instance whose meta.profile matches the node's profile,
 // and otherwise uses the first example of the resource type, so generation only
 // emits the synthetic example.org fallback in genuinely exceptional cases.
+//
+// The result is deterministic for a given node and registry: the node's
+// definition, binding, profile URL, and the registry's example instances are all
+// immutable once the registry is built. Because ResolveProfile memoises its
+// results, the same ElementNode pointer is reused across every synthesised
+// instance, so the resolution is cached per (registry, node). This is the
+// dominant hot path for bulk corpus generation, where the same handful of bound
+// codings are resolved once per element node per instance.
+var boundCodingCache sync.Map // boundCodingCacheKey -> boundCodingCacheEntry
+
+type boundCodingCacheKey struct {
+	reg  *registry.Registry
+	node *model.ElementNode
+}
+
+type boundCodingCacheEntry struct {
+	coding generatedCoding
+	ok     bool
+}
+
 func resolveBoundCodingForNode(node *model.ElementNode, reg *registry.Registry) (generatedCoding, bool) {
 	if node == nil || node.Path == "" {
 		return generatedCoding{}, false
 	}
+	key := boundCodingCacheKey{reg: reg, node: node}
+	if cached, ok := boundCodingCache.Load(key); ok {
+		entry := cached.(boundCodingCacheEntry)
+		return entry.coding, entry.ok
+	}
+	coding, ok := resolveBoundCodingForNodeUncached(node, reg)
+	boundCodingCache.Store(key, boundCodingCacheEntry{coding: coding, ok: ok})
+	return coding, ok
+}
+
+func resolveBoundCodingForNodeUncached(node *model.ElementNode, reg *registry.Registry) (generatedCoding, bool) {
 	if node.Definition != nil {
 		if coding, ok := resolveBoundCoding(node.Definition, reg); ok {
 			return coding, true
@@ -1606,6 +1716,24 @@ func resolveBoundCodingFromCodingChild(node *model.ElementNode, reg *registry.Re
 // example instance — extension URLs are globally unique, so the coding is found
 // wherever the extension appears (e.g. the "new-patient-availability" extension
 // on a HealthcareService example).
+//
+// The result is deterministic for a given (registry, resourceType, path,
+// profileURL): the example instances are immutable once the registry is built.
+// Because this is on the bulk corpus hot path, the result is cached per key.
+var exampleCodingCache sync.Map // exampleCodingCacheKey -> exampleCodingCacheEntry
+
+type exampleCodingCacheKey struct {
+	reg          *registry.Registry
+	resourceType string
+	path         string
+	profileURL   string
+}
+
+type exampleCodingCacheEntry struct {
+	coding generatedCoding
+	ok     bool
+}
+
 func resolveBoundCodingFromExample(node *model.ElementNode, reg *registry.Registry) (generatedCoding, bool) {
 	if node == nil || node.Path == "" || reg == nil {
 		return generatedCoding{}, false
@@ -1618,13 +1746,24 @@ func resolveBoundCodingFromExample(node *model.ElementNode, reg *registry.Regist
 	if resourceType == "" || path == "" {
 		return generatedCoding{}, false
 	}
+	profileURL := normalizeCanonical(node.ProfileURL)
+	key := exampleCodingCacheKey{reg: reg, resourceType: resourceType, path: path, profileURL: profileURL}
+	if cached, ok := exampleCodingCache.Load(key); ok {
+		entry := cached.(exampleCodingCacheEntry)
+		return entry.coding, entry.ok
+	}
+	coding, ok := resolveBoundCodingFromExampleUncached(resourceType, path, profileURL, reg)
+	exampleCodingCache.Store(key, exampleCodingCacheEntry{coding: coding, ok: ok})
+	return coding, ok
+}
+
+func resolveBoundCodingFromExampleUncached(resourceType, path, profileURL string, reg *registry.Registry) (generatedCoding, bool) {
 	instances := reg.ResourcesForType(resourceType)
 	if len(instances) == 0 {
 		return generatedCoding{}, false
 	}
 
 	// First pass: prefer instances whose meta.profile matches the node's profile.
-	profileURL := normalizeCanonical(node.ProfileURL)
 	for _, inst := range instances {
 		if !hasProfile(inst.ProfileURLs, profileURL) {
 			continue
@@ -1647,11 +1786,39 @@ func resolveBoundCodingFromExample(node *model.ElementNode, reg *registry.Regist
 // coding from its valueCodeableConcept (or valueCoding). The extension URL is
 // globally unique, so this resolves wherever the extension appears in the
 // package's examples.
+//
+// The result is deterministic for a given (registry, extensionURL): the example
+// instances are immutable once the registry is built. Because this is on the
+// bulk corpus hot path — it walks every example instance for every extension
+// value[x] element — the result is cached per (registry, extensionURL).
+var extensionValueCodingCache sync.Map // extensionValueCodingCacheKey -> extensionValueCodingCacheEntry
+
+type extensionValueCodingCacheKey struct {
+	reg          *registry.Registry
+	extensionURL string
+}
+
+type extensionValueCodingCacheEntry struct {
+	coding generatedCoding
+	ok     bool
+}
+
 func resolveBoundCodingFromExtensionValue(extensionURL string, reg *registry.Registry) (generatedCoding, bool) {
 	if extensionURL == "" || reg == nil {
 		return generatedCoding{}, false
 	}
 	extensionURL = normalizeCanonical(extensionURL)
+	key := extensionValueCodingCacheKey{reg: reg, extensionURL: extensionURL}
+	if cached, ok := extensionValueCodingCache.Load(key); ok {
+		entry := cached.(extensionValueCodingCacheEntry)
+		return entry.coding, entry.ok
+	}
+	coding, ok := resolveBoundCodingFromExtensionValueUncached(extensionURL, reg)
+	extensionValueCodingCache.Store(key, extensionValueCodingCacheEntry{coding: coding, ok: ok})
+	return coding, ok
+}
+
+func resolveBoundCodingFromExtensionValueUncached(extensionURL string, reg *registry.Registry) (generatedCoding, bool) {
 	for _, inst := range reg.AllResources() {
 		if inst == nil || inst.Raw == nil {
 			continue
@@ -2000,9 +2167,12 @@ func normalisePayloadCodingDisplays(v any, reg *registry.Registry) {
 	}
 }
 
-// normaliseCoding fixes the display on a single coding map. If a canonical
-// display is known it is set; if the display merely echoes the code and no
-// canonical display is known, the display is dropped rather than echoed.
+// normaliseCoding fixes the display on a single coding map. The canonical
+// CodeSystem display, when known, is authoritative and always wins over whatever
+// was generated — including a non-echoing display synthesised from the code by
+// title-casing (e.g. "Organisation Initiated" must become "Organisation
+// initiated" to match the CodeSystem). When no canonical display is known, a
+// display that merely echoes the code is dropped rather than echoed.
 func normaliseCoding(c any, reg *registry.Registry) {
 	m, ok := c.(map[string]any)
 	if !ok {
@@ -2019,16 +2189,15 @@ func normaliseCoding(c any, reg *registry.Registry) {
 		delete(m, "display")
 		return
 	}
-	current, _ := m["display"].(string)
-	if current != "" && current != code {
-		// An intentional, non-echoed display is preserved.
+	if resolved := resolveCodingDisplay(reg, system, code); resolved != "" {
+		// The canonical display is authoritative; replace any generated display
+		// so the payload matches the CodeSystem exactly (servers validate the
+		// display text against the bound value set).
+		m["display"] = resolved
 		return
 	}
-	resolved := resolveCodingDisplay(reg, system, code)
-	switch {
-	case resolved != "":
-		m["display"] = resolved
-	case current == code:
+	current, _ := m["display"].(string)
+	if current == code {
 		// Never echo the code as the display when the canonical display is not
 		// known.
 		delete(m, "display")
@@ -2075,7 +2244,7 @@ func mergePatternWithBinding(pattern any, typeCode string, binding generatedCodi
 		if !ok {
 			return nil, false
 		}
-		merged := cloneMap(patternMap)
+		merged := cloneValue(patternMap).(map[string]any)
 		codings := mergeCodingArray(patternMap["coding"], binding)
 		if len(codings) > 0 {
 			merged["coding"] = codings
@@ -2089,7 +2258,7 @@ func mergePatternWithBinding(pattern any, typeCode string, binding generatedCodi
 		if !ok {
 			return nil, false
 		}
-		merged := cloneMap(patternMap)
+		merged := cloneValue(patternMap).(map[string]any)
 		if _, exists := merged["system"]; !exists && binding.System != "" {
 			merged["system"] = binding.System
 		}

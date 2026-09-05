@@ -46,10 +46,14 @@ func Link(datasets []*model.Dataset) []*model.ResourceInstance {
 	return instances
 }
 
-// danglingRef matches a FHIR reference of the form Type/unknown, our sentinel
-// for an unresolved reference. URLs (http://…) and other non-resource strings
-// do not match because the character after the type prefix is not a slash.
-var danglingRef = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*/unknown$`)
+// danglingRef matches a FHIR reference of the form Type/unknown or
+// Type/momus-setup-*, our sentinels for an unresolved reference. The former is
+// the historical bulk placeholder; the latter is produced by the shared
+// generation core (generation.SynthesizeBody) via referencePlaceholder, which
+// points at a setup resource that does not exist in a bulk corpus. URLs
+// (http://…) and other non-resource strings do not match because the character
+// after the type prefix is not a slash.
+var danglingRef = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*/(unknown|momus-setup-[A-Za-z0-9-]+)$`)
 
 // rewriteReferences replaces dangling Type/unknown references in a resource
 // with a reference to a pool instance of the target type, distributed by a hash

@@ -951,6 +951,84 @@ func TestStripFixedCodingMarkers(t *testing.T) {
 	}
 }
 
+// TestWrapFixedSliceDoesNotAliasProfileValue verifies that wrapFixedSlice never
+// returns the profile's shared Fixed/Pattern map directly. The returned value is
+// later mutated by markFixedCoding (stripping display/text and adding the fixed
+// marker); if it aliases the profile's element definition, concurrent synthesis
+// of the same slice across goroutines races on the shared map and corrupts the
+// profile (a "concurrent map writes" panic).
+func TestWrapFixedSliceDoesNotAliasProfileValue(t *testing.T) {
+	fixed := map[string]any{"system": "http://cs", "code": "C", "display": "D"}
+	def := &model.ElementDefinition{Path: "X.coding", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Coding"}}, Fixed: fixed}
+	got := wrapFixedSlice(nil, def, fixed)
+	gotMap, ok := got.(map[string]any)
+	if !ok {
+		t.Fatalf("wrapFixedSlice = %T, want map", got)
+	}
+	// Mutating the returned value must not mutate the profile's Fixed map.
+	gotMap["display"] = "mutated"
+	if fixed["display"] != "D" {
+		t.Fatalf("wrapFixedSlice aliased the profile Fixed map; mutation leaked back: %v", fixed)
+	}
+}
+
+// TestMergeSlicePatternDoesNotAliasProfileValue verifies that mergeSlicePattern
+// never stores the profile's shared Pattern map (or a shallow clone of it) into
+// the generated value. The stored value is later mutated by markFixedCoding;
+// aliasing the profile's pattern would race across concurrent synthesis.
+func TestMergeSlicePatternDoesNotAliasProfileValue(t *testing.T) {
+	pattern := map[string]any{"coding": []any{map[string]any{"system": "http://cs", "code": "C", "display": "D"}}}
+	value := map[string]any{}
+	mergeSlicePattern(value, "type", pattern)
+	got, ok := value["type"].(map[string]any)
+	if !ok {
+		t.Fatalf("mergeSlicePattern = %T, want map", value["type"])
+	}
+	// Mutating the nested coding must not mutate the profile's pattern.
+	got["coding"].([]any)[0].(map[string]any)["display"] = "mutated"
+	if pattern["coding"].([]any)[0].(map[string]any)["display"] != "D" {
+		t.Fatalf("mergeSlicePattern aliased the profile Pattern map: %v", pattern)
+	}
+}
+
+// TestGenerateSingleValueDoesNotAliasProfileValue verifies that generateSingleValue
+// never returns the profile's shared Fixed/Pattern map directly. The returned
+// value is later mutated by markFixedCoding / stripFixedCodingMarkers /
+// normaliseCodingDisplay; aliasing the profile's element definition would race
+// across concurrent synthesis of the same element.
+func TestGenerateSingleValueDoesNotAliasProfileValue(t *testing.T) {
+	fixed := map[string]any{"system": "http://cs", "code": "C", "display": "D"}
+	node := &model.ElementNode{Definition: &model.ElementDefinition{Path: "X.type", Fixed: fixed}}
+	got, ok := generateSingleValue(node, nil)
+	if !ok {
+		t.Fatal("generateSingleValue should return a value")
+	}
+	gotMap, ok := got.(map[string]any)
+	if !ok {
+		t.Fatalf("generateSingleValue = %T, want map", got)
+	}
+	gotMap["display"] = "mutated"
+	if fixed["display"] != "D" {
+		t.Fatalf("generateSingleValue aliased the profile Fixed map: %v", fixed)
+	}
+
+	// Same for a Pattern value.
+	pattern := map[string]any{"coding": []any{map[string]any{"code": "P"}}}
+	node = &model.ElementNode{Definition: &model.ElementDefinition{Path: "X.type", Pattern: pattern}}
+	got, ok = generateSingleValue(node, nil)
+	if !ok {
+		t.Fatal("generateSingleValue should return a pattern value")
+	}
+	gotMap, ok = got.(map[string]any)
+	if !ok {
+		t.Fatalf("generateSingleValue(pattern) = %T, want map", got)
+	}
+	gotMap["coding"].([]any)[0].(map[string]any)["code"] = "mutated"
+	if pattern["coding"].([]any)[0].(map[string]any)["code"] != "P" {
+		t.Fatalf("generateSingleValue aliased the profile Pattern map: %v", pattern)
+	}
+}
+
 func TestNormaliseCodingDisplay(t *testing.T) {
 	reg := registry.New()
 	reg.AddCodeSystem(&model.CodeSystem{URL: "http://cs", Concepts: []model.CodeSystemConcept{{Code: "C", Display: "Canonical"}}})
@@ -965,6 +1043,36 @@ func TestNormaliseCodingDisplay(t *testing.T) {
 	normaliseCodingDisplay(arr, reg)
 	if arr[0].(map[string]any)["display"] != "Canonical" {
 		t.Fatalf("normaliseCodingDisplay(array) = %v", arr)
+	}
+}
+
+// TestFixedCodeableConceptCodingStaysDisplayless verifies that a CodeableConcept
+// materialised from a profile's fixedCodeableConcept (e.g. the PBPRN
+// Identifier.type fixed to {system: v2-0203, code: PRN}) is marked as a fixed
+// coding, so the display/text normalisation passes never add a display to it.
+// Without the marker, normaliseCoding resolves the canonical display
+// ("Provider number") and ships it on a fixed value that defines only system+code,
+// which HAPI rejects ("The element display is present in the instance but not
+// allowed in the applicable fixed value specified in profile").
+func TestFixedCodeableConceptCodingStaysDisplayless(t *testing.T) {
+	reg := registry.New()
+	reg.AddCodeSystem(&model.CodeSystem{URL: "http://terminology.hl7.org/CodeSystem/v2-0203", Concepts: []model.CodeSystemConcept{{Code: "PRN", Display: "Provider number"}}})
+	fixed := map[string]any{"coding": []any{map[string]any{"system": "http://terminology.hl7.org/CodeSystem/v2-0203", "code": "PRN"}}}
+	node := &model.ElementNode{Definition: &model.ElementDefinition{Path: "Identifier.type", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}, Fixed: fixed}}
+	got, ok := generateSingleValue(node, reg)
+	if !ok {
+		t.Fatal("generateSingleValue should return a value")
+	}
+	gotMap := got.(map[string]any)
+	// The coding must be marked fixed so normaliseCoding strips any display.
+	coding := gotMap["coding"].([]any)[0].(map[string]any)
+	if !isFixedCoding(coding) {
+		t.Fatalf("fixed CodeableConcept coding was not marked fixed: %v", coding)
+	}
+	// Running the display normalisation must not add a display.
+	normaliseCodingDisplay(gotMap, reg)
+	if _, ok := coding["display"]; ok {
+		t.Fatalf("fixed coding gained a display after normalisation: %v", coding)
 	}
 }
 

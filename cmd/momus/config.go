@@ -40,6 +40,9 @@ type config struct {
 	IncludeLowValuePaths   bool     `mapstructure:"include_low_value_paths" flag:"include-low-value-paths"`
 	InteractionStrength    int      `mapstructure:"interaction_strength" flag:"strength"`
 	IncludeUniversalSearch bool     `mapstructure:"include_universal_search" flag:"include-universal-search"`
+	IncludeDomains         []string `mapstructure:"include_domains" flag:"include-domain"`
+	ExcludeVariants        []string `mapstructure:"exclude_variants" flag:"exclude-variant"`
+	ExcludeExtensionURLs   []string `mapstructure:"exclude_extension_urls" flag:"exclude-extension-url"`
 
 	// Target FHIR server / API
 	BaseURL           string `mapstructure:"base_url" flag:"base-url"`
@@ -64,11 +67,19 @@ type config struct {
 	// Generation
 	Exhaustive        bool     `mapstructure:"exhaustive" flag:"exhaustive"`
 	BulkCount         int      `mapstructure:"bulk_count" flag:"count"`
+	BulkBatchSize     int      `mapstructure:"bulk_batch_size" flag:"batch-size"`
+	BulkPipelineDepth int      `mapstructure:"bulk_pipeline_depth" flag:"pipeline-depth"`
+	Concurrency       int      `mapstructure:"concurrency" flag:"concurrency"`
+	BundleMode        string   `mapstructure:"bundle_mode" flag:"bundle-mode"`
 	BulkPerTypeCounts []string `mapstructure:"bulk_per_type_counts" flag:"per-type"`
 
 	// Validate
 	ProfileURLs []string `mapstructure:"profile_urls" flag:"profile"`
 	PackagePath string   `mapstructure:"package_path" flag:"package"`
+
+	// Karate export
+	KarateOutDir      string `mapstructure:"karate_out_dir" flag:"output-dir,dir"`
+	GenerateKarateCfg bool   `mapstructure:"generate_karate_config" flag:"karate-config"`
 
 	// Conformance self-test
 	GoldenDir       string `mapstructure:"golden_dir" flag:"fixtures"`

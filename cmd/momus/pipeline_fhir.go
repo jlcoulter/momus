@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
+	"strings"
 
 	"github.com/jlcoulter/momus/internal/home"
 
@@ -30,17 +30,13 @@ import (
 // the scoped registry. It is the shared entry point for every command that
 // consumes a package archive.
 func resolvePackageGraph(cfg *config, rootPath string) (*fhirpackage.ResolvedGraph, *registry.Registry, error) {
-	searchDir := cfg.DepsDir
-	if searchDir == "" {
-		searchDir = filepath.Dir(rootPath)
-	}
 	cacheDir := cfg.DownloadDir
 	if cacheDir == "" {
 		cacheDir = home.PackageCacheDir()
 	}
 
 	graph, err := fhirpackage.ResolveLocalPackageGraphWithOptions(rootPath, fhirpackage.ResolveOptions{
-		DepsDir:        searchDir,
+		DepsDir:        cfg.DepsDir,
 		DownloadDir:    cacheDir,
 		ConflictPolicy: fhirpackage.ConflictPolicy(cfg.ConflictPolicy),
 	})
@@ -72,7 +68,38 @@ func deriveCoveragePlan(cfg *config, reg *registry.Registry, resourceTypes, prof
 		Strength:                     cfg.InteractionStrength,
 		CapabilitySearchCodes:        searchCodes,
 		IncludeUniversalSearchParams: cfg.IncludeUniversalSearch,
+		IncludeDomains:               parseDomains(cfg.IncludeDomains),
+		ExcludeVariants:              parseVariants(cfg.ExcludeVariants),
+		ExcludeExtensionURLs:         cfg.ExcludeExtensionURLs,
 	})
+}
+
+// parseDomains converts CLI domain strings into CoverageDomain values, ignoring
+// empty entries.
+func parseDomains(values []string) []testcoverage.CoverageDomain {
+	out := make([]testcoverage.CoverageDomain, 0, len(values))
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		out = append(out, testcoverage.CoverageDomain(v))
+	}
+	return out
+}
+
+// parseVariants converts CLI variant strings into CoverageVariant values,
+// ignoring empty entries.
+func parseVariants(values []string) []testcoverage.CoverageVariant {
+	out := make([]testcoverage.CoverageVariant, 0, len(values))
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		out = append(out, testcoverage.CoverageVariant(v))
+	}
+	return out
 }
 
 // buildTestPlan builds the test plan (seed dataset + test AST) from a coverage

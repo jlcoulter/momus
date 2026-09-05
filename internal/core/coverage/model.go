@@ -174,6 +174,25 @@ type DeriveOptions struct {
 	// that a conformant server is expected to support, overriding the
 	// capability-declaration restriction for universal codes.
 	IncludeUniversalSearchParams bool
+	// IncludeDomains, when non-empty, restricts derived obligations to the
+	// listed coverage domains. When empty (the default), all domains are
+	// derived. This lets a caller scope a plan to only the interactions a
+	// server exposes (e.g. search-only) so downstream consumers (AST, Karate
+	// export, execution) never see obligations for excluded domains.
+	IncludeDomains []CoverageDomain
+	// ExcludeVariants, when non-empty, removes obligations with the listed
+	// variants from the resulting plan. This allows excluding specific test types
+	// (e.g. operation-delete, state-crud-sequence) without removing an entire
+	// domain.
+	ExcludeVariants []CoverageVariant
+	// ExcludeExtensionURLs, when non-empty, removes obligations derived from
+	// elements belonging to extensions whose profile URL matches one of the
+	// listed canonical URLs. This lets a caller exclude package-defined
+	// extensions (e.g. a "suppressed" extension) whose presence changes how a
+	// server stores or returns a resource, which would otherwise produce false
+	// test failures on read-back. Both the extension slice entry element and its
+	// descendant elements are pruned.
+	ExcludeExtensionURLs []string
 }
 
 // PruneReason describes why an element was excluded from derivation.
@@ -185,6 +204,7 @@ const (
 	PruneReasonRootPath            PruneReason = "root-path"
 	PruneReasonLowValuePath        PruneReason = "low-value-path"
 	PruneReasonExcludedPathPrefix  PruneReason = "excluded-path-prefix"
+	PruneReasonExtensionURL        PruneReason = "extension-url-filtered"
 	PruneReasonMustSupportFiltered PruneReason = "must-support-filtered"
 	PruneReasonOptionalFiltered    PruneReason = "optional-filtered"
 )

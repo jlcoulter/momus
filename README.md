@@ -189,7 +189,8 @@ go run ./cmd/momus package resolve package.tgz
 
 Resolver behaviour:
 
-- Searches the local dependency directory first
+- Uses the root archive and package cache by default
+- Searches a local dependency directory first when `--deps-dir` is supplied
 - Downloads missing package archives from FHIR package registries
 - Stores downloaded archives in `.momus/packages` by default
 - Resolves floating dependency versions such as `current` using registry metadata
@@ -307,6 +308,14 @@ Generate realistic bulk data as NDJSON (the FHIR Bulk Data `$export` format):
 
 ```sh
 go run ./cmd/momus coverage bulk package.tgz --output ./data.ndjson
+go run ./cmd/momus coverage bulk package.tgz --output ./data/
+```
+
+Stream generated bulk records directly into a FHIR repository in dependency
+order (referenced targets before dependents):
+
+```sh
+go run ./cmd/momus coverage bulk package.tgz --base-url http://localhost:8080/fhir
 ```
 
 Key options:
@@ -317,6 +326,7 @@ Key options:
   target types are pulled in automatically so all references resolve
 - `--exhaustive` — populate optional elements with realistic values (default `true`)
 - `--output path` — write NDJSON to a file
+- `--base-url URL` — stream generated resources to a FHIR repository
 
 #### Write endpoints and credentials
 
@@ -339,7 +349,8 @@ go run ./cmd/momus coverage run ./test-plan.json \
 
 Write requests (PUT/PATCH/POST/DELETE) go to `--write-base-url`; GET
 read/search requests go to `--base-url`. The same flag is available on
-`coverage ast`, `coverage provision`, `coverage plan`, `api ast`, and `api run`.
+`coverage ast`, `coverage provision`, `coverage bulk`, `coverage plan`, `api ast`,
+and `api run`.
 
 If the write endpoint requires different credentials than the read endpoint,
 pass `--write-basic-username` and `--write-basic-password` to `coverage

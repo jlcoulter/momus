@@ -78,10 +78,6 @@ func ResolveLocalPackageGraphWithOptions(rootArchivePath string, options Resolve
 	}
 
 	depsDir := options.DepsDir
-	if depsDir == "" {
-		depsDir = filepath.Dir(rootArchivePath)
-	}
-
 	downloadDir := options.DownloadDir
 	if downloadDir == "" {
 		downloadDir = home.PackageCacheDir()
@@ -92,9 +88,24 @@ func ResolveLocalPackageGraphWithOptions(rootArchivePath string, options Resolve
 		policy = ConflictPolicyRootWins
 	}
 
-	index, err := IndexLocalPackageArchives(depsDir)
+	index := make(map[string]string)
+	rootManifest, err := readPackageManifestFromArchive(rootArchivePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read root package manifest from %s: %w", rootArchivePath, err)
+	}
+	if rootManifest.Name != "" && rootManifest.Version != "" {
+		index[packageKey(rootManifest.Name, rootManifest.Version)] = rootArchivePath
+	}
+	if depsDir != "" {
+		localIndex, err := IndexLocalPackageArchives(depsDir)
+		if err != nil {
+			return nil, err
+		}
+		for key, archivePath := range localIndex {
+			if _, exists := index[key]; !exists {
+				index[key] = archivePath
+			}
+		}
 	}
 	if downloadDir != depsDir {
 		downloadedIndex, err := IndexLocalPackageArchives(downloadDir)
