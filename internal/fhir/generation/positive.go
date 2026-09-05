@@ -264,6 +264,61 @@ func referenceTargetID(ref string) string {
 	return trimmed[slash+1:]
 }
 
+// normalizeReferencesToSetup rewrites every FHIR Reference in a generated body
+// from fhir-generator's "Type/<fakeID>" form to momus's "Type/momus-setup-Type"
+// form, so references resolve to the provisioned setup resources. It walks the
+// payload recursively and only rewrites references of the form "Type/<id>"
+// (a single slash, no URL/version/query), leaving absolute and canonical
+// references untouched.
+func normalizeReferencesToSetup(v any) {
+	switch t := v.(type) {
+	case map[string]any:
+		if ref, ok := t["reference"].(string); ok {
+			if rewritten, ok := rewriteReferenceToSetup(ref); ok {
+				t["reference"] = rewritten
+			}
+		}
+		for _, val := range t {
+			normalizeReferencesToSetup(val)
+		}
+	case []any:
+		for _, el := range t {
+			normalizeReferencesToSetup(el)
+		}
+	}
+}
+
+// rewriteReferenceToSetup rewrites a "Type/<id>" reference to
+// "Type/momus-setup-Type". It returns ok=false for references that are not of
+// the simple "Type/<id>" form (absolute URLs, canonical references, versioned
+// references, or references with a query/fragment).
+func rewriteReferenceToSetup(ref string) (string, bool) {
+	trimmed := strings.TrimSpace(ref)
+	if trimmed == "" {
+		return "", false
+	}
+	// Skip absolute URLs and canonical references (contain "://" or start with
+	// "urn:"), and references with version/query/fragment markers.
+	if strings.Contains(trimmed, "://") || strings.HasPrefix(trimmed, "urn:") ||
+		strings.ContainsAny(trimmed, "|#?") {
+		return "", false
+	}
+	slash := strings.Index(trimmed, "/")
+	if slash <= 0 || slash == len(trimmed)-1 {
+		return "", false
+	}
+	// A second slash means a nested/contained reference (e.g. "#/foo" or
+	// "Type/1/2"); only rewrite the simple "Type/<id>" form.
+	if strings.Contains(trimmed[slash+1:], "/") {
+		return "", false
+	}
+	resourceType := trimmed[:slash]
+	if resourceType == "" {
+		return "", false
+	}
+	return resourceType + "/" + coregen.SetupResourceID(resourceType), true
+}
+
 // RequirementCount returns the number of requirement-bound Assertions in a
 // generated plan, excluding setup scaffolding.
 func buildBodyTemplate(req coverage.CoverageRequirement, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) (map[string]any, bool) {
@@ -282,16 +337,71 @@ func buildSetupBody(resourceType, id string, profileURLs []string, primaryProfil
 
 // SynthesizeBody is the single registry-driven body-data core used for all
 // generated data — provisioned seed resources, test-case payloads, and the bulk
-// corpus alike. It depends on the registry as the source of truth: it walks the
-// resolved profile to populate required (and, when exhaustive, optional)
-// elements, resolves bindings to real codes, and applies resource-specific
-// normalisation. Keeping one core means test data, provisioned data, and bulk
-// data cannot drift apart.
+// corpus alike. It delegates the profile-driven element filling to the
+// fhir-generator library (which walks the resolved profile to populate required
+// and, when exhaustive, optional elements, resolves bindings to real codes, and
+// applies the momus normalizer), then applies the momus-specific post-processing
+// passes that need dataset context: dependency reference wiring, self-reference
+// stripping, and constraint application. Keeping one core means test data,
+// provisioned data, and bulk data cannot drift apart.
 func SynthesizeBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
-	body := baseBodyTemplate(resourceType, id, profileURLs, deps, reg, primaryProfileURL)
-	enrichBodyFromProfile(body, primaryProfileURL, reg)
-	if exhaustive {
-		enrichBodyExhaustive(body, primaryProfileURL, reg, newRNG(id))
+	// The base template (resourceType, id, meta.profile) is always built, even
+	// without a registry, so callers that pass no registry still get a
+	// structurally valid body with the declared profile.
+	body := map[string]any{
+		"resourceType": resourceType,
+		"id":           id,
+	}
+	if meta := coregen.BuildMeta(profileURLs); meta != nil {
+		body["meta"] = meta
+	}
+
+	// Fill the profile-driven elements via fhir-generator when a registry is
+	// present; otherwise the body stays at its base template.
+	if g := newBodyGenerator(resourceType, id, profileURLs, reg, exhaustive); g != nil {
+		var err error
+		if primaryProfileURL != "" {
+			body, err = g.GenerateForURL(primaryProfileURL)
+		}
+		if body == nil || err != nil {
+			body, err = g.Generate(resourceType)
+		}
+		if body == nil {
+			body = map[string]any{"resourceType": resourceType, "id": id}
+		}
+	}
+
+	// Momus-specific contract refinement on top of the fhir-generator base
+	// body. These passes handle behaviors that are test-generation-specific and
+	// out of fhir-generator's library scope: pattern+binding merge, slice-child
+	// pattern/example application, required-slice containers, and FHIRPath
+	// constraint synthesis. They only add/refine elements fhir-generator left
+	// generic, so the base body is preserved.
+	if primaryProfileURL != "" && reg != nil {
+		enrichBodyFromProfile(body, primaryProfileURL, reg)
+		if exhaustive {
+			enrichBodyExhaustive(body, primaryProfileURL, reg, newRNG(id))
+		}
+		// fhir-generator emits a Pattern value verbatim; momus additionally merges
+		// the element's bound coding into a patterned CodeableConcept/Coding so the
+		// display/text reflect the value set. Apply this to already-present nested
+		// values (which populateRequiredChildren skips).
+		refineNestedPatternBindings(body, primaryProfileURL, reg)
+	}
+
+	// Momus-specific post-processing that needs dataset context (not part of
+	// fhir-generator's library scope).
+	// fhir-generator emits references as "Type/<fakeID>"; momus references
+	// provisioned setup resources by their deterministic setup id, so rewrite
+	// every reference to the setup id of its target type.
+	normalizeReferencesToSetup(body)
+	attachDependencyReferences(body, resourceType, primaryProfileURL, deps, reg)
+	// Ensure repeatable elements (Max > 1) are arrays, including reference
+	// elements attached as dependencies (e.g. Provenance.target).
+	if primaryProfileURL != "" && reg != nil {
+		if resolved, err := reg.ResolveProfile(primaryProfileURL); err == nil && resolved != nil && resolved.Root != nil {
+			normalizeRepeatableChildren(body, resolved.Root)
+		}
 	}
 	// A resource must never reference itself: HAPI validates referential
 	// integrity at create time, so a self-reference (e.g. Location.partOf ->
@@ -299,22 +409,9 @@ func SynthesizeBody(resourceType, id string, profileURLs []string, primaryProfil
 	// the resource exists. Strip any Reference object or array element whose
 	// reference equals the resource's own logical reference.
 	stripSelfReferences(body, resourceType+"/"+id)
-	normalizeGeneratedPayload(body)
-	normalizeResourceSpecificPayload(body)
-	// Final pass: resolve any coding display that is missing or echoes its code
-	// to the canonical CodeSystem display. This covers every generation path
-	// (datatype profiles, slice patterns, bound codings), not just slice
-	// constraints, so e.g. an identifier type coding with code "XX" gets the
-	// canonical "Organization identifier" display instead of echoing "XX".
-	normalisePayloadCodingDisplays(body, reg)
 	// Remove the internal fixed-coding markers so they never reach the payload
 	// that is serialised and uploaded.
 	stripFixedCodingMarkers(body)
-	// Drop any Extension that ended up with neither a value[x] nor a nested
-	// sub-extension: such an extension violates ext-1 and is rejected by HAPI.
-	// Simple extensions are populated with a value earlier; complex ones whose
-	// optional sub-slices were not generated are simply omitted.
-	stripEmptyExtensions(body)
 	return body
 }
 
@@ -408,9 +505,86 @@ func enrichBodyExhaustive(body map[string]any, profileURL string, reg *registry.
 	normalizeRepeatableChildren(body, resolved.Root)
 }
 
-// populateOptionalChildren adds optional (Min == 0) children that are not
-// already present, randomised by rng, and recurses into existing complex
-// values so their optional children are populated too.
+// refineNestedPatternBindings walks the resolved profile tree and, for every
+// element that carries both a Pattern and a value set binding, merges the bound
+// coding into the already-generated value. fhir-generator emits a Pattern value
+// verbatim; momus additionally fills the binding's display/text so a patterned
+// CodeableConcept/Coding reflects the value set. It recurses into nested complex
+// values that populateRequiredChildren skips because they are already present.
+func refineNestedPatternBindings(body map[string]any, profileURL string, reg *registry.Registry) {
+	if body == nil || reg == nil || strings.TrimSpace(profileURL) == "" {
+		return
+	}
+	resolved, err := reg.ResolveProfile(profileURL)
+	if err != nil || resolved == nil || resolved.Root == nil {
+		return
+	}
+	refineNodePatternBindings(body, resolved.Root, reg)
+}
+
+// refineNodePatternBindings applies pattern+binding merge to a node's children
+// that are already present in value, recursing into nested complex values.
+func refineNodePatternBindings(value map[string]any, node *model.ElementNode, reg *registry.Registry) {
+	if value == nil || node == nil {
+		return
+	}
+	for _, name := range sortedNodeChildren(node) {
+		child := node.Children[name]
+		if child == nil || child.Definition == nil {
+			continue
+		}
+		prop := propertyNameForNode(child)
+		raw, exists := value[prop]
+		if !exists {
+			continue
+		}
+		// Merge pattern+binding for a present element that carries both.
+		if child.Definition.Pattern != nil && child.Definition.Binding != nil {
+			if binding, ok := resolveBoundCoding(child.Definition, reg); ok {
+				if merged, ok := mergePatternWithBinding(child.Definition.Pattern, primaryTypeCode(child.Definition), binding, true); ok {
+					value[prop] = merged
+					raw = merged
+				}
+			}
+		}
+		// Recurse into nested complex values.
+		switch typed := raw.(type) {
+		case map[string]any:
+			refineNodePatternBindings(typed, child, reg)
+		case []any:
+			for _, item := range typed {
+				if itemMap, ok := item.(map[string]any); ok {
+					refineNodePatternBindings(itemMap, child, reg)
+				}
+			}
+		}
+		// A complex child with type profiles (e.g. Location.identifier typed as
+		// Identifier with an identifier-profile) carries its pattern+binding
+		// elements inside the resolved type profile, not under the child itself.
+		// Resolve the first type profile and refine the present value against it.
+		if len(child.Definition.Types) > 0 {
+			for _, et := range child.Definition.Types {
+				for _, profileURL := range et.Profiles {
+					resolved, err := reg.ResolveProfile(normalizeCanonical(profileURL))
+					if err != nil || resolved == nil || resolved.Root == nil {
+						continue
+					}
+					switch typed := raw.(type) {
+					case map[string]any:
+						refineNodePatternBindings(typed, resolved.Root, reg)
+					case []any:
+						for _, item := range typed {
+							if itemMap, ok := item.(map[string]any); ok {
+								refineNodePatternBindings(itemMap, resolved.Root, reg)
+							}
+						}
+					}
+					break
+				}
+			}
+		}
+	}
+}
 func populateOptionalChildren(value map[string]any, node *model.ElementNode, reg *registry.Registry, rng *rand.Rand) {
 	if value == nil || node == nil {
 		return
@@ -471,19 +645,6 @@ func recurseExhaustive(raw any, node *model.ElementNode, reg *registry.Registry,
 			}
 		}
 	}
-}
-
-func baseBodyTemplate(resourceType, id string, profileURLs, deps []string, reg *registry.Registry, primaryProfileURL string) map[string]any {
-	body := map[string]any{
-		"resourceType": resourceType,
-		"id":           id,
-	}
-	if meta := coregen.BuildMeta(profileURLs); meta != nil {
-		body["meta"] = meta
-	}
-
-	attachDependencyReferences(body, resourceType, primaryProfileURL, deps, reg)
-	return body
 }
 
 func enrichBodyFromProfile(body map[string]any, profileURL string, reg *registry.Registry) {

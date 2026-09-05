@@ -73,6 +73,13 @@ func New() *Registry {
 	}
 }
 
+// Fhir returns the underlying fhir-registry instance. It is the bridge for
+// libraries that operate directly on fhir.Registry (e.g. fhir-generator),
+// allowing them to share the same index that backs this wrapper.
+func (r *Registry) Fhir() *fhir.Registry {
+	return r.fhir
+}
+
 // AddStructureDefinition indexes a StructureDefinition by canonical URL and,
 // when it has a Type, by that resource type.
 func (r *Registry) AddStructureDefinition(sd *model.StructureDefinition) {

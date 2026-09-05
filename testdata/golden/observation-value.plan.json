@@ -471,12 +471,10 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status",
+                  "status": "active",
                   "valueQuantity": {
-                    "code": "mmol",
-                    "system": "http://unitsofmeasure.org",
-                    "unit": "mmol",
-                    "value": 123.45
+                    "unit": "mg",
+                    "value": 87.62
                   }
                 }
               },
@@ -544,16 +542,13 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status",
+                  "status": "active",
                   "subject": {
-                    "reference": "Organization/momus-setup-organization",
-                    "type": "Organization"
+                    "reference": "Resource/momus-setup-resource"
                   },
                   "valueQuantity": {
-                    "code": "mmol",
-                    "system": "http://unitsofmeasure.org",
-                    "unit": "mmol",
-                    "value": 123.45
+                    "unit": "mg",
+                    "value": 1.32
                   }
                 }
               },
@@ -621,7 +616,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -654,7 +649,7 @@
                     "op": "add",
                     "path": "/",
                     "value": {
-                      "status": "status"
+                      "status": "active"
                     }
                   }
                 ]
@@ -696,10 +691,9 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status",
+                  "status": "active",
                   "subject": {
-                    "reference": "Organization/momus-setup-organization",
-                    "type": "Organization"
+                    "reference": "Resource/momus-setup-resource"
                   },
                   "valueQuantity": {
                     "code": "mmol",
@@ -773,12 +767,10 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status",
+                  "status": "active",
                   "valueQuantity": {
-                    "code": "mmol",
-                    "system": "http://unitsofmeasure.org",
-                    "unit": "mmol",
-                    "value": 123.45
+                    "unit": "mg",
+                    "value": 1.47
                   }
                 }
               },
@@ -815,12 +807,10 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status",
+                  "status": "active",
                   "valueQuantity": {
-                    "code": "mmol",
-                    "system": "http://unitsofmeasure.org",
-                    "unit": "mmol",
-                    "value": 123.45
+                    "unit": "mg",
+                    "value": 1.47
                   }
                 }
               },
@@ -861,10 +851,9 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status",
+                  "status": "active",
                   "subject": {
-                    "reference": "Organization/momus-setup-organization",
-                    "type": "Organization"
+                    "reference": "Resource/momus-setup-resource"
                   },
                   "valueQuantity": {
                     "code": "mmol",
@@ -934,10 +923,9 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status",
+                  "status": "active",
                   "subject": {
-                    "reference": "Organization/momus-setup-organization",
-                    "type": "Organization"
+                    "reference": "Resource/momus-setup-resource"
                   },
                   "valueQuantity": {
                     "code": "mmol",
@@ -1207,7 +1195,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1326,7 +1314,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {

@@ -36,6 +36,31 @@ func TestRegistryIndexesResourcesByType(t *testing.T) {
 	}
 }
 
+// TestRegistryFhirAccessor verifies that Fhir() exposes the underlying
+// fhir-registry instance, so libraries that operate directly on fhir.Registry
+// (e.g. fhir-generator) can be wired to the same index.
+func TestRegistryFhirAccessor(t *testing.T) {
+	r := New()
+	inner := r.Fhir()
+	if inner == nil {
+		t.Fatal("Fhir() returned nil")
+	}
+	// The exposed registry must be the same one backing the wrapper: adding a
+	// definition through the wrapper must be visible through the inner registry.
+	r.AddStructureDefinition(&model.StructureDefinition{
+		URL:  "http://example.org/StructureDefinition/patient",
+		Name: "Patient",
+		Type: "Patient",
+		Kind: "resource",
+		Elements: []model.ElementDefinition{
+			{ID: "Patient", Path: "Patient", Min: 1, Max: 1},
+		},
+	})
+	if _, ok := inner.Definition("http://example.org/StructureDefinition/patient"); !ok {
+		t.Error("definition added via wrapper not visible through Fhir()")
+	}
+}
+
 func TestRegistryOverlayCapabilityScope(t *testing.T) {
 	r := New()
 	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/hcpd-patient", Type: "Patient"})
