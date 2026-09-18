@@ -265,7 +265,7 @@ func applySearchMatch(
 	case "Reference":
 		// A reference search matches the reference string ("Type/id") held in the
 		// Reference object's `reference` member.
-		setReferenceLeaf(body, elementPath, value)
+		setReferenceLeaf(body, elementPath, value, repeatable)
 		return true
 	case "Quantity":
 		// A quantity search matches value/system/code of a Quantity element. Set
@@ -966,12 +966,19 @@ func setPathLeafBoolean(body map[string]any, path, value string) {
 }
 
 // setReferenceLeaf places the search value ("Type/id") on a Reference object's
-// `reference` member.
-func setReferenceLeaf(body map[string]any, path, value string) {
+// `reference` member. When the target element is repeatable (Max unbounded, e.g.
+// HealthcareService.endpoint 0..*), the reference is stored as a single-element
+// array so the seed keeps the correct shape.
+func setReferenceLeaf(body map[string]any, path, value string, repeatable bool) {
 	cur, field := containerForPath(body, path)
+	ref := map[string]any{"reference": value}
 	raw, ok := cur[field]
 	if !ok {
-		cur[field] = map[string]any{"reference": value}
+		if repeatable {
+			cur[field] = []any{ref}
+		} else {
+			cur[field] = ref
+		}
 		return
 	}
 	if arr, ok := raw.([]any); ok {
@@ -980,17 +987,21 @@ func setReferenceLeaf(body map[string]any, path, value string) {
 				m["reference"] = value
 				return
 			}
-			arr[0] = map[string]any{"reference": value}
+			arr[0] = ref
 			return
 		}
-		cur[field] = []any{map[string]any{"reference": value}}
+		cur[field] = []any{ref}
 		return
 	}
 	if m, ok := raw.(map[string]any); ok {
 		m["reference"] = value
 		return
 	}
-	cur[field] = map[string]any{"reference": value}
+	if repeatable {
+		cur[field] = []any{ref}
+	} else {
+		cur[field] = ref
+	}
 }
 
 // setQuantityLeaf places a search value on a Quantity element so a quantity

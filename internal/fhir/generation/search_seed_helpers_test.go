@@ -50,7 +50,7 @@ func TestSetPathLeafBoolean(t *testing.T) {
 
 func TestSetReferenceLeaf(t *testing.T) {
 	body := map[string]any{}
-	setReferenceLeaf(body, "subject", "Patient/p1")
+	setReferenceLeaf(body, "subject", "Patient/p1", false)
 	if body["subject"] == nil {
 		t.Fatal("subject not set")
 	}
@@ -60,7 +60,7 @@ func TestSetReferenceLeaf(t *testing.T) {
 
 	// Existing array member is updated.
 	body = map[string]any{"careManager": []any{map[string]any{"reference": "old"}}}
-	setReferenceLeaf(body, "careManager", "Practitioner/p2")
+	setReferenceLeaf(body, "careManager", "Practitioner/p2", false)
 	first := body["careManager"].([]any)[0].(map[string]any)
 	if first["reference"] != "Practitioner/p2" {
 		t.Fatalf("array reference = %v", first["reference"])
@@ -68,28 +68,28 @@ func TestSetReferenceLeaf(t *testing.T) {
 
 	// Non-map array element is replaced.
 	body = map[string]any{"careManager": []any{"str"}}
-	setReferenceLeaf(body, "careManager", "Practitioner/p3")
+	setReferenceLeaf(body, "careManager", "Practitioner/p3", false)
 	if m := body["careManager"].([]any)[0].(map[string]any); m["reference"] != "Practitioner/p3" {
 		t.Fatalf("replaced array reference = %v", m["reference"])
 	}
 
 	// Empty array.
 	body = map[string]any{"careManager": []any{}}
-	setReferenceLeaf(body, "careManager", "Patient/p4")
+	setReferenceLeaf(body, "careManager", "Patient/p4", false)
 	if m := body["careManager"].([]any)[0].(map[string]any); m["reference"] != "Patient/p4" {
 		t.Fatalf("empty array reference = %v", m["reference"])
 	}
 
 	// Existing map is updated.
 	body = map[string]any{"subject": map[string]any{"reference": "old"}}
-	setReferenceLeaf(body, "subject", "Patient/p5")
+	setReferenceLeaf(body, "subject", "Patient/p5", false)
 	if m := body["subject"].(map[string]any); m["reference"] != "Patient/p5" {
 		t.Fatalf("map reference = %v", m["reference"])
 	}
 
 	// Non-map scalar is replaced.
 	body = map[string]any{"subject": "scalar"}
-	setReferenceLeaf(body, "subject", "Patient/p6")
+	setReferenceLeaf(body, "subject", "Patient/p6", false)
 	if m := body["subject"].(map[string]any); m["reference"] != "Patient/p6" {
 		t.Fatalf("scalar replacement reference = %v", m["reference"])
 	}
