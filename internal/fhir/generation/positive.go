@@ -1405,9 +1405,6 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 		populateRequiredChildren(identifier, node, reg)
 		applySimpleConstraints(identifier, node, reg)
 		identifier = enrichGeneratedValueWithTypeProfiles(identifier, node.Definition, reg).(map[string]any)
-		if _, ok := identifier["system"]; !ok {
-			identifier["system"] = "http://example.org/fhir/identifier/" + coregen.SanitizeFHIRID(node.Path)
-		}
 		if _, ok := identifier["value"]; !ok {
 			identifier["value"] = coregen.SanitizeFHIRID(node.Path) + "-001"
 		}
@@ -1424,21 +1421,16 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 			}
 			return enrichGeneratedValueWithTypeProfiles(concept, node.Definition, reg), true
 		}
-		leaf := sampleCodeValue(node.Path)
-		concept := map[string]any{
-			"text": sampleStringValue(node.Path),
-			"coding": []any{map[string]any{
-				"system":  "http://example.org/fhir/code-system",
-				"code":    leaf,
-				"display": sampleStringValue(node.Path),
-			}},
-		}
+		// No bound coding or example resolves: fail closed rather than emitting a
+		// placeholder code system (example.org/acme) the validator rejects. A
+		// text-only CodeableConcept is conformant — no coding required.
+		concept := map[string]any{"text": sampleStringValue(node.Path)}
 		return enrichGeneratedValueWithTypeProfiles(concept, node.Definition, reg), true
 	case "Coding":
 		if hasBoundCoding {
 			return enrichGeneratedValueWithTypeProfiles(codingToMap(boundCoding), node.Definition, reg), true
 		}
-		return enrichGeneratedValueWithTypeProfiles(map[string]any{"system": "http://example.org/fhir/system", "code": sampleCodeValue(node.Path)}, node.Definition, reg), true
+		return enrichGeneratedValueWithTypeProfiles(map[string]any{"code": sampleCodeValue(node.Path)}, node.Definition, reg), true
 	case "HumanName":
 		value := map[string]any{"family": "Momus", "given": []any{"Test"}}
 		populateRequiredChildren(value, node, reg)
@@ -1495,7 +1487,7 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 	case "Attachment":
 		value := map[string]any{
 			"contentType": "text/plain",
-			"url":         "http://example.org/attachment.txt",
+			"data":        "aGVsbG8=",
 		}
 		populateRequiredChildren(value, node, reg)
 		applySimpleConstraints(value, node, reg)
@@ -2804,14 +2796,9 @@ func normalizeHealthcareServiceTypeCoding(body map[string]any) {
 		if _, hasCoding := cc["coding"]; hasCoding {
 			continue
 		}
-		code := "service-type"
-		if text, _ := cc["text"].(string); strings.TrimSpace(text) != "" {
-			code = sampleCodeValue(text)
-		}
-		cc["coding"] = []any{map[string]any{
-			"system": "http://example.org/fhir/service-type",
-			"code":   code,
-		}}
+		// Fail closed: never synthesize an example.org code system. A type with
+		// only text is conformant for an extensible/preferred binding.
+		_ = cc
 	}
 }
 

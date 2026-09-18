@@ -613,7 +613,7 @@ func TestNormalizeGeneratedAddressDropsAUStateForPortableValidation(t *testing.T
 	}
 }
 
-func TestNormalizeHealthcareServiceTypeCodingAddsCoding(t *testing.T) {
+func TestNormalizeHealthcareServiceTypeCodingLeavesTextOnly(t *testing.T) {
 	body := map[string]any{
 		"resourceType": "HealthcareService",
 		"type":         []any{map[string]any{"text": "Type"}},
@@ -623,9 +623,10 @@ func TestNormalizeHealthcareServiceTypeCodingAddsCoding(t *testing.T) {
 
 	types := body["type"].([]any)
 	first := types[0].(map[string]any)
-	coding, ok := first["coding"].([]any)
-	if !ok || len(coding) == 0 {
-		t.Fatalf("expected type coding to be populated, got %+v", first)
+	// Fail closed: no placeholder code system is synthesized, so the concept
+	// stays text-only rather than carrying an example.org coding.
+	if coding, ok := first["coding"].([]any); ok && len(coding) > 0 {
+		t.Fatalf("expected no synthesized coding, got %+v", coding)
 	}
 }
 

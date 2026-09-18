@@ -377,18 +377,14 @@ func TestEnsurePractitionerRoleAddsWhenMissing(t *testing.T) {
 }
 
 func TestNormalizeHealthcareServiceTypeCodingAndReferenceResourceType(t *testing.T) {
-	// A CodeableConcept with a text but no coding gets a coding.
-	cc := map[string]any{"text": "Service Type"}
-	arr := []any{cc}
-	body := map[string]any{"type": arr}
-	_ = body
-	// normalizeHealthcareServiceTypeCoding iterates body["type"].
-	body = map[string]any{"type": []any{map[string]any{"text": "Service Type"}}}
+	// A CodeableConcept with a text but no coding stays text-only: the
+	// synthesizer fails closed rather than emitting an example.org code system.
+	body := map[string]any{"type": []any{map[string]any{"text": "Service Type"}}}
 	normalizeHealthcareServiceTypeCoding(body)
 	types := body["type"].([]any)
 	first := types[0].(map[string]any)
-	if first["coding"] == nil {
-		t.Fatalf("expected coding populated: %v", first)
+	if first["coding"] != nil {
+		t.Fatalf("expected no synthesized coding, got %v", first["coding"])
 	}
 	// A concept with an existing coding is left alone.
 	body = map[string]any{"type": []any{map[string]any{"coding": []any{map[string]any{"code": "x"}}}}}
