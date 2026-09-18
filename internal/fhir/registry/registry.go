@@ -288,6 +288,39 @@ func (r *Registry) CodeSystem(url string) (*model.CodeSystem, bool) {
 	return r.fhir.CodeSystem(url)
 }
 
+// FirstConcept returns the first meaningful coding in a ValueSet.
+func (r *Registry) FirstConcept(vs *model.ValueSet) (fhir.ResolvedCoding, bool) {
+	return r.fhir.FirstConcept(vs)
+}
+
+// ResolveBoundCoding resolves a real coding for a value set canonical URL.
+func (r *Registry) ResolveBoundCoding(valueSetURL string) (fhir.ResolvedCoding, bool) {
+	return r.fhir.ResolveBoundCoding(valueSetURL)
+}
+
+// CodingDisplay returns the canonical CodeSystem display for a code.
+func (r *Registry) CodingDisplay(system, code string) string {
+	return r.fhir.CodingDisplay(system, code)
+}
+
+// FirstExampleCoding returns a real coding found at an element path within the
+// package's example instance resources.
+func (r *Registry) FirstExampleCoding(resourceType, path, profileURL string) (fhir.ResolvedCoding, bool) {
+	return r.fhir.FirstExampleCoding(resourceType, path, profileURL)
+}
+
+// ExampleCodingForExtension returns a real coding from an extension's
+// valueCodeableConcept/valueCoding found in any example instance.
+func (r *Registry) ExampleCodingForExtension(extensionURL string) (fhir.ResolvedCoding, bool) {
+	return r.fhir.ExampleCodingForExtension(extensionURL)
+}
+
+// IsPlaceholderURL reports whether a URL is an example/placeholder domain that
+// must not be emitted into a conformant instance.
+func (r *Registry) IsPlaceholderURL(url string) bool {
+	return fhir.IsPlaceholderURL(url)
+}
+
 // CapabilityStatements returns every indexed CapabilityStatement.
 func (r *Registry) CapabilityStatements() []*model.CapabilityStatement {
 	return r.fhir.CapabilityStatements()
