@@ -616,6 +616,11 @@ func populateOptionalChildren(value map[string]any, node *model.ElementNode, reg
 			// the target server and must not be synthesised.
 			continue
 		}
+		// A choice element's alternate branch must not be synthesized when a
+		// sibling concrete member already exists (see populateRequiredChildren).
+		if choiceBase := choiceBaseName(propName); choiceBase != "" && hasChoiceSibling(value, choiceBase) {
+			continue
+		}
 		optional := child.Definition.Min <= 0 && !hasRequiredSlices(child) && !hasContractSignal(child)
 		if !optional {
 			if raw, ok := value[propName]; ok {
@@ -736,6 +741,14 @@ func populateRequiredChildren(body map[string]any, node *model.ElementNode, reg 
 			continue
 		}
 		propertyName := propertyNameForNode(child)
+		// A choice element serialises under one concrete member (e.g. occurred
+		// -> occurredDateTime). If a sibling concrete member of the same choice
+		// base already exists (e.g. the generator emitted occurredDateTime), never
+		// synthesise the alternate branch (occurredPeriod): a resource carrying
+		// both violates the profile's single-choice narrowing.
+		if choiceBase := choiceBaseName(propertyName); choiceBase != "" && hasChoiceSibling(body, choiceBase) {
+			continue
+		}
 		if child.Definition.Min <= 0 && !hasRequiredSlices(child) && !hasContractSignal(child) {
 			continue
 		}
@@ -807,6 +820,46 @@ func propertyNameForNode(node *model.ElementNode) string {
 		return prefix
 	}
 	return prefix + upperCamelTypeName(typeCode)
+}
+
+// choiceBaseName returns the "[x]" base name of a concrete choice member
+// (e.g. "occurred" for "occurredDateTime"), or "" when the name is not a
+// type-suffixed choice member. It lets callers detect that two concrete
+// members belong to the same choice element.
+func choiceBaseName(concrete string) string {
+	// A concrete choice member is "<base><UpperCamelType>" (e.g. occurred +
+	// DateTime). The base is the leading lower-case run, the suffix starts at
+	// the first upper-case rune. Require a non-empty suffix so plain members
+	// like "recorded" are not mistaken for choices.
+	for i := 1; i < len(concrete); i++ {
+		c := concrete[i]
+		if c >= 'A' && c <= 'Z' {
+			base := concrete[:i]
+			if base == "" || i == len(concrete)-1 {
+				return ""
+			}
+			return base
+		}
+	}
+	return ""
+}
+
+// hasChoiceSibling reports whether a value map already carries any concrete
+// member sharing the given choice base (e.g. "occurredDateTime" for base
+// "occurred"), so the alternate branch must not be synthesized.
+func hasChoiceSibling(value map[string]any, base string) bool {
+	if value == nil || base == "" {
+		return false
+	}
+	for key := range value {
+		if key == base || key == base+"[x]" {
+			continue
+		}
+		if strings.HasPrefix(key, base) {
+			return true
+		}
+	}
+	return false
 }
 
 func choiceTypeFromSlices(slices map[string]*model.SliceNode) string {

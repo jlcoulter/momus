@@ -555,6 +555,7 @@ func setDateLeaf(
 	isChoice := ok && def != nil && strings.HasSuffix(def.Path, "[x]")
 
 	hasPeriod := false
+	isInstant := false
 	if def != nil {
 		for _, et := range def.Types {
 			if et.Code == "dateTime" || et.Code == "date" || et.Code == "instant" ||
@@ -565,6 +566,7 @@ func setDateLeaf(
 				if isChoice {
 					leaf = leaf + upperCamelTypeName(et.Code)
 				}
+				isInstant = et.Code == "instant"
 				hasPeriod = false
 				break
 			}
@@ -579,6 +581,11 @@ func setDateLeaf(
 		segments = append(segments, "start")
 		leaf = "start"
 	}
+	// An `instant` element requires a full timestamp; a bare date search value
+	// is padded so the stored value is a valid instant.
+	if isInstant {
+		value = normalizeInstantValue(value)
+	}
 	segments[len(segments)-1] = leaf
 	setPathLeaf(body, strings.Join(segments, "."), value)
 	// Writing one choice branch must not leave a sibling choice member behind
@@ -586,6 +593,20 @@ func setDateLeaf(
 	if isChoice && !hasPeriod {
 		clearSiblingChoiceMembers(body, segments, base, leaf)
 	}
+}
+
+// normalizeInstantValue pads a bare date search value into a valid FHIR
+// instant (RFC3339 with a time and timezone), leaving an already-qualified
+// value untouched.
+func normalizeInstantValue(value string) string {
+	if value == "" {
+		return value
+	}
+	if strings.Contains(value, "T") || strings.Contains(value, " ") {
+		return value
+	}
+	// A bare date like "2024-01-01" becomes "2024-01-01T00:00:00Z".
+	return value + "T00:00:00Z"
 }
 
 // clearSiblingChoiceMembers removes the other concrete members of a choice
