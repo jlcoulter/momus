@@ -185,16 +185,39 @@ func TestSetSpecialLeaf(t *testing.T) {
 	if pos["longitude"] != 151.2093 {
 		t.Fatalf("longitude = %v, want 151.2093", pos["longitude"])
 	}
+	if _, hasRootLat := body["latitude"]; hasRootLat {
+		t.Fatal("latitude leaked to resource root")
+	}
+	if _, hasRootLng := body["longitude"]; hasRootLng {
+		t.Fatal("longitude leaked to resource root")
+	}
+}
+
+func TestSetSpecialLeafElementPath(t *testing.T) {
+	// The near-search expression resolves to the element itself (Location.position),
+	// so lat/long must land on position, never on the resource root.
+	body := map[string]any{"position": map[string]any{}}
+	setSpecialLeaf(body, "position", "-33.8688|151.2093")
+	pos := body["position"].(map[string]any)
+	if pos["latitude"] != -33.8688 {
+		t.Fatalf("latitude = %v, want -33.8688", pos["latitude"])
+	}
+	if pos["longitude"] != 151.2093 {
+		t.Fatalf("longitude = %v, want 151.2093", pos["longitude"])
+	}
+	if _, hasRootLat := body["latitude"]; hasRootLat {
+		t.Fatal("latitude leaked to resource root")
+	}
 }
 
 func TestSetDateLeaf(t *testing.T) {
 	reg := buildBuilderRegistry()
 	body := map[string]any{}
-	// birthDate is typed date, so setDateLeaf places the value on the concrete
-	// choice member (birthDateDate).
+	// birthDate is a plain date element (path is not a choice "[x]"), so the
+	// value lands on the bare "birthDate" key, not a type-suffixed member.
 	setDateLeaf(body, "birthDate", "2024-01-01", reg, "Patient")
-	if body["birthDateDate"] != "2024-01-01" {
-		t.Fatalf("birthDateDate = %v, want 2024-01-01", body["birthDateDate"])
+	if body["birthDate"] != "2024-01-01" {
+		t.Fatalf("birthDate = %v, want 2024-01-01", body["birthDate"])
 	}
 
 	// An unresolvable path simply sets the leaf directly.

@@ -606,6 +606,10 @@ func populateOptionalChildren(value map[string]any, node *model.ElementNode, reg
 			}
 			continue
 		}
+		// An element with Max 0 can never be present; never synthesize it.
+		if child.Definition.Max == 0 {
+			continue
+		}
 		propName := propertyNameForNode(child)
 		if propName == "" || propName == "id" {
 			// Skip the resource/element id: ids are assigned by the generator or
@@ -725,6 +729,10 @@ func populateRequiredChildren(body map[string]any, node *model.ElementNode, reg 
 	for _, name := range childNames {
 		child := node.Children[name]
 		if child == nil || child.Definition == nil {
+			continue
+		}
+		// An element with Max 0 can never be present; never synthesize it.
+		if child.Definition.Max == 0 {
 			continue
 		}
 		propertyName := propertyNameForNode(child)

@@ -539,7 +539,9 @@ func setPathLeaf(body map[string]any, path string, value string) {
 // setDateLeaf places a date search value on a date element. A Period element
 // (e.g. PractitionerRole.period) receives its date on the `start` member; a
 // choice element (e.g. Provenance.occurred[x]) receives it on the concrete
-// dateTime choice member so the value lands on the serialised member.
+// dateTime choice member so the value lands on the serialised member. A plain
+// date element that is not a choice (e.g. Provenance.recorded, typed instant)
+// keeps its bare key and is never type-suffixed.
 func setDateLeaf(
 	body map[string]any,
 	path, value string,
@@ -548,14 +550,21 @@ func setDateLeaf(
 ) {
 	segments := strings.Split(path, ".")
 	leaf := segments[len(segments)-1]
-	// If the leaf is a choice element (e.g. "occurred" typed Period|dateTime),
-	// prefer the dateTime choice member so the primitive date value is valid.
-	if def, ok := searchElementDefinition(resourceType, path, reg); ok && def != nil {
-		hasPeriod := false
+	base := strings.TrimSuffix(leaf, "[x]")
+	def, ok := searchElementDefinition(resourceType, path, reg)
+	isChoice := ok && def != nil && strings.HasSuffix(def.Path, "[x]")
+
+	hasPeriod := false
+	if def != nil {
 		for _, et := range def.Types {
 			if et.Code == "dateTime" || et.Code == "date" || et.Code == "instant" ||
 				et.Code == "time" {
-				leaf = leaf + upperCamelTypeName(et.Code)
+				// A choice element (path "[x]") serialises under the type-suffixed
+				// member (e.g. occurred -> occurredDateTime); a plain date/instant
+				// element (e.g. recorded) keeps its bare key.
+				if isChoice {
+					leaf = leaf + upperCamelTypeName(et.Code)
+				}
 				hasPeriod = false
 				break
 			}
@@ -563,15 +572,38 @@ func setDateLeaf(
 				hasPeriod = true
 			}
 		}
-		// A pure Period element (no dateTime choice) is a map; set its `start`
-		// so the seed carries the date value rather than a bare scalar.
-		if hasPeriod {
-			segments = append(segments, "start")
-			leaf = "start"
-		}
+	}
+	// A Period element (choice or pure) is a map; set its `start` member so the
+	// seed carries the date value rather than a bare scalar.
+	if hasPeriod {
+		segments = append(segments, "start")
+		leaf = "start"
 	}
 	segments[len(segments)-1] = leaf
 	setPathLeaf(body, strings.Join(segments, "."), value)
+	// Writing one choice branch must not leave a sibling choice member behind
+	// (e.g. a generated occurredPeriod alongside the seed's occurredDateTime).
+	if isChoice && !hasPeriod {
+		clearSiblingChoiceMembers(body, segments, base, leaf)
+	}
+}
+
+// clearSiblingChoiceMembers removes the other concrete members of a choice
+// element (keys sharing the base prefix) from the container that holds the
+// just-written member, so only the seeded branch remains.
+func clearSiblingChoiceMembers(body map[string]any, segments []string, base, written string) {
+	cur := body
+	for i := 0; i < len(segments)-1; i++ {
+		cur = descendContainer(cur, segments[i])
+	}
+	for key := range cur {
+		if key == written {
+			continue
+		}
+		if strings.HasPrefix(key, base) {
+			delete(cur, key)
+		}
+	}
 }
 
 // descendContainer moves cur into the child named by key, handling a map
@@ -984,18 +1016,22 @@ func setSpecialLeaf(body map[string]any, path, value string) {
 	if len(parts) > 0 {
 		lat = strings.TrimSpace(parts[0])
 	}
-	// The expression is "position.longitude | position.latitude" (or vice
-	// versa). We resolve the parent container of the longitude path and set both
-	// latitude and longitude on it.
-	cur, _ := containerForPath(body, path)
+	// The expression is the element itself (e.g. Location.position), and the
+	// coordinates go on that element's map — not on its parent. Descend to the
+	// element container and set latitude/longitude on it.
+	cur, leaf := containerForPath(body, path)
+	target := cur
+	if el, ok := cur[leaf].(map[string]any); ok {
+		target = el
+	}
 	if lng != "" {
 		if f, err := strconv.ParseFloat(lng, 64); err == nil {
-			cur["longitude"] = f
+			target["longitude"] = f
 		}
 	}
 	if lat != "" {
 		if f, err := strconv.ParseFloat(lat, 64); err == nil {
-			cur["latitude"] = f
+			target["latitude"] = f
 		}
 	}
 }
