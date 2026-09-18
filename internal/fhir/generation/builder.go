@@ -3,6 +3,7 @@ package generation
 import (
 	"strings"
 
+	fhirgen "github.com/jlcoulter/fhir-generator"
 	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
@@ -16,6 +17,72 @@ import (
 type fhirBuilder struct {
 	reg        *registry.Registry
 	exhaustive bool
+}
+
+// validIdentifierSearchValue returns a conformant identifier value for an
+// accept token search on an Identifier element whose type profile fixes a
+// format-checked AU system (e.g. au-hpii fixes HPI-I, which must be a Luhn-valid
+// 16-digit "800361" number). Writing a placeholder like "momus-search" onto such
+// an identifier makes the provisioned seed fail its invariants. Returns "" when
+// the system is not a known format-checked AU identifier, so the caller can fall
+// back to a generic value.
+func validIdentifierSearchValue(def *model.ElementDefinition, reg *registry.Registry) string {
+	if def == nil || reg == nil {
+		return ""
+	}
+	for _, et := range def.Types {
+		for _, profileURL := range et.Profiles {
+			if system := fixedIdentifierSystem(profileURL, reg); system != "" {
+				switch system {
+				case "http://ns.electronichealth.net.au/id/hi/hpii/1.0":
+					return fhirgen.FakeHPII()
+				case "http://ns.electronichealth.net.au/id/hi/hpio/1.0":
+					return fhirgen.FakeHPIO()
+				case "http://hl7.org.au/id/abn":
+					return fhirgen.FakeABN()
+				case "http://hl7.org.au/id/acn":
+					return fhirgen.FakeACN()
+				case "http://hl7.org.au/id/ahpra-registration-number":
+					return fhirgen.FakeAHPRA()
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// fixedIdentifierSystem returns the fixed "system" URI of an Identifier type
+// profile (e.g. au-hpii fixes system to the HPI-I namespace), or "" when the
+// profile cannot be resolved or does not fix a system.
+func fixedIdentifierSystem(profileURL string, reg *registry.Registry) string {
+	if profileURL == "" || reg == nil {
+		return ""
+	}
+	resolved, err := reg.ResolveProfile(normalizeCanonical(profileURL))
+	if err != nil || resolved == nil || resolved.Root == nil {
+		return ""
+	}
+	var find func(node *model.ElementNode) string
+	find = func(node *model.ElementNode) string {
+		if node == nil {
+			return ""
+		}
+		for _, child := range node.Children {
+			if child == nil || child.Definition == nil {
+				continue
+			}
+			if strings.HasSuffix(child.Definition.Path, ".system") {
+				if u, ok := child.Definition.Fixed.(string); ok && u != "" {
+					return u
+				}
+			}
+			if s := find(child); s != "" {
+				return s
+			}
+		}
+		return ""
+	}
+	return find(resolved.Root)
 }
 
 // NewBuilder returns a PayloadBuilder that synthesizes FHIR payloads and search
@@ -83,6 +150,14 @@ func (b *fhirBuilder) SearchAcceptValue(req coverage.CoverageRequirement, code s
 	case "code", "Coding", "CodeableConcept":
 		if bound, ok := resolveBoundCoding(def, b.reg); ok && bound.Code != "" {
 			return bound.Code
+		}
+		return "momus-search"
+	case "Identifier":
+		// An identifier token search matches the identifier's value. A format-
+		// checked AU identifier (e.g. HPI-I, ABN) must carry a valid value or the
+		// provisioned seed fails its invariants, so synthesise a conformant one.
+		if v := validIdentifierSearchValue(def, b.reg); v != "" {
+			return v
 		}
 		return "momus-search"
 	case "boolean":
