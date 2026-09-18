@@ -800,6 +800,9 @@ func setSearchCodeValue(
 	}
 	switch v := raw.(type) {
 	case map[string]any:
+		// A CodeableConcept (even a text-only one) must carry a `coding` array,
+		// never a bare `code` member. If the map lacks a coding array but is a
+		// CodeableConcept (has a "text"), wrap the search coding in one.
 		if _, hasCode := v["code"]; hasCode {
 			resetCodingForSearchValue(v, nil, value, system, reg)
 			return
@@ -810,6 +813,10 @@ func setSearchCodeValue(
 				return
 			}
 			coding[0] = codingForSearchValue(value, system, reg)
+			return
+		}
+		if _, isTextOnly := v["text"]; isTextOnly {
+			v["coding"] = []any{codingForSearchValue(value, system, reg)}
 			return
 		}
 		resetCodingForSearchValue(v, nil, value, system, reg)
@@ -833,6 +840,10 @@ func setSearchCodeValue(
 				return
 			}
 			coding[0] = codingForSearchValue(value, system, reg)
+			return
+		}
+		if _, isTextOnly := first["text"]; isTextOnly {
+			first["coding"] = []any{codingForSearchValue(value, system, reg)}
 			return
 		}
 		resetCodingForSearchValue(first, nil, value, system, reg)
