@@ -20,6 +20,11 @@
 
 set -euo pipefail
 
+# Locate the repo root from this script's own path so the harness works
+# regardless of where the sibling repos live or how it is invoked.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 PKG="${1:-$HOME/Downloads/hcpd.tgz}"
 MOMUS_BIN="${2:-}"
 VALIDATOR_JAR="${3:-$HOME/Downloads/validator_cli.jar}"
@@ -27,7 +32,7 @@ FHIR_VERSION=4.0.1
 
 # Directory where the package cache (deps + IG) and extracted resources live.
 # (Use a repo-local path so logs are readable; set WORK to override.)
-WORK="${WORK:-/home/jc/git/momus/.validate-work}"
+WORK="${WORK:-$REPO_ROOT/.validate-work}"
 PACKAGE_CACHE="$WORK/packages"
 RESOURCES_DIR="$WORK/resources"
 VALIDATE_LOG="$WORK/all-validate.log"
@@ -39,8 +44,8 @@ ensure_packages() {
   echo "[1/5] ensuring validator package cache..."
   local cache="${FHIR_PACKAGE_CACHE:-$HOME/.fhir/packages}"
   local deps_dir="${MOMUS_DEPS_DIR:-}"
-  if [ -z "$deps_dir" ] && [ -d "$HOME/git/fhir-registry" ]; then
-    deps_dir="$HOME/git/fhir-registry"
+  if [ -z "$deps_dir" ] && [ -d "$HOME/Downloads/.momus/packages" ]; then
+    deps_dir="$HOME/Downloads/.momus/packages"
   fi
   if [ -n "$deps_dir" ] && [ -d "$deps_dir" ]; then
     # momus already resolved the deps; install any missing ones into the cache.
@@ -73,15 +78,15 @@ generate() {
   echo "[2/5] generating test plan..."
   if [ -z "$MOMUS_BIN" ]; then
     MOMUS_BIN="$WORK/momus"
-    (cd "$(git rev-parse --show-toplevel 2>/dev/null || echo .)" && go build -o "$MOMUS_BIN" ./cmd/momus)
+    (cd "$REPO_ROOT" && go build -o "$MOMUS_BIN" ./cmd/momus)
   fi
   mkdir -p "$WORK/deps"
   # momus must resolve the IG's dependencies to build the full registry. The
   # deps live in a local directory (e.g. git/fhir-registry/*.tgz); if none is
   # given, fall back to the validator package cache, then to the download dir.
   local deps="${MOMUS_DEPS_DIR:-}"
-  if [ -z "$deps" ] && [ -d "$HOME/git/fhir-registry" ]; then
-    deps="$HOME/git/fhir-registry"
+  if [ -z "$deps" ] && [ -d "$HOME/Downloads/.momus/packages" ]; then
+    deps="$HOME/Downloads/.momus/packages"
   fi
   local args=("--download-dir" "$WORK/deps" "--output" "$WORK/plan.json")
   if [ -n "$deps" ]; then
