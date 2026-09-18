@@ -211,7 +211,7 @@ func applySearchMatch(
 	}
 	switch typeCode {
 	case "string", "markdown", "uri", "url", "id", "oid", "uuid", "base64Binary":
-		setPathLeaf(body, elementPath, value)
+		setPathLeafRepeatable(body, elementPath, value, repeatable)
 		return true
 	case "code", "Coding", "CodeableConcept":
 		// A token search matches the code: for a primitive code it is the scalar,
@@ -536,6 +536,26 @@ func setPathLeaf(body map[string]any, path string, value string) {
 		cur = descendContainer(cur, segs[i])
 	}
 	cur[segs[len(segs)-1]] = value
+}
+
+// setPathLeafRepeatable sets a primitive string value at a dotted element path,
+// wrapping it in an array when the target element is repeatable (Max unbounded),
+// so e.g. name.given (0..*) is set to ["momus-search"] rather than a scalar.
+func setPathLeafRepeatable(body map[string]any, path, value string, repeatable bool) {
+	if !repeatable {
+		setPathLeaf(body, path, value)
+		return
+	}
+	segs := strings.Split(path, ".")
+	if len(segs) == 0 {
+		return
+	}
+	cur := body
+	for i := 0; i < len(segs)-1; i++ {
+		cur = descendContainer(cur, segs[i])
+	}
+	leaf := segs[len(segs)-1]
+	cur[leaf] = []any{value}
 }
 
 // setDateLeaf places a date search value on a date element. A Period element
