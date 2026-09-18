@@ -85,7 +85,7 @@ func newBodyGenerator(resourceType, id string, profileURLs []string, reg *regist
 		fhirgen.WithMetaProfiles(profileURLs),
 		fhirgen.WithBindingResolver(&registryBindingResolver{reg: reg}),
 		fhirgen.WithCodingDisplayResolver(&registryDisplayResolver{reg: reg}),
-		fhirgen.WithNormalizer(func(body map[string]any) {
+		fhirgen.WithNormaliser(func(body map[string]any) {
 			normalizeGeneratedPayload(body)
 			normalizeResourceSpecificPayload(body)
 			normalisePayloadCodingDisplays(body, reg)

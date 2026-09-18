@@ -4,8 +4,8 @@ go 1.27.0
 
 require (
 	github.com/go-chi/chi/v5 v5.3.2
-	github.com/jlcoulter/fhir-generator v0.1.0
-	github.com/jlcoulter/fhir-registry v0.1.0
+	github.com/jlcoulter/fhir-generator v0.1.1
+	github.com/jlcoulter/fhir-registry v0.1.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 )
@@ -25,6 +25,7 @@ require (
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 )
+
 replace github.com/jlcoulter/fhir-generator => ../fhir-generator
 
 replace github.com/jlcoulter/fhir-registry => ../fhir-registry
