@@ -238,8 +238,10 @@ func applySearchMatch(
 		return true
 	case "ContactPoint":
 		// A token search on a ContactPoint matches its `value` (telecom number/
-		// address) and `system`. Force the value onto the first contact point.
-		setFieldLeafForce(body, elementPath, "value", value)
+		// address) and `system`. Force the value onto the first contact point,
+		// ensuring a system is present so the seed satisfies cpt-2 (a system is
+		// required whenever a value is provided).
+		setContactPointValue(body, elementPath, value)
 		return true
 	case "Address":
 		setAddressLeaf(body, elementPath, value)
@@ -889,6 +891,43 @@ func setFieldLeafForce(body map[string]any, path, leaf, value string) {
 	}
 	if m, ok := raw.(map[string]any); ok {
 		m[leaf] = value
+	}
+}
+
+// setContactPointValue writes a token search value onto the first ContactPoint
+// element, ensuring the contact point carries a `system` so it satisfies the
+// cpt-2 invariant ("a system is required if a value is provided"). A newly
+// created contact point defaults to system "phone"; an existing one is given a
+// system only when it lacks one.
+func setContactPointValue(body map[string]any, path, value string) {
+	cur, field := containerForPath(body, path)
+	raw, ok := cur[field]
+	if !ok {
+		cur[field] = []any{map[string]any{"system": "phone", "value": value}}
+		return
+	}
+	switch typed := raw.(type) {
+	case []any:
+		if len(typed) == 0 {
+			cur[field] = []any{map[string]any{"system": "phone", "value": value}}
+			return
+		}
+		first, ok := typed[0].(map[string]any)
+		if !ok {
+			typed[0] = map[string]any{"system": "phone", "value": value}
+			return
+		}
+		first["value"] = value
+		if _, hasSystem := first["system"]; !hasSystem {
+			first["system"] = "phone"
+		}
+	case map[string]any:
+		typed["value"] = value
+		if _, hasSystem := typed["system"]; !hasSystem {
+			typed["system"] = "phone"
+		}
+	default:
+		cur[field] = map[string]any{"system": "phone", "value": value}
 	}
 }
 
