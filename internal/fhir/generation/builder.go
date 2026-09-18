@@ -226,6 +226,60 @@ func searchElementDefinition(resourceType, elementPath string, reg *registry.Reg
 				return node.Definition, true
 			}
 		}
+		// A dotted path whose container is a complex datatype (e.g. the
+		// address-use search targets Practitioner.address.use): the leaf's
+		// definition lives in the datatype's own StructureDefinition, not in the
+		// profile's element map. Walk the datatype to find it so the search value
+		// can honour the leaf's value-set binding.
+		if def, ok := resolveNestedElementDefinition(resolved, resourceType, elementPath, reg); ok {
+			return def, true
+		}
+	}
+	return nil, false
+}
+
+// resolveNestedElementDefinition walks a dotted element path whose container is
+// a complex datatype, returning the leaf's ElementDefinition from the datatype's
+// own StructureDefinition. It mirrors resolveNestedLeafType but returns the full
+// definition (with its binding) rather than only the type code.
+func resolveNestedElementDefinition(
+	resolved *model.ResolvedProfile,
+	resourceType, elementPath string,
+	reg *registry.Registry,
+) (*model.ElementDefinition, bool) {
+	segments := strings.Split(elementPath, ".")
+	if len(segments) < 2 {
+		return nil, false
+	}
+	container, ok := resolved.Elements[resourceType+"."+segments[0]]
+	if !ok || container == nil || container.Definition == nil ||
+		len(container.Definition.Types) == 0 {
+		return nil, false
+	}
+	containerType := container.Definition.Types[0].Code
+	sub, err := reg.ResolveProfile("http://hl7.org/fhir/StructureDefinition/" + containerType)
+	if err != nil || sub == nil {
+		return nil, false
+	}
+	cur := sub
+	for i := 1; i < len(segments); i++ {
+		key := containerType + "." + strings.Join(segments[1:i+1], ".")
+		node, ok := cur.Elements[key]
+		if !ok || node == nil || node.Definition == nil {
+			return nil, false
+		}
+		if i == len(segments)-1 {
+			return node.Definition, true
+		}
+		if len(node.Definition.Types) > 0 {
+			containerType = node.Definition.Types[0].Code
+			cur, err = reg.ResolveProfile(
+				"http://hl7.org/fhir/StructureDefinition/" + containerType,
+			)
+			if err != nil || cur == nil {
+				return nil, false
+			}
+		}
 	}
 	return nil, false
 }
