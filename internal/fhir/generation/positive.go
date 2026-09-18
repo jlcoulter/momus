@@ -2249,7 +2249,7 @@ func codingToMap(coding generatedCoding) map[string]any {
 // display/text normalisation passes skip these codings; it is stripped before a
 // payload is serialised (see stripFixedCodingMarkers). The key is prefixed so it
 // cannot collide with a real FHIR element name.
-const fixedCodingKey = "__momus_fixed_coding"
+const fixedCodingKey = fhirgen.FixedCodingKey
 
 // markFixedCoding marks v (a Coding map, a CodeableConcept map, or an array of
 // either) as derived from a Fixed/Pattern value and strips display/text from it,
