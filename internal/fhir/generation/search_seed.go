@@ -233,8 +233,11 @@ func applySearchMatch(
 	case "Identifier":
 		// A token search on an Identifier matches its `value` member (and a
 		// type/system search may match those). Force the value onto the first
-		// identifier so the search seed carries the query value.
+		// identifier so the search seed carries the query value, then ensure the
+		// value is format-valid for the identifier's own system (e.g. an ABN
+		// identifier must carry an 11-digit mod-89 value, not a 16-digit HPI).
 		setFieldLeafForce(body, elementPath, "value", value)
+		normalizeFirstIdentifierValue(body, elementPath)
 		return true
 	case "ContactPoint":
 		// A token search on a ContactPoint matches its `value` (telecom number/
@@ -883,6 +886,27 @@ func resetCodingForSearchValue(
 	if owner != nil {
 		delete(owner, "text")
 	}
+}
+
+// normalizeFirstIdentifierValue rewrites the value of the first identifier at
+// path to a format-valid value for its own system, so a token search seed that
+// forces a value onto a format-checked AU identifier (e.g. ABN, HPI-I) does not
+// ship a value that fails the identifier's invariants.
+func normalizeFirstIdentifierValue(body map[string]any, path string) {
+	cur, field := containerForPath(body, path)
+	raw, ok := cur[field]
+	if !ok {
+		return
+	}
+	ids, ok := raw.([]any)
+	if !ok || len(ids) == 0 {
+		return
+	}
+	id, ok := ids[0].(map[string]any)
+	if !ok {
+		return
+	}
+	normalizeGeneratedIdentifier(id)
 }
 
 // setFieldLeafForce sets a string leaf property on the first element of a field,
