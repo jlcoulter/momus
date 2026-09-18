@@ -148,6 +148,12 @@ func (b *fhirBuilder) SearchAcceptValue(req coverage.CoverageRequirement, code s
 	}
 	switch primaryTypeCode(def) {
 	case "code", "Coding", "CodeableConcept":
+		// An address-use/contact-point-use search must not place 'home' on a
+		// seed: Organization telecom/address forbid it (org-2/org-3), and 'work'
+		// is in the value set and universally valid.
+		if strings.HasSuffix(def.Path, ".use") {
+			return "work"
+		}
 		if bound, ok := resolveBoundCoding(def, b.reg); ok && bound.Code != "" {
 			return bound.Code
 		}
