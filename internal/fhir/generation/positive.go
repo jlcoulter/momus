@@ -7,10 +7,10 @@ import (
 	"math/rand"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 
+	fhirgen "github.com/jlcoulter/fhir-generator"
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
@@ -955,6 +955,7 @@ func generateSliceValue(slice *model.SliceNode, reg *registry.Registry) (any, bo
 			applySimpleConstraints(valueMap, synthetic, reg)
 			applySliceConstractions(valueMap, slice, reg)
 			ensureSimpleExtensionValue(valueMap, slice, reg)
+			normalizeGeneratedIdentifier(valueMap)
 		}
 		return value, true
 	}
@@ -1368,7 +1369,14 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 	if len(node.Definition.Examples) > 0 {
 		// Examples are the profile's shared element definition data; deep-clone
 		// so the returned value never aliases it (the caller mutates the result).
-		return cloneValue(node.Definition.Examples[0]), true
+		// Skip any example that carries a placeholder URL (example.org, acme.com
+		// etc.) — the AU PD IG's own examples on identifier.system and coded
+		// systems use such placeholder domains, and copying them verbatim makes a
+		// resource fail validation ("Example URLs are not allowed in this
+		// context"). Defer to the bound coding or a synthesized value instead.
+		if ex, ok := firstNonPlaceholderExample(node.Definition.Examples); ok {
+			return cloneValue(ex), true
+		}
 	}
 	switch typeCode {
 	case "string", "markdown", "id":
@@ -2291,6 +2299,43 @@ func stripFixedCodingMarkers(v any) {
 	}
 }
 
+// firstNonPlaceholderExample returns the first element example whose serialised
+// value contains no placeholder URL (example.org, acme.com, test OIDs, etc.).
+// Profiles such as the AU PD IG carry example values on identifier.system and
+// coded systems that use placeholder domains; copying them verbatim makes a
+// resource fail validation. When every example is a placeholder, ok is false so
+// generation defers to the bound coding or a synthesised value.
+func firstNonPlaceholderExample(examples []any) (any, bool) {
+	for _, ex := range examples {
+		if !exampleHasPlaceholderURL(ex) {
+			return ex, true
+		}
+	}
+	return nil, false
+}
+
+// exampleHasPlaceholderURL reports whether a serialised example value contains a
+// placeholder URL anywhere (system, url, or reference).
+func exampleHasPlaceholderURL(v any) bool {
+	switch t := v.(type) {
+	case map[string]any:
+		for _, val := range t {
+			if exampleHasPlaceholderURL(val) {
+				return true
+			}
+		}
+	case []any:
+		for _, el := range t {
+			if exampleHasPlaceholderURL(el) {
+				return true
+			}
+		}
+	case string:
+		return fhir.IsPlaceholderURL(t)
+	}
+	return false
+}
+
 // normaliseCodingDisplay resolves a coding's display to the canonical CodeSystem
 // display so a pattern/fixed that only carries system+code does not echo the
 // code as the display (e.g. "XX" instead of "Organization identifier"). It
@@ -2539,24 +2584,17 @@ func normalizeGeneratedIdentifier(identifier map[string]any) {
 	}
 	system, _ := identifier["system"].(string)
 	system = strings.TrimSpace(system)
-	if system == "http://ns.electronichealth.net.au/id/hi/hpio/1.0" {
-		identifier["value"] = generateHPIONumber()
-		return
-	}
-	if system == "http://ns.electronichealth.net.au/id/hi/hpii/1.0" {
-		identifier["value"] = generateHPIINumber()
-		return
-	}
-	if system == "http://hl7.org.au/id/abn" {
-		identifier["value"] = generateABN()
-		return
-	}
-	if system == "http://hl7.org.au/id/acn" {
-		identifier["value"] = generateACN()
-		return
-	}
-	if system == "http://hl7.org.au/id/ahpra-registration-number" {
-		identifier["value"] = generateAHPRA()
+	switch system {
+	case "http://ns.electronichealth.net.au/id/hi/hpio/1.0":
+		identifier["value"] = fhirgen.FakeHPIO()
+	case "http://ns.electronichealth.net.au/id/hi/hpii/1.0":
+		identifier["value"] = fhirgen.FakeHPII()
+	case "http://hl7.org.au/id/abn":
+		identifier["value"] = fhirgen.FakeABN()
+	case "http://hl7.org.au/id/acn":
+		identifier["value"] = fhirgen.FakeACN()
+	case "http://hl7.org.au/id/ahpra-registration-number":
+		identifier["value"] = fhirgen.FakeAHPRA()
 	}
 }
 
@@ -2577,11 +2615,6 @@ func normalizeGeneratedPayload(value any) {
 		if _, hasLine := typed["line"]; hasLine {
 			if _, hasCity := typed["city"]; hasCity {
 				normalizeGeneratedAddress(typed)
-			}
-		}
-		if _, hasSystem := typed["system"]; hasSystem {
-			if _, hasValue := typed["value"]; hasValue {
-				normalizeGeneratedIdentifier(typed)
 			}
 		}
 		for _, child := range typed {
@@ -2641,111 +2674,6 @@ func normalizeCodeableConceptMap(value map[string]any) {
 	if _, hasText := value["text"]; !hasText && firstLabel != "" {
 		value["text"] = firstLabel
 	}
-}
-
-func generateHPIONumber() string {
-	base := "800362123456789"
-	return appendLuhnCheckDigit(base)
-}
-
-func generateHPIINumber() string {
-	base := "800361123456789"
-	return appendLuhnCheckDigit(base)
-}
-
-func appendLuhnCheckDigit(number string) string {
-	if len(number) == 0 {
-		return ""
-	}
-	sum := 0
-	parity := (len(number) + 1) % 2
-	for idx, r := range number {
-		digit := int(r - '0')
-		if digit < 0 || digit > 9 {
-			return number
-		}
-		if idx%2 == parity {
-			digit *= 2
-			if digit > 9 {
-				digit -= 9
-			}
-		}
-		sum += digit
-	}
-	checkDigit := (10 - (sum % 10)) % 10
-	return number + strconv.Itoa(checkDigit)
-}
-
-// generateABN returns a valid 11-digit Australian Business Number. ABNs satisfy
-// a mod-89 check digit: subtract 1 from the first digit, weight the 11 digits by
-// [10,1,3,5,7,9,11,13,15,17,19], and the sum must be divisible by 89.
-func generateABN() string {
-	seed := uint64(coregen.StableChecksum("abn"))
-	weights := []int{10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
-	for i := uint64(0); i < 100000; i++ {
-		n := 1000000000 + (seed+i)%9000000000 // 10 digits, first digit 1-9
-		prefix := fmt.Sprintf("%010d", n)
-		if full, ok := appendMod89Check(prefix, weights, true); ok {
-			return full
-		}
-	}
-	return "51824753556"
-}
-
-// generateAHPRA returns a syntactically valid Ahpra registration number: three
-// uppercase letters followed by ten digits (per the au-ahpraregistrationnumber
-// inv-ahpra-0 invariant).
-func generateAHPRA() string {
-	digits := coregen.StableChecksum("ahpra") % 10000000000
-	return "MED" + fmt.Sprintf("%010d", digits)
-}
-
-// generateACN returns a valid 9-digit Australian Company Number (mod-89 check
-// digit, weights [10,1,3,5,7,9,11,13,15]).
-func generateACN() string {
-	seed := uint64(coregen.StableChecksum("acn"))
-	weights := []int{10, 1, 3, 5, 7, 9, 11, 13, 15}
-	for i := uint64(0); i < 100000; i++ {
-		n := 10000000 + (seed+i)%90000000 // 8 digits, first digit 1-9
-		prefix := fmt.Sprintf("%08d", n)
-		if full, ok := appendMod89Check(prefix, weights, false); ok {
-			return full
-		}
-	}
-	return "0050043679"
-}
-
-// appendMod89Check appends a check digit (0-9) to prefix so the full number
-// satisfies the ABN/ACN mod-89 weighting scheme. weights covers every digit
-// (the prefix digits plus the appended check digit). When subtractFirst is true
-// (ABN), 1 is subtracted from the first digit before weighting. It returns
-// (full, true) when a valid check digit exists, otherwise ("", false).
-func appendMod89Check(prefix string, weights []int, subtractFirst bool) (string, bool) {
-	for c := 0; c <= 9; c++ {
-		full := prefix + strconv.Itoa(c)
-		if mod89Valid(full, weights, subtractFirst) {
-			return full, true
-		}
-	}
-	return "", false
-}
-
-func mod89Valid(number string, weights []int, subtractFirst bool) bool {
-	if len(number) != len(weights) {
-		return false
-	}
-	sum := 0
-	for i := 0; i < len(number); i++ {
-		d := int(number[i] - '0')
-		if d < 0 || d > 9 {
-			return false
-		}
-		if i == 0 && subtractFirst {
-			d -= 1
-		}
-		sum += d * weights[i]
-	}
-	return sum%89 == 0
 }
 
 func normalizeResourceSpecificPayload(body map[string]any) {
@@ -3012,7 +2940,7 @@ func identifierMatchesHealthcareServiceKnownType(identifier map[string]any) bool
 func healthcareServiceKnownIdentifier() map[string]any {
 	return map[string]any{
 		"system": "http://ns.electronichealth.net.au/id/hi/hpio/1.0",
-		"value":  generateHPIONumber(),
+		"value":  fhirgen.FakeHPIO(),
 		"use":    "usual",
 		"type": map[string]any{
 			"coding": []any{map[string]any{

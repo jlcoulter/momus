@@ -581,24 +581,6 @@ func TestSynthesizeBodyFixedCodingCarriesOnlySystemAndCode(t *testing.T) {
 	}
 }
 
-// TestGenerateAHPRAProducesValidRegistrationNumber verifies the Ahpra registration
-// number satisfies the au-ahpraregistrationnumber inv-ahpra-0 invariant: three
-// uppercase letters followed by ten digits.
-func TestGenerateAHPRAProducesValidRegistrationNumber(t *testing.T) {
-	v := generateAHPRA()
-	if len(v) != 13 {
-		t.Fatalf("generateAHPRA()=%q length %d, want 13", v, len(v))
-	}
-	for i, r := range v {
-		switch {
-		case i < 3 && (r < 'A' || r > 'Z'):
-			t.Fatalf("generateAHPRA()=%q: char %d must be uppercase letter", v, i)
-		case i >= 3 && (r < '0' || r > '9'):
-			t.Fatalf("generateAHPRA()=%q: char %d must be digit", v, i)
-		}
-	}
-}
-
 // TestNormalizeGeneratedIdentifierFixesAhpraValue verifies that an identifier with
 // the Ahpra registration-number system gets a valid value via normalisation.
 func TestNormalizeGeneratedIdentifierFixesAhpraValue(t *testing.T) {

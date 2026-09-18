@@ -28,6 +28,14 @@ func (r *registryBindingResolver) ResolveBinding(elem *fhir.ElementDefinition, t
 	if coding, ok := resolveBoundCoding(elem, r.reg); ok {
 		return fhirgen.ResolvedCoding{System: coding.System, Code: coding.Code, Display: coding.Display}, true
 	}
+	// A CodeableConcept's binding often lives on its "coding" child rather than
+	// on the concept itself (common for nested extension value[x].coding). Defer
+	// to that child's binding before falling back to examples.
+	if child, ok := elementCodingChild(elem); ok {
+		if coding, ok := resolveBoundCoding(child, r.reg); ok {
+			return fhirgen.ResolvedCoding{System: coding.System, Code: coding.Code, Display: coding.Display}, true
+		}
+	}
 	// Example-based fallback: resolve a real coding at the element's path from
 	// the package's example instances. The element path (e.g. "Patient.gender")
 	// and the tree's root resource type drive the lookup.
@@ -35,6 +43,20 @@ func (r *registryBindingResolver) ResolveBinding(elem *fhir.ElementDefinition, t
 		return fhirgen.ResolvedCoding{System: coding.System, Code: coding.Code, Display: coding.Display}, true
 	}
 	return fhirgen.ResolvedCoding{}, false
+}
+
+// elementCodingChild returns the "coding" child element of a CodeableConcept
+// element, when present. Coded concepts bind on the coding child.
+func elementCodingChild(elem *fhir.ElementDefinition) (*fhir.ElementDefinition, bool) {
+	if elem == nil || elem.Children == nil {
+		return nil, false
+	}
+	for _, child := range elem.Children {
+		if child != nil && child.Path != "" && (child.Path == elem.Path+".coding" || child.ID == elem.ID+".coding") {
+			return child, true
+		}
+	}
+	return nil, false
 }
 
 // resolveBoundCodingFromExamplePath resolves a real coding at an element's path

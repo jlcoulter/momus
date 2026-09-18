@@ -304,23 +304,6 @@ func TestGeneratedProvenanceHasNoSubjectField(t *testing.T) {
 	}
 }
 
-// (satisfying the AU mod-89 check digit), so identifiers conform to the
-// au-australianbusinessnumber/au-australiancompanynumber profiles and their
-// slices resolve on the server.
-func TestGenerateValidABNAndACN(t *testing.T) {
-	abnWeights := []int{10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
-	acnWeights := []int{10, 1, 3, 5, 7, 9, 11, 13, 15}
-	abn := generateABN()
-	if len(abn) != 11 || !mod89Valid(abn, abnWeights, true) {
-		t.Fatalf("generateABN()=%q is not a valid ABN", abn)
-	}
-	acn := generateACN()
-	if len(acn) != 9 || !mod89Valid(acn, acnWeights, false) {
-		t.Fatalf("generateACN()=%q is not a valid ACN", acn)
-	}
-}
-
-// TestGenerateFromCoveragePlanExhaustiveAddsAndVariesOptionals verifies that
 func TestGenerateFromCoveragePlanExhaustiveAddsAndVariesOptionals(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
