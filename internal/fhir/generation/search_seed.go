@@ -130,12 +130,13 @@ func buildSearchSeedInstances(
 		if !matched {
 			return nil
 		}
-		// Re-resolve coding displays: overwriting a search value resets the coding
-		// (dropping its display), but a profile may require a display on the very
-		// element the search writes (e.g. HealthcareService.type.coding.display).
-		// Normalising after the match restores the canonical display so the seed
-		// still validates.
-		normalisePayloadCodingDisplays(body, options.Registry)
+		// Display resolution for search-written codings happens inline when the
+		// coding is placed (see codingForSearchValue/resetCodingForSearchValue),
+		// so no whole-body re-normalisation is needed here. Running a whole-body
+		// display pass over the payload after SynthesizeBody has already stripped
+		// the fixed-coding markers would re-add a display to codings derived from
+		// a Fixed/Pattern value, which a conformant server rejects ("not allowed
+		// in the applicable fixed value").
 		out = append(out, &model.ResourceInstance{
 			LocalID:      localID,
 			ResourceType: req.ResourceType,
@@ -222,7 +223,7 @@ func applySearchMatch(
 		// so a required binding is satisfied rather than shipping a system-less
 		// coding the server rejects.
 		system := boundCodingSystem(resourceType, elementPath, reg)
-		setSearchCodeValue(body, elementPath, value, typeCode, repeatable, system)
+		setSearchCodeValue(body, elementPath, value, typeCode, repeatable, system, reg)
 		return true
 	case "HumanName":
 		// A string search on HumanName matches the text/family tokens; ensure the
@@ -674,6 +675,7 @@ func setSearchCodeValue(
 	typeCode string,
 	repeatable bool,
 	system string,
+	reg *registry.Registry,
 ) {
 	cur, field := containerForPath(body, path)
 	if typeCode == "code" {
@@ -704,14 +706,14 @@ func setSearchCodeValue(
 	if !ok {
 		switch typeCode {
 		case "CodeableConcept":
-			single := map[string]any{"coding": []any{codingForSearchValue(value, system)}}
+			single := map[string]any{"coding": []any{codingForSearchValue(value, system, reg)}}
 			if repeatable {
 				cur[field] = []any{single}
 			} else {
 				cur[field] = single
 			}
 		case "Coding":
-			cur[field] = codingForSearchValue(value, system)
+			cur[field] = codingForSearchValue(value, system, reg)
 		default:
 			// A primitive code: set the scalar.
 			cur[field] = value
@@ -721,18 +723,18 @@ func setSearchCodeValue(
 	switch v := raw.(type) {
 	case map[string]any:
 		if _, hasCode := v["code"]; hasCode {
-			resetCodingForSearchValue(v, nil, value, system)
+			resetCodingForSearchValue(v, nil, value, system, reg)
 			return
 		}
 		if coding, ok := v["coding"].([]any); ok && len(coding) > 0 {
 			if first, ok := coding[0].(map[string]any); ok {
-				resetCodingForSearchValue(first, v, value, system)
+				resetCodingForSearchValue(first, v, value, system, reg)
 				return
 			}
-			coding[0] = codingForSearchValue(value, system)
+			coding[0] = codingForSearchValue(value, system, reg)
 			return
 		}
-		resetCodingForSearchValue(v, nil, value, system)
+		resetCodingForSearchValue(v, nil, value, system, reg)
 	case []any:
 		if len(v) == 0 {
 			cur[field] = []any{map[string]any{"code": value}}
@@ -744,18 +746,18 @@ func setSearchCodeValue(
 			return
 		}
 		if _, hasCode := first["code"]; hasCode {
-			resetCodingForSearchValue(first, nil, value, system)
+			resetCodingForSearchValue(first, nil, value, system, reg)
 			return
 		}
 		if coding, ok := first["coding"].([]any); ok && len(coding) > 0 {
 			if c, ok := coding[0].(map[string]any); ok {
-				resetCodingForSearchValue(c, first, value, system)
+				resetCodingForSearchValue(c, first, value, system, reg)
 				return
 			}
-			coding[0] = codingForSearchValue(value, system)
+			coding[0] = codingForSearchValue(value, system, reg)
 			return
 		}
-		resetCodingForSearchValue(first, nil, value, system)
+		resetCodingForSearchValue(first, nil, value, system, reg)
 	case string:
 		cur[field] = value
 	default:
@@ -764,11 +766,16 @@ func setSearchCodeValue(
 }
 
 // codingForSearchValue builds a coding map for a token search value, carrying the
-// resolved system (when known) so a required-bound element stays valid.
-func codingForSearchValue(value, system string) map[string]any {
+// resolved system (when known) so a required-bound element stays valid, and the
+// canonical CodeSystem display (when resolvable) so a profile that requires a
+// coding display (e.g. HealthcareService.type.coding.display) stays valid.
+func codingForSearchValue(value, system string, reg *registry.Registry) map[string]any {
 	coding := map[string]any{"code": value}
 	if system != "" {
 		coding["system"] = system
+		if display := resolveCodingDisplay(reg, system, value); display != "" {
+			coding["display"] = display
+		}
 	}
 	return coding
 }
@@ -786,6 +793,7 @@ func resetCodingForSearchValue(
 	owner map[string]any,
 	value string,
 	system string,
+	reg *registry.Registry,
 ) {
 	coding["code"] = value
 	delete(coding, "display")
@@ -793,6 +801,9 @@ func resetCodingForSearchValue(
 		coding["system"] = system
 	} else {
 		delete(coding, "system")
+	}
+	if display := resolveCodingDisplay(reg, system, value); display != "" {
+		coding["display"] = display
 	}
 	if owner != nil {
 		delete(owner, "text")
@@ -930,7 +941,7 @@ func applyCompositeMatch(
 		switch typeCode {
 		case "code", "Coding", "CodeableConcept":
 			system := boundCodingSystem(resourceType, path, reg)
-			setSearchCodeValue(body, path, part, typeCode, false, system)
+			setSearchCodeValue(body, path, part, typeCode, false, system, reg)
 		case "Quantity":
 			setQuantityLeaf(body, path, part)
 		case "boolean":

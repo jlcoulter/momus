@@ -966,7 +966,7 @@ func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
 			"display": "Sealed Immediate Message Delivery",
 		},
 	}
-	setSearchCodeValue(body, "connectionType", "dicom-wado-rs", "Coding", false, "")
+	setSearchCodeValue(body, "connectionType", "dicom-wado-rs", "Coding", false, "", nil)
 	ct, ok := body["connectionType"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected connectionType map, got %T", body["connectionType"])
@@ -990,7 +990,7 @@ func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
 			"text": "Old",
 		},
 	}
-	setSearchCodeValue(concept, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(concept, "type", "new", "CodeableConcept", false, "", nil)
 	typ, ok := concept["type"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected type map, got %T", concept["type"])
@@ -1024,20 +1024,20 @@ func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
 func TestSetSearchCodeValueCodingArrayNonMap(t *testing.T) {
 	// A map with a coding array whose first element is not a map.
 	body := map[string]any{"type": map[string]any{"coding": []any{"not-a-map"}}}
-	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "", nil)
 	codings := body["type"].(map[string]any)["coding"].([]any)
 	if codings[0].(map[string]any)["code"] != "new" {
 		t.Fatalf("non-map coding array = %v", codings[0])
 	}
 	// An array whose first element is not a map.
 	body = map[string]any{"type": []any{"not-a-map"}}
-	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "", nil)
 	if body["type"].([]any)[0].(map[string]any)["code"] != "new" {
 		t.Fatalf("non-map array element = %v", body["type"])
 	}
 	// An array of codings where the first coding is not a map.
 	body = map[string]any{"type": []any{map[string]any{"coding": []any{"not-a-map"}}}}
-	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "", nil)
 	inner := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
 	if inner[0].(map[string]any)["code"] != "new" {
 		t.Fatalf("array non-map coding = %v", inner[0])
@@ -1051,7 +1051,7 @@ func TestSetSearchCodeValueDefaultBranches(t *testing.T) {
 			map[string]any{"coding": []any{map[string]any{"code": "old", "system": "old"}}},
 		},
 	}
-	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "", nil)
 	codings := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
 	first := codings[0].(map[string]any)
 	if first["code"] != "new" {
@@ -1059,20 +1059,20 @@ func TestSetSearchCodeValueDefaultBranches(t *testing.T) {
 	}
 	// An existing map with a coding array whose first element is not a map.
 	body = map[string]any{"type": map[string]any{"coding": []any{"not-a-map"}}}
-	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "", nil)
 	codings = body["type"].(map[string]any)["coding"].([]any)
 	if codings[0].(map[string]any)["code"] != "new" {
 		t.Fatalf("non-map coding replaced = %v", codings[0])
 	}
 	// An existing string field.
 	body = map[string]any{"status": "old"}
-	setSearchCodeValue(body, "status", "new", "code", false, "")
+	setSearchCodeValue(body, "status", "new", "code", false, "", nil)
 	if body["status"] != "new" {
 		t.Fatalf("string field = %v", body["status"])
 	}
 	// A non-map, non-string default (e.g. a number) is replaced with a coding map.
 	body = map[string]any{"status": float64(5)}
-	setSearchCodeValue(body, "status", "new", "Coding", false, "")
+	setSearchCodeValue(body, "status", "new", "Coding", false, "", nil)
 	if body["status"].(map[string]any)["code"] != "new" {
 		t.Fatalf("default branch = %v", body["status"])
 	}
@@ -1124,6 +1124,7 @@ func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
 		"CodeableConcept",
 		true,
 		"http://digitalhealth.gov.au/fhir/hcpd/CodeSystem/service-provision-cs",
+		nil,
 	)
 	arr := body["serviceProvisionCode"].([]any)
 	cc := arr[0].(map[string]any)
@@ -1150,6 +1151,7 @@ func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
 		"Coding",
 		false,
 		"http://hl7.org/fhir/ValueSet/endpoint-connection-type",
+		nil,
 	)
 	ct := existing["connectionType"].(map[string]any)
 	if ct["code"] != "dicom-wado-rs" {
@@ -1166,43 +1168,43 @@ func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
 func TestSetSearchCodeValueBranches(t *testing.T) {
 	// Primitive repeatable code, absent.
 	body := map[string]any{}
-	setSearchCodeValue(body, "status", "active", "code", true, "")
+	setSearchCodeValue(body, "status", "active", "code", true, "", nil)
 	if got := body["status"].([]any)[0]; got != "active" {
 		t.Fatalf("repeatable code = %v", got)
 	}
 	// Primitive non-repeatable code.
 	body = map[string]any{}
-	setSearchCodeValue(body, "status", "active", "code", false, "")
+	setSearchCodeValue(body, "status", "active", "code", false, "", nil)
 	if body["status"] != "active" {
 		t.Fatalf("non-repeatable code = %v", body["status"])
 	}
 	// Existing primitive array (repeatable).
 	body = map[string]any{"status": []any{"old"}}
-	setSearchCodeValue(body, "status", "new", "code", true, "")
+	setSearchCodeValue(body, "status", "new", "code", true, "", nil)
 	if body["status"].([]any)[0] != "new" {
 		t.Fatalf("existing repeatable code = %v", body["status"])
 	}
 	// Coding type, absent -> coding map.
 	body = map[string]any{}
-	setSearchCodeValue(body, "connectionType", "dicom-wado-rs", "Coding", false, "http://sys")
+	setSearchCodeValue(body, "connectionType", "dicom-wado-rs", "Coding", false, "http://sys", nil)
 	if body["connectionType"].(map[string]any)["code"] != "dicom-wado-rs" {
 		t.Fatalf("Coding = %v", body["connectionType"])
 	}
 	// CodeableConcept repeatable absent.
 	body = map[string]any{}
-	setSearchCodeValue(body, "type", "x", "CodeableConcept", true, "")
+	setSearchCodeValue(body, "type", "x", "CodeableConcept", true, "", nil)
 	if body["type"].([]any)[0].(map[string]any)["coding"] == nil {
 		t.Fatalf("CodeableConcept repeatable = %v", body["type"])
 	}
 	// Empty array case.
 	body = map[string]any{"status": []any{}}
-	setSearchCodeValue(body, "status", "active", "code", true, "")
+	setSearchCodeValue(body, "status", "active", "code", true, "", nil)
 	if body["status"].([]any)[0] != "active" {
 		t.Fatalf("empty array code = %v", body["status"])
 	}
 	// Existing string field.
 	body = map[string]any{"status": "old"}
-	setSearchCodeValue(body, "status", "new", "code", false, "")
+	setSearchCodeValue(body, "status", "new", "code", false, "", nil)
 	if body["status"] != "new" {
 		t.Fatalf("existing string = %v", body["status"])
 	}
@@ -1210,14 +1212,14 @@ func TestSetSearchCodeValueBranches(t *testing.T) {
 	body = map[string]any{
 		"type": []any{map[string]any{"coding": []any{map[string]any{"code": "old"}}}},
 	}
-	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "", nil)
 	codings := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
 	if codings[0].(map[string]any)["code"] != "new" {
 		t.Fatalf("array of codings = %v", codings)
 	}
 	// Existing map with a "code" field directly (bare coding).
 	body = map[string]any{"type": map[string]any{"code": "old"}}
-	setSearchCodeValue(body, "type", "new", "Coding", false, "")
+	setSearchCodeValue(body, "type", "new", "Coding", false, "", nil)
 	if body["type"].(map[string]any)["code"] != "new" {
 		t.Fatalf("bare coding = %v", body["type"])
 	}
