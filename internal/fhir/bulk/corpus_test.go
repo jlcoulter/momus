@@ -592,6 +592,7 @@ func TestGenerateCorpusSkipsAbstractResourceTypes(t *testing.T) {
 		URL:      "http://hl7.org/fhir/StructureDefinition/Resource",
 		Type:     "Resource",
 		Kind:     "resource",
+		Abstract: true,
 		Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: fhir.MaxUnbounded}},
 	})
 	gen := NewCorpusGenerator(reg, true)
@@ -629,6 +630,7 @@ func TestGenerateCorpusDoesNotExpandAbstractResourceTarget(t *testing.T) {
 		URL:      "http://hl7.org/fhir/StructureDefinition/Resource",
 		Type:     "Resource",
 		Kind:     "resource",
+		Abstract: true,
 		Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: fhir.MaxUnbounded}},
 	})
 	gen := NewCorpusGenerator(reg, true)

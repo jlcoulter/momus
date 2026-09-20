@@ -213,7 +213,13 @@ func recordBodyReferences(ds *model.Dataset) {
 func walkBodyRefs(inst *model.ResourceInstance, node any, typeByLocalID map[string]string, ds *model.Dataset, seen map[string]struct{}, path string) {
 	switch v := node.(type) {
 	case map[string]any:
-		for key, val := range v {
+		keys := make([]string, 0, len(v))
+		for key := range v {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			val := v[key]
 			childPath := key
 			if path != "" {
 				childPath = path + "." + key
@@ -1016,7 +1022,7 @@ func generateSliceValue(slice *model.SliceNode, reg *registry.Registry) (any, bo
 			applySimpleConstraints(valueMap, synthetic, reg)
 			applySliceConstractions(valueMap, slice, reg)
 			ensureSimpleExtensionValue(valueMap, slice, reg)
-			normalizeGeneratedIdentifier(valueMap)
+			normalizeGeneratedIdentifierSeeded(valueMap, slice.Definition.Path)
 		}
 		return value, true
 	}
@@ -1472,7 +1478,7 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 		if _, ok := identifier["type"]; !ok {
 			identifier["type"] = map[string]any{"text": sampleStringValue(node.Path + ".type")}
 		}
-		normalizeGeneratedIdentifier(identifier)
+		normalizeGeneratedIdentifierSeeded(identifier, node.Path)
 		return identifier, true
 	case "CodeableConcept":
 		if hasBoundCoding {
@@ -2635,19 +2641,38 @@ func normalizeGeneratedIdentifier(identifier map[string]any) {
 	if identifier == nil {
 		return
 	}
+	// Derive a deterministic seed from the identifier's existing value when one
+	// is present, so the generated AU value is reproducible regardless of call
+	// order (the global Fake* constructors advance a shared RNG whose sequence
+	// depends on call order). The value set before this pass (e.g. a path-derived
+	// sample or a forced search value) is deterministic for the element.
+	seed, _ := identifier["value"].(string)
+	normalizeGeneratedIdentifierSeeded(identifier, seed)
+}
+
+// normalizeGeneratedIdentifierSeeded rewrites an AU identifier's value to a
+// format-valid, deterministic value for its system, derived from seed. The
+// unseeded helper is retained for callers without a resource id; seeded callers
+// pass the resource id so the identifier is reproducible regardless of generation
+// order (the global Fake* constructors advance a shared RNG whose sequence
+// depends on call order, which varies with map iteration).
+func normalizeGeneratedIdentifierSeeded(identifier map[string]any, seed string) {
+	if identifier == nil {
+		return
+	}
 	system, _ := identifier["system"].(string)
 	system = strings.TrimSpace(system)
 	switch system {
 	case "http://ns.electronichealth.net.au/id/hi/hpio/1.0":
-		identifier["value"] = fhirgen.FakeHPIO()
+		identifier["value"] = fhirgen.FakeHPIOFromSeed(seed)
 	case "http://ns.electronichealth.net.au/id/hi/hpii/1.0":
-		identifier["value"] = fhirgen.FakeHPII()
+		identifier["value"] = fhirgen.FakeHPIIFromSeed(seed)
 	case "http://hl7.org.au/id/abn":
-		identifier["value"] = fhirgen.FakeABN()
+		identifier["value"] = fhirgen.FakeABNFromSeed(seed)
 	case "http://hl7.org.au/id/acn":
-		identifier["value"] = fhirgen.FakeACN()
+		identifier["value"] = fhirgen.FakeACNFromSeed(seed)
 	case "http://hl7.org.au/id/ahpra-registration-number":
-		identifier["value"] = fhirgen.FakeAHPRA()
+		identifier["value"] = fhirgen.FakeAHPRAFromSeed(seed)
 	}
 }
 
@@ -2730,6 +2755,19 @@ func normalizeCodeableConceptMap(value map[string]any) {
 }
 
 func normalizeResourceSpecificPayload(body map[string]any) {
+	seed := ""
+	if body != nil {
+		if id, _ := body["id"].(string); id != "" {
+			seed = id
+		}
+	}
+	normalizeResourceSpecificPayloadSeeded(body, seed)
+}
+
+// normalizeResourceSpecificPayloadSeeded applies profile-specific payload
+// refinements. seed is the resource id, used to derive AU identifier values
+// deterministically so they are reproducible regardless of generation order.
+func normalizeResourceSpecificPayloadSeeded(body map[string]any, seed string) {
 	if body == nil {
 		return
 	}
@@ -2737,9 +2775,9 @@ func normalizeResourceSpecificPayload(body map[string]any) {
 	switch resourceType {
 	case "HealthcareService":
 		normalizeHealthcareServiceTypeCoding(body)
-		ensureHealthcareServiceKnownIdentifier(body)
+		ensureHealthcareServiceKnownIdentifier(body, seed)
 	case "PractitionerRole":
-		ensurePractitionerRoleKnownIdentifier(body)
+		ensurePractitionerRoleKnownIdentifier(body, seed)
 	case "Endpoint":
 		ensureEndpointManagingOrganization(body)
 		ensureEndpointKnownIdentifier(body)
@@ -2863,7 +2901,7 @@ func normalizeHealthcareServiceTypeCoding(body map[string]any) {
 	}
 }
 
-func ensurePractitionerRoleKnownIdentifier(body map[string]any) {
+func ensurePractitionerRoleKnownIdentifier(body map[string]any, seed string) {
 	raw, ok := body["identifier"]
 	if !ok {
 		body["identifier"] = []any{practitionerRoleKnownIdentifier()}
@@ -2880,6 +2918,7 @@ func ensurePractitionerRoleKnownIdentifier(body map[string]any) {
 			continue
 		}
 		if identifierMatchesPractitionerRoleKnownType(identifier) {
+			normalizeGeneratedIdentifierSeeded(identifier, seed)
 			return
 		}
 	}
@@ -2930,16 +2969,16 @@ func practitionerRoleKnownIdentifier() map[string]any {
 	}
 }
 
-func ensureHealthcareServiceKnownIdentifier(body map[string]any) {
+func ensureHealthcareServiceKnownIdentifier(body map[string]any, seed string) {
 	// AU PD requires at least one known HealthcareService identifier slice (au-pd-hs-01).
 	raw, ok := body["identifier"]
 	if !ok {
-		body["identifier"] = []any{healthcareServiceKnownIdentifier()}
+		body["identifier"] = []any{healthcareServiceKnownIdentifier(seed)}
 		return
 	}
 	identifiers, ok := raw.([]any)
 	if !ok {
-		body["identifier"] = []any{healthcareServiceKnownIdentifier()}
+		body["identifier"] = []any{healthcareServiceKnownIdentifier(seed)}
 		return
 	}
 	for _, rawIdentifier := range identifiers {
@@ -2949,12 +2988,12 @@ func ensureHealthcareServiceKnownIdentifier(body map[string]any) {
 		}
 		if identifierMatchesHealthcareServiceKnownType(identifier) {
 			if system, _ := identifier["system"].(string); strings.TrimSpace(system) == "http://ns.electronichealth.net.au/id/hi/hpio/1.0" {
-				normalizeGeneratedIdentifier(identifier)
+				normalizeGeneratedIdentifierSeeded(identifier, seed)
 			}
 			return
 		}
 	}
-	body["identifier"] = append(identifiers, healthcareServiceKnownIdentifier())
+	body["identifier"] = append(identifiers, healthcareServiceKnownIdentifier(seed))
 }
 
 func identifierMatchesHealthcareServiceKnownType(identifier map[string]any) bool {
@@ -2985,10 +3024,10 @@ func identifierMatchesHealthcareServiceKnownType(identifier map[string]any) bool
 	return false
 }
 
-func healthcareServiceKnownIdentifier() map[string]any {
+func healthcareServiceKnownIdentifier(seed string) map[string]any {
 	return map[string]any{
 		"system": "http://ns.electronichealth.net.au/id/hi/hpio/1.0",
-		"value":  fhirgen.FakeHPIO(),
+		"value":  fhirgen.FakeHPIOFromSeed(seed),
 		"use":    "usual",
 		"type": map[string]any{
 			"coding": []any{map[string]any{

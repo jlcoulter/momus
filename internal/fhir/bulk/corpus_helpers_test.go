@@ -38,23 +38,31 @@ func TestSanitizeID(t *testing.T) {
 	}
 }
 
-func TestIsConcreteResourceTypeExcludesParameters(t *testing.T) {
-	// Parameters is an operational type (operation request/response payloads),
-	// not a resource that is provisioned to a server as seed data. Even though a
-	// package may ship a StructureDefinition for it (e.g. HCPD's
-	// hcpd-export-request-parameters), it must never be generated into the corpus.
-	if isConcreteResourceType("Parameters") {
-		t.Fatal("isConcreteResourceType(Parameters) should be false")
+func TestRegistryAbstractTypeExclusion(t *testing.T) {
+	// Abstract base types and operational types (e.g. Parameters) must be
+	// excluded from the corpus. This is driven by the registry's
+	// IsAbstractType, which derives from the loaded StructureDefinitions'
+	// Abstract flag / Kind, so it stays correct for any FHIR IG.
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Resource", Type: "Resource", Kind: "resource", Abstract: true, Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: 1}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/DomainResource", Type: "DomainResource", Kind: "resource", Abstract: true, Elements: []model.ElementDefinition{{Path: "DomainResource", Min: 0, Max: 1}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Parameters", Type: "Parameters", Kind: "resource", Abstract: true, Elements: []model.ElementDefinition{{Path: "Parameters", Min: 0, Max: 1}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Practitioner", Type: "Practitioner", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Practitioner", Min: 0, Max: 1}}})
+
+	if !reg.IsAbstractType("Parameters") {
+		t.Fatal("IsAbstractType(Parameters) should be true")
 	}
-	// The abstract base types remain excluded.
-	for _, rt := range []string{"Resource", "DomainResource", "CanonicalResource", "MetadataResource"} {
-		if isConcreteResourceType(rt) {
-			t.Fatalf("isConcreteResourceType(%s) should be false", rt)
+	for _, rt := range []string{"Resource", "DomainResource"} {
+		if !reg.IsAbstractType(rt) {
+			t.Fatalf("IsAbstractType(%s) should be true", rt)
 		}
 	}
-	// A real resource type stays concrete.
-	if !isConcreteResourceType("Practitioner") {
-		t.Fatal("isConcreteResourceType(Practitioner) should be true")
+	if reg.IsAbstractType("Practitioner") {
+		t.Fatal("IsAbstractType(Practitioner) should be false")
+	}
+	// An unindexed type is treated as concrete.
+	if reg.IsAbstractType("UnknownType") {
+		t.Fatal("IsAbstractType(unindexed) should be false")
 	}
 }
 

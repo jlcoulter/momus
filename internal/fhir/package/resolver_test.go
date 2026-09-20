@@ -460,17 +460,32 @@ func TestFindDependencyArchiveEdgeCases(t *testing.T) {
 	if _, err := findDependencyArchive(map[string]string{}, Dependency{Name: "a.pkg", Version: "latest"}); err == nil {
 		t.Fatal("expected error when no matches")
 	}
-	// Ambiguous (multiple versions).
+	// Ambiguous (multiple versions): floating refs resolve to the newest local
+	// archive deterministically, matching the official tooling's "current"
+	// semantics rather than erroring.
 	index := map[string]string{
 		"a.pkg@1.0.0": "/a-1.0.tgz",
 		"a.pkg@2.0.0": "/a-2.0.tgz",
 	}
-	if _, err := findDependencyArchive(index, Dependency{Name: "a.pkg", Version: "latest"}); err == nil {
-		t.Fatal("expected error for ambiguous versions")
+	p, err := findDependencyArchive(index, Dependency{Name: "a.pkg", Version: "latest"})
+	if err != nil {
+		t.Fatalf("findDependencyArchive(multiple) returned error: %v", err)
+	}
+	if p != "/a-2.0.tgz" {
+		t.Fatalf("findDependencyArchive(multiple) = %q, want newest /a-2.0.tgz", p)
+	}
+	// A ci-build outranks an older release (2.1.0-ci-build > 2.0.1).
+	index = map[string]string{
+		"a.pkg@2.0.1":          "/a-2.0.1.tgz",
+		"a.pkg@2.1.0-ci-build": "/a-2.1.0-ci-build.tgz",
+	}
+	p, err = findDependencyArchive(index, Dependency{Name: "a.pkg", Version: "current"})
+	if err != nil || p != "/a-2.1.0-ci-build.tgz" {
+		t.Fatalf("findDependencyArchive(ci-build) = %q, %v; want /a-2.1.0-ci-build.tgz", p, err)
 	}
 	// Single match resolves.
 	index = map[string]string{"a.pkg@1.0.0": "/a-1.0.tgz"}
-	p, err := findDependencyArchive(index, Dependency{Name: "a.pkg", Version: "latest"})
+	p, err = findDependencyArchive(index, Dependency{Name: "a.pkg", Version: "latest"})
 	if err != nil || p != "/a-1.0.tgz" {
 		t.Fatalf("findDependencyArchive(single) = %q, %v", p, err)
 	}

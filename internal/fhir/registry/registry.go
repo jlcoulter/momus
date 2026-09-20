@@ -8,6 +8,7 @@ package registry
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -156,6 +157,15 @@ func (r *Registry) StructureDefinitions() []*model.StructureDefinition {
 		out = append(out, sd)
 	}
 	return out
+}
+
+// IsAbstractType reports whether typeName is an abstract FHIR type (kind
+// "resource" with the abstract flag, or a logical type) that cannot be
+// instantiated as provisioned seed data. It delegates to the underlying
+// fhir-registry index so it stays correct for any FHIR IG rather than relying
+// on a hardcoded type list.
+func (r *Registry) IsAbstractType(typeName string) bool {
+	return r.fhir.IsAbstractType(typeName)
 }
 
 // fromFhir converts an fhir-registry StructureDefinition back into the Momus
@@ -414,13 +424,62 @@ func (r *Registry) SearchParameters() []*model.SearchParameter {
 // ProfilesForResource returns all profiles (derived or base) for a resource
 // type.
 func (r *Registry) ProfilesForResource(resourceType string) []*model.StructureDefinition {
-	var out []*model.StructureDefinition
-	for _, sd := range r.momusSDs {
-		if sd.Type == resourceType {
-			out = append(out, sd)
+	// Iterate in fhir-registry's insertion order (base definitions loaded before
+	// their profiles), then apply a stable sort by derivation depth descending so
+	// more-constrained profiles come first while equal-depth ties keep insertion
+	// order (base before its profiles).
+	urls := make([]string, 0, len(r.momusSDs))
+	for _, sd := range r.fhir.DefinitionsForType(resourceType) {
+		if sd != nil && sd.URL != "" {
+			urls = append(urls, sd.URL)
 		}
 	}
+	out := make([]*model.StructureDefinition, 0, len(urls))
+	seen := make(map[string]bool, len(urls))
+	for _, u := range urls {
+		sd, ok := r.momusSDs[u]
+		if !ok || sd == nil || seen[u] {
+			continue
+		}
+		seen[u] = true
+		out = append(out, sd)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return derivationDepth(r, out[i]) > derivationDepth(r, out[j])
+	})
 	return out
+}
+
+// derivationDepth returns how many levels deep a definition sits in its base
+// chain (0 = a definition with no base, i.e. the base resource). Deeper
+// definitions are more constrained, so they are preferred during resolution.
+func derivationDepth(r *Registry, sd *model.StructureDefinition) int {
+	if sd == nil || sd.BaseDefinition == "" {
+		return 0
+	}
+	depth := 1
+	cur := stripVersion(sd.BaseDefinition)
+	seen := map[string]bool{sd.URL: true}
+	for cur != "" && !seen[cur] {
+		seen[cur] = true
+		base, ok := r.momusSDs[cur]
+		if !ok || base == nil || base.BaseDefinition == "" {
+			break
+		}
+		cur = stripVersion(base.BaseDefinition)
+		depth++
+	}
+	return depth
+}
+
+// stripVersion removes a trailing "|version" suffix from a canonical URL so a
+// profile's baseDefinition (which may carry a version like "...Provenance|4.0.1")
+// resolves to the versionless canonical in the registry index.
+func stripVersion(url string) string {
+	if i := strings.Index(url, "|"); i >= 0 {
+		return url[:i]
+	}
+	return url
 }
 
 // ResolveProfile resolves a StructureDefinition by canonical URL into a

@@ -28,6 +28,7 @@ type StructureDefinition struct {
 	BaseDefinition string
 	Kind           string
 	Derivation     string
+	Abstract       bool
 	Elements       []ElementDefinition
 	// HasSnapshot reports whether Elements came from a complete snapshot
 	// (rather than a differential). When true, ToFhir emits a Snapshot and the
@@ -41,10 +42,14 @@ type StructureDefinition struct {
 // stored as a differential so the registry's ensureSnapshot merges the base
 // definition's elements.
 func (sd *StructureDefinition) ToFhir() *fhir.StructureDefinition {
+	var out *fhir.StructureDefinition
 	if sd.BaseDefinition != "" && !sd.HasSnapshot {
-		return fhir.NewStructureDefinitionDiff(sd.URL, sd.Name, sd.Type, sd.Kind, sd.BaseDefinition, sd.Derivation, sd.Elements)
+		out = fhir.NewStructureDefinitionDiff(sd.URL, sd.Name, sd.Type, sd.Kind, sd.BaseDefinition, sd.Derivation, sd.Elements)
+	} else {
+		out = fhir.NewStructureDefinition(sd.URL, sd.Name, sd.Type, sd.Kind, sd.BaseDefinition, sd.Derivation, sd.Elements)
 	}
-	return fhir.NewStructureDefinition(sd.URL, sd.Name, sd.Type, sd.Kind, sd.BaseDefinition, sd.Derivation, sd.Elements)
+	out.Abstract = sd.Abstract
+	return out
 }
 
 // UnmarshalJSON decodes a StructureDefinition from its JSON form. It accepts
@@ -60,6 +65,7 @@ func (sd *StructureDefinition) UnmarshalJSON(data []byte) error {
 		BaseDefinition string
 		Kind           string
 		Derivation     string
+		Abstract       bool
 		Elements       []json.RawMessage `json:"elements"`
 	}
 	var a alias
@@ -80,6 +86,7 @@ func (sd *StructureDefinition) UnmarshalJSON(data []byte) error {
 	sd.BaseDefinition = a.BaseDefinition
 	sd.Kind = a.Kind
 	sd.Derivation = a.Derivation
+	sd.Abstract = a.Abstract
 	for _, raw := range a.Elements {
 		var m map[string]any
 		if err := json.Unmarshal(raw, &m); err != nil {

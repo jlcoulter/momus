@@ -33,17 +33,22 @@ func validIdentifierSearchValue(def *model.ElementDefinition, reg *registry.Regi
 	for _, et := range def.Types {
 		for _, profileURL := range et.Profiles {
 			if system := fixedIdentifierSystem(profileURL, reg); system != "" {
+				// Derive the value deterministically from the element path so it is
+				// reproducible regardless of generation order (the global Fake*
+				// constructors advance a shared RNG whose sequence varies with call
+				// order). This is the same seed source the body generator uses.
+				seed := def.Path
 				switch system {
 				case "http://ns.electronichealth.net.au/id/hi/hpii/1.0":
-					return fhirgen.FakeHPII()
+					return fhirgen.FakeHPIIFromSeed(seed)
 				case "http://ns.electronichealth.net.au/id/hi/hpio/1.0":
-					return fhirgen.FakeHPIO()
+					return fhirgen.FakeHPIOFromSeed(seed)
 				case "http://hl7.org.au/id/abn":
-					return fhirgen.FakeABN()
+					return fhirgen.FakeABNFromSeed(seed)
 				case "http://hl7.org.au/id/acn":
-					return fhirgen.FakeACN()
+					return fhirgen.FakeACNFromSeed(seed)
 				case "http://hl7.org.au/id/ahpra-registration-number":
-					return fhirgen.FakeAHPRA()
+					return fhirgen.FakeAHPRAFromSeed(seed)
 				}
 			}
 		}

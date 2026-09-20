@@ -47,28 +47,49 @@ ensure_packages() {
   if [ -z "$deps_dir" ] && [ -d "$HOME/Downloads/.momus/packages" ]; then
     deps_dir="$HOME/Downloads/.momus/packages"
   fi
-  if [ -n "$deps_dir" ] && [ -d "$deps_dir" ]; then
-    # momus already resolved the deps; install any missing ones into the cache.
-    for tgz in "$deps_dir"/*.tgz; do
-      [ -e "$tgz" ] || continue
-      local name
-      name=$(tar xzf "$tgz" -O package/package.json 2>/dev/null | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['name']+'#'+d['version'])" 2>/dev/null || true)
-      if [ -n "$name" ] && [ ! -d "$cache/$name" ]; then
-        mkdir -p "$cache/$name/package"
-        tar xzf "$tgz" -C "$cache/$name/package" --strip-components=1 2>/dev/null
-        echo "installed $name"
-      fi
-    done
-  fi
-  # Install the IG itself.
+  # Install the IG itself into the validator cache (overwrite so the cache is
+  # always in sync with the package being tested, never a stale prior build).
   local igname
   igname=$(tar xzf "$PKG" -O package/package.json | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['name']+'#'+d['version'])")
-  if [ ! -d "$cache/$igname" ]; then
-    mkdir -p "$cache/$igname/package"
-    tar xzf "$PKG" -C "$cache/$igname/package" --strip-components=1
-    echo "installed $igname"
-  fi
+  mkdir -p "$cache/$igname/package"
+  tar xzf "$PKG" -C "$cache/$igname/package" --strip-components=1
   echo "IG package: $igname (cache: $cache)"
+}
+
+# ---------------------------------------------------------------------------
+# 0b. Sync the validator package cache with the dependencies momus resolved so
+#     the validator validates against the SAME package versions momus generated
+#     against. Floating dependency references (e.g. "current"/"latest") resolve
+#     differently between the public registries and a manually-populated cache,
+#     so any floating cache entry is overwritten with momus's resolved archive
+#     rather than left stale.
+# ---------------------------------------------------------------------------
+sync_packages() {
+  local cache="${FHIR_PACKAGE_CACHE:-$HOME/.fhir/packages}"
+  # momus writes every resolved dependency archive to WORK/deps.
+  local deps_dir="$WORK/deps"
+  if [ -d "$deps_dir" ]; then
+    for tgz in "$deps_dir"/*.tgz; do
+      [ -e "$tgz" ] || continue
+      local meta name version
+      meta=$(tar xzf "$tgz" -O package/package.json 2>/dev/null)
+      name=$(printf '%s' "$meta" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('name',''))" 2>/dev/null || true)
+      version=$(printf '%s' "$meta" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('version',''))" 2>/dev/null || true)
+      [ -n "$name" ] || continue
+      # Install under name#version (the concrete resolved version).
+      mkdir -p "$cache/$name#$version/package"
+      tar xzf "$tgz" -C "$cache/$name#$version/package" --strip-components=1
+      # Install the same content under any floating alias ("current"/"latest")
+      # so the validator resolves the floating ref to the exact version momus
+      # generated against, never a stale different build.
+      for alias in current latest; do
+        rm -rf "$cache/$name#$alias"
+        mkdir -p "$cache/$name#$alias/package"
+        tar xzf "$tgz" -C "$cache/$name#$alias/package" --strip-components=1
+      done
+      echo "synced $name#$version"
+    done
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -179,6 +200,7 @@ PY
 
 ensure_packages
 generate
+sync_packages
 extract
 validate
 summarize

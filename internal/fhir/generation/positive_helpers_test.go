@@ -363,14 +363,14 @@ func TestEnsurePractitionerRoleAndHealthcareServiceIdentifierMatchers(t *testing
 
 func TestEnsurePractitionerRoleAddsWhenMissing(t *testing.T) {
 	body := map[string]any{}
-	ensurePractitionerRoleKnownIdentifier(body)
+	ensurePractitionerRoleKnownIdentifier(body, "")
 	ids := body["identifier"].([]any)
 	if len(ids) != 1 {
 		t.Fatalf("identifier count = %d, want 1", len(ids))
 	}
 	// Non-array identifier is replaced.
 	body = map[string]any{"identifier": "scalar"}
-	ensurePractitionerRoleKnownIdentifier(body)
+	ensurePractitionerRoleKnownIdentifier(body, "")
 	if ids := body["identifier"].([]any); len(ids) != 1 {
 		t.Fatalf("non-array identifier not replaced: %v", body["identifier"])
 	}
@@ -430,26 +430,26 @@ func TestEnsureEndpointKnownIdentifier(t *testing.T) {
 func TestEnsureHealthcareServiceKnownIdentifierBranches(t *testing.T) {
 	// Missing identifier -> added.
 	body := map[string]any{}
-	ensureHealthcareServiceKnownIdentifier(body)
+	ensureHealthcareServiceKnownIdentifier(body, "")
 	if ids := body["identifier"].([]any); len(ids) != 1 {
 		t.Fatalf("missing identifier count = %d, want 1", len(ids))
 	}
 	// Non-array identifier -> replaced.
 	body = map[string]any{"identifier": "scalar"}
-	ensureHealthcareServiceKnownIdentifier(body)
+	ensureHealthcareServiceKnownIdentifier(body, "")
 	if ids := body["identifier"].([]any); len(ids) != 1 {
 		t.Fatalf("non-array identifier count = %d, want 1", len(ids))
 	}
 	// Array with an already-known identifier -> not appended.
 	known := map[string]any{"system": "http://ns.electronichealth.net.au/id/hi/hpio/1.0", "type": map[string]any{"coding": []any{map[string]any{"system": "http://terminology.hl7.org.au/CodeSystem/v2-0203", "code": "NOI"}}}}
 	body = map[string]any{"identifier": []any{known}}
-	ensureHealthcareServiceKnownIdentifier(body)
+	ensureHealthcareServiceKnownIdentifier(body, "")
 	if ids := body["identifier"].([]any); len(ids) != 1 {
 		t.Fatalf("known identifier count = %d, want 1 (no duplicate)", len(ids))
 	}
 	// Array without a known identifier -> appended.
 	body = map[string]any{"identifier": []any{map[string]any{"system": "http://other", "value": "x"}}}
-	ensureHealthcareServiceKnownIdentifier(body)
+	ensureHealthcareServiceKnownIdentifier(body, "")
 	if ids := body["identifier"].([]any); len(ids) != 2 {
 		t.Fatalf("unknown identifier count = %d, want 2", len(ids))
 	}

@@ -50,18 +50,6 @@ type refFieldInfo struct {
 	intermediates map[string]*model.ElementNode
 }
 
-var abstractResourceTypes = map[string]bool{
-	"Resource":          true,
-	"DomainResource":    true,
-	"CanonicalResource": true,
-	"MetadataResource":  true,
-	// Parameters is an operational type (operation request/response payloads),
-	// not a resource that is provisioned to a server as seed data. A package may
-	// ship a StructureDefinition for it (e.g. HCPD's hcpd-export-request-parameters),
-	// but it must never be generated into the corpus.
-	"Parameters": true,
-}
-
 // NewCorpusGenerator returns a CorpusGenerator backed by reg.
 func NewCorpusGenerator(reg *registry.Registry, exhaustive bool) *CorpusGenerator {
 	return &CorpusGenerator{reg: reg, exhaustive: exhaustive}
@@ -701,11 +689,7 @@ func topologicalTypeOrder(resourceTypes []string, g *CorpusGenerator) []string {
 }
 
 func (g *CorpusGenerator) hasResourceType(resourceType string) bool {
-	return isConcreteResourceType(resourceType) && g.reg != nil && len(g.reg.ProfilesForResource(resourceType)) > 0
-}
-
-func isConcreteResourceType(resourceType string) bool {
-	return strings.TrimSpace(resourceType) != "" && !abstractResourceTypes[resourceType]
+	return resourceType != "" && !g.reg.IsAbstractType(resourceType) && len(g.reg.ProfilesForResource(resourceType)) > 0
 }
 
 // referenceFields derives the reference element paths of a resource type and
@@ -894,13 +878,13 @@ func elementNodeByPath(root *model.ElementNode, segments []string) *model.Elemen
 // targets abstract Resource, but a real example references Organization).
 func referenceTargetType(def *model.ElementDefinition, reg *registry.Registry) string {
 	for _, profileURL := range def.TargetProfile {
-		if rt := resourceTypeOfProfile(reg, profileURL); rt != "" && isConcreteResourceType(rt) {
+		if rt := resourceTypeOfProfile(reg, profileURL); rt != "" && !reg.IsAbstractType(rt) {
 			return rt
 		}
 	}
 	for _, et := range def.Types {
 		for _, profileURL := range et.TargetProfile {
-			if rt := resourceTypeOfProfile(reg, profileURL); rt != "" && isConcreteResourceType(rt) {
+			if rt := resourceTypeOfProfile(reg, profileURL); rt != "" && !reg.IsAbstractType(rt) {
 				return rt
 			}
 		}
