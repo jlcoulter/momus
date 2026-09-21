@@ -541,63 +541,6 @@ func decodeExamples(rawExamples []any) []any {
 	return examples
 }
 
-func decodeExpansionContains(raw []struct {
-	System   string `json:"system"`
-	Code     string `json:"code"`
-	Display  string `json:"display"`
-	Contains []struct {
-		System   string `json:"system"`
-		Code     string `json:"code"`
-		Display  string `json:"display"`
-		Contains []struct {
-			System  string `json:"system"`
-			Code    string `json:"code"`
-			Display string `json:"display"`
-		} `json:"contains"`
-	} `json:"contains"`
-}) []model.ValueSetExpansionContains {
-	out := make([]model.ValueSetExpansionContains, 0, len(raw))
-	for _, entry := range raw {
-		childContains := make([]model.ValueSetExpansionContains, 0, len(entry.Contains))
-		for _, child := range entry.Contains {
-			grandChildren := make([]model.ValueSetExpansionContains, 0, len(child.Contains))
-			for _, grandChild := range child.Contains {
-				grandChildren = append(grandChildren, model.ValueSetExpansionContains{System: grandChild.System, Code: grandChild.Code, Display: grandChild.Display})
-			}
-			childContains = append(childContains, model.ValueSetExpansionContains{System: child.System, Code: child.Code, Display: child.Display, Contains: grandChildren})
-		}
-		out = append(out, model.ValueSetExpansionContains{System: entry.System, Code: entry.Code, Display: entry.Display, Contains: childContains})
-	}
-	return out
-}
-
-func decodeCodeSystemConcepts(raw []struct {
-	Code    string `json:"code"`
-	Display string `json:"display"`
-	Concept []struct {
-		Code    string `json:"code"`
-		Display string `json:"display"`
-		Concept []struct {
-			Code    string `json:"code"`
-			Display string `json:"display"`
-		} `json:"concept"`
-	} `json:"concept"`
-}) []model.CodeSystemConcept {
-	out := make([]model.CodeSystemConcept, 0, len(raw))
-	for _, concept := range raw {
-		children := make([]model.CodeSystemConcept, 0, len(concept.Concept))
-		for _, child := range concept.Concept {
-			grandChildren := make([]model.CodeSystemConcept, 0, len(child.Concept))
-			for _, grandChild := range child.Concept {
-				grandChildren = append(grandChildren, model.CodeSystemConcept{Code: grandChild.Code, Display: grandChild.Display})
-			}
-			children = append(children, model.CodeSystemConcept{Code: child.Code, Display: child.Display, Concepts: grandChildren})
-		}
-		out = append(out, model.CodeSystemConcept{Code: concept.Code, Display: concept.Display, Concepts: children})
-	}
-	return out
-}
-
 // stringField retrieves a string field from a map, returning an empty string if the key is not present or not a string.
 func stringField(m map[string]any, key string) string {
 	v, ok := m[key]
