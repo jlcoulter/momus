@@ -29,10 +29,10 @@ func applyNegativeMutation(body map[string]any, req coverage.CoverageRequirement
 		coverage.CoverageVariantTerminologyAbsent:
 		return deletePath(body, req.ElementPath)
 	case coverage.CoverageVariantDatatypeNull:
-		return setPath(body, req.ElementPath, nil)
+		return setPath(body, req.ElementPath, nil, req, reg)
 	case coverage.CoverageVariantDatatypeInvalidLexical,
 		coverage.CoverageVariantDatatypeWrongJSONType:
-		return setPath(body, req.ElementPath, wrongDatatypeValue(req, reg))
+		return setPath(body, req.ElementPath, wrongDatatypeValue(req, reg), req, reg)
 	case coverage.CoverageVariantTerminologyInvalid:
 		return setBogusCode(body, req.ElementPath)
 	case coverage.CoverageVariantReferenceWrongTarget:
@@ -171,11 +171,17 @@ func deletePath(body map[string]any, path string) bool {
 
 // setPath sets the leaf at path to value, reporting whether a leaf was present
 // and modified (false when the element is absent, so no invalid value could be
-// placed).
-func setPath(body map[string]any, path string, value any) bool {
+// placed). When the target element is repeatable (max > 1), the value is placed
+// inside a single-element array so the mutation violates only the intended
+// datatype constraint, never the structural cardinality: e.g. Practitioner.
+// name.given (0..*) becomes ["not-a-string"], not a bare scalar.
+func setPath(body map[string]any, path string, value any, req coverage.CoverageRequirement, reg *registry.Registry) bool {
 	parent, key, ok := resolveLeafContainer(body, path)
 	if !ok {
 		return false
+	}
+	if elementAllowsMultiple(elementDefinitionOf(reg, req.ProfileURL, path)) {
+		value = []any{value}
 	}
 	parent[key] = value
 	return true
