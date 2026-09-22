@@ -54,12 +54,12 @@ func TestDeletePathAndSetPath(t *testing.T) {
 		t.Fatal("deletePath(missing) should return false")
 	}
 	// setPath on absent element returns false.
-	if setPath(body, "Patient.nope", nil) {
+	if setPath(body, "Patient.nope", nil, coverage.CoverageRequirement{}, nil) {
 		t.Fatal("setPath(missing) should return false")
 	}
 	// setPath on a choice key.
 	body2 := map[string]any{"deceasedBoolean": false}
-	if !setPath(body2, "Patient.deceased", nil) {
+	if !setPath(body2, "Patient.deceased", nil, coverage.CoverageRequirement{}, nil) {
 		t.Fatal("setPath(choice) should return true")
 	}
 }
