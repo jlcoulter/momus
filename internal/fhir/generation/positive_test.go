@@ -11,6 +11,8 @@ import (
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 // TestResolveBoundCodingFallsBackToExample verifies that when the bound
@@ -69,12 +71,12 @@ func TestResolveBoundCodingFallsBackToExample(t *testing.T) {
 // resolves a real code (common for nested extension value[x].coding).
 func TestResolveBoundCodingFromCodingChild(t *testing.T) {
 	reg := registry.New()
-	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/responsible-party", ComposeIncludes: []model.ValueSetInclude{{
+	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/responsible-party", Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{{
 		System: "http://example.org/CodeSystem/responsible-party",
-		Concepts: []model.ConceptReference{
+		Concept: []model.ConceptReference{
 			{Code: "practitioner-initiated", Display: "Practitioner initiated"},
 		},
-	}}})
+	}}}})
 	reg.AddCodeSystem(&model.CodeSystem{URL: "http://example.org/CodeSystem/responsible-party", Concepts: []model.CodeSystemConcept{{Code: "practitioner-initiated", Display: "Practitioner initiated"}}})
 
 	// The node is a CodeableConcept with no binding of its own; the binding is
@@ -136,7 +138,7 @@ func TestResolveBoundCodingFromExtensionValue(t *testing.T) {
 // the package, so generated CodeableConcepts don't carry a null placeholder.
 func TestResolveBoundCodingSkipsPlaceholders(t *testing.T) {
 	reg := registry.New()
-	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/vs", ComposeIncludes: []model.ValueSetInclude{{System: "http://example.org/cs", Concepts: []model.ConceptReference{{Code: "XX", Display: "Null"}, {Code: "RI", Display: "Resource identifier"}}}}})
+	reg.AddValueSet(&model.ValueSet{URL: "http://example.org/vs", Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{{System: "http://example.org/cs", Concept: []model.ConceptReference{{Code: "XX", Display: "Null"}, {Code: "RI", Display: "Resource identifier"}}}}}})
 	reg.AddCodeSystem(&model.CodeSystem{URL: "http://example.org/cs", Concepts: []model.CodeSystemConcept{{Code: "XX", Display: "Null"}, {Code: "RI", Display: "Resource identifier"}}})
 	def := &model.ElementDefinition{Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/vs"}}
 	c, ok := resolveBoundCoding(def, reg)
@@ -272,13 +274,13 @@ func TestGeneratedPractitionerRecordedSexOrGenderHasValueSlice(t *testing.T) {
 func TestGeneratedProvenanceHasNoSubjectField(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Kind: "resource", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 	}})
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/provenance", Type: "Provenance", Kind: "resource", Elements: []model.ElementDefinition{
-		{Path: "Provenance", Min: 0, Max: "*"},
-		{Path: "Provenance.target", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
-		{Path: "Provenance.recorded", Min: 1, Max: "1", Types: []model.ElementType{{Code: "instant"}}},
+		{Path: "Provenance", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Provenance.target", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
+		{Path: "Provenance.recorded", Min: 1, Max: 1, Types: []model.ElementType{{Code: "instant"}}},
 	}})
 
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
@@ -302,30 +304,13 @@ func TestGeneratedProvenanceHasNoSubjectField(t *testing.T) {
 	}
 }
 
-// (satisfying the AU mod-89 check digit), so identifiers conform to the
-// au-australianbusinessnumber/au-australiancompanynumber profiles and their
-// slices resolve on the server.
-func TestGenerateValidABNAndACN(t *testing.T) {
-	abnWeights := []int{10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
-	acnWeights := []int{10, 1, 3, 5, 7, 9, 11, 13, 15}
-	abn := generateABN()
-	if len(abn) != 11 || !mod89Valid(abn, abnWeights, true) {
-		t.Fatalf("generateABN()=%q is not a valid ABN", abn)
-	}
-	acn := generateACN()
-	if len(acn) != 9 || !mod89Valid(acn, acnWeights, false) {
-		t.Fatalf("generateACN()=%q is not a valid ACN", acn)
-	}
-}
-
-// TestGenerateFromCoveragePlanExhaustiveAddsAndVariesOptionals verifies that
 func TestGenerateFromCoveragePlanExhaustiveAddsAndVariesOptionals(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
-		{Path: "Patient.birthDate", Min: 0, Max: "1", Types: []model.ElementType{{Code: "date"}}},
-		{Path: "Patient.gender", Min: 0, Max: "1", Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
+		{Path: "Patient.birthDate", Min: 0, Max: 1, Types: []model.ElementType{{Code: "date"}}},
+		{Path: "Patient.gender", Min: 0, Max: 1, Types: []model.ElementType{{Code: "code"}}},
 	}})
 	basePlan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
 		{ID: "req-1", ProfileURL: "http://example.org/StructureDefinition/patient", ResourceType: "Patient", ElementPath: "Patient.name", Variant: coverage.CoverageVariantValidMin},
@@ -384,16 +369,16 @@ func TestGenerateFromCoveragePlanExhaustiveAddsAndVariesOptionals(t *testing.T) 
 func TestGenerateDatatypeFromProfilesPicksOneNotMerged(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/profA", Type: "Identifier", Elements: []model.ElementDefinition{
-		{Path: "Identifier", Min: 0, Max: "*"},
-		{Path: "Identifier.system", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://example.org/system-a"},
-		{Path: "Identifier.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Identifier.system", Min: 1, Max: 1, Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://example.org/system-a"},
+		{Path: "Identifier.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 	}})
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/profB", Type: "Identifier", Elements: []model.ElementDefinition{
-		{Path: "Identifier", Min: 0, Max: "*"},
-		{Path: "Identifier.system", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://example.org/system-b"},
-		{Path: "Identifier.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Identifier.system", Min: 1, Max: 1, Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://example.org/system-b"},
+		{Path: "Identifier.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 	}})
-	v, ok := generateDatatypeValueFromProfiles([]model.ElementType{{Profile: []string{"http://example.org/profA", "http://example.org/profB"}}}, reg)
+	v, ok := generateDatatypeValueFromProfiles([]model.ElementType{{Profiles: []string{"http://example.org/profA", "http://example.org/profB"}}}, reg)
 	if !ok {
 		t.Fatal("expected a generated value")
 	}
@@ -413,8 +398,8 @@ func TestGenerateDatatypeFromProfilesPicksOneNotMerged(t *testing.T) {
 func TestGenerateFromCoveragePlanOmitsProvisioning(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 	}})
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
 		{ID: "req-1", ProfileURL: "http://example.org/StructureDefinition/patient", ResourceType: "Patient", ElementPath: "Patient.name", Variant: coverage.CoverageVariantValidMin},
@@ -512,8 +497,8 @@ func TestGenerateFromCoveragePlanBuildsPerRequirementSequence(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/patient",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 		},
 	})
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
@@ -628,7 +613,7 @@ func TestNormalizeGeneratedAddressDropsAUStateForPortableValidation(t *testing.T
 	}
 }
 
-func TestNormalizeHealthcareServiceTypeCodingAddsCoding(t *testing.T) {
+func TestNormalizeHealthcareServiceTypeCodingLeavesTextOnly(t *testing.T) {
 	body := map[string]any{
 		"resourceType": "HealthcareService",
 		"type":         []any{map[string]any{"text": "Type"}},
@@ -638,9 +623,10 @@ func TestNormalizeHealthcareServiceTypeCodingAddsCoding(t *testing.T) {
 
 	types := body["type"].([]any)
 	first := types[0].(map[string]any)
-	coding, ok := first["coding"].([]any)
-	if !ok || len(coding) == 0 {
-		t.Fatalf("expected type coding to be populated, got %+v", first)
+	// Fail closed: no placeholder code system is synthesized, so the concept
+	// stays text-only rather than carrying an example.org coding.
+	if coding, ok := first["coding"].([]any); ok && len(coding) > 0 {
+		t.Fatalf("expected no synthesized coding, got %+v", coding)
 	}
 }
 
@@ -837,9 +823,9 @@ func TestEncodePlanIncludesTypeTags(t *testing.T) {
 
 func TestGenerateFromCoveragePlanPopulatesRequiredIdentifierSlicesFromProfile(t *testing.T) {
 	r := registry.New()
-	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/hcpd-source-identifier", Type: "Identifier", Elements: []model.ElementDefinition{{Path: "Identifier", Min: 0, Max: "*"}, {Path: "Identifier.type", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}}, {Path: "Identifier.system", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}}, {Path: "Identifier.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}}}})
-	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/hcpd-local-identifier", Type: "Identifier", Elements: []model.ElementDefinition{{Path: "Identifier", Min: 0, Max: "*"}, {Path: "Identifier.type", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}}, {Path: "Identifier.system", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}}, {Path: "Identifier.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}}}})
-	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/location", Type: "Location", Elements: []model.ElementDefinition{{Path: "Location", Min: 0, Max: "*"}, {Path: "Location.identifier", Min: 2, Max: "*", Types: []model.ElementType{{Code: "Identifier"}}}, {Path: "Location.identifier", Min: 1, Max: "1", SliceName: "Source", Types: []model.ElementType{{Code: "Identifier", Profile: []string{"http://example.org/StructureDefinition/hcpd-source-identifier"}}}}, {Path: "Location.identifier", Min: 1, Max: "1", SliceName: "Local", Types: []model.ElementType{{Code: "Identifier", Profile: []string{"http://example.org/StructureDefinition/hcpd-local-identifier"}}}}}})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/hcpd-source-identifier", Type: "Identifier", Elements: []model.ElementDefinition{{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded}, {Path: "Identifier.type", Min: 1, Max: 1, Types: []model.ElementType{{Code: "CodeableConcept"}}}, {Path: "Identifier.system", Min: 1, Max: 1, Types: []model.ElementType{{Code: "uri"}}}, {Path: "Identifier.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}}}})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/hcpd-local-identifier", Type: "Identifier", Elements: []model.ElementDefinition{{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded}, {Path: "Identifier.type", Min: 1, Max: 1, Types: []model.ElementType{{Code: "CodeableConcept"}}}, {Path: "Identifier.system", Min: 1, Max: 1, Types: []model.ElementType{{Code: "uri"}}}, {Path: "Identifier.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}}}})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/location", Type: "Location", Elements: []model.ElementDefinition{{Path: "Location", Min: 0, Max: fhir.MaxUnbounded}, {Path: "Location.identifier", Min: 2, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Identifier"}}}, {Path: "Location.identifier", Min: 1, Max: 1, SliceName: "Source", Types: []model.ElementType{{Code: "Identifier", Profiles: []string{"http://example.org/StructureDefinition/hcpd-source-identifier"}}}}, {Path: "Location.identifier", Min: 1, Max: 1, SliceName: "Local", Types: []model.ElementType{{Code: "Identifier", Profiles: []string{"http://example.org/StructureDefinition/hcpd-local-identifier"}}}}}})
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{{ID: "req-location", ProfileURL: "http://example.org/StructureDefinition/location", ResourceType: "Location", ElementPath: "Location.identifier", Variant: coverage.CoverageVariantValidMin}}}, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: r})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
@@ -863,9 +849,9 @@ func TestGenerateFromCoveragePlanPopulatesRequiredIdentifierSlicesFromProfile(t 
 
 func TestGenerateFromCoveragePlanMergesPatternAndBindingForCodeableConcept(t *testing.T) {
 	r := registry.New()
-	r.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/identifier-type", ComposeIncludes: []model.ValueSetInclude{{System: "http://example.org/system/identifier-type", Concepts: []model.ConceptReference{{Code: "bound-code", Display: "Bound Code"}}}}})
-	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/identifier-profile", Type: "Identifier", Elements: []model.ElementDefinition{{Path: "Identifier", Min: 0, Max: "*"}, {Path: "Identifier.type", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/identifier-type"}, Pattern: map[string]any{"coding": []any{map[string]any{"system": "http://pattern.example/system", "code": "pattern-code"}}}}, {Path: "Identifier.system", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}}, {Path: "Identifier.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}}}})
-	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/location-profile", Type: "Location", Elements: []model.ElementDefinition{{Path: "Location", Min: 0, Max: "*"}, {Path: "Location.identifier", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Identifier", Profile: []string{"http://example.org/StructureDefinition/identifier-profile"}}}}}})
+	r.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/identifier-type", Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{{System: "http://example.org/system/identifier-type", Concept: []model.ConceptReference{{Code: "bound-code", Display: "Bound Code"}}}}}})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/identifier-profile", Type: "Identifier", Elements: []model.ElementDefinition{{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded}, {Path: "Identifier.type", Min: 1, Max: 1, Types: []model.ElementType{{Code: "CodeableConcept"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/identifier-type"}, Pattern: map[string]any{"coding": []any{map[string]any{"system": "http://pattern.example/system", "code": "pattern-code"}}}}, {Path: "Identifier.system", Min: 1, Max: 1, Types: []model.ElementType{{Code: "uri"}}}, {Path: "Identifier.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}}}})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/location-profile", Type: "Location", Elements: []model.ElementDefinition{{Path: "Location", Min: 0, Max: fhir.MaxUnbounded}, {Path: "Location.identifier", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Identifier", Profiles: []string{"http://example.org/StructureDefinition/identifier-profile"}}}}}})
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{{ID: "req-location-binding", ProfileURL: "http://example.org/StructureDefinition/location-profile", ResourceType: "Location", ElementPath: "Location.identifier", Variant: coverage.CoverageVariantValidMin}}}, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: r})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
@@ -893,8 +879,8 @@ func TestGenerateFromCoveragePlanMergesPatternAndBindingForCodeableConcept(t *te
 
 func TestGenerateFromCoveragePlanFillsMissingPatternCodingFieldsFromBinding(t *testing.T) {
 	r := registry.New()
-	r.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/fill-coding", ComposeIncludes: []model.ValueSetInclude{{System: "http://example.org/system/fill-coding", Concepts: []model.ConceptReference{{Code: "bound-code", Display: "Bound Display"}}}}})
-	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/test-profile", Type: "Observation", Elements: []model.ElementDefinition{{Path: "Observation", Min: 0, Max: "*"}, {Path: "Observation.code", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/fill-coding"}, Pattern: map[string]any{"coding": []any{map[string]any{"system": "http://pattern.example/system"}}}}}})
+	r.AddValueSet(&model.ValueSet{URL: "http://example.org/ValueSet/fill-coding", Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{{System: "http://example.org/system/fill-coding", Concept: []model.ConceptReference{{Code: "bound-code", Display: "Bound Display"}}}}}})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/test-profile", Type: "Observation", Elements: []model.ElementDefinition{{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded}, {Path: "Observation.code", Min: 1, Max: 1, Types: []model.ElementType{{Code: "CodeableConcept"}}, Binding: &model.Binding{Strength: "required", ValueSet: "http://example.org/ValueSet/fill-coding"}, Pattern: map[string]any{"coding": []any{map[string]any{"system": "http://pattern.example/system"}}}}}})
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{{ID: "req-observation-binding", ProfileURL: "http://example.org/StructureDefinition/test-profile", ResourceType: "Observation", ElementPath: "Observation.code", Variant: coverage.CoverageVariantValidMin}}}, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: r})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
@@ -917,7 +903,7 @@ func TestGenerateFromCoveragePlanFillsMissingPatternCodingFieldsFromBinding(t *t
 
 func TestGenerateFromCoveragePlanIncludesOptionalContainerWithRequiredSlices(t *testing.T) {
 	r := registry.New()
-	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/location-sliced-extension", Type: "Location", Elements: []model.ElementDefinition{{Path: "Location", Min: 0, Max: "*"}, {Path: "Location.extension", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Extension"}}}, {Path: "Location.extension", Min: 1, Max: "1", SliceName: "required-ext", Types: []model.ElementType{{Code: "Extension"}}}, {Path: "Location.extension.url", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://example.org/StructureDefinition/required-ext"}, {Path: "Location.extension.valueString", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}, Examples: []any{"example-value"}}}})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/location-sliced-extension", Type: "Location", Elements: []model.ElementDefinition{{Path: "Location", Min: 0, Max: fhir.MaxUnbounded}, {Path: "Location.extension", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Extension"}}}, {Path: "Location.extension", Min: 1, Max: 1, SliceName: "required-ext", Types: []model.ElementType{{Code: "Extension"}}}, {Path: "Location.extension.url", Min: 1, Max: 1, Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://example.org/StructureDefinition/required-ext"}, {Path: "Location.extension.valueString", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}, Examples: []any{"example-value"}}}})
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{{ID: "req-location-ext", ProfileURL: "http://example.org/StructureDefinition/location-sliced-extension", ResourceType: "Location", ElementPath: "Location.extension.url", Variant: coverage.CoverageVariantValidMin}}}, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: r})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
@@ -936,7 +922,7 @@ func TestGenerateFromCoveragePlanIncludesOptionalContainerWithRequiredSlices(t *
 
 func TestGenerateFromCoveragePlanPopulatesSliceChildPatternFields(t *testing.T) {
 	r := registry.New()
-	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/org-address-slice", Type: "Organization", Elements: []model.ElementDefinition{{Path: "Organization", Name: "Organization"}, {Path: "Organization.address", Name: "address", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Address"}}}, {Path: "Organization.address", Name: "address", SliceName: "physical", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Address"}}}, {ID: "Organization.address:physical.type", Path: "Organization.address.type", Name: "type", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}, Pattern: "physical"}, {ID: "Organization.address:physical.line", Path: "Organization.address.line", Name: "line", Min: 1, Max: "*", Types: []model.ElementType{{Code: "string"}}, Examples: []any{"1 Example Street"}}}})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/org-address-slice", Type: "Organization", Elements: []model.ElementDefinition{{Path: "Organization"}, {Path: "Organization.address", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Address"}}}, {Path: "Organization.address", SliceName: "physical", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Address"}}}, {ID: "Organization.address:physical.type", Path: "Organization.address.type", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}, Pattern: "physical"}, {ID: "Organization.address:physical.line", Path: "Organization.address.line", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "string"}}, Examples: []any{"1 Example Street"}}}})
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{{ID: "req-org-address", ProfileURL: "http://example.org/StructureDefinition/org-address-slice", ResourceType: "Organization", ElementPath: "Organization.address", Variant: coverage.CoverageVariantValidMin}}}, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: r})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
@@ -958,8 +944,8 @@ func TestGenerateFromCoveragePlanPopulatesSliceChildPatternFields(t *testing.T) 
 
 func TestGenerateFromCoveragePlanUsesTypedChoicePropertyNames(t *testing.T) {
 	r := registry.New()
-	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/ext-profile", Type: "Extension", Elements: []model.ElementDefinition{{Path: "Extension", Name: "Extension"}, {Path: "Extension.url", Name: "url", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://example.org/ext"}, {Path: "Extension.value[x]", Name: "value[x]", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Coding"}}, Pattern: map[string]any{"system": "http://example.org/system", "code": "seed"}}}})
-	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/location-choice", Type: "Location", Elements: []model.ElementDefinition{{Path: "Location", Name: "Location"}, {Path: "Location.extension", Name: "extension", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Extension", Profile: []string{"http://example.org/StructureDefinition/ext-profile"}}}}}})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/ext-profile", Type: "Extension", Elements: []model.ElementDefinition{{Path: "Extension"}, {Path: "Extension.url", Min: 1, Max: 1, Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://example.org/ext"}, {Path: "Extension.value[x]", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Coding"}}, Pattern: map[string]any{"system": "http://example.org/system", "code": "seed"}}}})
+	r.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/location-choice", Type: "Location", Elements: []model.ElementDefinition{{Path: "Location"}, {Path: "Location.extension", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Extension", Profiles: []string{"http://example.org/StructureDefinition/ext-profile"}}}}}})
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{{ID: "req-location-choice", ProfileURL: "http://example.org/StructureDefinition/location-choice", ResourceType: "Location", ElementPath: "Location.extension", Variant: coverage.CoverageVariantValidMin}}}, BuildOptions{BaseURL: "http://localhost:8080/fhir", Registry: r})
 	if err != nil {
 		t.Fatalf("GenerateFromCoveragePlan returned error: %v", err)
@@ -985,18 +971,18 @@ func TestGenerateFromCoveragePlanUsesSingleObjectForSingularSlicedChoice(t *test
 		URL:  "http://example.org/StructureDefinition/ext-sliced-choice",
 		Type: "Extension",
 		Elements: []model.ElementDefinition{
-			{Path: "Extension", Name: "Extension"},
-			{Path: "Extension.url", Name: "url", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://example.org/ext-sliced"},
-			{Path: "Extension.value[x]", Name: "value[x]", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Element"}}},
-			{Path: "Extension.value[x]", Name: "value[x]", SliceName: "valueCoding", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Coding"}}, Pattern: map[string]any{"system": "http://example.org/system", "code": "seed"}},
+			{Path: "Extension"},
+			{Path: "Extension.url", Min: 1, Max: 1, Types: []model.ElementType{{Code: "uri"}}, Fixed: "http://example.org/ext-sliced"},
+			{Path: "Extension.value[x]", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Element"}}},
+			{Path: "Extension.value[x]", SliceName: "valueCoding", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Coding"}}, Pattern: map[string]any{"system": "http://example.org/system", "code": "seed"}},
 		},
 	})
 	r.AddStructureDefinition(&model.StructureDefinition{
 		URL:  "http://example.org/StructureDefinition/location-choice-slice",
 		Type: "Location",
 		Elements: []model.ElementDefinition{
-			{Path: "Location", Name: "Location"},
-			{Path: "Location.extension", Name: "extension", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Extension", Profile: []string{"http://example.org/StructureDefinition/ext-sliced-choice"}}}},
+			{Path: "Location"},
+			{Path: "Location.extension", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Extension", Profiles: []string{"http://example.org/StructureDefinition/ext-sliced-choice"}}}},
 		},
 	})
 
@@ -1026,9 +1012,9 @@ func TestGenerateFromCoveragePlanWrapsRepeatableComplexFieldsAsArrays(t *testing
 		URL:  "http://example.org/StructureDefinition/org-repeatable-address",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Name: "Organization"},
-			{Path: "Organization.address", Name: "address", Min: 1, Max: "1", BaseMax: "*", Types: []model.ElementType{{Code: "Address"}}},
-			{Path: "Organization.address.line", Name: "line", Min: 1, Max: "*", Types: []model.ElementType{{Code: "string"}}, Examples: []any{"1 Example Street"}},
+			{Path: "Organization"},
+			{Path: "Organization.address", Min: 1, Max: 1, BaseMax: ptrMax(fhir.MaxUnbounded), Types: []model.ElementType{{Code: "Address"}}},
+			{Path: "Organization.address.line", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "string"}}, Examples: []any{"1 Example Street"}},
 		},
 	})
 
@@ -1126,8 +1112,8 @@ func TestGenerateFromCoveragePlanGeneratesNegativeVariants(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/observation",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 		},
 	})
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
@@ -1173,8 +1159,8 @@ func TestGenerateFromCoveragePlanCarriesTraceToAssertions(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/observation",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "date"}}},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "date"}}},
 		},
 	})
 	plan, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
@@ -1240,13 +1226,13 @@ func TestOptionalSliceIncludedRandomly(t *testing.T) {
 	node := &model.ElementNode{
 		Name:       "extension",
 		Path:       "Organization.extension",
-		Definition: &model.ElementDefinition{Path: "Organization.extension", Min: 0, Max: "*"},
+		Definition: &model.ElementDefinition{Path: "Organization.extension", Min: 0, Max: fhir.MaxUnbounded},
 		Slices: map[string]*model.SliceNode{
-			"required": {Name: "required", Definition: &model.ElementDefinition{Path: "Organization.extension", SliceName: "required", Min: 1, Max: "1"}, Children: map[string]*model.ElementNode{
-				"url": {Name: "url", Path: "Organization.extension.url", Definition: &model.ElementDefinition{Path: "Organization.extension.url", Min: 1, Max: "1", Fixed: "http://example.org/required"}},
+			"required": {Name: "required", Definition: &model.ElementDefinition{Path: "Organization.extension", SliceName: "required", Min: 1, Max: 1}, Children: map[string]*model.ElementNode{
+				"url": {Name: "url", Path: "Organization.extension.url", Definition: &model.ElementDefinition{Path: "Organization.extension.url", Min: 1, Max: 1, Fixed: "http://example.org/required"}},
 			}},
-			"optional": {Name: "optional", Definition: &model.ElementDefinition{Path: "Organization.extension", SliceName: "optional", Min: 0, Max: "1"}, Children: map[string]*model.ElementNode{
-				"url": {Name: "url", Path: "Organization.extension.url", Definition: &model.ElementDefinition{Path: "Organization.extension.url", Min: 1, Max: "1", Fixed: "http://example.org/optional"}},
+			"optional": {Name: "optional", Definition: &model.ElementDefinition{Path: "Organization.extension", SliceName: "optional", Min: 0, Max: 1}, Children: map[string]*model.ElementNode{
+				"url": {Name: "url", Path: "Organization.extension.url", Definition: &model.ElementDefinition{Path: "Organization.extension.url", Min: 1, Max: 1, Fixed: "http://example.org/optional"}},
 			}},
 		},
 	}
@@ -1321,12 +1307,12 @@ func TestSliceFallbackAppliesSliceConstraints(t *testing.T) {
 					Path:      "Practitioner.telecom",
 					SliceName: "personalPhoneNumber",
 					Min:       min,
-					Max:       "1",
+					Max:       1,
 					Types:     []model.ElementType{{Code: "ContactPoint"}},
 				},
 				Children: map[string]*model.ElementNode{
-					"system": {Name: "system", Path: "Practitioner.telecom.system", Definition: &model.ElementDefinition{Path: "Practitioner.telecom.system", Min: 0, Max: "1", Fixed: "phone"}},
-					"use":    {Name: "use", Path: "Practitioner.telecom.use", Definition: &model.ElementDefinition{Path: "Practitioner.telecom.use", Min: 0, Max: "1", Fixed: "home"}},
+					"system": {Name: "system", Path: "Practitioner.telecom.system", Definition: &model.ElementDefinition{Path: "Practitioner.telecom.system", Min: 0, Max: 1, Fixed: "phone"}},
+					"use":    {Name: "use", Path: "Practitioner.telecom.use", Definition: &model.ElementDefinition{Path: "Practitioner.telecom.use", Min: 0, Max: 1, Fixed: "home"}},
 				},
 			},
 		}
@@ -1350,7 +1336,7 @@ func TestSliceFallbackAppliesSliceConstraints(t *testing.T) {
 	required := &model.ElementNode{
 		Name:       "telecom",
 		Path:       "Practitioner.telecom",
-		Definition: &model.ElementDefinition{Path: "Practitioner.telecom", Min: 0, Max: "*"},
+		Definition: &model.ElementDefinition{Path: "Practitioner.telecom", Min: 0, Max: fhir.MaxUnbounded},
 		Slices:     makeSlice(1),
 	}
 	val, ok := generateRepeatedValue(required, reg, nil)
@@ -1363,7 +1349,7 @@ func TestSliceFallbackAppliesSliceConstraints(t *testing.T) {
 	optional := &model.ElementNode{
 		Name:       "telecom",
 		Path:       "Practitioner.telecom",
-		Definition: &model.ElementDefinition{Path: "Practitioner.telecom", Min: 0, Max: "*"},
+		Definition: &model.ElementDefinition{Path: "Practitioner.telecom", Min: 0, Max: fhir.MaxUnbounded},
 		Slices:     makeSlice(0),
 	}
 	val, ok = generateRepeatedValue(optional, reg, nil)
@@ -1397,11 +1383,11 @@ func TestRepeatedValueRespectsParentMax(t *testing.T) {
 				Path:      "Practitioner.qualification.identifier",
 				SliceName: name,
 				Min:       0,
-				Max:       "1",
+				Max:       1,
 				Types:     []model.ElementType{{Code: "Identifier"}},
 			},
 			Children: map[string]*model.ElementNode{
-				"system": {Name: "system", Path: "Practitioner.qualification.identifier.system", Definition: &model.ElementDefinition{Path: "Practitioner.qualification.identifier.system", Min: 1, Max: "1", Fixed: "http://example.org/" + name}},
+				"system": {Name: "system", Path: "Practitioner.qualification.identifier.system", Definition: &model.ElementDefinition{Path: "Practitioner.qualification.identifier.system", Min: 1, Max: 1, Fixed: "http://example.org/" + name}},
 			},
 		}
 	}
@@ -1409,7 +1395,7 @@ func TestRepeatedValueRespectsParentMax(t *testing.T) {
 	node := &model.ElementNode{
 		Name:       "identifier",
 		Path:       "Practitioner.qualification.identifier",
-		Definition: &model.ElementDefinition{Path: "Practitioner.qualification.identifier", Min: 0, Max: "1"},
+		Definition: &model.ElementDefinition{Path: "Practitioner.qualification.identifier", Min: 0, Max: 1},
 		Slices: map[string]*model.SliceNode{
 			"ahpraregistrationnumber":    makeSlice("ahpra"),
 			"peakbodyregistrationnumber": makeSlice("pbprn"),
@@ -1437,13 +1423,13 @@ func TestRepeatedValueRespectsParentMax(t *testing.T) {
 func TestGenerateSingleValueMissingDatatypes(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/observation", Type: "Observation", Elements: []model.ElementDefinition{
-		{Path: "Observation", Min: 0, Max: "*"},
-		{Path: "Observation.valueDecimal", Min: 0, Max: "1", Types: []model.ElementType{{Code: "decimal"}}},
-		{Path: "Observation.effectiveTime", Min: 0, Max: "1", Types: []model.ElementType{{Code: "time"}}},
-		{Path: "Observation.valueQuantity", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Quantity"}}},
-		{Path: "Observation.valueRatio", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Ratio"}}},
-		{Path: "Observation.valueRange", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Range"}}},
-		{Path: "Observation.attachment", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Attachment"}}},
+		{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Observation.valueDecimal", Min: 0, Max: 1, Types: []model.ElementType{{Code: "decimal"}}},
+		{Path: "Observation.effectiveTime", Min: 0, Max: 1, Types: []model.ElementType{{Code: "time"}}},
+		{Path: "Observation.valueQuantity", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Quantity"}}},
+		{Path: "Observation.valueRatio", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Ratio"}}},
+		{Path: "Observation.valueRange", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Range"}}},
+		{Path: "Observation.attachment", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Attachment"}}},
 	}})
 
 	cases := []struct {
@@ -1483,3 +1469,5 @@ func leafTypeOf(path string) string {
 	}
 	return ""
 }
+
+func ptrMax(v fhir.Max) *fhir.Max { return &v }

@@ -10,6 +10,8 @@ import (
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 // TestBuildSetupDatasetProducesSeedResources verifies that the seed dataset
@@ -20,8 +22,8 @@ import (
 func TestBuildSetupDatasetProducesSeedResources(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 	}})
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
 		{ID: "req-1", ProfileURL: "http://example.org/StructureDefinition/patient", ResourceType: "Patient", ElementPath: "Patient.name", Variant: coverage.CoverageVariantValidMin},
@@ -71,13 +73,13 @@ func TestBuildSetupDatasetProducesSeedResources(t *testing.T) {
 func TestBuildSetupDatasetIncludesTransitiveReferenceTargets(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 	}})
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/observation", Type: "Observation", Elements: []model.ElementDefinition{
-		{Path: "Observation", Min: 0, Max: "*"},
-		{Path: "Observation.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
-		{Path: "Observation.subject", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
+		{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Observation.status", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Observation.subject", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
 	}})
 	// Only Observation is a coverage obligation; Patient is reached only via the
 	// Observation profile's subject reference.
@@ -141,11 +143,11 @@ func keysOf(m map[string]*model.ResourceInstance) []string {
 // even when a Reference element carries an abstract target profile.
 func TestBuildSetupDatasetExcludesAbstractReferenceTypes(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Resource", Type: "Resource", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: "*"}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Resource", Type: "Resource", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: fhir.MaxUnbounded}}})
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/observation", Type: "Observation", Elements: []model.ElementDefinition{
-		{Path: "Observation", Min: 0, Max: "*"},
-		{Path: "Observation.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
-		{Path: "Observation.subject", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Resource"}}}},
+		{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Observation.status", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Observation.subject", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Resource"}}}},
 	}})
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
 		{ID: "o-1", ProfileURL: "http://example.org/StructureDefinition/observation", ResourceType: "Observation", ElementPath: "Observation.subject", Variant: coverage.CoverageVariantValidMin},
@@ -167,8 +169,8 @@ func TestBuildSetupDatasetExcludesAbstractReferenceTypes(t *testing.T) {
 func TestBuildSetupDatasetRespectsCapabilityProfileScope(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/org-unsupported", Type: "Organization", Elements: []model.ElementDefinition{
-		{Path: "Organization", Min: 0, Max: "*"},
-		{Path: "Organization.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Organization.name", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 	}})
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
 		{ID: "o-1", ProfileURL: "http://example.org/StructureDefinition/org-unsupported", ResourceType: "Organization", ElementPath: "Organization.name", Variant: coverage.CoverageVariantValidMin},
@@ -190,13 +192,13 @@ func TestBuildSetupDatasetRespectsCapabilityProfileScope(t *testing.T) {
 func TestBuildSetupDatasetRespectsCapabilityScope(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 	}})
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/observation", Type: "Observation", Elements: []model.ElementDefinition{
-		{Path: "Observation", Min: 0, Max: "*"},
-		{Path: "Observation.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
-		{Path: "Observation.subject", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
+		{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Observation.status", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Observation.subject", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
 	}})
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
 		{ID: "o-1", ProfileURL: "http://example.org/StructureDefinition/observation", ResourceType: "Observation", ElementPath: "Observation.subject", Variant: coverage.CoverageVariantValidMin},
@@ -222,13 +224,13 @@ func TestBuildSetupDatasetRespectsCapabilityScope(t *testing.T) {
 func TestBuildSetupDatasetRecordsDependencyRelationships(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 	}})
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/observation", Type: "Observation", Elements: []model.ElementDefinition{
-		{Path: "Observation", Min: 0, Max: "*"},
-		{Path: "Observation.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
-		{Path: "Observation.subject", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
+		{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Observation.status", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}},
+		{Path: "Observation.subject", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/patient"}}}},
 	}})
 	plan := &coverage.CoveragePlan{Requirements: []coverage.CoverageRequirement{
 		{ID: "p-1", ProfileURL: "http://example.org/StructureDefinition/patient", ResourceType: "Patient", ElementPath: "Patient.name", Variant: coverage.CoverageVariantValidMin},
@@ -266,13 +268,13 @@ func TestBuildSetupDatasetRecordsDependencyRelationships(t *testing.T) {
 func TestBuildSetupDatasetRecordsReferencesFromResourceBody(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/endpoint", Type: "Endpoint", Elements: []model.ElementDefinition{
-		{Path: "Endpoint", Min: 0, Max: "*"},
-		{Path: "Endpoint.connectionType", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Coding"}}},
+		{Path: "Endpoint", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Endpoint.connectionType", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Coding"}}},
 	}})
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/healthcareservice", Type: "HealthcareService", Elements: []model.ElementDefinition{
-		{Path: "HealthcareService", Min: 0, Max: "*"},
-		{Path: "HealthcareService.characteristic", Min: 0, Max: "*", Types: []model.ElementType{{Code: "CodeableConcept"}}},
-		{Path: "HealthcareService.endpoint", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
+		{Path: "HealthcareService", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "HealthcareService.characteristic", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "CodeableConcept"}}},
+		{Path: "HealthcareService.endpoint", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
 	}})
 	reg.AddSearchParameter(&model.SearchParameter{URL: "http://example.org/SearchParameter/hs-characteristic", Name: "characteristic", Code: "characteristic", Base: []string{"HealthcareService"}, Type: "token", Expression: "HealthcareService.characteristic"})
 
@@ -329,7 +331,7 @@ func TestApplySliceConstractionsNormalisesCodingDisplay(t *testing.T) {
 
 	slice := &model.SliceNode{
 		Name:       "Local",
-		Definition: &model.ElementDefinition{Path: "Endpoint.identifier", Min: 1, Max: "1"},
+		Definition: &model.ElementDefinition{Path: "Endpoint.identifier", Min: 1, Max: 1},
 		Children: map[string]*model.ElementNode{
 			"type": {
 				Name: "type",
@@ -379,9 +381,9 @@ func TestSynthesizeBodyStripsSelfReferences(t *testing.T) {
 	locationURL := "http://example.org/StructureDefinition/location"
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: locationURL, Type: "Location", Kind: "resource", Elements: []model.ElementDefinition{
-		{Path: "Location", Min: 0, Max: "*"},
-		{Path: "Location.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
-		{Path: "Location.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{locationURL}}}},
+		{Path: "Location", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Location.name", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
+		{Path: "Location.partOf", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{locationURL}}}},
 	}})
 
 	// Setup Location: its partOf resolves to its own reference and must be
@@ -422,19 +424,19 @@ func TestApplySliceConstraintsRecursesIntoNestedCoding(t *testing.T) {
 	}
 	slice := &model.SliceNode{
 		Name:       "suppressedBy",
-		Definition: &model.ElementDefinition{Path: "Organization.extension.extension", SliceName: "suppressedBy", Min: 1, Max: "1"},
+		Definition: &model.ElementDefinition{Path: "Organization.extension.extension", SliceName: "suppressedBy", Min: 1, Max: 1},
 		Children: map[string]*model.ElementNode{
 			"url": {
 				Name: "url", Path: "Organization.extension.extension.url",
-				Definition: &model.ElementDefinition{Path: "Organization.extension.extension.url", Min: 1, Max: "1", Fixed: "suppressedBy"},
+				Definition: &model.ElementDefinition{Path: "Organization.extension.extension.url", Min: 1, Max: 1, Fixed: "suppressedBy"},
 			},
 			"value[x]": {
 				Name: "value[x]", Path: "Organization.extension.extension.value[x]",
-				Definition: &model.ElementDefinition{Path: "Organization.extension.extension.value[x]", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}},
+				Definition: &model.ElementDefinition{Path: "Organization.extension.extension.value[x]", Min: 1, Max: 1, Types: []model.ElementType{{Code: "CodeableConcept"}}},
 				Children: map[string]*model.ElementNode{
 					"coding": {
 						Name: "coding", Path: "Organization.extension.extension.value[x].coding",
-						Definition: &model.ElementDefinition{Path: "Organization.extension.extension.value[x].coding", Min: 1, Max: "1", Fixed: fixedCoding, Types: []model.ElementType{{Code: "Coding"}}},
+						Definition: &model.ElementDefinition{Path: "Organization.extension.extension.value[x].coding", Min: 1, Max: 1, Fixed: fixedCoding, Types: []model.ElementType{{Code: "Coding"}}},
 					},
 				},
 			},
@@ -489,17 +491,17 @@ func TestSynthesizeBodyGivesSimpleExtensionAValue(t *testing.T) {
 	r := registry.New()
 	activePeriodURL := "http://digitalhealth.gov.au/fhir/cc/StructureDefinition/active-period"
 	r.AddStructureDefinition(&model.StructureDefinition{URL: activePeriodURL, Type: "Extension", Kind: "complex-type", Elements: []model.ElementDefinition{
-		{Path: "Extension", Min: 0, Max: "*"},
-		{Path: "Extension.extension", Min: 0, Max: "0", Types: []model.ElementType{{Code: "Extension"}}},
-		{Path: "Extension.url", Min: 1, Max: "1", Types: []model.ElementType{{Code: "uri"}}, Fixed: activePeriodURL},
-		{Path: "Extension.value[x]", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Period"}}},
+		{Path: "Extension", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Extension.extension", Min: 0, Max: 0, Types: []model.ElementType{{Code: "Extension"}}},
+		{Path: "Extension.url", Min: 1, Max: 1, Types: []model.ElementType{{Code: "uri"}}, Fixed: activePeriodURL},
+		{Path: "Extension.value[x]", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Period"}}},
 	}})
 	orgURL := "http://example.org/StructureDefinition/org"
 	r.AddStructureDefinition(&model.StructureDefinition{URL: orgURL, Type: "Organization", Elements: []model.ElementDefinition{
-		{Path: "Organization", Min: 0, Max: "*"},
-		{Path: "Organization.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
-		{Path: "Organization.extension", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Extension"}}},
-		{Path: "Organization.extension", Min: 1, Max: "1", SliceName: "active-period", Types: []model.ElementType{{Code: "Extension", Profile: []string{activePeriodURL}}}},
+		{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Organization.name", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
+		{Path: "Organization.extension", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Extension"}}},
+		{Path: "Organization.extension", Min: 1, Max: 1, SliceName: "active-period", Types: []model.ElementType{{Code: "Extension", Profiles: []string{activePeriodURL}}}},
 	}})
 
 	body := SynthesizeBody("Organization", "momus-test", []string{orgURL}, orgURL, nil, r, true)
@@ -532,15 +534,15 @@ func TestSynthesizeBodyFixedCodingCarriesOnlySystemAndCode(t *testing.T) {
 	}
 	slice := &model.SliceNode{
 		Name:       "suppressedBy",
-		Definition: &model.ElementDefinition{Path: "Organization.extension.extension", SliceName: "suppressedBy", Min: 1, Max: "1"},
+		Definition: &model.ElementDefinition{Path: "Organization.extension.extension", SliceName: "suppressedBy", Min: 1, Max: 1},
 		Children: map[string]*model.ElementNode{
 			"value[x]": {
 				Name: "value[x]", Path: "Organization.extension.extension.value[x]",
-				Definition: &model.ElementDefinition{Path: "Organization.extension.extension.value[x]", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}},
+				Definition: &model.ElementDefinition{Path: "Organization.extension.extension.value[x]", Min: 1, Max: 1, Types: []model.ElementType{{Code: "CodeableConcept"}}},
 				Children: map[string]*model.ElementNode{
 					"coding": {
 						Name: "coding", Path: "Organization.extension.extension.value[x].coding",
-						Definition: &model.ElementDefinition{Path: "Organization.extension.extension.value[x].coding", Min: 1, Max: "1", Fixed: fixedCoding, Types: []model.ElementType{{Code: "Coding"}}},
+						Definition: &model.ElementDefinition{Path: "Organization.extension.extension.value[x].coding", Min: 1, Max: 1, Fixed: fixedCoding, Types: []model.ElementType{{Code: "Coding"}}},
 					},
 				},
 			},
@@ -576,24 +578,6 @@ func TestSynthesizeBodyFixedCodingCarriesOnlySystemAndCode(t *testing.T) {
 	// The internal marker must never leak.
 	if _, has := coding[fixedCodingKey]; has {
 		t.Fatalf("fixed coding marker leaked into payload: %q", fixedCodingKey)
-	}
-}
-
-// TestGenerateAHPRAProducesValidRegistrationNumber verifies the Ahpra registration
-// number satisfies the au-ahpraregistrationnumber inv-ahpra-0 invariant: three
-// uppercase letters followed by ten digits.
-func TestGenerateAHPRAProducesValidRegistrationNumber(t *testing.T) {
-	v := generateAHPRA()
-	if len(v) != 13 {
-		t.Fatalf("generateAHPRA()=%q length %d, want 13", v, len(v))
-	}
-	for i, r := range v {
-		switch {
-		case i < 3 && (r < 'A' || r > 'Z'):
-			t.Fatalf("generateAHPRA()=%q: char %d must be uppercase letter", v, i)
-		case i >= 3 && (r < '0' || r > '9'):
-			t.Fatalf("generateAHPRA()=%q: char %d must be digit", v, i)
-		}
 	}
 }
 

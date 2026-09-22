@@ -6,6 +6,8 @@ import (
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 func TestCanonicalToResourceType(t *testing.T) {
@@ -73,16 +75,16 @@ func TestIsDerivableElement(t *testing.T) {
 }
 
 func TestAllowsMultiple(t *testing.T) {
-	if !allowsMultiple("*") {
+	if !allowsMultiple(fhir.MaxUnbounded) {
 		t.Fatal("allowsMultiple(*) should be true")
 	}
-	if !allowsMultiple("2") {
+	if !allowsMultiple(2) {
 		t.Fatal("allowsMultiple(2) should be true")
 	}
-	if allowsMultiple("1") || allowsMultiple("0") {
+	if allowsMultiple(1) || allowsMultiple(0) {
 		t.Fatal("allowsMultiple(1/0) should be false")
 	}
-	if allowsMultiple("abc") {
+	if allowsMultiple(1) {
 		t.Fatal("allowsMultiple(non-numeric) should be false")
 	}
 }
@@ -164,8 +166,8 @@ func TestToSet(t *testing.T) {
 
 func TestCollectDependencyTargets(t *testing.T) {
 	reg := registry.New()
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Patient", Type: "Patient", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Patient", Min: 0, Max: "*"}}})
-	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Organization", Type: "Organization", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: "*"}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Patient", Type: "Patient", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded}}})
+	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/Organization", Type: "Organization", Kind: "resource", Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded}}})
 	// Element-level TargetProfile.
 	el := model.ElementDefinition{TargetProfile: []string{"http://example.org/StructureDefinition/Patient", "http://example.org/StructureDefinition/Patient"}}
 	got := collectDependencyTargets(reg, el)
@@ -199,10 +201,10 @@ func TestTrackPruned(t *testing.T) {
 func TestExtensionSlicePrefixes(t *testing.T) {
 	suppressedURL := "http://example.org/StructureDefinition/suppressed"
 	elements := []model.ElementDefinition{
-		{Path: "Organization.extension", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Extension"}}},
-		{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Extension", Profile: []string{suppressedURL}}}},
-		{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: "1"},
-		{ID: "Organization.extension:other", Path: "Organization.extension", SliceName: "other", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Extension", Profile: []string{"https://example.org/StructureDefinition/other"}}}},
+		{Path: "Organization.extension", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Extension"}}},
+		{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Extension", Profiles: []string{suppressedURL}}}},
+		{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: 1},
+		{ID: "Organization.extension:other", Path: "Organization.extension", SliceName: "other", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Extension", Profiles: []string{"https://example.org/StructureDefinition/other"}}}},
 	}
 
 	// Empty exclusion list yields no prefixes.
@@ -242,12 +244,12 @@ func TestElementIsExcludedExtension(t *testing.T) {
 	excluded := map[string]struct{}{"https://example.org/structuredefinition/suppressed": {}}
 
 	if !elementIsExcludedExtension(model.ElementDefinition{
-		Types: []model.ElementType{{Code: "Extension", Profile: []string{"https://example.org/StructureDefinition/suppressed"}}},
+		Types: []model.ElementType{{Code: "Extension", Profiles: []string{"https://example.org/StructureDefinition/suppressed"}}},
 	}, excluded) {
 		t.Fatal("matching extension profile should be excluded")
 	}
 	if elementIsExcludedExtension(model.ElementDefinition{
-		Types: []model.ElementType{{Code: "Extension", Profile: []string{"https://example.org/StructureDefinition/other"}}},
+		Types: []model.ElementType{{Code: "Extension", Profiles: []string{"https://example.org/StructureDefinition/other"}}},
 	}, excluded) {
 		t.Fatal("non-matching extension profile should not be excluded")
 	}
@@ -257,7 +259,7 @@ func TestElementIsExcludedExtension(t *testing.T) {
 		t.Fatal("non-extension element should not be excluded")
 	}
 	if !elementIsExcludedExtension(model.ElementDefinition{
-		Types: []model.ElementType{{Code: "Extension", Profile: []string{"https://example.org/StructureDefinition/suppressed|26.0.0"}}},
+		Types: []model.ElementType{{Code: "Extension", Profiles: []string{"https://example.org/StructureDefinition/suppressed|26.0.0"}}},
 	}, excluded) {
 		t.Fatal("version-suffixed matching profile should be excluded")
 	}

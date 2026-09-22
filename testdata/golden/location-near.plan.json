@@ -320,12 +320,12 @@
                       "http://example.org/StructureDefinition/location"
                     ]
                   },
+                  "name": "Vandelay delta",
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 63.39,
+                    "longitude": 27.31
                   },
-                  "resourceType": "Location",
-                  "status": "status"
+                  "resourceType": "Location"
                 }
               },
               {
@@ -392,8 +392,8 @@
                     ]
                   },
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 23.88,
+                    "longitude": 17.57
                   },
                   "resourceType": "Location"
                 }
@@ -461,12 +461,12 @@
                       "http://example.org/StructureDefinition/location"
                     ]
                   },
+                  "name": "Umbrella kappa",
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 73.65,
+                    "longitude": 24.58
                   },
-                  "resourceType": "Location",
-                  "status": "status"
+                  "resourceType": "Location"
                 }
               },
               {
@@ -499,7 +499,7 @@
                     "op": "add",
                     "path": "/",
                     "value": {
-                      "status": "status"
+                      "name": "Umbrella kappa"
                     }
                   }
                 ]
@@ -540,13 +540,13 @@
                       "http://example.org/StructureDefinition/location"
                     ]
                   },
-                  "name": "Name",
+                  "name": "Umbrella epsilon",
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 1.37,
+                    "longitude": 40.01
                   },
                   "resourceType": "Location",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -612,12 +612,12 @@
                       "http://example.org/StructureDefinition/location"
                     ]
                   },
+                  "name": "Vandelay delta",
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 91.69,
+                    "longitude": 0.75
                   },
-                  "resourceType": "Location",
-                  "status": "status"
+                  "resourceType": "Location"
                 }
               },
               {
@@ -652,12 +652,12 @@
                       "http://example.org/StructureDefinition/location"
                     ]
                   },
+                  "name": "Vandelay delta",
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 91.69,
+                    "longitude": 0.75
                   },
-                  "resourceType": "Location",
-                  "status": "status"
+                  "resourceType": "Location"
                 }
               },
               {
@@ -697,8 +697,8 @@
                     ]
                   },
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 27.59,
+                    "longitude": 9.19
                   },
                   "resourceType": "Location"
                 }
@@ -763,8 +763,8 @@
                     ]
                   },
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 27.59,
+                    "longitude": 9.19
                   },
                   "resourceType": "Location"
                 }
@@ -950,7 +950,7 @@
                   },
                   "position": {
                     "latitude": "12abc",
-                    "longitude": 123.45
+                    "longitude": 19.05
                   },
                   "resourceType": "Location"
                 }
@@ -993,7 +993,7 @@
                   },
                   "position": {
                     "latitude": null,
-                    "longitude": 123.45
+                    "longitude": 3.26
                   },
                   "resourceType": "Location"
                 }
@@ -1035,8 +1035,8 @@
                     ]
                   },
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 42.67,
+                    "longitude": 49.21
                   },
                   "resourceType": "Location"
                 }
@@ -1079,7 +1079,7 @@
                   },
                   "position": {
                     "latitude": "not-a-number",
-                    "longitude": 123.45
+                    "longitude": 59.5
                   },
                   "resourceType": "Location"
                 }
@@ -1121,7 +1121,7 @@
                     ]
                   },
                   "position": {
-                    "longitude": 123.45
+                    "longitude": 29.44
                   },
                   "resourceType": "Location"
                 }
@@ -1163,8 +1163,8 @@
                     ]
                   },
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 36.68,
+                    "longitude": 2.9
                   },
                   "resourceType": "Location"
                 }
@@ -1206,7 +1206,7 @@
                     ]
                   },
                   "position": {
-                    "latitude": 123.45,
+                    "latitude": 77.83,
                     "longitude": "12abc"
                   },
                   "resourceType": "Location"
@@ -1249,7 +1249,7 @@
                     ]
                   },
                   "position": {
-                    "latitude": 123.45,
+                    "latitude": 75.75,
                     "longitude": null
                   },
                   "resourceType": "Location"
@@ -1292,8 +1292,8 @@
                     ]
                   },
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 27.3,
+                    "longitude": 49.16
                   },
                   "resourceType": "Location"
                 }
@@ -1335,7 +1335,7 @@
                     ]
                   },
                   "position": {
-                    "latitude": 123.45,
+                    "latitude": 0.34,
                     "longitude": "not-a-number"
                   },
                   "resourceType": "Location"
@@ -1378,7 +1378,7 @@
                     ]
                   },
                   "position": {
-                    "latitude": 123.45
+                    "latitude": 97.43
                   },
                   "resourceType": "Location"
                 }
@@ -1420,8 +1420,8 @@
                     ]
                   },
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 76.79,
+                    "longitude": 33.29
                   },
                   "resourceType": "Location"
                 }
@@ -1543,8 +1543,8 @@
                     ]
                   },
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 84.72,
+                    "longitude": 85.76
                   },
                   "resourceType": "Location"
                 }
@@ -1665,8 +1665,8 @@
                     ]
                   },
                   "position": {
-                    "latitude": 123.45,
-                    "longitude": 123.45
+                    "latitude": 17.09,
+                    "longitude": 70.99
                   },
                   "resourceType": "Location"
                 }

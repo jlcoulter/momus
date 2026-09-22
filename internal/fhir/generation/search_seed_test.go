@@ -9,6 +9,8 @@ import (
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 func TestBuildSetupDatasetAddsSearchMatchSeed(t *testing.T) {
@@ -18,11 +20,11 @@ func TestBuildSetupDatasetAddsSearchMatchSeed(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.name",
 					Min:   1,
-					Max:   "*",
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "HumanName"}},
 				},
 			},
@@ -82,11 +84,11 @@ func TestBuildSetupDatasetAddsIDSearchSeed(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.name",
 					Min:   1,
-					Max:   "*",
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "HumanName"}},
 				},
 			},
@@ -175,12 +177,12 @@ func TestSearchSeedUsesValidBoundCode(t *testing.T) {
 	reg.AddValueSet(
 		&model.ValueSet{
 			URL: "http://hl7.org/fhir/ValueSet/endpoint-status",
-			ComposeIncludes: []model.ValueSetInclude{
+			Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{
 				{
-					System:   "http://hl7.org/fhir/ValueSet/endpoint-status",
-					Concepts: []model.ConceptReference{{Code: "active"}, {Code: "off"}},
+					System:  "http://hl7.org/fhir/ValueSet/endpoint-status",
+					Concept: []model.ConceptReference{{Code: "active"}, {Code: "off"}},
 				},
-			},
+			}},
 		},
 	)
 	reg.AddStructureDefinition(
@@ -188,11 +190,11 @@ func TestSearchSeedUsesValidBoundCode(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/endpoint",
 			Type: "Endpoint",
 			Elements: []model.ElementDefinition{
-				{Path: "Endpoint", Min: 0, Max: "*"},
+				{Path: "Endpoint", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Endpoint.status",
 					Min:   1,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "code"}},
 					Binding: &model.Binding{
 						Strength: "required",
@@ -202,7 +204,7 @@ func TestSearchSeedUsesValidBoundCode(t *testing.T) {
 				{
 					Path:  "Endpoint.connectionType",
 					Min:   1,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "Coding"}},
 				},
 			},
@@ -307,12 +309,12 @@ func TestSearchSeedUsesValidBoundCodeableConcept(t *testing.T) {
 	reg.AddValueSet(
 		&model.ValueSet{
 			URL: "http://example.org/ValueSet/spc",
-			ComposeIncludes: []model.ValueSetInclude{
+			Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{
 				{
-					System:   "http://example.org/cs/spc",
-					Concepts: []model.ConceptReference{{Code: "spc1"}},
+					System:  "http://example.org/cs/spc",
+					Concept: []model.ConceptReference{{Code: "spc1"}},
 				},
-			},
+			}},
 		},
 	)
 	reg.AddStructureDefinition(
@@ -320,17 +322,17 @@ func TestSearchSeedUsesValidBoundCodeableConcept(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/hs",
 			Type: "HealthcareService",
 			Elements: []model.ElementDefinition{
-				{Path: "HealthcareService", Min: 0, Max: "*"},
+				{Path: "HealthcareService", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "HealthcareService.active",
 					Min:   1,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 				{
 					Path:  "HealthcareService.serviceProvisionCode",
 					Min:   0,
-					Max:   "*",
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "CodeableConcept"}},
 					Binding: &model.Binding{
 						Strength: "required",
@@ -400,17 +402,17 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/org",
 			Type: "Organization",
 			Elements: []model.ElementDefinition{
-				{Path: "Organization", Min: 0, Max: "*"},
+				{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Organization.name",
 					Min:   1,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "string"}},
 				},
 				{
 					Path:  "Organization.address",
 					Min:   1,
-					Max:   "*",
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Address"}},
 				},
 				{
@@ -418,7 +420,7 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 					Path:      "Organization.address",
 					SliceName: "physical",
 					Min:       1,
-					Max:       "1",
+					Max:       1,
 					Types:     []model.ElementType{{Code: "Address"}},
 				},
 				{
@@ -426,7 +428,7 @@ func TestSliceAppliesDiscriminatorPattern(t *testing.T) {
 					Path:      "Organization.address.type",
 					SliceName: "",
 					Min:       1,
-					Max:       "1",
+					Max:       1,
 					Types:     []model.ElementType{{Code: "code"}},
 					Pattern:   "physical",
 				},
@@ -498,11 +500,11 @@ func TestSetDateLeafPeriodElement(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/practitionerrole",
 			Type: "PractitionerRole",
 			Elements: []model.ElementDefinition{
-				{Path: "PractitionerRole", Min: 0, Max: "*"},
+				{Path: "PractitionerRole", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "PractitionerRole.period",
 					Min:   0,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "Period"}},
 				},
 			},
@@ -523,11 +525,11 @@ func TestSearchSeedSetsIdentifierValue(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.identifier",
 					Min:   0,
-					Max:   "*",
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Identifier"}},
 				},
 			},
@@ -618,11 +620,11 @@ func TestResolveNestedLeafType(t *testing.T) {
 			URL:  "http://hl7.org/fhir/StructureDefinition/Identifier",
 			Type: "Identifier",
 			Elements: []model.ElementDefinition{
-				{Path: "Identifier", Min: 0, Max: "*"},
+				{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Identifier.value",
 					Min:   0,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "string"}},
 				},
 			},
@@ -634,11 +636,11 @@ func TestResolveNestedLeafType(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.identifier",
 					Min:   0,
-					Max:   "*",
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Identifier"}},
 				},
 			},
@@ -697,17 +699,17 @@ func TestSearchLeafType(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.active",
 					Min:   0,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 				{
 					Path:  "Patient.deceased",
 					Min:   0,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 			},
@@ -736,41 +738,41 @@ func TestApplySearchMatchBranchCoverage(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.name",
 					Min:   0,
-					Max:   "*",
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "HumanName"}},
 				},
 				{
 					Path:  "Patient.address",
 					Min:   0,
-					Max:   "*",
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Address"}},
 				},
 				{
 					Path:  "Patient.telecom",
 					Min:   0,
-					Max:   "*",
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "ContactPoint"}},
 				},
 				{
 					Path:  "Patient.generalPractitioner",
 					Min:   0,
-					Max:   "*",
+					Max:   fhir.MaxUnbounded,
 					Types: []model.ElementType{{Code: "Reference"}},
 				},
 				{
 					Path:  "Patient.valueQuantity",
 					Min:   0,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "Quantity"}},
 				},
 				{
 					Path:  "Patient.score",
 					Min:   0,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "integer"}},
 				},
 			},
@@ -843,29 +845,29 @@ func TestApplySearchMatchSpecialDateComposite(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/location",
 			Type: "Location",
 			Elements: []model.ElementDefinition{
-				{Path: "Location", Min: 0, Max: "*"},
+				{Path: "Location", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Location.position",
 					Min:   0,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "BackboneElement"}},
 				},
 				{
 					Path:  "Location.position.latitude",
 					Min:   1,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "decimal"}},
 				},
 				{
 					Path:  "Location.position.longitude",
 					Min:   1,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "decimal"}},
 				},
 				{
 					Path:  "Location.recorded",
 					Min:   0,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "instant"}},
 				},
 			},
@@ -904,11 +906,11 @@ func TestSearchSeedSkipsNonMatchableSearch(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/patient",
 			Type: "Patient",
 			Elements: []model.ElementDefinition{
-				{Path: "Patient", Min: 0, Max: "*"},
+				{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Patient.active",
 					Min:   1,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 			},
@@ -964,7 +966,7 @@ func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
 			"display": "Sealed Immediate Message Delivery",
 		},
 	}
-	setSearchCodeValue(body, "connectionType", "dicom-wado-rs", "Coding", false, "")
+	setSearchCodeValue(body, "connectionType", "dicom-wado-rs", "Coding", false, "", nil)
 	ct, ok := body["connectionType"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected connectionType map, got %T", body["connectionType"])
@@ -988,7 +990,7 @@ func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
 			"text": "Old",
 		},
 	}
-	setSearchCodeValue(concept, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(concept, "type", "new", "CodeableConcept", false, "", nil)
 	typ, ok := concept["type"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected type map, got %T", concept["type"])
@@ -1022,20 +1024,20 @@ func TestSetSearchCodeValueClearsStaleSystemDisplay(t *testing.T) {
 func TestSetSearchCodeValueCodingArrayNonMap(t *testing.T) {
 	// A map with a coding array whose first element is not a map.
 	body := map[string]any{"type": map[string]any{"coding": []any{"not-a-map"}}}
-	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "", nil)
 	codings := body["type"].(map[string]any)["coding"].([]any)
 	if codings[0].(map[string]any)["code"] != "new" {
 		t.Fatalf("non-map coding array = %v", codings[0])
 	}
 	// An array whose first element is not a map.
 	body = map[string]any{"type": []any{"not-a-map"}}
-	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "", nil)
 	if body["type"].([]any)[0].(map[string]any)["code"] != "new" {
 		t.Fatalf("non-map array element = %v", body["type"])
 	}
 	// An array of codings where the first coding is not a map.
 	body = map[string]any{"type": []any{map[string]any{"coding": []any{"not-a-map"}}}}
-	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "", nil)
 	inner := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
 	if inner[0].(map[string]any)["code"] != "new" {
 		t.Fatalf("array non-map coding = %v", inner[0])
@@ -1049,7 +1051,7 @@ func TestSetSearchCodeValueDefaultBranches(t *testing.T) {
 			map[string]any{"coding": []any{map[string]any{"code": "old", "system": "old"}}},
 		},
 	}
-	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "", nil)
 	codings := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
 	first := codings[0].(map[string]any)
 	if first["code"] != "new" {
@@ -1057,20 +1059,20 @@ func TestSetSearchCodeValueDefaultBranches(t *testing.T) {
 	}
 	// An existing map with a coding array whose first element is not a map.
 	body = map[string]any{"type": map[string]any{"coding": []any{"not-a-map"}}}
-	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "", nil)
 	codings = body["type"].(map[string]any)["coding"].([]any)
 	if codings[0].(map[string]any)["code"] != "new" {
 		t.Fatalf("non-map coding replaced = %v", codings[0])
 	}
 	// An existing string field.
 	body = map[string]any{"status": "old"}
-	setSearchCodeValue(body, "status", "new", "code", false, "")
+	setSearchCodeValue(body, "status", "new", "code", false, "", nil)
 	if body["status"] != "new" {
 		t.Fatalf("string field = %v", body["status"])
 	}
 	// A non-map, non-string default (e.g. a number) is replaced with a coding map.
 	body = map[string]any{"status": float64(5)}
-	setSearchCodeValue(body, "status", "new", "Coding", false, "")
+	setSearchCodeValue(body, "status", "new", "Coding", false, "", nil)
 	if body["status"].(map[string]any)["code"] != "new" {
 		t.Fatalf("default branch = %v", body["status"])
 	}
@@ -1083,17 +1085,17 @@ func TestApplyCompositeMatchTypeBranches(t *testing.T) {
 			URL:  "http://example.org/StructureDefinition/observation",
 			Type: "Observation",
 			Elements: []model.ElementDefinition{
-				{Path: "Observation", Min: 0, Max: "*"},
+				{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
 				{
 					Path:  "Observation.active",
 					Min:   0,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "boolean"}},
 				},
 				{
 					Path:  "Observation.value",
 					Min:   0,
-					Max:   "1",
+					Max:   1,
 					Types: []model.ElementType{{Code: "Quantity"}},
 				},
 			},
@@ -1122,6 +1124,7 @@ func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
 		"CodeableConcept",
 		true,
 		"http://digitalhealth.gov.au/fhir/hcpd/CodeSystem/service-provision-cs",
+		nil,
 	)
 	arr := body["serviceProvisionCode"].([]any)
 	cc := arr[0].(map[string]any)
@@ -1148,6 +1151,7 @@ func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
 		"Coding",
 		false,
 		"http://hl7.org/fhir/ValueSet/endpoint-connection-type",
+		nil,
 	)
 	ct := existing["connectionType"].(map[string]any)
 	if ct["code"] != "dicom-wado-rs" {
@@ -1164,43 +1168,43 @@ func TestSetSearchCodeValueKeepsResolvedSystem(t *testing.T) {
 func TestSetSearchCodeValueBranches(t *testing.T) {
 	// Primitive repeatable code, absent.
 	body := map[string]any{}
-	setSearchCodeValue(body, "status", "active", "code", true, "")
+	setSearchCodeValue(body, "status", "active", "code", true, "", nil)
 	if got := body["status"].([]any)[0]; got != "active" {
 		t.Fatalf("repeatable code = %v", got)
 	}
 	// Primitive non-repeatable code.
 	body = map[string]any{}
-	setSearchCodeValue(body, "status", "active", "code", false, "")
+	setSearchCodeValue(body, "status", "active", "code", false, "", nil)
 	if body["status"] != "active" {
 		t.Fatalf("non-repeatable code = %v", body["status"])
 	}
 	// Existing primitive array (repeatable).
 	body = map[string]any{"status": []any{"old"}}
-	setSearchCodeValue(body, "status", "new", "code", true, "")
+	setSearchCodeValue(body, "status", "new", "code", true, "", nil)
 	if body["status"].([]any)[0] != "new" {
 		t.Fatalf("existing repeatable code = %v", body["status"])
 	}
 	// Coding type, absent -> coding map.
 	body = map[string]any{}
-	setSearchCodeValue(body, "connectionType", "dicom-wado-rs", "Coding", false, "http://sys")
+	setSearchCodeValue(body, "connectionType", "dicom-wado-rs", "Coding", false, "http://sys", nil)
 	if body["connectionType"].(map[string]any)["code"] != "dicom-wado-rs" {
 		t.Fatalf("Coding = %v", body["connectionType"])
 	}
 	// CodeableConcept repeatable absent.
 	body = map[string]any{}
-	setSearchCodeValue(body, "type", "x", "CodeableConcept", true, "")
+	setSearchCodeValue(body, "type", "x", "CodeableConcept", true, "", nil)
 	if body["type"].([]any)[0].(map[string]any)["coding"] == nil {
 		t.Fatalf("CodeableConcept repeatable = %v", body["type"])
 	}
 	// Empty array case.
 	body = map[string]any{"status": []any{}}
-	setSearchCodeValue(body, "status", "active", "code", true, "")
+	setSearchCodeValue(body, "status", "active", "code", true, "", nil)
 	if body["status"].([]any)[0] != "active" {
 		t.Fatalf("empty array code = %v", body["status"])
 	}
 	// Existing string field.
 	body = map[string]any{"status": "old"}
-	setSearchCodeValue(body, "status", "new", "code", false, "")
+	setSearchCodeValue(body, "status", "new", "code", false, "", nil)
 	if body["status"] != "new" {
 		t.Fatalf("existing string = %v", body["status"])
 	}
@@ -1208,14 +1212,14 @@ func TestSetSearchCodeValueBranches(t *testing.T) {
 	body = map[string]any{
 		"type": []any{map[string]any{"coding": []any{map[string]any{"code": "old"}}}},
 	}
-	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "")
+	setSearchCodeValue(body, "type", "new", "CodeableConcept", false, "", nil)
 	codings := body["type"].([]any)[0].(map[string]any)["coding"].([]any)
 	if codings[0].(map[string]any)["code"] != "new" {
 		t.Fatalf("array of codings = %v", codings)
 	}
 	// Existing map with a "code" field directly (bare coding).
 	body = map[string]any{"type": map[string]any{"code": "old"}}
-	setSearchCodeValue(body, "type", "new", "Coding", false, "")
+	setSearchCodeValue(body, "type", "new", "Coding", false, "", nil)
 	if body["type"].(map[string]any)["code"] != "new" {
 		t.Fatalf("bare coding = %v", body["type"])
 	}

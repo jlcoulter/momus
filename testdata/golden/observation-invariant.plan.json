@@ -167,11 +167,16 @@
                   "id": "momus-observation-operation-delete-1224694867",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "jknz9juf"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "mk4k767z"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "e5zq2fo1"
                     }
                   ],
                   "meta": {
@@ -180,7 +185,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -243,11 +248,8 @@
                   "id": "momus-observation-operation-history-1985385168",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "z180mdsl"
                     }
                   ],
                   "meta": {
@@ -256,7 +258,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -319,11 +321,16 @@
                   "id": "momus-observation-operation-patch-1196719590",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "xe0lq74i"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "ylau57c8"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "tdatb6st"
                     }
                   ],
                   "meta": {
@@ -332,7 +339,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -365,7 +372,7 @@
                     "op": "add",
                     "path": "/",
                     "value": {
-                      "status": "status"
+                      "status": "active"
                     }
                   }
                 ]
@@ -403,11 +410,12 @@
                   "id": "momus-observation-operation-read-1830018108",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "z8rwq0z1"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "ubmbpowl"
                     }
                   ],
                   "meta": {
@@ -416,7 +424,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -479,11 +487,8 @@
                   "id": "momus-observation-operation-update-479677577",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "q5b52uyy"
                     }
                   ],
                   "meta": {
@@ -492,7 +497,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -524,11 +529,8 @@
                   "id": "momus-observation-operation-update-479677577",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "q5b52uyy"
                     }
                   ],
                   "meta": {
@@ -537,7 +539,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -573,11 +575,8 @@
                   "id": "momus-crud-observation",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "jd73s8qh"
                     }
                   ],
                   "meta": {
@@ -586,7 +585,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -645,11 +644,8 @@
                   "id": "momus-crud-observation",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "jd73s8qh"
                     }
                   ],
                   "meta": {
@@ -658,7 +654,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -842,7 +838,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -883,7 +879,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -919,11 +915,16 @@
                   "id": "momus-observation-datatype-valid-265421262",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "yhyii6vj"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "4rwgie2e"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "e7gme5eo"
                     }
                   ],
                   "meta": {
@@ -932,7 +933,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -973,7 +974,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1000,55 +1001,6 @@
             "Steps": [
               {
                 "Method": "PUT",
-                "URL": "http://momus-golden.invalid/fhir/Observation/momus-observation-invariant-satisfies-529810484",
-                "Headers": {
-                  "Content-Type": "application/fhir+json",
-                  "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/observation|Observation.identifier|invariant-satisfies"
-                },
-                "Body": {
-                  "id": "momus-observation-invariant-satisfies-529810484",
-                  "identifier": [
-                    {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
-                    }
-                  ],
-                  "meta": {
-                    "profile": [
-                      "http://example.org/StructureDefinition/observation"
-                    ]
-                  },
-                  "resourceType": "Observation",
-                  "status": "status"
-                }
-              },
-              {
-                "Description": "Observation.identifier: accept a resource satisfying the invariant",
-                "RequirementID": "http://example.org/StructureDefinition/observation|Observation.identifier|invariant-satisfies",
-                "Expression": "status in [200,201]",
-                "Trace": {
-                  "ConstraintID": "http://example.org/StructureDefinition/observation|Observation.identifier|invariant|obs-id-0",
-                  "ProfileURL": "http://example.org/StructureDefinition/observation",
-                  "ResourceType": "Observation",
-                  "ElementPath": "Observation.identifier",
-                  "Domain": "invariant",
-                  "Variant": "invariant-satisfies",
-                  "Expected": "accept",
-                  "Description": "Observation.identifier: accept a resource satisfying the invariant",
-                  "HumanID": "Observation.identifier.invariant.invariant-satisfies",
-                  "SearchCode": "",
-                  "SearchCodeB": ""
-                }
-              }
-            ]
-          },
-          {
-            "Steps": [
-              {
-                "Method": "PUT",
                 "URL": "http://momus-golden.invalid/fhir/Observation/momus-observation-missing-required-2037825686",
                 "Headers": {
                   "Content-Type": "application/fhir+json",
@@ -1062,7 +1014,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1098,11 +1050,8 @@
                   "id": "momus-observation-multiple-values-1861502229",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "evx07ooo"
                     }
                   ],
                   "meta": {
@@ -1111,7 +1060,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1147,11 +1096,16 @@
                   "id": "momus-observation-valid-min-1146936539",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "w4zbeqa4"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "cszw6r5o"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "uk1ipd87"
                     }
                   ],
                   "meta": {
@@ -1160,7 +1114,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1196,11 +1150,12 @@
                   "id": "momus-observation-datatype-invalid-lexical-2141746177",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "zrbbtz6k"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "ierdkwrt"
                     }
                   ],
                   "meta": {
@@ -1245,11 +1200,12 @@
                   "id": "momus-observation-datatype-null-1667718716",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "9g7gk59y"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "hgdn4xas"
                     }
                   ],
                   "meta": {
@@ -1294,11 +1250,8 @@
                   "id": "momus-observation-datatype-valid-977319817",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "khuxtcur"
                     }
                   ],
                   "meta": {
@@ -1307,7 +1260,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1343,11 +1296,16 @@
                   "id": "momus-observation-datatype-wrong-json-type-105074910",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "jtatfv8r"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "k65tg1re"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "jabr9m4l"
                     }
                   ],
                   "meta": {
@@ -1392,11 +1350,12 @@
                   "id": "momus-observation-missing-required-521654573",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "e9ptn58o"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "kh5o1khm"
                     }
                   ],
                   "meta": {
@@ -1440,11 +1399,12 @@
                   "id": "momus-observation-valid-min-492593826",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/observation.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "12345678901"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "clfvpzlp"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "27911pz4"
                     }
                   ],
                   "meta": {
@@ -1453,7 +1413,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {

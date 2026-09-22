@@ -11,11 +11,11 @@ func buildTerminologyRegistry() *registry.Registry {
 	r := registry.New()
 	r.AddValueSet(&model.ValueSet{
 		URL: "http://example.org/ValueSet/gender",
-		ComposeIncludes: []model.ValueSetInclude{{
-			System:   "http://hl7.org/fhir/administrative-gender",
-			Concepts: []model.ConceptReference{{Code: "male"}, {Code: "female"}},
-		}},
-		ExpansionContains: []model.ValueSetExpansionContains{{Code: "other"}},
+		Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{{
+			System:  "http://hl7.org/fhir/administrative-gender",
+			Concept: []model.ConceptReference{{Code: "male"}, {Code: "female"}},
+		}}},
+		Expansion: &model.ValueSetExpansion{Contains: []model.ValueSetExpansionContains{{Code: "other"}}},
 	})
 	return r
 }
@@ -54,11 +54,11 @@ func TestValueSetContains(t *testing.T) {
 	r := registry.New()
 	r.AddValueSet(&model.ValueSet{
 		URL: "http://example.org/ValueSet/gender",
-		ComposeIncludes: []model.ValueSetInclude{{
-			System:   "http://hl7.org/fhir/administrative-gender",
-			Concepts: []model.ConceptReference{{Code: "male"}, {Code: "female"}},
-		}},
-		ExpansionContains: []model.ValueSetExpansionContains{{Code: "other"}},
+		Compose: &model.ValueSetCompose{Include: []model.ValueSetInclude{{
+			System:  "http://hl7.org/fhir/administrative-gender",
+			Concept: []model.ConceptReference{{Code: "male"}, {Code: "female"}},
+		}}},
+		Expansion: &model.ValueSetExpansion{Contains: []model.ValueSetExpansionContains{{Code: "other"}}},
 	})
 	vsp, _ := r.ValueSet("http://example.org/ValueSet/gender")
 

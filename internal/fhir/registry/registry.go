@@ -1,13 +1,18 @@
 // Package registry implements the FHIR Registry: a concurrency-safe index
 // of FHIR knowledge keyed by canonical URL and resource type.
+//
+// It wraps the fhir-registry library's Registry for storage and tree building,
+// and adds Momus-specific scope and capability-overlay behaviour on top.
 package registry
 
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
+	fhir "github.com/jlcoulter/fhir-registry"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 )
 
@@ -20,22 +25,12 @@ var ErrNotFound = errors.New("registry: resource not found")
 // Build it once (using the Add* methods) and treat it as effectively
 // immutable afterwards. All methods are safe for concurrent use.
 type Registry struct {
-	mu sync.RWMutex
+	// fhir is the underlying fhir-registry index.
+	fhir *fhir.Registry
 
-	structureDefinitions map[string]*model.StructureDefinition
-	valueSets            map[string]*model.ValueSet
-	codeSystems          map[string]*model.CodeSystem
-	capabilityStatements map[string]*model.CapabilityStatement
-
-	searchParameters map[string]*model.SearchParameter
-
-	profilesByResource map[string][]*model.StructureDefinition
-
-	// resourcesByType indexes instance/example resources by FHIR resource type
-	// (e.g. all example Patient resources). The registry represents the package
-	// and its dependencies in full, so these are indexed alongside the
-	// conformance types.
-	resourcesByType map[string][]*model.Resource
+	// momusSDs preserves the original Momus StructureDefinition pointers so
+	// StructureDefinition(url) returns the same pointer that was added.
+	momusSDs map[string]*model.StructureDefinition
 
 	// scoped reports whether a scope has been set. It is tracked separately
 	// from scopedStructureDefinitions so that an empty-but-set scope (e.g.
@@ -73,126 +68,127 @@ type Registry struct {
 // New returns an empty Registry.
 func New() *Registry {
 	return &Registry{
-		structureDefinitions:        make(map[string]*model.StructureDefinition),
-		valueSets:                   make(map[string]*model.ValueSet),
-		codeSystems:                 make(map[string]*model.CodeSystem),
-		capabilityStatements:        make(map[string]*model.CapabilityStatement),
-		searchParameters:            make(map[string]*model.SearchParameter),
-		profilesByResource:          make(map[string][]*model.StructureDefinition),
-		resourcesByType:             make(map[string][]*model.Resource),
+		fhir:                        fhir.NewRegistry(),
+		momusSDs:                    make(map[string]*model.StructureDefinition),
 		rootCapabilityStatementURLs: make(map[string]struct{}),
 	}
+}
+
+// Fhir returns the underlying fhir-registry instance. It is the bridge for
+// libraries that operate directly on fhir.Registry (e.g. fhir-generator),
+// allowing them to share the same index that backs this wrapper.
+func (r *Registry) Fhir() *fhir.Registry {
+	return r.fhir
 }
 
 // AddStructureDefinition indexes a StructureDefinition by canonical URL and,
 // when it has a Type, by that resource type.
 func (r *Registry) AddStructureDefinition(sd *model.StructureDefinition) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	if sd == nil || sd.URL == "" {
 		return
 	}
-	r.structureDefinitions[sd.URL] = sd
-	if sd.Type != "" {
-		r.profilesByResource[sd.Type] = append(r.profilesByResource[sd.Type], sd)
-	}
+	r.momusSDs[sd.URL] = sd
+	r.fhir.AddStructureDefinition(sd.ToFhir())
 }
 
 // AddValueSet indexes a ValueSet by canonical URL.
 func (r *Registry) AddValueSet(vs *model.ValueSet) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if vs != nil && vs.URL != "" {
-		r.valueSets[vs.URL] = vs
+	if vs == nil || vs.URL == "" {
+		return
 	}
+	r.fhir.AddValueSet(vs)
 }
 
 // AddCodeSystem indexes a CodeSystem by canonical URL.
 func (r *Registry) AddCodeSystem(cs *model.CodeSystem) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if cs != nil && cs.URL != "" {
-		r.codeSystems[cs.URL] = cs
+	if cs == nil || cs.URL == "" {
+		return
 	}
+	r.fhir.AddCodeSystem(cs)
 }
 
 // AddCapabilityStatement indexes a CapabilityStatement by canonical URL.
 func (r *Registry) AddCapabilityStatement(cs *model.CapabilityStatement) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if cs != nil && cs.URL != "" {
-		r.capabilityStatements[cs.URL] = cs
+	if cs == nil {
+		return
 	}
+	r.fhir.AddCapabilityStatement(cs)
 }
 
 // AddSearchParameter indexes a SearchParameter by each resource type it
 // applies to, combined with its code.
 func (r *Registry) AddSearchParameter(sp *model.SearchParameter) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	if sp == nil || sp.Code == "" {
 		return
 	}
-	for _, base := range sp.Base {
-		r.searchParameters[searchParameterKey(base, sp.Code)] = sp
-	}
-}
-
-func searchParameterKey(resourceType, code string) string {
-	return resourceType + "\x00" + code
+	r.fhir.AddSearchParameter(sp)
 }
 
 // AddResource indexes an instance/example resource by its FHIR resource type.
 func (r *Registry) AddResource(res *model.Resource) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	if res == nil || res.ResourceType == "" {
 		return
 	}
-	r.resourcesByType[res.ResourceType] = append(r.resourcesByType[res.ResourceType], res)
+	r.fhir.AddResource(res)
 }
 
 // ResourcesForType returns every indexed instance/example resource of a given
 // FHIR resource type.
 func (r *Registry) ResourcesForType(resourceType string) []*model.Resource {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make([]*model.Resource, 0, len(r.resourcesByType[resourceType]))
-	out = append(out, r.resourcesByType[resourceType]...)
-	return out
+	return r.fhir.ResourcesForType(resourceType)
 }
 
 // AllResources returns every indexed instance/example resource across all
 // resource types.
 func (r *Registry) AllResources() []*model.Resource {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	var total int
-	for _, list := range r.resourcesByType {
-		total += len(list)
-	}
-	out := make([]*model.Resource, 0, total)
-	for _, list := range r.resourcesByType {
-		out = append(out, list...)
-	}
-	return out
+	return r.fhir.AllResources()
 }
 
 // StructureDefinition returns the StructureDefinition for a canonical URL.
 func (r *Registry) StructureDefinition(url string) (*model.StructureDefinition, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	sd, ok := r.structureDefinitions[url]
+	sd, ok := r.momusSDs[url]
 	return sd, ok
 }
 
 // StructureDefinitions returns every indexed StructureDefinition.
 func (r *Registry) StructureDefinitions() []*model.StructureDefinition {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make([]*model.StructureDefinition, 0, len(r.structureDefinitions))
-	for _, sd := range r.structureDefinitions {
+	out := make([]*model.StructureDefinition, 0, len(r.momusSDs))
+	for _, sd := range r.momusSDs {
 		out = append(out, sd)
+	}
+	return out
+}
+
+// IsAbstractType reports whether typeName is an abstract FHIR type (kind
+// "resource" with the abstract flag, or a logical type) that cannot be
+// instantiated as provisioned seed data. It delegates to the underlying
+// fhir-registry index so it stays correct for any FHIR IG rather than relying
+// on a hardcoded type list.
+func (r *Registry) IsAbstractType(typeName string) bool {
+	return r.fhir.IsAbstractType(typeName)
+}
+
+// fromFhir converts an fhir-registry StructureDefinition back into the Momus
+// representation with a flat element list.
+func fromFhir(sd *fhir.StructureDefinition) *model.StructureDefinition {
+	if sd == nil {
+		return nil
+	}
+	out := &model.StructureDefinition{
+		URL:            sd.URL,
+		Name:           sd.Name,
+		Title:          sd.Title,
+		Type:           sd.Type,
+		BaseDefinition: sd.BaseDefinition,
+		Kind:           sd.Kind,
+		Derivation:     sd.Derivation,
+	}
+	if sd.Snapshot != nil {
+		for _, raw := range sd.Snapshot.Elements {
+			if e, err := fhir.ConvertElement(raw); err == nil {
+				out.Elements = append(out.Elements, e)
+			}
+		}
 	}
 	return out
 }
@@ -205,8 +201,6 @@ func (r *Registry) StructureDefinitions() []*model.StructureDefinition {
 // scope clears the restriction and treats every indexed StructureDefinition
 // as in scope.
 func (r *Registry) SetScope(scope []string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	if len(scope) == 0 {
 		r.scoped = false
 		r.scopedStructureDefinitions = nil
@@ -226,14 +220,12 @@ func (r *Registry) SetScope(scope []string) {
 // subjects of test generation: those in the selected package scope, or every
 // indexed StructureDefinition when no scope has been set.
 func (r *Registry) ScopedStructureDefinitions() []*model.StructureDefinition {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
 	if !r.scoped {
-		return r.structureDefinitionsSnapshot()
+		return r.StructureDefinitions()
 	}
 	out := make([]*model.StructureDefinition, 0, len(r.scopedStructureDefinitions))
 	for url := range r.scopedStructureDefinitions {
-		if sd, ok := r.structureDefinitions[url]; ok {
+		if sd, ok := r.momusSDs[url]; ok {
 			out = append(out, sd)
 		}
 	}
@@ -250,13 +242,10 @@ func (r *Registry) SetScopeToResourceTypesAndProfiles(types, profiles []string) 
 	typeSet := toLowerSet(types)
 	profileSet := toLowerSet(profiles)
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	var urls []string
 	if !r.scoped {
-		for u := range r.structureDefinitions {
-			urls = append(urls, u)
+		for _, sd := range r.fhir.StructureDefinitions() {
+			urls = append(urls, sd.URL)
 		}
 	} else {
 		for u := range r.scopedStructureDefinitions {
@@ -265,8 +254,8 @@ func (r *Registry) SetScopeToResourceTypesAndProfiles(types, profiles []string) 
 	}
 	kept := make(map[string]struct{})
 	for _, u := range urls {
-		sd := r.structureDefinitions[u]
-		if sd == nil {
+		sd, ok := r.momusSDs[u]
+		if !ok || sd == nil {
 			continue
 		}
 		if len(typeSet) > 0 {
@@ -299,39 +288,52 @@ func toLowerSet(values []string) map[string]struct{} {
 	return set
 }
 
-func (r *Registry) structureDefinitionsSnapshot() []*model.StructureDefinition {
-	out := make([]*model.StructureDefinition, 0, len(r.structureDefinitions))
-	for _, sd := range r.structureDefinitions {
-		out = append(out, sd)
-	}
-	return out
-}
-
 // ValueSet returns the ValueSet for a canonical URL.
 func (r *Registry) ValueSet(url string) (*model.ValueSet, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	vs, ok := r.valueSets[url]
-	return vs, ok
+	return r.fhir.ValueSet(url)
 }
 
 // CodeSystem returns the CodeSystem for a canonical URL.
 func (r *Registry) CodeSystem(url string) (*model.CodeSystem, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	cs, ok := r.codeSystems[url]
-	return cs, ok
+	return r.fhir.CodeSystem(url)
+}
+
+// FirstConcept returns the first meaningful coding in a ValueSet.
+func (r *Registry) FirstConcept(vs *model.ValueSet) (fhir.ResolvedCoding, bool) {
+	return r.fhir.FirstConcept(vs)
+}
+
+// ResolveBoundCoding resolves a real coding for a value set canonical URL.
+func (r *Registry) ResolveBoundCoding(valueSetURL string) (fhir.ResolvedCoding, bool) {
+	return r.fhir.ResolveBoundCoding(valueSetURL)
+}
+
+// CodingDisplay returns the canonical CodeSystem display for a code.
+func (r *Registry) CodingDisplay(system, code string) string {
+	return r.fhir.CodingDisplay(system, code)
+}
+
+// FirstExampleCoding returns a real coding found at an element path within the
+// package's example instance resources.
+func (r *Registry) FirstExampleCoding(resourceType, path, profileURL string) (fhir.ResolvedCoding, bool) {
+	return r.fhir.FirstExampleCoding(resourceType, path, profileURL)
+}
+
+// ExampleCodingForExtension returns a real coding from an extension's
+// valueCodeableConcept/valueCoding found in any example instance.
+func (r *Registry) ExampleCodingForExtension(extensionURL string) (fhir.ResolvedCoding, bool) {
+	return r.fhir.ExampleCodingForExtension(extensionURL)
+}
+
+// IsPlaceholderURL reports whether a URL is an example/placeholder domain that
+// must not be emitted into a conformant instance.
+func (r *Registry) IsPlaceholderURL(url string) bool {
+	return fhir.IsPlaceholderURL(url)
 }
 
 // CapabilityStatements returns every indexed CapabilityStatement.
 func (r *Registry) CapabilityStatements() []*model.CapabilityStatement {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make([]*model.CapabilityStatement, 0, len(r.capabilityStatements))
-	for _, cs := range r.capabilityStatements {
-		out = append(out, cs)
-	}
-	return out
+	return r.fhir.CapabilityStatements()
 }
 
 // OverlayCapabilityScope narrows the scoped test-generation subjects to the
@@ -347,14 +349,12 @@ func (r *Registry) CapabilityStatements() []*model.CapabilityStatement {
 // it returns without narrowing (the existing scope, or the full registry, is
 // preserved).
 func (r *Registry) OverlayCapabilityScope() {
-	r.mu.RLock()
-	csList := make([]*model.CapabilityStatement, 0, len(r.rootCapabilityStatementURLs))
-	for url := range r.rootCapabilityStatementURLs {
-		if cs, ok := r.capabilityStatements[url]; ok {
+	var csList []*model.CapabilityStatement
+	for _, cs := range r.fhir.CapabilityStatements() {
+		if _, ok := r.rootCapabilityStatementURLs[cs.URL]; ok {
 			csList = append(csList, cs)
 		}
 	}
-	r.mu.RUnlock()
 
 	types := make(map[string]struct{})
 	profiles := make(map[string]struct{})
@@ -398,26 +398,20 @@ func (r *Registry) MarkRootCapabilityStatements(cs *model.CapabilityStatement) {
 	if cs == nil || cs.URL == "" {
 		return
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.rootCapabilityStatementURLs[cs.URL] = struct{}{}
 }
 
 // SearchParameter returns the SearchParameter for a resource type and code.
 func (r *Registry) SearchParameter(resourceType, code string) (*model.SearchParameter, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	sp, ok := r.searchParameters[searchParameterKey(resourceType, code)]
-	return sp, ok
+	return r.fhir.SearchParameter(resourceType, code)
 }
 
 // SearchParameters returns every distinct indexed SearchParameter.
 func (r *Registry) SearchParameters() []*model.SearchParameter {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	seen := make(map[*model.SearchParameter]struct{}, len(r.searchParameters))
-	out := make([]*model.SearchParameter, 0, len(r.searchParameters))
-	for _, sp := range r.searchParameters {
+	all := r.fhir.SearchParameters()
+	seen := make(map[*model.SearchParameter]struct{}, len(all))
+	out := make([]*model.SearchParameter, 0, len(all))
+	for _, sp := range all {
 		if _, ok := seen[sp]; ok {
 			continue
 		}
@@ -430,28 +424,79 @@ func (r *Registry) SearchParameters() []*model.SearchParameter {
 // ProfilesForResource returns all profiles (derived or base) for a resource
 // type.
 func (r *Registry) ProfilesForResource(resourceType string) []*model.StructureDefinition {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	profiles := r.profilesByResource[resourceType]
-	out := make([]*model.StructureDefinition, len(profiles))
-	copy(out, profiles)
+	// Iterate in fhir-registry's insertion order (base definitions loaded before
+	// their profiles), then apply a stable sort by derivation depth descending so
+	// more-constrained profiles come first while equal-depth ties keep insertion
+	// order (base before its profiles).
+	urls := make([]string, 0, len(r.momusSDs))
+	for _, sd := range r.fhir.DefinitionsForType(resourceType) {
+		if sd != nil && sd.URL != "" {
+			urls = append(urls, sd.URL)
+		}
+	}
+	out := make([]*model.StructureDefinition, 0, len(urls))
+	seen := make(map[string]bool, len(urls))
+	for _, u := range urls {
+		sd, ok := r.momusSDs[u]
+		if !ok || sd == nil || seen[u] {
+			continue
+		}
+		seen[u] = true
+		out = append(out, sd)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return derivationDepth(r, out[i]) > derivationDepth(r, out[j])
+	})
 	return out
+}
+
+// derivationDepth returns how many levels deep a definition sits in its base
+// chain (0 = a definition with no base, i.e. the base resource). Deeper
+// definitions are more constrained, so they are preferred during resolution.
+func derivationDepth(r *Registry, sd *model.StructureDefinition) int {
+	if sd == nil || sd.BaseDefinition == "" {
+		return 0
+	}
+	depth := 1
+	cur := stripVersion(sd.BaseDefinition)
+	seen := map[string]bool{sd.URL: true}
+	for cur != "" && !seen[cur] {
+		seen[cur] = true
+		base, ok := r.momusSDs[cur]
+		if !ok || base == nil || base.BaseDefinition == "" {
+			break
+		}
+		cur = stripVersion(base.BaseDefinition)
+		depth++
+	}
+	return depth
+}
+
+// stripVersion removes a trailing "|version" suffix from a canonical URL so a
+// profile's baseDefinition (which may carry a version like "...Provenance|4.0.1")
+// resolves to the versionless canonical in the registry index.
+func stripVersion(url string) string {
+	if i := strings.Index(url, "|"); i >= 0 {
+		return url[:i]
+	}
+	return url
 }
 
 // ResolveProfile resolves a StructureDefinition by canonical URL into a
 // ResolvedProfile with a built element tree and path index.
-//
-// This is a minimal implementation; profile inheritance and slicing
-// resolution will be extended later.
 func (r *Registry) ResolveProfile(url string) (*model.ResolvedProfile, error) {
 	if cached, ok := r.resolvedProfiles.Load(url); ok {
 		return cached.(*model.ResolvedProfile), nil
 	}
-	sd, ok := r.StructureDefinition(url)
+	sd, ok := r.fhir.Definition(url)
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrNotFound, url)
 	}
-	elements := r.resolveElements(sd, make(map[string]bool))
+	tree, err := r.fhir.Tree(url)
+	if err != nil {
+		return nil, err
+	}
+	elements := treeElements(tree)
 	rp := model.NewResolvedProfile(sd.URL, sd.Type, elements)
 	if rp != nil {
 		r.resolvedProfiles.Store(url, rp)
@@ -460,67 +505,40 @@ func (r *Registry) ResolveProfile(url string) (*model.ResolvedProfile, error) {
 }
 
 // ResolveElements returns the flat, parent-merged ElementDefinition list for
-// the StructureDefinition at url. Parent elements (walked via BaseDefinition)
-// are merged first; child elements override parent elements with the same
-// elementKey (path, or path:sliceName when sliced) and append new paths. The
-// returned slice preserves slice definitions and slice-child elements, which
-// the ResolvedProfile.Elements map intentionally drops.
+// the StructureDefinition at url. It is derived from the fhir-registry element
+// tree, which already merges the base definition chain.
 //
 // Returns ErrNotFound when url is not indexed.
 func (r *Registry) ResolveElements(url string) ([]model.ElementDefinition, error) {
 	if cached, ok := r.resolvedElements.Load(url); ok {
 		return cached.([]model.ElementDefinition), nil
 	}
-	sd, ok := r.StructureDefinition(url)
-	if !ok {
+	if _, ok := r.fhir.Definition(url); !ok {
 		return nil, fmt.Errorf("%w: %s", ErrNotFound, url)
 	}
-	elements := r.resolveElements(sd, make(map[string]bool))
+	tree, err := r.fhir.Tree(url)
+	if err != nil {
+		return nil, err
+	}
+	elements := treeElements(tree)
 	r.resolvedElements.Store(url, elements)
 	return elements, nil
 }
 
-// resolveElements returns the full element set for sd by resolving its parent
-// (baseDefinition) dependency chain and merging: child elements override parent
-// elements with the same path, preserving order. This ensures inherited elements
-// and constraints (e.g. a profile's base Identifier structure) are available to
-// generation even when a profile is a differential.
-func (r *Registry) resolveElements(sd *model.StructureDefinition, seen map[string]bool) []model.ElementDefinition {
-	if sd == nil || seen[sd.URL] {
+// treeElements flattens an fhir-registry ElementTree into a slice of
+// ElementDefinition, preserving slice definitions and slice-child elements. It
+// iterates every element in the tree's ByID index (which includes orphaned
+// slice elements not reachable from the root), rather than walking the tree.
+func treeElements(tree *fhir.ElementTree) []model.ElementDefinition {
+	if tree == nil {
 		return nil
 	}
-	seen[sd.URL] = true
-	parentSD, _ := r.StructureDefinition(sd.BaseDefinition)
-	parent := r.resolveElements(parentSD, seen)
-	merged := make([]model.ElementDefinition, 0, len(parent)+len(sd.Elements))
-	index := make(map[string]int, len(parent)+len(sd.Elements))
-	for _, el := range parent {
-		index[elementKey(el)] = len(merged)
-		merged = append(merged, el)
-	}
-	for _, el := range sd.Elements {
-		if idx, ok := index[elementKey(el)]; ok {
-			merged[idx] = el
-		} else {
-			index[elementKey(el)] = len(merged)
-			merged = append(merged, el)
+	out := make([]model.ElementDefinition, 0, len(tree.ByID))
+	for _, elem := range tree.ByID {
+		if elem == nil {
+			continue
 		}
+		out = append(out, *elem)
 	}
-	return merged
-}
-
-// elementKey returns a unique merge key for an element: its path plus slice
-// name when sliced (slices share a path), otherwise its path. For slice children
-// whose slice context lives only in their ID (e.g. an ID of
-// "Organization.extension:suppressed.url" with a plain path), the ID's slice
-// segment is preserved so the slice member keys distinct from its base element
-// (task #30); otherwise a SliceName is used when present.
-func elementKey(el model.ElementDefinition) string {
-	if key := model.ElementSliceKey(el.ID, el.Path); key != el.Path {
-		return key
-	}
-	if el.SliceName != "" {
-		return el.Path + ":" + el.SliceName
-	}
-	return el.Path
+	return out
 }

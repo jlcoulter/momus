@@ -7,6 +7,8 @@ import (
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 // TestStateDeleteNonexistentPortableAssertion verifies that a DELETE on a
@@ -35,9 +37,9 @@ func TestPatchPropertyDerivesFromProfile(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/patient",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
-			{Path: "Patient.name", Min: 0, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.active", Min: 0, Max: 1, Types: []model.ElementType{{Code: "boolean"}}},
+			{Path: "Patient.name", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 		},
 	})
 	req := coverage.CoverageRequirement{

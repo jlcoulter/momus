@@ -27,7 +27,11 @@ func Derive(r *registry.Registry) ([]constraint.Constraint, error) {
 		if sd == nil {
 			continue
 		}
-		for _, element := range sd.Elements {
+		elements, err := r.ResolveElements(sd.URL)
+		if err != nil {
+			continue
+		}
+		for _, element := range elements {
 			all = append(all, deriveElementConstraints(sd, element)...)
 		}
 	}
@@ -141,7 +145,7 @@ func cardinalityConstraint(sd *model.StructureDefinition, element model.ElementD
 		ResourceType: sd.Type,
 		ElementPath:  element.Path,
 		Min:          element.Min,
-		Max:          element.Max,
+		Max:          element.Max.String(),
 	}
 }
 

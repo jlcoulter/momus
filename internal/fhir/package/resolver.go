@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -407,20 +408,31 @@ func findDependencyArchive(index map[string]string, dep Dependency) (string, err
 		}
 	}
 
-	matches := make([]string, 0, 1)
-	for key, p := range index {
-		if strings.HasPrefix(key, prefix) {
-			matches = append(matches, p)
+	// A floating/unspecified version reference prefers an exact keyed local
+	// archive (e.g. "pkg@latest"), then resolves to the newest matching local
+	// archive so resolution is deterministic and matches the official tooling's
+	// "current" semantics (pick the newest available).
+	if dep.Version != "" {
+		if p, ok := index[packageKey(dep.Name, dep.Version)]; ok {
+			return p, nil
 		}
 	}
-
-	if len(matches) == 1 {
-		return matches[0], nil
+	var bestPath string
+	var bestVersion string
+	for key, p := range index {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		v := strings.TrimPrefix(key, dep.Name+"@")
+		if bestVersion == "" || versionNewer(v, bestVersion) {
+			bestVersion = v
+			bestPath = p
+		}
 	}
-	if len(matches) == 0 {
+	if bestPath == "" {
 		return "", fmt.Errorf("dependency archive not found for %s (version unspecified)", dep.Name)
 	}
-	return "", fmt.Errorf("dependency %s is ambiguous; multiple versions found", dep.Name)
+	return bestPath, nil
 }
 
 func ensureDependencyArchive(index map[string]string, downloadDir string, dep Dependency) (string, error) {
@@ -662,6 +674,35 @@ func floatingVersionTag(version string) string {
 	default:
 		return v
 	}
+}
+
+// versionNewer reports whether version a is newer than version b, comparing
+// numeric core parts and preferring an unlabelled version over a labelled one
+// (e.g. "2.1.0-ci-build" is newer than "2.0.1" because its core parts are
+// greater). It mirrors the version ordering used by fhir-registry so floating
+// resolution is consistent across modules.
+func versionNewer(a, b string) bool {
+	pa := versionParts(a)
+	pb := versionParts(b)
+	for i := 0; i < 3; i++ {
+		if pa[i] != pb[i] {
+			return pa[i] > pb[i]
+		}
+	}
+	return len(a) < len(b)
+}
+
+func versionParts(v string) [3]int {
+	var parts [3]int
+	fields := strings.SplitN(v, "-", 2)[0]
+	for i, s := range strings.SplitN(fields, ".", 3) {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			n = 0
+		}
+		parts[i] = n
+	}
+	return parts
 }
 
 func sanitizeFileComponent(s string) string {

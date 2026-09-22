@@ -35,11 +35,11 @@ func TestDecodeResourceValueSetAndCodeSystem(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ValueSet, got %T", res)
 	}
-	if len(vs.ComposeIncludes) != 1 || vs.ComposeIncludes[0].System != "http://example.org/cs" {
-		t.Fatalf("value set includes = %+v", vs.ComposeIncludes)
+	if len(vs.Compose.Include) != 1 || vs.Compose.Include[0].System != "http://example.org/cs" {
+		t.Fatalf("value set includes = %+v", vs.Compose.Include)
 	}
-	if len(vs.ExpansionContains) != 1 || vs.ExpansionContains[0].Code != "e1" {
-		t.Fatalf("value set expansion = %+v", vs.ExpansionContains)
+	if len(vs.Expansion.Contains) != 1 || vs.Expansion.Contains[0].Code != "e1" {
+		t.Fatalf("value set expansion = %+v", vs.Expansion.Contains)
 	}
 
 	// CodeSystem with concepts.

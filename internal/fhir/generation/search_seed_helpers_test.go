@@ -6,6 +6,8 @@ import (
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 func TestIsFunctionName(t *testing.T) {
@@ -48,7 +50,7 @@ func TestSetPathLeafBoolean(t *testing.T) {
 
 func TestSetReferenceLeaf(t *testing.T) {
 	body := map[string]any{}
-	setReferenceLeaf(body, "subject", "Patient/p1")
+	setReferenceLeaf(body, "subject", "Patient/p1", false)
 	if body["subject"] == nil {
 		t.Fatal("subject not set")
 	}
@@ -58,7 +60,7 @@ func TestSetReferenceLeaf(t *testing.T) {
 
 	// Existing array member is updated.
 	body = map[string]any{"careManager": []any{map[string]any{"reference": "old"}}}
-	setReferenceLeaf(body, "careManager", "Practitioner/p2")
+	setReferenceLeaf(body, "careManager", "Practitioner/p2", false)
 	first := body["careManager"].([]any)[0].(map[string]any)
 	if first["reference"] != "Practitioner/p2" {
 		t.Fatalf("array reference = %v", first["reference"])
@@ -66,28 +68,28 @@ func TestSetReferenceLeaf(t *testing.T) {
 
 	// Non-map array element is replaced.
 	body = map[string]any{"careManager": []any{"str"}}
-	setReferenceLeaf(body, "careManager", "Practitioner/p3")
+	setReferenceLeaf(body, "careManager", "Practitioner/p3", false)
 	if m := body["careManager"].([]any)[0].(map[string]any); m["reference"] != "Practitioner/p3" {
 		t.Fatalf("replaced array reference = %v", m["reference"])
 	}
 
 	// Empty array.
 	body = map[string]any{"careManager": []any{}}
-	setReferenceLeaf(body, "careManager", "Patient/p4")
+	setReferenceLeaf(body, "careManager", "Patient/p4", false)
 	if m := body["careManager"].([]any)[0].(map[string]any); m["reference"] != "Patient/p4" {
 		t.Fatalf("empty array reference = %v", m["reference"])
 	}
 
 	// Existing map is updated.
 	body = map[string]any{"subject": map[string]any{"reference": "old"}}
-	setReferenceLeaf(body, "subject", "Patient/p5")
+	setReferenceLeaf(body, "subject", "Patient/p5", false)
 	if m := body["subject"].(map[string]any); m["reference"] != "Patient/p5" {
 		t.Fatalf("map reference = %v", m["reference"])
 	}
 
 	// Non-map scalar is replaced.
 	body = map[string]any{"subject": "scalar"}
-	setReferenceLeaf(body, "subject", "Patient/p6")
+	setReferenceLeaf(body, "subject", "Patient/p6", false)
 	if m := body["subject"].(map[string]any); m["reference"] != "Patient/p6" {
 		t.Fatalf("scalar replacement reference = %v", m["reference"])
 	}
@@ -160,8 +162,8 @@ func TestApplyCompositeMatch(t *testing.T) {
 func TestApplyCompositeMatchPadsAndBranches(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.active", Min: 0, Max: 1, Types: []model.ElementType{{Code: "boolean"}}},
 	}})
 	// More parts than paths -> last path is padded, so all parts land on it.
 	body := map[string]any{}
@@ -183,16 +185,39 @@ func TestSetSpecialLeaf(t *testing.T) {
 	if pos["longitude"] != 151.2093 {
 		t.Fatalf("longitude = %v, want 151.2093", pos["longitude"])
 	}
+	if _, hasRootLat := body["latitude"]; hasRootLat {
+		t.Fatal("latitude leaked to resource root")
+	}
+	if _, hasRootLng := body["longitude"]; hasRootLng {
+		t.Fatal("longitude leaked to resource root")
+	}
+}
+
+func TestSetSpecialLeafElementPath(t *testing.T) {
+	// The near-search expression resolves to the element itself (Location.position),
+	// so lat/long must land on position, never on the resource root.
+	body := map[string]any{"position": map[string]any{}}
+	setSpecialLeaf(body, "position", "-33.8688|151.2093")
+	pos := body["position"].(map[string]any)
+	if pos["latitude"] != -33.8688 {
+		t.Fatalf("latitude = %v, want -33.8688", pos["latitude"])
+	}
+	if pos["longitude"] != 151.2093 {
+		t.Fatalf("longitude = %v, want 151.2093", pos["longitude"])
+	}
+	if _, hasRootLat := body["latitude"]; hasRootLat {
+		t.Fatal("latitude leaked to resource root")
+	}
 }
 
 func TestSetDateLeaf(t *testing.T) {
 	reg := buildBuilderRegistry()
 	body := map[string]any{}
-	// birthDate is typed date, so setDateLeaf places the value on the concrete
-	// choice member (birthDateDate).
+	// birthDate is a plain date element (path is not a choice "[x]"), so the
+	// value lands on the bare "birthDate" key, not a type-suffixed member.
 	setDateLeaf(body, "birthDate", "2024-01-01", reg, "Patient")
-	if body["birthDateDate"] != "2024-01-01" {
-		t.Fatalf("birthDateDate = %v, want 2024-01-01", body["birthDateDate"])
+	if body["birthDate"] != "2024-01-01" {
+		t.Fatalf("birthDate = %v, want 2024-01-01", body["birthDate"])
 	}
 
 	// An unresolvable path simply sets the leaf directly.
@@ -237,12 +262,12 @@ func TestDescendContainer(t *testing.T) {
 func TestResolveNestedLeafTypeFailures(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://hl7.org/fhir/StructureDefinition/Identifier", Type: "Identifier", Elements: []model.ElementDefinition{
-		{Path: "Identifier", Min: 0, Max: "*"},
-		{Path: "Identifier.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+		{Path: "Identifier", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Identifier.value", Min: 0, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 	}})
 	reg.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.identifier", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Identifier"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.identifier", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Identifier"}}},
 	}})
 	resolved, err := reg.ResolveProfile("http://example.org/StructureDefinition/patient")
 	if err != nil {
@@ -260,8 +285,8 @@ func TestResolveNestedLeafTypeFailures(t *testing.T) {
 	// Unknown top-level container.
 	reg2 := registry.New()
 	reg2.AddStructureDefinition(&model.StructureDefinition{URL: "http://example.org/StructureDefinition/patient", Type: "Patient", Elements: []model.ElementDefinition{
-		{Path: "Patient", Min: 0, Max: "*"},
-		{Path: "Patient.id", Min: 0, Max: "1", Types: []model.ElementType{{Code: "id"}}},
+		{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+		{Path: "Patient.id", Min: 0, Max: 1, Types: []model.ElementType{{Code: "id"}}},
 	}})
 	resolved2, _ := reg2.ResolveProfile("http://example.org/StructureDefinition/patient")
 	if _, _, found := resolveNestedLeafType(resolved2, "Patient", "id.value", reg2); found {

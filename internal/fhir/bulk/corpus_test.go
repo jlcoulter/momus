@@ -9,6 +9,8 @@ import (
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 const obsProfile = "http://example.org/StructureDefinition/observation"
@@ -21,20 +23,20 @@ func testRegistry(t *testing.T) *registry.Registry {
 		URL:  obsProfile,
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.status", Min: 1, Max: "1", Types: []model.ElementType{{Code: "code"}}},
-			{Path: "Observation.value", Min: 0, Max: "1", Types: []model.ElementType{{Code: "string"}}},
-			{Path: "Observation.subject", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{patientProfile}}}},
-			{Path: "Observation.code", Min: 1, Max: "1", Types: []model.ElementType{{Code: "CodeableConcept"}}},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.status", Min: 1, Max: 1, Types: []model.ElementType{{Code: "code"}}},
+			{Path: "Observation.value", Min: 0, Max: 1, Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Observation.subject", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{patientProfile}}}},
+			{Path: "Observation.code", Min: 1, Max: 1, Types: []model.ElementType{{Code: "CodeableConcept"}}},
 		},
 	})
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL:  patientProfile,
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
-			{Path: "Patient.birthDate", Min: 1, Max: "1", Types: []model.ElementType{{Code: "date"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient.birthDate", Min: 1, Max: 1, Types: []model.ElementType{{Code: "date"}}},
 		},
 	})
 	return reg
@@ -162,17 +164,17 @@ func TestGenerateCorpusStripsForwardReferences(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/org",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "*"},
-			{Path: "Organization.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
-			{Path: "Organization.endpoint", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
+			{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Organization.partOf", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+			{Path: "Organization.endpoint", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
 		},
 	})
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL:  "http://example.org/StructureDefinition/endpoint",
 		Type: "Endpoint",
 		Elements: []model.ElementDefinition{
-			{Path: "Endpoint", Min: 0, Max: "*"},
-			{Path: "Endpoint.managingOrganization", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+			{Path: "Endpoint", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Endpoint.managingOrganization", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
 		},
 	})
 	gen := NewCorpusGenerator(reg, true)
@@ -270,17 +272,17 @@ func TestGenerateCorpusBatchedFinalizesRequiredForwardReferences(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/org",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "*"},
-			{Path: "Organization.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
-			{Path: "Organization.endpoint", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
+			{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Organization.partOf", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+			{Path: "Organization.endpoint", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
 		},
 	})
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL:  "http://example.org/StructureDefinition/endpoint",
 		Type: "Endpoint",
 		Elements: []model.ElementDefinition{
-			{Path: "Endpoint", Min: 0, Max: "*"},
-			{Path: "Endpoint.managingOrganization", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+			{Path: "Endpoint", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Endpoint.managingOrganization", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
 		},
 	})
 	gen := NewCorpusGenerator(reg, true)
@@ -327,32 +329,32 @@ func TestTopologicalTypeOrderIgnoresSelfReferences(t *testing.T) {
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: endpointProfile, Type: "Endpoint",
 		Elements: []model.ElementDefinition{
-			{Path: "Endpoint", Min: 0, Max: "*"},
+			{Path: "Endpoint", Min: 0, Max: fhir.MaxUnbounded},
 		},
 	})
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: orgProfile, Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "*"},
-			{Path: "Organization.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{orgProfile}}}},
-			{Path: "Organization.endpoint", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{endpointProfile}}}},
+			{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Organization.partOf", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{orgProfile}}}},
+			{Path: "Organization.endpoint", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{endpointProfile}}}},
 		},
 	})
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: locationProfile, Type: "Location",
 		Elements: []model.ElementDefinition{
-			{Path: "Location", Min: 0, Max: "*"},
-			{Path: "Location.managingOrganization", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{orgProfile}}}},
-			{Path: "Location.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{locationProfile}}}},
+			{Path: "Location", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Location.managingOrganization", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{orgProfile}}}},
+			{Path: "Location.partOf", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{locationProfile}}}},
 		},
 	})
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: hsProfile, Type: "HealthcareService",
 		Elements: []model.ElementDefinition{
-			{Path: "HealthcareService", Min: 0, Max: "*"},
-			{Path: "HealthcareService.providedBy", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{orgProfile}}}},
-			{Path: "HealthcareService.location", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{locationProfile}}}},
-			{Path: "HealthcareService.endpoint", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{endpointProfile}}}},
+			{Path: "HealthcareService", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "HealthcareService.providedBy", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{orgProfile}}}},
+			{Path: "HealthcareService.location", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{locationProfile}}}},
+			{Path: "HealthcareService.endpoint", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{endpointProfile}}}},
 		},
 	})
 	gen := NewCorpusGenerator(reg, true)
@@ -547,7 +549,7 @@ func TestResourceTypeOfProfileStripsVersion(t *testing.T) {
 	reg := registry.New()
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: "http://hl7.org/fhir/StructureDefinition/Organization", Type: "Organization", Kind: "resource",
-		Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: "1"}},
+		Elements: []model.ElementDefinition{{Path: "Organization", Min: 0, Max: 1}},
 	})
 	// A versioned target-profile canonical must resolve to the resource type by
 	// stripping the "|4.0.1" suffix. Before the fix this returned "" and the
@@ -590,7 +592,8 @@ func TestGenerateCorpusSkipsAbstractResourceTypes(t *testing.T) {
 		URL:      "http://hl7.org/fhir/StructureDefinition/Resource",
 		Type:     "Resource",
 		Kind:     "resource",
-		Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: "*"}},
+		Abstract: true,
+		Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: fhir.MaxUnbounded}},
 	})
 	gen := NewCorpusGenerator(reg, true)
 
@@ -619,15 +622,16 @@ func TestGenerateCorpusDoesNotExpandAbstractResourceTarget(t *testing.T) {
 		Type: "Patient",
 		Kind: "resource",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.managingOrganization", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Resource"}}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.managingOrganization", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://hl7.org/fhir/StructureDefinition/Resource"}}}},
 		},
 	})
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL:      "http://hl7.org/fhir/StructureDefinition/Resource",
 		Type:     "Resource",
 		Kind:     "resource",
-		Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: "*"}},
+		Abstract: true,
+		Elements: []model.ElementDefinition{{Path: "Resource", Min: 0, Max: fhir.MaxUnbounded}},
 	})
 	gen := NewCorpusGenerator(reg, true)
 
@@ -672,15 +676,15 @@ func TestGenerateCorpusDisambiguatesCollidingTypeIDs(t *testing.T) {
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: "http://example.org/StructureDefinition/ab", Type: "A/B",
 		Elements: []model.ElementDefinition{
-			{Path: "A/B", Min: 0, Max: "*"},
-			{Path: "A/B.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "A/B", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "A/B.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 		},
 	})
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: "http://example.org/StructureDefinition/ab2", Type: "A-B",
 		Elements: []model.ElementDefinition{
-			{Path: "A-B", Min: 0, Max: "*"},
-			{Path: "A-B.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "A-B", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "A-B.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 		},
 	})
 	gen := NewCorpusGenerator(reg, true)
@@ -965,17 +969,17 @@ func TestGenerateCorpusStreamedFinalizesRequiredForwardReferences(t *testing.T) 
 		URL:  "http://example.org/StructureDefinition/org",
 		Type: "Organization",
 		Elements: []model.ElementDefinition{
-			{Path: "Organization", Min: 0, Max: "*"},
-			{Path: "Organization.partOf", Min: 0, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
-			{Path: "Organization.endpoint", Min: 1, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
+			{Path: "Organization", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Organization.partOf", Min: 0, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+			{Path: "Organization.endpoint", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/endpoint"}}}},
 		},
 	})
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL:  "http://example.org/StructureDefinition/endpoint",
 		Type: "Endpoint",
 		Elements: []model.ElementDefinition{
-			{Path: "Endpoint", Min: 0, Max: "*"},
-			{Path: "Endpoint.managingOrganization", Min: 1, Max: "1", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
+			{Path: "Endpoint", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Endpoint.managingOrganization", Min: 1, Max: 1, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/org"}}}},
 		},
 	})
 	gen := NewCorpusGenerator(reg, true)

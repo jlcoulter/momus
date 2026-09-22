@@ -7,25 +7,23 @@ import (
 	"math/rand"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 
+	fhirgen "github.com/jlcoulter/fhir-generator"
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
-func allowsMultiple(maxValue string) bool {
-	if maxValue == "*" {
+func allowsMultiple(maxValue fhir.Max) bool {
+	if maxValue == fhir.MaxUnbounded {
 		return true
 	}
-	n, err := strconv.Atoi(maxValue)
-	if err != nil {
-		return false
-	}
-	return n > 1
+	return maxValue > 1
 }
 
 func elementAllowsMultiple(def *model.ElementDefinition) bool {
@@ -35,7 +33,10 @@ func elementAllowsMultiple(def *model.ElementDefinition) bool {
 	if allowsMultiple(def.Max) {
 		return true
 	}
-	return allowsMultiple(def.BaseMax)
+	if def.BaseMax != nil {
+		return allowsMultiple(*def.BaseMax)
+	}
+	return false
 }
 
 // maxCardinality returns the element's maximum cardinality as an int, or -1 when
@@ -46,17 +47,13 @@ func maxCardinality(def *model.ElementDefinition) int {
 		return -1
 	}
 	max := def.Max
-	if max == "" {
-		max = def.BaseMax
+	if max == 0 && def.BaseMax != nil {
+		max = *def.BaseMax
 	}
-	if max == "*" {
+	if max == fhir.MaxUnbounded {
 		return -1
 	}
-	n, err := strconv.Atoi(max)
-	if err != nil {
-		return -1
-	}
-	return n
+	return int(max)
 }
 
 // optionalInclusionProbability is the chance that an optional (Min == 0)
@@ -216,7 +213,13 @@ func recordBodyReferences(ds *model.Dataset) {
 func walkBodyRefs(inst *model.ResourceInstance, node any, typeByLocalID map[string]string, ds *model.Dataset, seen map[string]struct{}, path string) {
 	switch v := node.(type) {
 	case map[string]any:
-		for key, val := range v {
+		keys := make([]string, 0, len(v))
+		for key := range v {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			val := v[key]
 			childPath := key
 			if path != "" {
 				childPath = path + "." + key
@@ -267,6 +270,61 @@ func referenceTargetID(ref string) string {
 	return trimmed[slash+1:]
 }
 
+// normalizeReferencesToSetup rewrites every FHIR Reference in a generated body
+// from fhir-generator's "Type/<fakeID>" form to momus's "Type/momus-setup-Type"
+// form, so references resolve to the provisioned setup resources. It walks the
+// payload recursively and only rewrites references of the form "Type/<id>"
+// (a single slash, no URL/version/query), leaving absolute and canonical
+// references untouched.
+func normalizeReferencesToSetup(v any) {
+	switch t := v.(type) {
+	case map[string]any:
+		if ref, ok := t["reference"].(string); ok {
+			if rewritten, ok := rewriteReferenceToSetup(ref); ok {
+				t["reference"] = rewritten
+			}
+		}
+		for _, val := range t {
+			normalizeReferencesToSetup(val)
+		}
+	case []any:
+		for _, el := range t {
+			normalizeReferencesToSetup(el)
+		}
+	}
+}
+
+// rewriteReferenceToSetup rewrites a "Type/<id>" reference to
+// "Type/momus-setup-Type". It returns ok=false for references that are not of
+// the simple "Type/<id>" form (absolute URLs, canonical references, versioned
+// references, or references with a query/fragment).
+func rewriteReferenceToSetup(ref string) (string, bool) {
+	trimmed := strings.TrimSpace(ref)
+	if trimmed == "" {
+		return "", false
+	}
+	// Skip absolute URLs and canonical references (contain "://" or start with
+	// "urn:"), and references with version/query/fragment markers.
+	if strings.Contains(trimmed, "://") || strings.HasPrefix(trimmed, "urn:") ||
+		strings.ContainsAny(trimmed, "|#?") {
+		return "", false
+	}
+	slash := strings.Index(trimmed, "/")
+	if slash <= 0 || slash == len(trimmed)-1 {
+		return "", false
+	}
+	// A second slash means a nested/contained reference (e.g. "#/foo" or
+	// "Type/1/2"); only rewrite the simple "Type/<id>" form.
+	if strings.Contains(trimmed[slash+1:], "/") {
+		return "", false
+	}
+	resourceType := trimmed[:slash]
+	if resourceType == "" {
+		return "", false
+	}
+	return resourceType + "/" + coregen.SetupResourceID(resourceType), true
+}
+
 // RequirementCount returns the number of requirement-bound Assertions in a
 // generated plan, excluding setup scaffolding.
 func buildBodyTemplate(req coverage.CoverageRequirement, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) (map[string]any, bool) {
@@ -285,16 +343,71 @@ func buildSetupBody(resourceType, id string, profileURLs []string, primaryProfil
 
 // SynthesizeBody is the single registry-driven body-data core used for all
 // generated data — provisioned seed resources, test-case payloads, and the bulk
-// corpus alike. It depends on the registry as the source of truth: it walks the
-// resolved profile to populate required (and, when exhaustive, optional)
-// elements, resolves bindings to real codes, and applies resource-specific
-// normalisation. Keeping one core means test data, provisioned data, and bulk
-// data cannot drift apart.
+// corpus alike. It delegates the profile-driven element filling to the
+// fhir-generator library (which walks the resolved profile to populate required
+// and, when exhaustive, optional elements, resolves bindings to real codes, and
+// applies the momus normalizer), then applies the momus-specific post-processing
+// passes that need dataset context: dependency reference wiring, self-reference
+// stripping, and constraint application. Keeping one core means test data,
+// provisioned data, and bulk data cannot drift apart.
 func SynthesizeBody(resourceType, id string, profileURLs []string, primaryProfileURL string, deps []string, reg *registry.Registry, exhaustive bool) map[string]any {
-	body := baseBodyTemplate(resourceType, id, profileURLs, deps, reg, primaryProfileURL)
-	enrichBodyFromProfile(body, primaryProfileURL, reg)
-	if exhaustive {
-		enrichBodyExhaustive(body, primaryProfileURL, reg, newRNG(id))
+	// The base template (resourceType, id, meta.profile) is always built, even
+	// without a registry, so callers that pass no registry still get a
+	// structurally valid body with the declared profile.
+	body := map[string]any{
+		"resourceType": resourceType,
+		"id":           id,
+	}
+	if meta := coregen.BuildMeta(profileURLs); meta != nil {
+		body["meta"] = meta
+	}
+
+	// Fill the profile-driven elements via fhir-generator when a registry is
+	// present; otherwise the body stays at its base template.
+	if g := newBodyGenerator(resourceType, id, profileURLs, reg, exhaustive); g != nil {
+		var err error
+		if primaryProfileURL != "" {
+			body, err = g.GenerateForURL(primaryProfileURL)
+		}
+		if body == nil || err != nil {
+			body, err = g.Generate(resourceType)
+		}
+		if body == nil {
+			body = map[string]any{"resourceType": resourceType, "id": id}
+		}
+	}
+
+	// Momus-specific contract refinement on top of the fhir-generator base
+	// body. These passes handle behaviors that are test-generation-specific and
+	// out of fhir-generator's library scope: pattern+binding merge, slice-child
+	// pattern/example application, required-slice containers, and FHIRPath
+	// constraint synthesis. They only add/refine elements fhir-generator left
+	// generic, so the base body is preserved.
+	if primaryProfileURL != "" && reg != nil {
+		enrichBodyFromProfile(body, primaryProfileURL, reg)
+		if exhaustive {
+			enrichBodyExhaustive(body, primaryProfileURL, reg, newRNG(id))
+		}
+		// fhir-generator emits a Pattern value verbatim; momus additionally merges
+		// the element's bound coding into a patterned CodeableConcept/Coding so the
+		// display/text reflect the value set. Apply this to already-present nested
+		// values (which populateRequiredChildren skips).
+		refineNestedPatternBindings(body, primaryProfileURL, reg)
+	}
+
+	// Momus-specific post-processing that needs dataset context (not part of
+	// fhir-generator's library scope).
+	// fhir-generator emits references as "Type/<fakeID>"; momus references
+	// provisioned setup resources by their deterministic setup id, so rewrite
+	// every reference to the setup id of its target type.
+	normalizeReferencesToSetup(body)
+	attachDependencyReferences(body, resourceType, primaryProfileURL, deps, reg)
+	// Ensure repeatable elements (Max > 1) are arrays, including reference
+	// elements attached as dependencies (e.g. Provenance.target).
+	if primaryProfileURL != "" && reg != nil {
+		if resolved, err := reg.ResolveProfile(primaryProfileURL); err == nil && resolved != nil && resolved.Root != nil {
+			normalizeRepeatableChildren(body, resolved.Root)
+		}
 	}
 	// A resource must never reference itself: HAPI validates referential
 	// integrity at create time, so a self-reference (e.g. Location.partOf ->
@@ -302,22 +415,9 @@ func SynthesizeBody(resourceType, id string, profileURLs []string, primaryProfil
 	// the resource exists. Strip any Reference object or array element whose
 	// reference equals the resource's own logical reference.
 	stripSelfReferences(body, resourceType+"/"+id)
-	normalizeGeneratedPayload(body)
-	normalizeResourceSpecificPayload(body)
-	// Final pass: resolve any coding display that is missing or echoes its code
-	// to the canonical CodeSystem display. This covers every generation path
-	// (datatype profiles, slice patterns, bound codings), not just slice
-	// constraints, so e.g. an identifier type coding with code "XX" gets the
-	// canonical "Organization identifier" display instead of echoing "XX".
-	normalisePayloadCodingDisplays(body, reg)
 	// Remove the internal fixed-coding markers so they never reach the payload
 	// that is serialised and uploaded.
 	stripFixedCodingMarkers(body)
-	// Drop any Extension that ended up with neither a value[x] nor a nested
-	// sub-extension: such an extension violates ext-1 and is rejected by HAPI.
-	// Simple extensions are populated with a value earlier; complex ones whose
-	// optional sub-slices were not generated are simply omitted.
-	stripEmptyExtensions(body)
 	return body
 }
 
@@ -411,9 +511,86 @@ func enrichBodyExhaustive(body map[string]any, profileURL string, reg *registry.
 	normalizeRepeatableChildren(body, resolved.Root)
 }
 
-// populateOptionalChildren adds optional (Min == 0) children that are not
-// already present, randomised by rng, and recurses into existing complex
-// values so their optional children are populated too.
+// refineNestedPatternBindings walks the resolved profile tree and, for every
+// element that carries both a Pattern and a value set binding, merges the bound
+// coding into the already-generated value. fhir-generator emits a Pattern value
+// verbatim; momus additionally fills the binding's display/text so a patterned
+// CodeableConcept/Coding reflects the value set. It recurses into nested complex
+// values that populateRequiredChildren skips because they are already present.
+func refineNestedPatternBindings(body map[string]any, profileURL string, reg *registry.Registry) {
+	if body == nil || reg == nil || strings.TrimSpace(profileURL) == "" {
+		return
+	}
+	resolved, err := reg.ResolveProfile(profileURL)
+	if err != nil || resolved == nil || resolved.Root == nil {
+		return
+	}
+	refineNodePatternBindings(body, resolved.Root, reg)
+}
+
+// refineNodePatternBindings applies pattern+binding merge to a node's children
+// that are already present in value, recursing into nested complex values.
+func refineNodePatternBindings(value map[string]any, node *model.ElementNode, reg *registry.Registry) {
+	if value == nil || node == nil {
+		return
+	}
+	for _, name := range sortedNodeChildren(node) {
+		child := node.Children[name]
+		if child == nil || child.Definition == nil {
+			continue
+		}
+		prop := propertyNameForNode(child)
+		raw, exists := value[prop]
+		if !exists {
+			continue
+		}
+		// Merge pattern+binding for a present element that carries both.
+		if child.Definition.Pattern != nil && child.Definition.Binding != nil {
+			if binding, ok := resolveBoundCoding(child.Definition, reg); ok {
+				if merged, ok := mergePatternWithBinding(child.Definition.Pattern, primaryTypeCode(child.Definition), binding, true); ok {
+					value[prop] = merged
+					raw = merged
+				}
+			}
+		}
+		// Recurse into nested complex values.
+		switch typed := raw.(type) {
+		case map[string]any:
+			refineNodePatternBindings(typed, child, reg)
+		case []any:
+			for _, item := range typed {
+				if itemMap, ok := item.(map[string]any); ok {
+					refineNodePatternBindings(itemMap, child, reg)
+				}
+			}
+		}
+		// A complex child with type profiles (e.g. Location.identifier typed as
+		// Identifier with an identifier-profile) carries its pattern+binding
+		// elements inside the resolved type profile, not under the child itself.
+		// Resolve the first type profile and refine the present value against it.
+		if len(child.Definition.Types) > 0 {
+			for _, et := range child.Definition.Types {
+				for _, profileURL := range et.Profiles {
+					resolved, err := reg.ResolveProfile(normalizeCanonical(profileURL))
+					if err != nil || resolved == nil || resolved.Root == nil {
+						continue
+					}
+					switch typed := raw.(type) {
+					case map[string]any:
+						refineNodePatternBindings(typed, resolved.Root, reg)
+					case []any:
+						for _, item := range typed {
+							if itemMap, ok := item.(map[string]any); ok {
+								refineNodePatternBindings(itemMap, resolved.Root, reg)
+							}
+						}
+					}
+					break
+				}
+			}
+		}
+	}
+}
 func populateOptionalChildren(value map[string]any, node *model.ElementNode, reg *registry.Registry, rng *rand.Rand) {
 	if value == nil || node == nil {
 		return
@@ -435,10 +612,19 @@ func populateOptionalChildren(value map[string]any, node *model.ElementNode, reg
 			}
 			continue
 		}
+		// An element with Max 0 can never be present; never synthesize it.
+		if child.Definition.Max == 0 {
+			continue
+		}
 		propName := propertyNameForNode(child)
 		if propName == "" || propName == "id" {
 			// Skip the resource/element id: ids are assigned by the generator or
 			// the target server and must not be synthesised.
+			continue
+		}
+		// A choice element's alternate branch must not be synthesized when a
+		// sibling concrete member already exists (see populateRequiredChildren).
+		if choiceBase := choiceBaseName(propName); choiceBase != "" && hasChoiceSibling(value, choiceBase) {
 			continue
 		}
 		optional := child.Definition.Min <= 0 && !hasRequiredSlices(child) && !hasContractSignal(child)
@@ -474,19 +660,6 @@ func recurseExhaustive(raw any, node *model.ElementNode, reg *registry.Registry,
 			}
 		}
 	}
-}
-
-func baseBodyTemplate(resourceType, id string, profileURLs, deps []string, reg *registry.Registry, primaryProfileURL string) map[string]any {
-	body := map[string]any{
-		"resourceType": resourceType,
-		"id":           id,
-	}
-	if meta := coregen.BuildMeta(profileURLs); meta != nil {
-		body["meta"] = meta
-	}
-
-	attachDependencyReferences(body, resourceType, primaryProfileURL, deps, reg)
-	return body
 }
 
 func enrichBodyFromProfile(body map[string]any, profileURL string, reg *registry.Registry) {
@@ -569,7 +742,19 @@ func populateRequiredChildren(body map[string]any, node *model.ElementNode, reg 
 		if child == nil || child.Definition == nil {
 			continue
 		}
+		// An element with Max 0 can never be present; never synthesize it.
+		if child.Definition.Max == 0 {
+			continue
+		}
 		propertyName := propertyNameForNode(child)
+		// A choice element serialises under one concrete member (e.g. occurred
+		// -> occurredDateTime). If a sibling concrete member of the same choice
+		// base already exists (e.g. the generator emitted occurredDateTime), never
+		// synthesise the alternate branch (occurredPeriod): a resource carrying
+		// both violates the profile's single-choice narrowing.
+		if choiceBase := choiceBaseName(propertyName); choiceBase != "" && hasChoiceSibling(body, choiceBase) {
+			continue
+		}
 		if child.Definition.Min <= 0 && !hasRequiredSlices(child) && !hasContractSignal(child) {
 			continue
 		}
@@ -617,7 +802,7 @@ func hasProfileTypes(def *model.ElementDefinition) bool {
 		return false
 	}
 	for _, et := range def.Types {
-		if len(et.Profile) > 0 {
+		if len(et.Profiles) > 0 {
 			return true
 		}
 	}
@@ -641,6 +826,46 @@ func propertyNameForNode(node *model.ElementNode) string {
 		return prefix
 	}
 	return prefix + upperCamelTypeName(typeCode)
+}
+
+// choiceBaseName returns the "[x]" base name of a concrete choice member
+// (e.g. "occurred" for "occurredDateTime"), or "" when the name is not a
+// type-suffixed choice member. It lets callers detect that two concrete
+// members belong to the same choice element.
+func choiceBaseName(concrete string) string {
+	// A concrete choice member is "<base><UpperCamelType>" (e.g. occurred +
+	// DateTime). The base is the leading lower-case run, the suffix starts at
+	// the first upper-case rune. Require a non-empty suffix so plain members
+	// like "recorded" are not mistaken for choices.
+	for i := 1; i < len(concrete); i++ {
+		c := concrete[i]
+		if c >= 'A' && c <= 'Z' {
+			base := concrete[:i]
+			if base == "" || i == len(concrete)-1 {
+				return ""
+			}
+			return base
+		}
+	}
+	return ""
+}
+
+// hasChoiceSibling reports whether a value map already carries any concrete
+// member sharing the given choice base (e.g. "occurredDateTime" for base
+// "occurred"), so the alternate branch must not be synthesized.
+func hasChoiceSibling(value map[string]any, base string) bool {
+	if value == nil || base == "" {
+		return false
+	}
+	for key := range value {
+		if key == base || key == base+"[x]" {
+			continue
+		}
+		if strings.HasPrefix(key, base) {
+			return true
+		}
+	}
+	return false
 }
 
 func choiceTypeFromSlices(slices map[string]*model.SliceNode) string {
@@ -784,7 +1009,7 @@ func generateSliceValue(slice *model.SliceNode, reg *registry.Registry) (any, bo
 		return nil, false
 	}
 	synthetic := &model.ElementNode{
-		Name:       slice.Definition.Name,
+		Name:       lastPathSegment(slice.Definition.Path),
 		Path:       slice.Definition.Path,
 		Definition: slice.Definition,
 		ProfileURL: slice.ProfileURL,
@@ -797,6 +1022,7 @@ func generateSliceValue(slice *model.SliceNode, reg *registry.Registry) (any, bo
 			applySimpleConstraints(valueMap, synthetic, reg)
 			applySliceConstractions(valueMap, slice, reg)
 			ensureSimpleExtensionValue(valueMap, slice, reg)
+			normalizeGeneratedIdentifierSeeded(valueMap, slice.Definition.Path)
 		}
 		return value, true
 	}
@@ -848,11 +1074,11 @@ func findSliceValueX(slice *model.SliceNode, reg *registry.Registry) (*model.Ele
 	}
 	// A complex extension carries sub-extension content and must not receive a
 	// value[x] (its value[x] is Max 0). Only genuinely simple extensions get one.
-	if extChild, ok := root.Children["extension"]; ok && extChild != nil && extChild.Definition != nil && extChild.Definition.Max != "0" {
+	if extChild, ok := root.Children["extension"]; ok && extChild != nil && extChild.Definition != nil && extChild.Definition.Max != 0 {
 		return nil, false
 	}
 	vx, ok := root.Children["value[x]"]
-	if !ok || vx == nil || vx.Definition == nil || vx.Definition.Max == "0" {
+	if !ok || vx == nil || vx.Definition == nil || vx.Definition.Max == 0 {
 		return nil, false
 	}
 	return vx, true
@@ -866,10 +1092,10 @@ func sliceExtensionRoot(slice *model.SliceNode, reg *registry.Registry) *model.E
 	}
 	if c, ok := slice.Children["value[x]"]; ok && c != nil && c.Definition != nil {
 		// Use a synthetic root if the slice already carries its value[x] child.
-		return &model.ElementNode{Name: slice.Definition.Name, Path: slice.Definition.Path, Definition: slice.Definition, Children: slice.Children}
+		return &model.ElementNode{Name: lastPathSegment(slice.Definition.Path), Path: slice.Definition.Path, Definition: slice.Definition, Children: slice.Children}
 	}
 	for _, et := range slice.Definition.Types {
-		for _, p := range et.Profile {
+		for _, p := range et.Profiles {
 			resolved, err := reg.ResolveProfile(normalizeCanonical(p))
 			if err != nil || resolved == nil || resolved.Root == nil {
 				continue
@@ -1165,7 +1391,7 @@ func generateDatatypeValueFromProfiles(types []model.ElementType, reg *registry.
 	// variants on Organization.identifier), and merging them produces a value
 	// that conforms to none.
 	for _, et := range types {
-		for _, profileURL := range et.Profile {
+		for _, profileURL := range et.Profiles {
 			value, ok := generateDatatypeValueFromProfile(profileURL, reg)
 			if ok {
 				if _, ok := value.(map[string]any); ok {
@@ -1210,7 +1436,14 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 	if len(node.Definition.Examples) > 0 {
 		// Examples are the profile's shared element definition data; deep-clone
 		// so the returned value never aliases it (the caller mutates the result).
-		return cloneValue(node.Definition.Examples[0]), true
+		// Skip any example that carries a placeholder URL (example.org, acme.com
+		// etc.) — the AU PD IG's own examples on identifier.system and coded
+		// systems use such placeholder domains, and copying them verbatim makes a
+		// resource fail validation ("Example URLs are not allowed in this
+		// context"). Defer to the bound coding or a synthesized value instead.
+		if ex, ok := firstNonPlaceholderExample(node.Definition.Examples); ok {
+			return cloneValue(ex), true
+		}
 	}
 	switch typeCode {
 	case "string", "markdown", "id":
@@ -1239,16 +1472,13 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 		populateRequiredChildren(identifier, node, reg)
 		applySimpleConstraints(identifier, node, reg)
 		identifier = enrichGeneratedValueWithTypeProfiles(identifier, node.Definition, reg).(map[string]any)
-		if _, ok := identifier["system"]; !ok {
-			identifier["system"] = "http://example.org/fhir/identifier/" + coregen.SanitizeFHIRID(node.Path)
-		}
 		if _, ok := identifier["value"]; !ok {
 			identifier["value"] = coregen.SanitizeFHIRID(node.Path) + "-001"
 		}
 		if _, ok := identifier["type"]; !ok {
 			identifier["type"] = map[string]any{"text": sampleStringValue(node.Path + ".type")}
 		}
-		normalizeGeneratedIdentifier(identifier)
+		normalizeGeneratedIdentifierSeeded(identifier, node.Path)
 		return identifier, true
 	case "CodeableConcept":
 		if hasBoundCoding {
@@ -1258,21 +1488,16 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 			}
 			return enrichGeneratedValueWithTypeProfiles(concept, node.Definition, reg), true
 		}
-		leaf := sampleCodeValue(node.Path)
-		concept := map[string]any{
-			"text": sampleStringValue(node.Path),
-			"coding": []any{map[string]any{
-				"system":  "http://example.org/fhir/code-system",
-				"code":    leaf,
-				"display": sampleStringValue(node.Path),
-			}},
-		}
+		// No bound coding or example resolves: fail closed rather than emitting a
+		// placeholder code system (example.org/acme) the validator rejects. A
+		// text-only CodeableConcept is conformant — no coding required.
+		concept := map[string]any{"text": sampleStringValue(node.Path)}
 		return enrichGeneratedValueWithTypeProfiles(concept, node.Definition, reg), true
 	case "Coding":
 		if hasBoundCoding {
 			return enrichGeneratedValueWithTypeProfiles(codingToMap(boundCoding), node.Definition, reg), true
 		}
-		return enrichGeneratedValueWithTypeProfiles(map[string]any{"system": "http://example.org/fhir/system", "code": sampleCodeValue(node.Path)}, node.Definition, reg), true
+		return enrichGeneratedValueWithTypeProfiles(map[string]any{"code": sampleCodeValue(node.Path)}, node.Definition, reg), true
 	case "HumanName":
 		value := map[string]any{"family": "Momus", "given": []any{"Test"}}
 		populateRequiredChildren(value, node, reg)
@@ -1329,7 +1554,7 @@ func generateSingleValue(node *model.ElementNode, reg *registry.Registry) (any, 
 	case "Attachment":
 		value := map[string]any{
 			"contentType": "text/plain",
-			"url":         "http://example.org/attachment.txt",
+			"data":        "aGVsbG8=",
 		}
 		populateRequiredChildren(value, node, reg)
 		applySimpleConstraints(value, node, reg)
@@ -1367,7 +1592,7 @@ func enrichGeneratedValueWithTypeProfiles(value any, def *model.ElementDefinitio
 	// not merge all profiles: an element that lists several (e.g. all the AU
 	// Identifier variants) must be generated from one, not a Frankenstein of all.
 	for _, et := range def.Types {
-		for _, profileURL := range et.Profile {
+		for _, profileURL := range et.Profiles {
 			resolved, err := reg.ResolveProfile(normalizeCanonical(profileURL))
 			if err != nil || resolved == nil || resolved.Root == nil {
 				continue
@@ -1611,11 +1836,19 @@ func resolveBoundCoding(def *model.ElementDefinition, reg *registry.Registry) (g
 	if !ok || vs == nil {
 		return generatedCoding{}, false
 	}
-	if coding, ok := firstExpansionCoding(vs.ExpansionContains); ok {
+	var expansion []model.ValueSetExpansionContains
+	if vs.Expansion != nil {
+		expansion = vs.Expansion.Contains
+	}
+	if coding, ok := firstExpansionCoding(expansion); ok {
 		return coding, true
 	}
-	for _, include := range vs.ComposeIncludes {
-		for _, concept := range include.Concepts {
+	var includes []model.ValueSetInclude
+	if vs.Compose != nil {
+		includes = vs.Compose.Include
+	}
+	for _, include := range includes {
+		for _, concept := range include.Concept {
 			if isMeaningfulCoding(concept.Code, concept.Display) {
 				return generatedCoding{System: include.System, Code: concept.Code, Display: concept.Display}, true
 			}
@@ -2075,7 +2308,7 @@ func codingToMap(coding generatedCoding) map[string]any {
 // display/text normalisation passes skip these codings; it is stripped before a
 // payload is serialised (see stripFixedCodingMarkers). The key is prefixed so it
 // cannot collide with a real FHIR element name.
-const fixedCodingKey = "__momus_fixed_coding"
+const fixedCodingKey = fhirgen.FixedCodingKey
 
 // markFixedCoding marks v (a Coding map, a CodeableConcept map, or an array of
 // either) as derived from a Fixed/Pattern value and strips display/text from it,
@@ -2123,6 +2356,43 @@ func stripFixedCodingMarkers(v any) {
 			stripFixedCodingMarkers(el)
 		}
 	}
+}
+
+// firstNonPlaceholderExample returns the first element example whose serialised
+// value contains no placeholder URL (example.org, acme.com, test OIDs, etc.).
+// Profiles such as the AU PD IG carry example values on identifier.system and
+// coded systems that use placeholder domains; copying them verbatim makes a
+// resource fail validation. When every example is a placeholder, ok is false so
+// generation defers to the bound coding or a synthesised value.
+func firstNonPlaceholderExample(examples []any) (any, bool) {
+	for _, ex := range examples {
+		if !exampleHasPlaceholderURL(ex) {
+			return ex, true
+		}
+	}
+	return nil, false
+}
+
+// exampleHasPlaceholderURL reports whether a serialised example value contains a
+// placeholder URL anywhere (system, url, or reference).
+func exampleHasPlaceholderURL(v any) bool {
+	switch t := v.(type) {
+	case map[string]any:
+		for _, val := range t {
+			if exampleHasPlaceholderURL(val) {
+				return true
+			}
+		}
+	case []any:
+		for _, el := range t {
+			if exampleHasPlaceholderURL(el) {
+				return true
+			}
+		}
+	case string:
+		return fhir.IsPlaceholderURL(t)
+	}
+	return false
 }
 
 // normaliseCodingDisplay resolves a coding's display to the canonical CodeSystem
@@ -2371,26 +2641,38 @@ func normalizeGeneratedIdentifier(identifier map[string]any) {
 	if identifier == nil {
 		return
 	}
+	// Derive a deterministic seed from the identifier's existing value when one
+	// is present, so the generated AU value is reproducible regardless of call
+	// order (the global Fake* constructors advance a shared RNG whose sequence
+	// depends on call order). The value set before this pass (e.g. a path-derived
+	// sample or a forced search value) is deterministic for the element.
+	seed, _ := identifier["value"].(string)
+	normalizeGeneratedIdentifierSeeded(identifier, seed)
+}
+
+// normalizeGeneratedIdentifierSeeded rewrites an AU identifier's value to a
+// format-valid, deterministic value for its system, derived from seed. The
+// unseeded helper is retained for callers without a resource id; seeded callers
+// pass the resource id so the identifier is reproducible regardless of generation
+// order (the global Fake* constructors advance a shared RNG whose sequence
+// depends on call order, which varies with map iteration).
+func normalizeGeneratedIdentifierSeeded(identifier map[string]any, seed string) {
+	if identifier == nil {
+		return
+	}
 	system, _ := identifier["system"].(string)
 	system = strings.TrimSpace(system)
-	if system == "http://ns.electronichealth.net.au/id/hi/hpio/1.0" {
-		identifier["value"] = generateHPIONumber()
-		return
-	}
-	if system == "http://ns.electronichealth.net.au/id/hi/hpii/1.0" {
-		identifier["value"] = generateHPIINumber()
-		return
-	}
-	if system == "http://hl7.org.au/id/abn" {
-		identifier["value"] = generateABN()
-		return
-	}
-	if system == "http://hl7.org.au/id/acn" {
-		identifier["value"] = generateACN()
-		return
-	}
-	if system == "http://hl7.org.au/id/ahpra-registration-number" {
-		identifier["value"] = generateAHPRA()
+	switch system {
+	case "http://ns.electronichealth.net.au/id/hi/hpio/1.0":
+		identifier["value"] = fhirgen.FakeHPIOFromSeed(seed)
+	case "http://ns.electronichealth.net.au/id/hi/hpii/1.0":
+		identifier["value"] = fhirgen.FakeHPIIFromSeed(seed)
+	case "http://hl7.org.au/id/abn":
+		identifier["value"] = fhirgen.FakeABNFromSeed(seed)
+	case "http://hl7.org.au/id/acn":
+		identifier["value"] = fhirgen.FakeACNFromSeed(seed)
+	case "http://hl7.org.au/id/ahpra-registration-number":
+		identifier["value"] = fhirgen.FakeAHPRAFromSeed(seed)
 	}
 }
 
@@ -2411,11 +2693,6 @@ func normalizeGeneratedPayload(value any) {
 		if _, hasLine := typed["line"]; hasLine {
 			if _, hasCity := typed["city"]; hasCity {
 				normalizeGeneratedAddress(typed)
-			}
-		}
-		if _, hasSystem := typed["system"]; hasSystem {
-			if _, hasValue := typed["value"]; hasValue {
-				normalizeGeneratedIdentifier(typed)
 			}
 		}
 		for _, child := range typed {
@@ -2477,112 +2754,20 @@ func normalizeCodeableConceptMap(value map[string]any) {
 	}
 }
 
-func generateHPIONumber() string {
-	base := "800362123456789"
-	return appendLuhnCheckDigit(base)
-}
-
-func generateHPIINumber() string {
-	base := "800361123456789"
-	return appendLuhnCheckDigit(base)
-}
-
-func appendLuhnCheckDigit(number string) string {
-	if len(number) == 0 {
-		return ""
-	}
-	sum := 0
-	parity := (len(number) + 1) % 2
-	for idx, r := range number {
-		digit := int(r - '0')
-		if digit < 0 || digit > 9 {
-			return number
-		}
-		if idx%2 == parity {
-			digit *= 2
-			if digit > 9 {
-				digit -= 9
-			}
-		}
-		sum += digit
-	}
-	checkDigit := (10 - (sum % 10)) % 10
-	return number + strconv.Itoa(checkDigit)
-}
-
-// generateABN returns a valid 11-digit Australian Business Number. ABNs satisfy
-// a mod-89 check digit: subtract 1 from the first digit, weight the 11 digits by
-// [10,1,3,5,7,9,11,13,15,17,19], and the sum must be divisible by 89.
-func generateABN() string {
-	seed := uint64(coregen.StableChecksum("abn"))
-	weights := []int{10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
-	for i := uint64(0); i < 100000; i++ {
-		n := 1000000000 + (seed+i)%9000000000 // 10 digits, first digit 1-9
-		prefix := fmt.Sprintf("%010d", n)
-		if full, ok := appendMod89Check(prefix, weights, true); ok {
-			return full
-		}
-	}
-	return "51824753556"
-}
-
-// generateAHPRA returns a syntactically valid Ahpra registration number: three
-// uppercase letters followed by ten digits (per the au-ahpraregistrationnumber
-// inv-ahpra-0 invariant).
-func generateAHPRA() string {
-	digits := coregen.StableChecksum("ahpra") % 10000000000
-	return "MED" + fmt.Sprintf("%010d", digits)
-}
-
-// generateACN returns a valid 9-digit Australian Company Number (mod-89 check
-// digit, weights [10,1,3,5,7,9,11,13,15]).
-func generateACN() string {
-	seed := uint64(coregen.StableChecksum("acn"))
-	weights := []int{10, 1, 3, 5, 7, 9, 11, 13, 15}
-	for i := uint64(0); i < 100000; i++ {
-		n := 10000000 + (seed+i)%90000000 // 8 digits, first digit 1-9
-		prefix := fmt.Sprintf("%08d", n)
-		if full, ok := appendMod89Check(prefix, weights, false); ok {
-			return full
-		}
-	}
-	return "0050043679"
-}
-
-// appendMod89Check appends a check digit (0-9) to prefix so the full number
-// satisfies the ABN/ACN mod-89 weighting scheme. weights covers every digit
-// (the prefix digits plus the appended check digit). When subtractFirst is true
-// (ABN), 1 is subtracted from the first digit before weighting. It returns
-// (full, true) when a valid check digit exists, otherwise ("", false).
-func appendMod89Check(prefix string, weights []int, subtractFirst bool) (string, bool) {
-	for c := 0; c <= 9; c++ {
-		full := prefix + strconv.Itoa(c)
-		if mod89Valid(full, weights, subtractFirst) {
-			return full, true
-		}
-	}
-	return "", false
-}
-
-func mod89Valid(number string, weights []int, subtractFirst bool) bool {
-	if len(number) != len(weights) {
-		return false
-	}
-	sum := 0
-	for i := 0; i < len(number); i++ {
-		d := int(number[i] - '0')
-		if d < 0 || d > 9 {
-			return false
-		}
-		if i == 0 && subtractFirst {
-			d -= 1
-		}
-		sum += d * weights[i]
-	}
-	return sum%89 == 0
-}
-
 func normalizeResourceSpecificPayload(body map[string]any) {
+	seed := ""
+	if body != nil {
+		if id, _ := body["id"].(string); id != "" {
+			seed = id
+		}
+	}
+	normalizeResourceSpecificPayloadSeeded(body, seed)
+}
+
+// normalizeResourceSpecificPayloadSeeded applies profile-specific payload
+// refinements. seed is the resource id, used to derive AU identifier values
+// deterministically so they are reproducible regardless of generation order.
+func normalizeResourceSpecificPayloadSeeded(body map[string]any, seed string) {
 	if body == nil {
 		return
 	}
@@ -2590,9 +2775,9 @@ func normalizeResourceSpecificPayload(body map[string]any) {
 	switch resourceType {
 	case "HealthcareService":
 		normalizeHealthcareServiceTypeCoding(body)
-		ensureHealthcareServiceKnownIdentifier(body)
+		ensureHealthcareServiceKnownIdentifier(body, seed)
 	case "PractitionerRole":
-		ensurePractitionerRoleKnownIdentifier(body)
+		ensurePractitionerRoleKnownIdentifier(body, seed)
 	case "Endpoint":
 		ensureEndpointManagingOrganization(body)
 		ensureEndpointKnownIdentifier(body)
@@ -2710,18 +2895,13 @@ func normalizeHealthcareServiceTypeCoding(body map[string]any) {
 		if _, hasCoding := cc["coding"]; hasCoding {
 			continue
 		}
-		code := "service-type"
-		if text, _ := cc["text"].(string); strings.TrimSpace(text) != "" {
-			code = sampleCodeValue(text)
-		}
-		cc["coding"] = []any{map[string]any{
-			"system": "http://example.org/fhir/service-type",
-			"code":   code,
-		}}
+		// Fail closed: never synthesize an example.org code system. A type with
+		// only text is conformant for an extensible/preferred binding.
+		_ = cc
 	}
 }
 
-func ensurePractitionerRoleKnownIdentifier(body map[string]any) {
+func ensurePractitionerRoleKnownIdentifier(body map[string]any, seed string) {
 	raw, ok := body["identifier"]
 	if !ok {
 		body["identifier"] = []any{practitionerRoleKnownIdentifier()}
@@ -2738,6 +2918,7 @@ func ensurePractitionerRoleKnownIdentifier(body map[string]any) {
 			continue
 		}
 		if identifierMatchesPractitionerRoleKnownType(identifier) {
+			normalizeGeneratedIdentifierSeeded(identifier, seed)
 			return
 		}
 	}
@@ -2788,16 +2969,16 @@ func practitionerRoleKnownIdentifier() map[string]any {
 	}
 }
 
-func ensureHealthcareServiceKnownIdentifier(body map[string]any) {
+func ensureHealthcareServiceKnownIdentifier(body map[string]any, seed string) {
 	// AU PD requires at least one known HealthcareService identifier slice (au-pd-hs-01).
 	raw, ok := body["identifier"]
 	if !ok {
-		body["identifier"] = []any{healthcareServiceKnownIdentifier()}
+		body["identifier"] = []any{healthcareServiceKnownIdentifier(seed)}
 		return
 	}
 	identifiers, ok := raw.([]any)
 	if !ok {
-		body["identifier"] = []any{healthcareServiceKnownIdentifier()}
+		body["identifier"] = []any{healthcareServiceKnownIdentifier(seed)}
 		return
 	}
 	for _, rawIdentifier := range identifiers {
@@ -2807,12 +2988,12 @@ func ensureHealthcareServiceKnownIdentifier(body map[string]any) {
 		}
 		if identifierMatchesHealthcareServiceKnownType(identifier) {
 			if system, _ := identifier["system"].(string); strings.TrimSpace(system) == "http://ns.electronichealth.net.au/id/hi/hpio/1.0" {
-				normalizeGeneratedIdentifier(identifier)
+				normalizeGeneratedIdentifierSeeded(identifier, seed)
 			}
 			return
 		}
 	}
-	body["identifier"] = append(identifiers, healthcareServiceKnownIdentifier())
+	body["identifier"] = append(identifiers, healthcareServiceKnownIdentifier(seed))
 }
 
 func identifierMatchesHealthcareServiceKnownType(identifier map[string]any) bool {
@@ -2843,10 +3024,10 @@ func identifierMatchesHealthcareServiceKnownType(identifier map[string]any) bool
 	return false
 }
 
-func healthcareServiceKnownIdentifier() map[string]any {
+func healthcareServiceKnownIdentifier(seed string) map[string]any {
 	return map[string]any{
 		"system": "http://ns.electronichealth.net.au/id/hi/hpio/1.0",
-		"value":  generateHPIONumber(),
+		"value":  fhirgen.FakeHPIOFromSeed(seed),
 		"use":    "usual",
 		"type": map[string]any{
 			"coding": []any{map[string]any{

@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 // appendSearchSeedResources adds seed resources that let search-accept
@@ -128,12 +131,18 @@ func buildSearchSeedInstances(
 		if !matched {
 			return nil
 		}
-		// Re-resolve coding displays: overwriting a search value resets the coding
-		// (dropping its display), but a profile may require a display on the very
-		// element the search writes (e.g. HealthcareService.type.coding.display).
-		// Normalising after the match restores the canonical display so the seed
-		// still validates.
-		normalisePayloadCodingDisplays(body, options.Registry)
+		// Search writes may have created repeatable elements (e.g.
+		// Provenance.signature, PractitionerRole.availableTime) as a bare map via
+		// descendContainer, but the IG requires them as arrays. Re-normalise
+		// repeatable children so the seed keeps the correct shape.
+		reNormalizeRepeatables(body, setupPrimaryProfile, options.Registry)
+		// Display resolution for search-written codings happens inline when the
+		// coding is placed (see codingForSearchValue/resetCodingForSearchValue),
+		// so no whole-body re-normalisation is needed here. Running a whole-body
+		// display pass over the payload after SynthesizeBody has already stripped
+		// the fixed-coding markers would re-add a display to codings derived from
+		// a Fixed/Pattern value, which a conformant server rejects ("not allowed
+		// in the applicable fixed value").
 		out = append(out, &model.ResourceInstance{
 			LocalID:      localID,
 			ResourceType: req.ResourceType,
@@ -142,6 +151,24 @@ func buildSearchSeedInstances(
 		})
 	}
 	return out
+}
+
+// searchSeedID returns a deterministic FHIR id for a search seed resource.
+// reNormalizeRepeatables re-applies array-wrapping for repeatable (Max > 1)
+// elements after search-match writes create nested containers as bare maps (via
+// descendContainer). Without this, a seed element the IG requires as an array
+// (e.g. Provenance.signature, PractitionerRole.availableTime) is left as a bare
+// object and fails validation. It is a no-op when the profile root cannot be
+// resolved.
+func reNormalizeRepeatables(body map[string]any, profileURL string, reg *registry.Registry) {
+	if profileURL == "" || reg == nil {
+		return
+	}
+	resolved, err := reg.ResolveProfile(profileURL)
+	if err != nil || resolved == nil || resolved.Root == nil {
+		return
+	}
+	normalizeRepeatableChildren(body, resolved.Root)
 }
 
 func searchSeedID(req coverage.CoverageRequirement, index int) string {
@@ -191,6 +218,16 @@ func applySearchMatch(
 		return applyCompositeMatch(body, sp.Expression, resourceType, value, reg)
 	}
 	typeCode, repeatable := searchLeafType(resourceType, elementPath, reg)
+	// A search write that descends into a complex datatype container (e.g.
+	// Provenance.signature.type descends into Signature) creates the container
+	// from scratch, but the datatype's required children (e.g. Signature.when,
+	// Signature.who) are not inlined into the resource profile's element tree,
+	// so they cannot be populated afterwards. Rather than shipping a seed that
+	// fails validation, decline it so the obligation degrades to a status-only
+	// search.
+	if containerDatatypeRequiresChildren(resourceType, elementPath, reg) {
+		return false
+	}
 	// A special search (e.g. near) matches geographic coordinates, not a single
 	// leaf's primitive value. Set the Location position's lat/long from the
 	// "lat|long" search value, independent of the leaf element's own type.
@@ -208,7 +245,7 @@ func applySearchMatch(
 	}
 	switch typeCode {
 	case "string", "markdown", "uri", "url", "id", "oid", "uuid", "base64Binary":
-		setPathLeaf(body, elementPath, value)
+		setPathLeafRepeatable(body, elementPath, value, repeatable)
 		return true
 	case "code", "Coding", "CodeableConcept":
 		// A token search matches the code: for a primitive code it is the scalar,
@@ -219,8 +256,19 @@ func applySearchMatch(
 		// is bound to a value set, keep the coding's system aligned with the code
 		// so a required binding is satisfied rather than shipping a system-less
 		// coding the server rejects.
+		//
+		// A placeholder value can never carry the display a profile requires on
+		// a coding (e.g. hcpd-healthcareservice.type.coding.display min=1 with an
+		// external value set the registry cannot resolve). A system-less
+		// placeholder is an opaque token the validator skips, but a required
+		// display cannot be fabricated. Rather than shipping a seed that fails
+		// validation, decline the seed so the obligation degrades to a status-only
+		// search.
+		if isSearchPlaceholder(value) && codingRequiresDisplay(resourceType, elementPath, reg) {
+			return false
+		}
 		system := boundCodingSystem(resourceType, elementPath, reg)
-		setSearchCodeValue(body, elementPath, value, typeCode, repeatable, system)
+		setSearchCodeValue(body, elementPath, value, typeCode, repeatable, system, reg)
 		return true
 	case "HumanName":
 		// A string search on HumanName matches the text/family tokens; ensure the
@@ -230,13 +278,18 @@ func applySearchMatch(
 	case "Identifier":
 		// A token search on an Identifier matches its `value` member (and a
 		// type/system search may match those). Force the value onto the first
-		// identifier so the search seed carries the query value.
+		// identifier so the search seed carries the query value, then ensure the
+		// value is format-valid for the identifier's own system (e.g. an ABN
+		// identifier must carry an 11-digit mod-89 value, not a 16-digit HPI).
 		setFieldLeafForce(body, elementPath, "value", value)
+		normalizeFirstIdentifierValue(body, elementPath)
 		return true
 	case "ContactPoint":
 		// A token search on a ContactPoint matches its `value` (telecom number/
-		// address) and `system`. Force the value onto the first contact point.
-		setFieldLeafForce(body, elementPath, "value", value)
+		// address) and `system`. Force the value onto the first contact point,
+		// ensuring a system is present so the seed satisfies cpt-2 (a system is
+		// required whenever a value is provided).
+		setContactPointValue(body, elementPath, value)
 		return true
 	case "Address":
 		setAddressLeaf(body, elementPath, value)
@@ -260,7 +313,7 @@ func applySearchMatch(
 	case "Reference":
 		// A reference search matches the reference string ("Type/id") held in the
 		// Reference object's `reference` member.
-		setReferenceLeaf(body, elementPath, value)
+		setReferenceLeaf(body, elementPath, value, repeatable)
 		return true
 	case "Quantity":
 		// A quantity search matches value/system/code of a Quantity element. Set
@@ -448,7 +501,7 @@ func searchLeafType(
 		for _, key := range keys {
 			node, ok := resolved.Elements[key]
 			if ok && node != nil && node.Definition != nil && len(node.Definition.Types) > 0 {
-				return node.Definition.Types[0].Code, node.Definition.Max == "*"
+				return node.Definition.Types[0].Code, node.Definition.Max == fhir.MaxUnbounded
 			}
 		}
 		// Nested datatype path: walk segments, resolving each container's type,
@@ -497,7 +550,7 @@ func resolveNestedLeafType(
 		}
 		if i == len(segments)-1 {
 			if len(node.Definition.Types) > 0 {
-				return node.Definition.Types[0].Code, node.Definition.Max == "*", true
+				return node.Definition.Types[0].Code, node.Definition.Max == fhir.MaxUnbounded, true
 			}
 			return "", false, false
 		}
@@ -533,10 +586,32 @@ func setPathLeaf(body map[string]any, path string, value string) {
 	cur[segs[len(segs)-1]] = value
 }
 
+// setPathLeafRepeatable sets a primitive string value at a dotted element path,
+// wrapping it in an array when the target element is repeatable (Max unbounded),
+// so e.g. name.given (0..*) is set to ["momus-search"] rather than a scalar.
+func setPathLeafRepeatable(body map[string]any, path, value string, repeatable bool) {
+	if !repeatable {
+		setPathLeaf(body, path, value)
+		return
+	}
+	segs := strings.Split(path, ".")
+	if len(segs) == 0 {
+		return
+	}
+	cur := body
+	for i := 0; i < len(segs)-1; i++ {
+		cur = descendContainer(cur, segs[i])
+	}
+	leaf := segs[len(segs)-1]
+	cur[leaf] = []any{value}
+}
+
 // setDateLeaf places a date search value on a date element. A Period element
 // (e.g. PractitionerRole.period) receives its date on the `start` member; a
 // choice element (e.g. Provenance.occurred[x]) receives it on the concrete
-// dateTime choice member so the value lands on the serialised member.
+// dateTime choice member so the value lands on the serialised member. A plain
+// date element that is not a choice (e.g. Provenance.recorded, typed instant)
+// keeps its bare key and is never type-suffixed.
 func setDateLeaf(
 	body map[string]any,
 	path, value string,
@@ -545,14 +620,23 @@ func setDateLeaf(
 ) {
 	segments := strings.Split(path, ".")
 	leaf := segments[len(segments)-1]
-	// If the leaf is a choice element (e.g. "occurred" typed Period|dateTime),
-	// prefer the dateTime choice member so the primitive date value is valid.
-	if def, ok := searchElementDefinition(resourceType, path, reg); ok && def != nil {
-		hasPeriod := false
+	base := strings.TrimSuffix(leaf, "[x]")
+	def, ok := searchElementDefinition(resourceType, path, reg)
+	isChoice := ok && def != nil && strings.HasSuffix(def.Path, "[x]")
+
+	hasPeriod := false
+	isInstant := false
+	if def != nil {
 		for _, et := range def.Types {
 			if et.Code == "dateTime" || et.Code == "date" || et.Code == "instant" ||
 				et.Code == "time" {
-				leaf = leaf + upperCamelTypeName(et.Code)
+				// A choice element (path "[x]") serialises under the type-suffixed
+				// member (e.g. occurred -> occurredDateTime); a plain date/instant
+				// element (e.g. recorded) keeps its bare key.
+				if isChoice {
+					leaf = leaf + upperCamelTypeName(et.Code)
+				}
+				isInstant = et.Code == "instant"
 				hasPeriod = false
 				break
 			}
@@ -560,15 +644,112 @@ func setDateLeaf(
 				hasPeriod = true
 			}
 		}
-		// A pure Period element (no dateTime choice) is a map; set its `start`
-		// so the seed carries the date value rather than a bare scalar.
-		if hasPeriod {
-			segments = append(segments, "start")
-			leaf = "start"
-		}
+	}
+	// A Period element (choice or pure) is a map; set its `start` member so the
+	// seed carries the date value rather than a bare scalar. The generator may
+	// already have populated `end` with an earlier date (its fakePeriod draws a
+	// random start/end), so ensure the interval stays ordered (per-1) after the
+	// search date overwrites `start`.
+	if hasPeriod {
+		segments = append(segments, "start")
+		leaf = "start"
+	}
+	// An `instant` element requires a full timestamp; a bare date search value
+	// is padded so the stored value is a valid instant.
+	if isInstant {
+		value = normalizeInstantValue(value)
 	}
 	segments[len(segments)-1] = leaf
 	setPathLeaf(body, strings.Join(segments, "."), value)
+	// A Period element's `start` was just set to the search date. If a
+	// previously-generated `end` is now on or before `start`, the interval
+	// violates per-1 ("start SHALL have a lower value than end"). Move `end`
+	// just after `start` to keep the seed conformant.
+	if hasPeriod {
+		ensurePeriodOrdered(body, strings.Join(segments[:len(segments)-1], "."))
+	}
+	// Writing one choice branch must not leave a sibling choice member behind
+	// (e.g. a generated occurredPeriod alongside the seed's occurredDateTime).
+	if isChoice && !hasPeriod {
+		clearSiblingChoiceMembers(body, segments, base, leaf)
+	}
+}
+
+// ensurePeriodOrdered enforces the FHIR per-1 invariant (start < end) on a
+// Period at the given dotted path. When end is missing or not strictly after
+// start, end is pushed to one day after start so a conformant server accepts
+// the interval.
+//
+// It never uses the wall clock: a fixed reference instant keeps the seed
+// deterministic across runs so generation is reproducible for any IG.
+func ensurePeriodOrdered(body map[string]any, path string) {
+	cur, field := containerForPath(body, path)
+	period, ok := cur[field].(map[string]any)
+	if !ok {
+		return
+	}
+	startStr, _ := period["start"].(string)
+	endStr, _ := period["end"].(string)
+	if startStr != "" && endStr != "" {
+		s, serr := parsePeriodInstant(startStr)
+		e, eerr := parsePeriodInstant(endStr)
+		if serr == nil && eerr == nil && s.Before(e) {
+			return
+		}
+	}
+	// start missing/unparseable or end not after start: leave start as-is and
+	// set end to one day after start (or a fixed reference when start is
+	// absent). A fixed reference keeps the seed deterministic across runs.
+	base := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	if s, serr := parsePeriodInstant(startStr); serr == nil {
+		base = s
+	}
+	period["end"] = base.AddDate(0, 0, 1).Format(time.RFC3339)
+}
+
+// parsePeriodInstant parses a Period start/end value, which may be either a
+// full FHIR instant (RFC3339) or a bare date (YYYY-MM-DD). It returns the
+// parsed time and nil, or a zero time and an error when neither form matches.
+func parsePeriodInstant(v string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		return t, nil
+	}
+	if t, err := time.Parse("2006-01-02", v); err == nil {
+		return t, nil
+	}
+	return time.Time{}, fmt.Errorf("unparseable period value %q", v)
+}
+
+// normalizeInstantValue pads a bare date search value into a valid FHIR
+// instant (RFC3339 with a time and timezone), leaving an already-qualified
+// value untouched.
+func normalizeInstantValue(value string) string {
+	if value == "" {
+		return value
+	}
+	if strings.Contains(value, "T") || strings.Contains(value, " ") {
+		return value
+	}
+	// A bare date like "2024-01-01" becomes "2024-01-01T00:00:00Z".
+	return value + "T00:00:00Z"
+}
+
+// clearSiblingChoiceMembers removes the other concrete members of a choice
+// element (keys sharing the base prefix) from the container that holds the
+// just-written member, so only the seeded branch remains.
+func clearSiblingChoiceMembers(body map[string]any, segments []string, base, written string) {
+	cur := body
+	for i := 0; i < len(segments)-1; i++ {
+		cur = descendContainer(cur, segments[i])
+	}
+	for key := range cur {
+		if key == written {
+			continue
+		}
+		if strings.HasPrefix(key, base) {
+			delete(cur, key)
+		}
+	}
 }
 
 // descendContainer moves cur into the child named by key, handling a map
@@ -659,6 +840,128 @@ func boundCodingSystem(resourceType, elementPath string, reg *registry.Registry)
 	return ""
 }
 
+// codingRequiresDisplay reports whether the element a token search targets has a
+// required (Min >= 1) display on its coding child. When a profile constrains
+// e.g. HealthcareService.type.coding.display to min=1, a search seed that can
+// only carry a system-less placeholder (the bound value set is unresolvable,
+// e.g. an external terminology server) cannot fabricate a valid display, so the
+// seed must be declined rather than shipped invalid.
+func codingRequiresDisplay(resourceType, elementPath string, reg *registry.Registry) bool {
+	if reg == nil {
+		return false
+	}
+	def, ok := searchElementDefinition(resourceType, elementPath, reg)
+	if !ok || def == nil {
+		return false
+	}
+	// Find the "coding" child (CodeableConcept.coding or Coding itself), then
+	// check whether its "display" child is required.
+	coding := codingChildOf(def)
+	if coding == nil {
+		return false
+	}
+	for _, child := range coding.Children {
+		if child != nil && child.Path != "" &&
+			strings.HasSuffix(child.Path, ".display") && child.Min >= 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// codingChildOf returns the "coding" child ElementDefinition of a CodeableConcept
+// element, or the element itself when it is already a Coding, or nil otherwise.
+func codingChildOf(def *model.ElementDefinition) *model.ElementDefinition {
+	if def == nil {
+		return nil
+	}
+	if len(def.Types) > 0 && def.Types[0].Code == "Coding" {
+		return def
+	}
+	for _, child := range def.Children {
+		if child != nil && child.Path != "" && strings.HasSuffix(child.Path, ".coding") {
+			return child
+		}
+	}
+	return nil
+}
+
+// containerDatatypeRequiresChildren reports whether a search expression path
+// descends into a complex datatype whose definition requires (Min >= 1) child
+// elements beyond the single leaf the search write populates. The resource
+// profile's element tree does not inline datatype children (e.g.
+// Provenance.signature.type resolves the Signature datatype separately), so a
+// search write that creates the datatype container from scratch would ship a
+// resource missing those required children. When true, the caller declines the
+// seed (the obligation stays status-only) rather than emitting an invalid one.
+func containerDatatypeRequiresChildren(resourceType, elementPath string, reg *registry.Registry) bool {
+	if reg == nil {
+		return false
+	}
+	segments := strings.Split(elementPath, ".")
+	// A datatype container is only at risk when the path has at least two
+	// segments (e.g. "signature.type": the "signature" segment is the datatype
+	// container, "type" is the leaf inside it).
+	if len(segments) < 2 {
+		return false
+	}
+	def, ok := searchElementDefinition(resourceType, elementPath, reg)
+	if !ok || def == nil || len(def.Types) == 0 {
+		return false
+	}
+	// The leaf itself being a complex datatype (e.g. Signature.type is Coding,
+	// which is fine) is not the concern; the concern is the *container* datatype
+	// (e.g. Signature) carrying required children other than the one written.
+	containerType := ""
+	for _, profile := range reg.ProfilesForResource(resourceType) {
+		resolved, err := reg.ResolveProfile(profile.URL)
+		if err != nil || resolved == nil {
+			continue
+		}
+		node, ok := resolved.Elements[resourceType+"."+segments[0]]
+		if !ok || node == nil || node.Definition == nil || len(node.Definition.Types) == 0 {
+			continue
+		}
+		containerType = node.Definition.Types[0].Code
+		break
+	}
+	if containerType == "" {
+		return false
+	}
+	datatype, err := reg.ResolveProfile("http://hl7.org/fhir/StructureDefinition/" + containerType)
+	if err != nil || datatype == nil || datatype.Root == nil {
+		return false
+	}
+	// The leaf we will populate is the last path segment under the container.
+	leafKey := containerType + "." + strings.Join(segments[1:], ".")
+	leafMin := 0
+	if node, ok := datatype.Elements[leafKey]; ok && node != nil && node.Definition != nil {
+		leafMin = node.Definition.Min
+	}
+	for key, node := range datatype.Elements {
+		if node == nil || node.Definition == nil {
+			continue
+		}
+		// Only direct children of the container (one segment below) and not the
+		// leaf we populate.
+		if !strings.HasPrefix(key, containerType+".") {
+			continue
+		}
+		rest := strings.TrimPrefix(key, containerType+".")
+		if strings.Contains(rest, ".") {
+			continue // a grandchild, not a direct child
+		}
+		if key == leafKey && leafMin > 0 {
+			// The leaf is required and the search write populates it.
+			continue
+		}
+		if node.Definition.Min >= 1 && key != leafKey {
+			return true
+		}
+	}
+	return false
+}
+
 // setSearchCodeValue places a code value that a token search can match on the
 // target element, handling a primitive code (scalar), a Coding (its `code`
 // member), and a CodeableConcept (its first coding's `code`). It never adds an
@@ -672,6 +975,7 @@ func setSearchCodeValue(
 	typeCode string,
 	repeatable bool,
 	system string,
+	reg *registry.Registry,
 ) {
 	cur, field := containerForPath(body, path)
 	if typeCode == "code" {
@@ -702,14 +1006,22 @@ func setSearchCodeValue(
 	if !ok {
 		switch typeCode {
 		case "CodeableConcept":
-			single := map[string]any{"coding": []any{codingForSearchValue(value, system)}}
+			single := map[string]any{"coding": []any{codingForSearchValue(value, system, reg)}}
 			if repeatable {
 				cur[field] = []any{single}
 			} else {
 				cur[field] = single
 			}
 		case "Coding":
-			cur[field] = codingForSearchValue(value, system)
+			// A repeatable Coding (e.g. Signature.type, max="*") must be an array
+			// of coding objects, never a bare object (servers reject an object
+			// where an array is required).
+			coding := codingForSearchValue(value, system, reg)
+			if repeatable {
+				cur[field] = []any{coding}
+			} else {
+				cur[field] = coding
+			}
 		default:
 			// A primitive code: set the scalar.
 			cur[field] = value
@@ -718,19 +1030,26 @@ func setSearchCodeValue(
 	}
 	switch v := raw.(type) {
 	case map[string]any:
+		// A CodeableConcept (even a text-only one) must carry a `coding` array,
+		// never a bare `code` member. If the map lacks a coding array but is a
+		// CodeableConcept (has a "text"), wrap the search coding in one.
 		if _, hasCode := v["code"]; hasCode {
-			resetCodingForSearchValue(v, nil, value, system)
+			resetCodingForSearchValue(v, nil, value, system, reg)
 			return
 		}
 		if coding, ok := v["coding"].([]any); ok && len(coding) > 0 {
 			if first, ok := coding[0].(map[string]any); ok {
-				resetCodingForSearchValue(first, v, value, system)
+				resetCodingForSearchValue(first, v, value, system, reg)
 				return
 			}
-			coding[0] = codingForSearchValue(value, system)
+			coding[0] = codingForSearchValue(value, system, reg)
 			return
 		}
-		resetCodingForSearchValue(v, nil, value, system)
+		if _, isTextOnly := v["text"]; isTextOnly {
+			v["coding"] = []any{codingForSearchValue(value, system, reg)}
+			return
+		}
+		resetCodingForSearchValue(v, nil, value, system, reg)
 	case []any:
 		if len(v) == 0 {
 			cur[field] = []any{map[string]any{"code": value}}
@@ -742,18 +1061,22 @@ func setSearchCodeValue(
 			return
 		}
 		if _, hasCode := first["code"]; hasCode {
-			resetCodingForSearchValue(first, nil, value, system)
+			resetCodingForSearchValue(first, nil, value, system, reg)
 			return
 		}
 		if coding, ok := first["coding"].([]any); ok && len(coding) > 0 {
 			if c, ok := coding[0].(map[string]any); ok {
-				resetCodingForSearchValue(c, first, value, system)
+				resetCodingForSearchValue(c, first, value, system, reg)
 				return
 			}
-			coding[0] = codingForSearchValue(value, system)
+			coding[0] = codingForSearchValue(value, system, reg)
 			return
 		}
-		resetCodingForSearchValue(first, nil, value, system)
+		if _, isTextOnly := first["text"]; isTextOnly {
+			first["coding"] = []any{codingForSearchValue(value, system, reg)}
+			return
+		}
+		resetCodingForSearchValue(first, nil, value, system, reg)
 	case string:
 		cur[field] = value
 	default:
@@ -762,13 +1085,33 @@ func setSearchCodeValue(
 }
 
 // codingForSearchValue builds a coding map for a token search value, carrying the
-// resolved system (when known) so a required-bound element stays valid.
-func codingForSearchValue(value, system string) map[string]any {
+// resolved system (when known) and the canonical display (when resolvable) so a
+// profile that requires a coding display stays valid. A system is only attached
+// when the search value is a real code; attaching a system to a synthetic
+// placeholder (e.g. "momus-search") turns it into a checkable unknown code and
+// fails a required binding, whereas a system-less placeholder is treated as an
+// opaque token.
+func codingForSearchValue(value, system string, reg *registry.Registry) map[string]any {
 	coding := map[string]any{"code": value}
-	if system != "" {
-		coding["system"] = system
+	if system == "" || isSearchPlaceholder(value) {
+		return coding
+	}
+	coding["system"] = system
+	if display := resolveCodingDisplay(reg, system, value); display != "" {
+		coding["display"] = display
 	}
 	return coding
+}
+
+// isSearchPlaceholder reports whether value is a synthetic search placeholder
+// rather than a real data value. Placeholders must never be paired with a real
+// code system, or a conformant server rejects them as unknown codes.
+func isSearchPlaceholder(value string) bool {
+	v := strings.TrimSpace(value)
+	if v == "" {
+		return true
+	}
+	return strings.HasPrefix(v, "momus-search") || strings.HasPrefix(v, "momus-no-match")
 }
 
 // resetCodingForSearchValue overwrites a coding's code with the search value and
@@ -784,17 +1127,45 @@ func resetCodingForSearchValue(
 	owner map[string]any,
 	value string,
 	system string,
+	reg *registry.Registry,
 ) {
 	coding["code"] = value
 	delete(coding, "display")
-	if system != "" {
+	// Only align the system when the value is a real code; a placeholder (e.g.
+	// "momus-search") must stay system-less so it is not rejected as an unknown
+	// code of a real CodeSystem.
+	if system != "" && !isSearchPlaceholder(value) {
 		coding["system"] = system
+		if display := resolveCodingDisplay(reg, system, value); display != "" {
+			coding["display"] = display
+		}
 	} else {
 		delete(coding, "system")
 	}
 	if owner != nil {
 		delete(owner, "text")
 	}
+}
+
+// normalizeFirstIdentifierValue rewrites the value of the first identifier at
+// path to a format-valid value for its own system, so a token search seed that
+// forces a value onto a format-checked AU identifier (e.g. ABN, HPI-I) does not
+// ship a value that fails the identifier's invariants.
+func normalizeFirstIdentifierValue(body map[string]any, path string) {
+	cur, field := containerForPath(body, path)
+	raw, ok := cur[field]
+	if !ok {
+		return
+	}
+	ids, ok := raw.([]any)
+	if !ok || len(ids) == 0 {
+		return
+	}
+	id, ok := ids[0].(map[string]any)
+	if !ok {
+		return
+	}
+	normalizeGeneratedIdentifierSeeded(id, path)
 }
 
 // setFieldLeafForce sets a string leaf property on the first element of a field,
@@ -826,6 +1197,43 @@ func setFieldLeafForce(body map[string]any, path, leaf, value string) {
 	}
 }
 
+// setContactPointValue writes a token search value onto the first ContactPoint
+// element, ensuring the contact point carries a `system` so it satisfies the
+// cpt-2 invariant ("a system is required if a value is provided"). A newly
+// created contact point defaults to system "phone"; an existing one is given a
+// system only when it lacks one.
+func setContactPointValue(body map[string]any, path, value string) {
+	cur, field := containerForPath(body, path)
+	raw, ok := cur[field]
+	if !ok {
+		cur[field] = []any{map[string]any{"system": "phone", "value": value}}
+		return
+	}
+	switch typed := raw.(type) {
+	case []any:
+		if len(typed) == 0 {
+			cur[field] = []any{map[string]any{"system": "phone", "value": value}}
+			return
+		}
+		first, ok := typed[0].(map[string]any)
+		if !ok {
+			typed[0] = map[string]any{"system": "phone", "value": value}
+			return
+		}
+		first["value"] = value
+		if _, hasSystem := first["system"]; !hasSystem {
+			first["system"] = "phone"
+		}
+	case map[string]any:
+		typed["value"] = value
+		if _, hasSystem := typed["system"]; !hasSystem {
+			typed["system"] = "phone"
+		}
+	default:
+		cur[field] = map[string]any{"system": "phone", "value": value}
+	}
+}
+
 // setPathLeafBoolean sets a boolean value at a dotted element path, parsing the
 // string "true"/"false" into a Go bool.
 func setPathLeafBoolean(body map[string]any, path, value string) {
@@ -841,12 +1249,19 @@ func setPathLeafBoolean(body map[string]any, path, value string) {
 }
 
 // setReferenceLeaf places the search value ("Type/id") on a Reference object's
-// `reference` member.
-func setReferenceLeaf(body map[string]any, path, value string) {
+// `reference` member. When the target element is repeatable (Max unbounded, e.g.
+// HealthcareService.endpoint 0..*), the reference is stored as a single-element
+// array so the seed keeps the correct shape.
+func setReferenceLeaf(body map[string]any, path, value string, repeatable bool) {
 	cur, field := containerForPath(body, path)
+	ref := map[string]any{"reference": value}
 	raw, ok := cur[field]
 	if !ok {
-		cur[field] = map[string]any{"reference": value}
+		if repeatable {
+			cur[field] = []any{ref}
+		} else {
+			cur[field] = ref
+		}
 		return
 	}
 	if arr, ok := raw.([]any); ok {
@@ -855,17 +1270,21 @@ func setReferenceLeaf(body map[string]any, path, value string) {
 				m["reference"] = value
 				return
 			}
-			arr[0] = map[string]any{"reference": value}
+			arr[0] = ref
 			return
 		}
-		cur[field] = []any{map[string]any{"reference": value}}
+		cur[field] = []any{ref}
 		return
 	}
 	if m, ok := raw.(map[string]any); ok {
 		m["reference"] = value
 		return
 	}
-	cur[field] = map[string]any{"reference": value}
+	if repeatable {
+		cur[field] = []any{ref}
+	} else {
+		cur[field] = ref
+	}
 }
 
 // setQuantityLeaf places a search value on a Quantity element so a quantity
@@ -928,7 +1347,7 @@ func applyCompositeMatch(
 		switch typeCode {
 		case "code", "Coding", "CodeableConcept":
 			system := boundCodingSystem(resourceType, path, reg)
-			setSearchCodeValue(body, path, part, typeCode, false, system)
+			setSearchCodeValue(body, path, part, typeCode, false, system, reg)
 		case "Quantity":
 			setQuantityLeaf(body, path, part)
 		case "boolean":
@@ -971,18 +1390,43 @@ func setSpecialLeaf(body map[string]any, path, value string) {
 	if len(parts) > 0 {
 		lat = strings.TrimSpace(parts[0])
 	}
-	// The expression is "position.longitude | position.latitude" (or vice
-	// versa). We resolve the parent container of the longitude path and set both
-	// latitude and longitude on it.
-	cur, _ := containerForPath(body, path)
+	// The expression is the element itself (e.g. Location.position), and the
+	// coordinates go on that element's map — not on its parent. When the path is
+	// a single segment the element is the coordinate container: create it as a
+	// map so lat/long never leak to the resource root. When the path is nested
+	// (e.g. position.longitude) the container is the parent map, which holds both
+	// the longitude and latitude members.
+	cur, leaf := containerForPath(body, path)
+	target := cur
+	segs := strings.Split(path, ".")
+	if len(segs) == 1 {
+		// The path names the element itself; ensure it is a map container.
+		switch t := cur[leaf].(type) {
+		case map[string]any:
+			target = t
+		case []any:
+			if len(t) > 0 {
+				if el, ok := t[0].(map[string]any); ok {
+					target = el
+				}
+			}
+		default:
+			el := map[string]any{}
+			cur[leaf] = el
+			target = el
+		}
+	} else if el, ok := cur[leaf].(map[string]any); ok {
+		// Nested path: the leaf is the last member of the container map.
+		target = el
+	}
 	if lng != "" {
 		if f, err := strconv.ParseFloat(lng, 64); err == nil {
-			cur["longitude"] = f
+			target["longitude"] = f
 		}
 	}
 	if lat != "" {
 		if f, err := strconv.ParseFloat(lat, 64); err == nil {
-			cur["latitude"] = f
+			target["latitude"] = f
 		}
 	}
 }
