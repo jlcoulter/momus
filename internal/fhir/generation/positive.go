@@ -159,6 +159,15 @@ func BuildSetupDataset(plan *coverage.CoveragePlan, options BuildOptions) (*mode
 		appendSearchSeedResources(ds, req, options, byResource)
 	}
 
+	// Break reference cycles between seed resources before recording
+	// relationships. Two seeds can reference each other through optional elements
+	// (e.g. Organization.endpoint -> Endpoint and Endpoint.managingOrganization
+	// -> Organization). With referential integrity enforced, neither can be
+	// created first, so both provisioning requests fail (HAPI-1094). Dropping one
+	// optional back-edge makes the graph acyclic while keeping the data
+	// conformant, since the dropped element is optional.
+	breakSetupReferenceCycles(ds, options.Registry)
+
 	// Record relationships from the actual generated resource bodies so
 	// provisioning orders targets before dependents. The relationship graph must
 	// reflect only references that actually appear in a resource body: the
@@ -172,6 +181,213 @@ func BuildSetupDataset(plan *coverage.CoveragePlan, options BuildOptions) (*mode
 	// "not found". Scanning the bodies keeps the graph acyclic and correct.
 	recordBodyReferences(ds)
 	return ds, nil
+}
+
+// seedRefEdge is a reference from one seed resource to another, recording the
+// top-level body key that holds the reference so it can be removed to break a
+// cycle.
+type seedRefEdge struct {
+	sourceID  string
+	targetID  string
+	topKey    string
+	ref       string
+	removable bool
+}
+
+// breakSetupReferenceCycles removes optional references from seed resource
+// bodies so the reference graph among seeds is acyclic. The provisioner creates
+// targets before dependents; a reference cycle (e.g. Organization.endpoint ->
+// Endpoint and Endpoint.managingOrganization -> Organization) has no valid
+// order, so every resource in it fails with HAPI-1094 "not found".
+//
+// It repeatedly removes one optional edge that lies on a cycle until the graph
+// is acyclic. An edge is optional when the element holding it has min
+// cardinality 0; required references are never removed, so a cycle composed
+// solely of required references is left intact (it cannot be broken without a
+// two-phase create, which is out of scope here). Edge selection is deterministic
+// (sorted by source id, then element key) so generation stays reproducible.
+func breakSetupReferenceCycles(ds *model.Dataset, reg *registry.Registry) {
+	if ds == nil || len(ds.Resources) == 0 {
+		return
+	}
+
+	typeByLocalID := make(map[string]string, len(ds.Resources))
+	instByID := make(map[string]*model.ResourceInstance, len(ds.Resources))
+	ids := make([]string, 0, len(ds.Resources))
+	for _, inst := range ds.Resources {
+		if inst == nil || inst.LocalID == "" {
+			continue
+		}
+		typeByLocalID[inst.LocalID] = inst.ResourceType
+		instByID[inst.LocalID] = inst
+		ids = append(ids, inst.LocalID)
+	}
+
+	edges := make([]seedRefEdge, 0)
+	for _, id := range ids {
+		for _, e := range collectSeedRefEdges(instByID[id], typeByLocalID) {
+			e.removable = isOptionalSeedReference(instByID[id].ResourceType, e.topKey, reg)
+			edges = append(edges, e)
+		}
+	}
+	sort.Slice(edges, func(i, j int) bool {
+		if edges[i].sourceID != edges[j].sourceID {
+			return edges[i].sourceID < edges[j].sourceID
+		}
+		if edges[i].topKey != edges[j].topKey {
+			return edges[i].topKey < edges[j].topKey
+		}
+		return edges[i].targetID < edges[j].targetID
+	})
+
+	// Remove one optional on-cycle edge at a time, re-evaluating after each
+	// removal, until no removable edge lies on a cycle. The bound is the edge
+	// count, since each iteration removes exactly one edge.
+	for range edges {
+		adj := buildSeedAdjacency(edges)
+		removedIdx := -1
+		for i := range edges {
+			if !edges[i].removable {
+				continue
+			}
+			// The edge source->target lies on a cycle iff target can reach source.
+			if seedReachable(adj, edges[i].targetID, edges[i].sourceID) {
+				removeReferenceUnderKey(instByID[edges[i].sourceID].Resource, edges[i].topKey, edges[i].ref)
+				removedIdx = i
+				break
+			}
+		}
+		if removedIdx < 0 {
+			return
+		}
+		edges = append(edges[:removedIdx], edges[removedIdx+1:]...)
+	}
+}
+
+// buildSeedAdjacency builds a source->targets reachability map from the edge set.
+func buildSeedAdjacency(edges []seedRefEdge) map[string]map[string]struct{} {
+	adj := make(map[string]map[string]struct{})
+	for _, e := range edges {
+		if adj[e.sourceID] == nil {
+			adj[e.sourceID] = make(map[string]struct{})
+		}
+		adj[e.sourceID][e.targetID] = struct{}{}
+	}
+	return adj
+}
+
+// seedReachable reports whether dst is reachable from src through the adjacency.
+func seedReachable(adj map[string]map[string]struct{}, src, dst string) bool {
+	if src == dst {
+		return true
+	}
+	visited := make(map[string]struct{})
+	stack := []string{src}
+	for len(stack) > 0 {
+		n := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if _, ok := visited[n]; ok {
+			continue
+		}
+		visited[n] = struct{}{}
+		for next := range adj[n] {
+			if next == dst {
+				return true
+			}
+			if _, ok := visited[next]; !ok {
+				stack = append(stack, next)
+			}
+		}
+	}
+	return false
+}
+
+// isOptionalSeedReference reports whether the element at the resource's top-level
+// key is optional (min cardinality 0), so a reference it holds may be dropped. A
+// reference whose element cannot be resolved is treated as optional, since seed
+// data omitting an unknown optional element stays conformant.
+func isOptionalSeedReference(resourceType, topKey string, reg *registry.Registry) bool {
+	def, ok := searchElementDefinition(resourceType, topKey, reg)
+	if !ok || def == nil {
+		return true
+	}
+	return def.Min == 0
+}
+
+// collectSeedRefEdges returns every reference from inst's body to another seed
+// resource, tagged with the top-level body key that holds it.
+func collectSeedRefEdges(inst *model.ResourceInstance, typeByLocalID map[string]string) []seedRefEdge {
+	if inst == nil || inst.Resource == nil {
+		return nil
+	}
+	var edges []seedRefEdge
+	seen := make(map[string]struct{})
+	for topKey, val := range inst.Resource {
+		collectSeedRefEdgesWalk(inst.LocalID, topKey, val, typeByLocalID, seen, &edges)
+	}
+	return edges
+}
+
+func collectSeedRefEdgesWalk(selfID, topKey string, node any, typeByLocalID map[string]string, seen map[string]struct{}, edges *[]seedRefEdge) {
+	switch v := node.(type) {
+	case map[string]any:
+		if ref, ok := v["reference"].(string); ok {
+			if id := referenceTargetID(ref); id != "" && id != selfID {
+				if _, ok := typeByLocalID[id]; ok {
+					key := topKey + "\x00" + id + "\x00" + ref
+					if _, dup := seen[key]; !dup {
+						seen[key] = struct{}{}
+						*edges = append(*edges, seedRefEdge{sourceID: selfID, targetID: id, topKey: topKey, ref: ref})
+					}
+				}
+			}
+		}
+		for _, val := range v {
+			collectSeedRefEdgesWalk(selfID, topKey, val, typeByLocalID, seen, edges)
+		}
+	case []any:
+		for _, el := range v {
+			collectSeedRefEdgesWalk(selfID, topKey, el, typeByLocalID, seen, edges)
+		}
+	}
+}
+
+// removeReferenceUnderKey removes the reference ref held under the top-level body
+// key, deleting the key when it becomes empty. It handles both a single
+// Reference object and an array of References.
+func removeReferenceUnderKey(body map[string]any, key, ref string) bool {
+	val, ok := body[key]
+	if !ok {
+		return false
+	}
+	switch v := val.(type) {
+	case map[string]any:
+		if r, _ := v["reference"].(string); r == ref {
+			delete(body, key)
+			return true
+		}
+	case []any:
+		filtered := make([]any, 0, len(v))
+		removed := false
+		for _, el := range v {
+			if m, ok := el.(map[string]any); ok {
+				if r, _ := m["reference"].(string); r == ref {
+					removed = true
+					continue
+				}
+			}
+			filtered = append(filtered, el)
+		}
+		if removed {
+			if len(filtered) == 0 {
+				delete(body, key)
+			} else {
+				body[key] = filtered
+			}
+			return true
+		}
+	}
+	return false
 }
 
 // recordBodyReferences scans every resource body in ds for "reference" fields
