@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/jlcoulter/momus/internal/core/constraint"
@@ -13,6 +12,8 @@ import (
 	"github.com/jlcoulter/momus/internal/fhir/constraintderive"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 var defaultLowValueSegments = map[string]struct{}{
@@ -579,7 +580,7 @@ func addRequirement(plan *coverage.CoveragePlan, seen map[string]struct{}, c con
 		Domain:            domain,
 		Variant:           variant,
 		Min:               de.element.Min,
-		Max:               de.element.Max,
+		Max:               de.element.Max.String(),
 		Datatype:          c.Datatype,
 	}
 	req.Description = coverage.DescribeCoverageRequirement(req)
@@ -703,7 +704,7 @@ func elementIsExcludedExtension(element model.ElementDefinition, excluded map[st
 		if !strings.EqualFold(et.Code, "Extension") {
 			continue
 		}
-		for _, p := range et.Profile {
+		for _, p := range et.Profiles {
 			if _, ok := excluded[normalizeCanonicalURL(p)]; ok {
 				return true
 			}
@@ -751,15 +752,11 @@ func isDerivableElement(element model.ElementDefinition, options coverage.Derive
 	return true, ""
 }
 
-func allowsMultiple(max string) bool {
-	if max == "*" {
+func allowsMultiple(max fhir.Max) bool {
+	if max == fhir.MaxUnbounded {
 		return true
 	}
-	n, err := strconv.Atoi(max)
-	if err != nil {
-		return false
-	}
-	return n > 1
+	return max > 1
 }
 
 func normalizeOptions(options coverage.DeriveOptions) coverage.DeriveOptions {

@@ -914,7 +914,8 @@
                   "X-Momus-Requirement-ID": "operation|Patient|operation-delete"
                 },
                 "Body": {
-                  "deceasedDateTime": "2024-01-01T00:00:00Z",
+                  "birthDate": "2009-08-16",
+                  "deceasedDateTime": "2010-02-06T00:00:00Z",
                   "gender": "male",
                   "id": "momus-patient-operation-delete-1612029882",
                   "meta": {
@@ -924,10 +925,11 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Johnson",
                       "given": [
-                        "Test"
-                      ]
+                        "Robert"
+                      ],
+                      "use": "official"
                     }
                   ],
                   "resourceType": "Patient",
@@ -996,7 +998,9 @@
                   "X-Momus-Requirement-ID": "operation|Patient|operation-history"
                 },
                 "Body": {
-                  "birthDate": "2024-01-01",
+                  "birthDate": "1997-04-10",
+                  "deceasedBoolean": true,
+                  "deceasedDateTime": "2024-01-01T00:00:00Z",
                   "gender": "male",
                   "id": "momus-patient-operation-history-612420303",
                   "meta": {
@@ -1006,17 +1010,43 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Brown",
                       "given": [
-                        "Test"
-                      ]
+                        "Michael"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Davis",
+                      "given": [
+                        "Patricia"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Jones",
+                      "given": [
+                        "Linda"
+                      ],
+                      "use": "official"
                     }
                   ],
                   "resourceType": "Patient",
                   "telecom": [
                     {
                       "system": "phone",
-                      "value": "0299999999"
+                      "use": "home",
+                      "value": "+1-696-006-6670"
+                    },
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-792-815-6156"
+                    },
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-636-146-0187"
                     }
                   ]
                 }
@@ -1078,17 +1108,19 @@
                   "X-Momus-Requirement-ID": "operation|Patient|operation-patch"
                 },
                 "Body": {
-                  "birthDate": "2024-01-01",
+                  "birthDate": "1953-03-26",
+                  "deceasedBoolean": false,
                   "deceasedDateTime": "2024-01-01T00:00:00Z",
                   "gender": "male",
                   "id": "momus-patient-operation-patch-1197474521",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/patient.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "patient.identifier-001"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "hu43zqc9"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "7nh7j464"
                     }
                   ],
                   "meta": {
@@ -1098,13 +1130,33 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Davis",
                       "given": [
-                        "Test"
-                      ]
+                        "Patricia"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Smith",
+                      "given": [
+                        "Michael"
+                      ],
+                      "use": "official"
                     }
                   ],
-                  "resourceType": "Patient"
+                  "resourceType": "Patient",
+                  "telecom": [
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-462-362-2563"
+                    },
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-465-550-5322"
+                    }
+                  ]
                 }
               },
               {
@@ -1137,7 +1189,7 @@
                     "op": "add",
                     "path": "/",
                     "value": {
-                      "birthDate": "2024-01-01"
+                      "birthDate": "1953-03-26"
                     }
                   }
                 ]
@@ -1172,15 +1224,21 @@
                   "X-Momus-Requirement-ID": "operation|Patient|operation-read"
                 },
                 "Body": {
+                  "deceasedBoolean": true,
                   "gender": "male",
                   "id": "momus-patient-operation-read-733475765",
                   "identifier": [
                     {
-                      "system": "http://example.org/fhir/identifier/patient.identifier",
-                      "type": {
-                        "text": "Type"
-                      },
-                      "value": "patient.identifier-001"
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "mc59q3er"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "jemmx61t"
+                    },
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "nx3uekdw"
                     }
                   ],
                   "meta": {
@@ -1190,10 +1248,18 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Williams",
                       "given": [
-                        "Test"
-                      ]
+                        "John"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Miller",
+                      "given": [
+                        "Linda"
+                      ],
+                      "use": "official"
                     }
                   ],
                   "resourceType": "Patient",
@@ -1262,9 +1328,17 @@
                   "X-Momus-Requirement-ID": "operation|Patient|operation-update"
                 },
                 "Body": {
-                  "birthDate": "2024-01-01",
+                  "birthDate": "2016-04-25",
+                  "deceasedBoolean": true,
+                  "deceasedDateTime": "2024-01-01T00:00:00Z",
                   "gender": "male",
                   "id": "momus-patient-operation-update-395211428",
+                  "identifier": [
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "p8tkvnp9"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/patient"
@@ -1272,17 +1346,43 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Johnson",
                       "given": [
-                        "Test"
-                      ]
+                        "Linda"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Davis",
+                      "given": [
+                        "Robert"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Jones",
+                      "given": [
+                        "James"
+                      ],
+                      "use": "official"
                     }
                   ],
                   "resourceType": "Patient",
                   "telecom": [
                     {
                       "system": "phone",
-                      "value": "0299999999"
+                      "use": "home",
+                      "value": "+1-819-958-3906"
+                    },
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-041-791-6674"
+                    },
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-594-474-5015"
                     }
                   ]
                 }
@@ -1313,9 +1413,17 @@
                   "X-Momus-Requirement-ID": "operation|Patient|operation-update"
                 },
                 "Body": {
-                  "birthDate": "2024-01-01",
+                  "birthDate": "2016-04-25",
+                  "deceasedBoolean": true,
+                  "deceasedDateTime": "2024-01-01T00:00:00Z",
                   "gender": "male",
                   "id": "momus-patient-operation-update-395211428",
+                  "identifier": [
+                    {
+                      "system": "urn:oid:1.2.3.4.5",
+                      "value": "p8tkvnp9"
+                    }
+                  ],
                   "meta": {
                     "profile": [
                       "http://example.org/StructureDefinition/patient"
@@ -1323,17 +1431,43 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Johnson",
                       "given": [
-                        "Test"
-                      ]
+                        "Linda"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Davis",
+                      "given": [
+                        "Robert"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Jones",
+                      "given": [
+                        "James"
+                      ],
+                      "use": "official"
                     }
                   ],
                   "resourceType": "Patient",
                   "telecom": [
                     {
                       "system": "phone",
-                      "value": "0299999999"
+                      "use": "home",
+                      "value": "+1-819-958-3906"
+                    },
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-041-791-6674"
+                    },
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-594-474-5015"
                     }
                   ]
                 }
@@ -1369,6 +1503,7 @@
                 },
                 "Body": {
                   "birthDate": "2024-01-01",
+                  "deceasedBoolean": true,
                   "deceasedDateTime": "2024-01-01T00:00:00Z",
                   "gender": "male",
                   "id": "momus-crud-patient",
@@ -1388,13 +1523,31 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Brown",
                       "given": [
-                        "Test"
-                      ]
+                        "James"
+                      ],
+                      "use": "official"
                     }
                   ],
-                  "resourceType": "Patient"
+                  "resourceType": "Patient",
+                  "telecom": [
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-003-512-3566"
+                    },
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-583-140-4042"
+                    },
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-213-186-5515"
+                    }
+                  ]
                 }
               },
               {
@@ -1451,6 +1604,7 @@
                 },
                 "Body": {
                   "birthDate": "2024-01-01",
+                  "deceasedBoolean": true,
                   "deceasedDateTime": "2024-01-01T00:00:00Z",
                   "gender": "male",
                   "id": "momus-crud-patient",
@@ -1470,13 +1624,31 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Brown",
                       "given": [
-                        "Test"
-                      ]
+                        "James"
+                      ],
+                      "use": "official"
                     }
                   ],
-                  "resourceType": "Patient"
+                  "resourceType": "Patient",
+                  "telecom": [
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-003-512-3566"
+                    },
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-583-140-4042"
+                    },
+                    {
+                      "system": "phone",
+                      "use": "home",
+                      "value": "+1-213-186-5515"
+                    }
+                  ]
                 }
               },
               {
@@ -1652,6 +1824,7 @@
                   "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-invalid-lexical"
                 },
                 "Body": {
+                  "deceasedDateTime": "2015-03-28T00:00:00Z",
                   "gender": "male",
                   "id": "momus-patient-datatype-invalid-lexical-1524346553",
                   "meta": {
@@ -1693,6 +1866,7 @@
                   "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-null"
                 },
                 "Body": {
+                  "deceasedDateTime": "2013-08-22T00:00:00Z",
                   "gender": "male",
                   "id": "momus-patient-datatype-null-1796488836",
                   "meta": {
@@ -1734,6 +1908,7 @@
                   "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-valid"
                 },
                 "Body": {
+                  "deceasedBoolean": true,
                   "gender": "male",
                   "id": "momus-patient-datatype-valid-2056347089",
                   "meta": {
@@ -1743,10 +1918,25 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Miller",
                       "given": [
-                        "Test"
-                      ]
+                        "Robert"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Johnson",
+                      "given": [
+                        "Robert"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Davis",
+                      "given": [
+                        "Jennifer"
+                      ],
+                      "use": "official"
                     }
                   ],
                   "resourceType": "Patient"
@@ -1782,6 +1972,7 @@
                   "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|HumanName|datatype-wrong-json-type"
                 },
                 "Body": {
+                  "deceasedDateTime": "2017-02-13T00:00:00Z",
                   "gender": "male",
                   "id": "momus-patient-datatype-wrong-json-type-1090438694",
                   "meta": {
@@ -1823,6 +2014,7 @@
                   "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|missing-required"
                 },
                 "Body": {
+                  "deceasedBoolean": false,
                   "gender": "male",
                   "id": "momus-patient-missing-required-1027105714",
                   "meta": {
@@ -1863,6 +2055,7 @@
                   "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|multiple-values"
                 },
                 "Body": {
+                  "deceasedDateTime": "2014-10-13T00:00:00Z",
                   "gender": "male",
                   "id": "momus-patient-multiple-values-1149616609",
                   "meta": {
@@ -1872,10 +2065,11 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Davis",
                       "given": [
-                        "Test"
-                      ]
+                        "Michael"
+                      ],
+                      "use": "official"
                     }
                   ],
                   "resourceType": "Patient"
@@ -1911,6 +2105,7 @@
                   "X-Momus-Requirement-ID": "http://example.org/StructureDefinition/patient|Patient.name|valid-min"
                 },
                 "Body": {
+                  "deceasedBoolean": false,
                   "gender": "male",
                   "id": "momus-patient-valid-min-1996412143",
                   "meta": {
@@ -1920,10 +2115,11 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Jones",
                       "given": [
-                        "Test"
-                      ]
+                        "Patricia"
+                      ],
+                      "use": "official"
                     }
                   ],
                   "resourceType": "Patient"

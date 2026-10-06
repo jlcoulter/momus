@@ -6,6 +6,8 @@ import (
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 func TestBuildDependencyPlanOrdersOptionalProfileReferences(t *testing.T) {
@@ -14,18 +16,18 @@ func TestBuildDependencyPlanOrdersOptionalProfileReferences(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/location",
 		Type: "Location",
 		Elements: []model.ElementDefinition{
-			{Path: "Location", Min: 0, Max: "*"},
-			{Path: "Location.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Location", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Location.name", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 		},
 	})
 	r.AddStructureDefinition(&model.StructureDefinition{
 		URL:  "http://example.org/StructureDefinition/healthcareservice",
 		Type: "HealthcareService",
 		Elements: []model.ElementDefinition{
-			{Path: "HealthcareService", Min: 0, Max: "*"},
-			{Path: "HealthcareService.name", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "HealthcareService", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "HealthcareService.name", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 			// Optional reference that is not a derived coverage obligation.
-			{Path: "HealthcareService.coverageArea", Min: 0, Max: "*", Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/location"}}}},
+			{Path: "HealthcareService.coverageArea", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "Reference", TargetProfile: []string{"http://example.org/StructureDefinition/location"}}}},
 		},
 	})
 

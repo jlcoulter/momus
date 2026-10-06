@@ -171,7 +171,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -231,6 +231,20 @@
                   "X-Momus-Requirement-ID": "operation|Observation|operation-history"
                 },
                 "Body": {
+                  "component": [
+                    {
+                      "code": {
+                        "coding": [
+                          {
+                            "code": "code",
+                            "display": "Code",
+                            "system": "http://example.org/fhir/code-system"
+                          }
+                        ],
+                        "text": "Code"
+                      }
+                    }
+                  ],
                   "id": "momus-observation-operation-history-1985385168",
                   "meta": {
                     "profile": [
@@ -238,7 +252,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -305,7 +319,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -338,7 +352,7 @@
                     "op": "add",
                     "path": "/",
                     "value": {
-                      "status": "status"
+                      "status": "active"
                     }
                   }
                 ]
@@ -373,6 +387,20 @@
                   "X-Momus-Requirement-ID": "operation|Observation|operation-read"
                 },
                 "Body": {
+                  "component": [
+                    {
+                      "code": {
+                        "coding": [
+                          {
+                            "code": "code",
+                            "display": "Code",
+                            "system": "http://example.org/fhir/code-system"
+                          }
+                        ],
+                        "text": "Code"
+                      }
+                    }
+                  ],
                   "id": "momus-observation-operation-read-1830018108",
                   "meta": {
                     "profile": [
@@ -380,7 +408,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -447,7 +475,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -483,7 +511,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -516,6 +544,20 @@
                   "X-Momus-Requirement-ID": "state|Observation|state-crud-sequence"
                 },
                 "Body": {
+                  "component": [
+                    {
+                      "code": {
+                        "coding": [
+                          {
+                            "code": "code",
+                            "display": "Code",
+                            "system": "http://example.org/fhir/code-system"
+                          }
+                        ],
+                        "text": "Code"
+                      }
+                    }
+                  ],
                   "id": "momus-crud-observation",
                   "meta": {
                     "profile": [
@@ -523,7 +565,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -579,6 +621,20 @@
                   "X-Momus-Requirement-ID": "state|Observation|state-crud-sequence"
                 },
                 "Body": {
+                  "component": [
+                    {
+                      "code": {
+                        "coding": [
+                          {
+                            "code": "code",
+                            "display": "Code",
+                            "system": "http://example.org/fhir/code-system"
+                          }
+                        ],
+                        "text": "Code"
+                      }
+                    }
+                  ],
                   "id": "momus-crud-observation",
                   "meta": {
                     "profile": [
@@ -586,7 +642,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -849,7 +905,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -968,7 +1024,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {

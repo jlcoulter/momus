@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/jlcoulter/momus/internal/fhir/model"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 func TestReadPackageLoadsManifestAndResources(t *testing.T) {
@@ -161,8 +163,8 @@ func TestReadPackageDecodesElementBaseMax(t *testing.T) {
 	if len(sd.Elements) < 2 {
 		t.Fatalf("got %d elements, want at least 2", len(sd.Elements))
 	}
-	if sd.Elements[1].BaseMax != "*" {
-		t.Fatalf("got base max %q, want *", sd.Elements[1].BaseMax)
+	if sd.Elements[1].BaseMax == nil || *sd.Elements[1].BaseMax != fhir.MaxUnbounded {
+		t.Fatalf("got base max %v, want *", sd.Elements[1].BaseMax)
 	}
 }
 
@@ -583,14 +585,14 @@ func TestReadPackageDecodesValueSetExpansion(t *testing.T) {
 	if vs == nil {
 		t.Fatal("expected a ValueSet resource")
 	}
-	if len(vs.ExpansionContains) != 1 || vs.ExpansionContains[0].Code != "A" {
-		t.Fatalf("unexpected expansion: %+v", vs.ExpansionContains)
+	if len(vs.Expansion.Contains) != 1 || vs.Expansion.Contains[0].Code != "A" {
+		t.Fatalf("unexpected expansion: %+v", vs.Expansion.Contains)
 	}
-	if len(vs.ExpansionContains[0].Contains) != 1 || vs.ExpansionContains[0].Contains[0].Code != "A1" {
-		t.Fatalf("unexpected nested expansion: %+v", vs.ExpansionContains[0].Contains)
+	if len(vs.Expansion.Contains[0].Contains) != 1 || vs.Expansion.Contains[0].Contains[0].Code != "A1" {
+		t.Fatalf("unexpected nested expansion: %+v", vs.Expansion.Contains[0].Contains)
 	}
-	if len(vs.ExpansionContains[0].Contains[0].Contains) != 1 || vs.ExpansionContains[0].Contains[0].Contains[0].Code != "A1a" {
-		t.Fatalf("unexpected grandchild expansion: %+v", vs.ExpansionContains[0].Contains[0].Contains)
+	if len(vs.Expansion.Contains[0].Contains[0].Contains) != 1 || vs.Expansion.Contains[0].Contains[0].Contains[0].Code != "A1a" {
+		t.Fatalf("unexpected grandchild expansion: %+v", vs.Expansion.Contains[0].Contains[0].Contains)
 	}
 }
 
@@ -683,10 +685,10 @@ func TestDecodeElementDefinitionsFixedPatternMustSupport(t *testing.T) {
 		t.Fatalf("got %d defs, want 3", len(defs))
 	}
 	d := defs[0]
-	if d.Min != 1 || d.Max != "1" || !d.MustSupport || d.SliceName != "status:active" {
+	if d.Min != 1 || d.Max != 1 || !d.MustSupport || d.SliceName != "status:active" {
 		t.Fatalf("def0 = %+v", d)
 	}
-	if len(d.Types) != 1 || d.Types[0].Code != "code" || len(d.Types[0].Profile) != 1 {
+	if len(d.Types) != 1 || d.Types[0].Code != "code" || len(d.Types[0].Profiles) != 1 {
 		t.Fatalf("def0 types = %+v", d.Types)
 	}
 	if d.Fixed != "final" {

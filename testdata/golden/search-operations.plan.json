@@ -554,7 +554,7 @@
                   "X-Momus-Requirement-ID": "operation|Practitioner|operation-delete"
                 },
                 "Body": {
-                  "active": true,
+                  "active": false,
                   "id": "momus-practitioner-operation-delete-1284619681",
                   "meta": {
                     "profile": [
@@ -563,22 +563,16 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Jones",
                       "given": [
-                        "Test"
-                      ]
-                    },
-                    {
-                      "family": "Momus",
-                      "given": [
-                        "Test"
+                        "Jennifer"
                       ],
                       "use": "official"
                     },
                     {
-                      "family": "Momus",
+                      "family": "Jones",
                       "given": [
-                        "Test"
+                        "Jennifer"
                       ],
                       "use": "usual"
                     }
@@ -652,22 +646,16 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Miller",
                       "given": [
-                        "Test"
-                      ]
-                    },
-                    {
-                      "family": "Momus",
-                      "given": [
-                        "Test"
+                        "Patricia"
                       ],
                       "use": "official"
                     },
                     {
-                      "family": "Momus",
+                      "family": "Miller",
                       "given": [
-                        "Test"
+                        "Patricia"
                       ],
                       "use": "usual"
                     }
@@ -732,7 +720,7 @@
                   "X-Momus-Requirement-ID": "operation|Practitioner|operation-patch"
                 },
                 "Body": {
-                  "active": true,
+                  "active": false,
                   "id": "momus-practitioner-operation-patch-1517184380",
                   "meta": {
                     "profile": [
@@ -741,22 +729,30 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Brown",
                       "given": [
-                        "Test"
-                      ]
-                    },
-                    {
-                      "family": "Momus",
-                      "given": [
-                        "Test"
+                        "Linda"
                       ],
                       "use": "official"
                     },
                     {
-                      "family": "Momus",
+                      "family": "Brown",
                       "given": [
-                        "Test"
+                        "Michael"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Smith",
+                      "given": [
+                        "Linda"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Brown",
+                      "given": [
+                        "Linda"
                       ],
                       "use": "usual"
                     }
@@ -794,7 +790,7 @@
                     "op": "add",
                     "path": "/",
                     "value": {
-                      "active": true
+                      "active": false
                     }
                   }
                 ]
@@ -838,22 +834,30 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Davis",
                       "given": [
-                        "Test"
-                      ]
-                    },
-                    {
-                      "family": "Momus",
-                      "given": [
-                        "Test"
+                        "Linda"
                       ],
                       "use": "official"
                     },
                     {
-                      "family": "Momus",
+                      "family": "Williams",
                       "given": [
-                        "Test"
+                        "Patricia"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Johnson",
+                      "given": [
+                        "James"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Davis",
+                      "given": [
+                        "Linda"
                       ],
                       "use": "usual"
                     }
@@ -918,7 +922,7 @@
                   "X-Momus-Requirement-ID": "operation|Practitioner|operation-update"
                 },
                 "Body": {
-                  "active": true,
+                  "active": false,
                   "id": "momus-practitioner-operation-update-1348084751",
                   "meta": {
                     "profile": [
@@ -927,22 +931,30 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Williams",
                       "given": [
-                        "Test"
-                      ]
-                    },
-                    {
-                      "family": "Momus",
-                      "given": [
-                        "Test"
+                        "Mary"
                       ],
                       "use": "official"
                     },
                     {
-                      "family": "Momus",
+                      "family": "Davis",
                       "given": [
-                        "Test"
+                        "Patricia"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Jones",
+                      "given": [
+                        "Robert"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Williams",
+                      "given": [
+                        "Mary"
                       ],
                       "use": "usual"
                     }
@@ -976,7 +988,7 @@
                   "X-Momus-Requirement-ID": "operation|Practitioner|operation-update"
                 },
                 "Body": {
-                  "active": true,
+                  "active": false,
                   "id": "momus-practitioner-operation-update-1348084751",
                   "meta": {
                     "profile": [
@@ -985,22 +997,30 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Williams",
                       "given": [
-                        "Test"
-                      ]
-                    },
-                    {
-                      "family": "Momus",
-                      "given": [
-                        "Test"
+                        "Mary"
                       ],
                       "use": "official"
                     },
                     {
-                      "family": "Momus",
+                      "family": "Davis",
                       "given": [
-                        "Test"
+                        "Patricia"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Jones",
+                      "given": [
+                        "Robert"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Williams",
+                      "given": [
+                        "Mary"
                       ],
                       "use": "usual"
                     }
@@ -1038,7 +1058,7 @@
                   "X-Momus-Requirement-ID": "state|Practitioner|state-crud-sequence"
                 },
                 "Body": {
-                  "active": true,
+                  "active": false,
                   "id": "momus-crud-practitioner",
                   "meta": {
                     "profile": [
@@ -1047,22 +1067,16 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Williams",
                       "given": [
-                        "Test"
-                      ]
-                    },
-                    {
-                      "family": "Momus",
-                      "given": [
-                        "Test"
+                        "Patricia"
                       ],
                       "use": "official"
                     },
                     {
-                      "family": "Momus",
+                      "family": "Williams",
                       "given": [
-                        "Test"
+                        "Patricia"
                       ],
                       "use": "usual"
                     }
@@ -1123,7 +1137,7 @@
                   "X-Momus-Requirement-ID": "state|Practitioner|state-crud-sequence"
                 },
                 "Body": {
-                  "active": true,
+                  "active": false,
                   "id": "momus-crud-practitioner",
                   "meta": {
                     "profile": [
@@ -1132,22 +1146,16 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Williams",
                       "given": [
-                        "Test"
-                      ]
-                    },
-                    {
-                      "family": "Momus",
-                      "given": [
-                        "Test"
+                        "Patricia"
                       ],
                       "use": "official"
                     },
                     {
-                      "family": "Momus",
+                      "family": "Williams",
                       "given": [
-                        "Test"
+                        "Patricia"
                       ],
                       "use": "usual"
                     }
@@ -1337,22 +1345,23 @@
                   },
                   "name": [
                     {
-                      "family": "Momus",
+                      "family": "Jones",
                       "given": [
-                        "Test"
-                      ]
-                    },
-                    {
-                      "family": "Momus",
-                      "given": [
-                        "Test"
+                        "Linda"
                       ],
                       "use": "official"
                     },
                     {
-                      "family": "Momus",
+                      "family": "Garcia",
                       "given": [
-                        "Test"
+                        "Patricia"
+                      ],
+                      "use": "official"
+                    },
+                    {
+                      "family": "Jones",
+                      "given": [
+                        "Linda"
                       ],
                       "use": "usual"
                     }

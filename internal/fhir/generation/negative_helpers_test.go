@@ -6,6 +6,8 @@ import (
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 func TestElementSegmentsNegative(t *testing.T) {
@@ -52,12 +54,12 @@ func TestDeletePathAndSetPath(t *testing.T) {
 		t.Fatal("deletePath(missing) should return false")
 	}
 	// setPath on absent element returns false.
-	if setPath(body, "Patient.nope", nil) {
+	if setPath(body, "Patient.nope", nil, coverage.CoverageRequirement{}, nil) {
 		t.Fatal("setPath(missing) should return false")
 	}
 	// setPath on a choice key.
 	body2 := map[string]any{"deceasedBoolean": false}
-	if !setPath(body2, "Patient.deceased", nil) {
+	if !setPath(body2, "Patient.deceased", nil, coverage.CoverageRequirement{}, nil) {
 		t.Fatal("setPath(choice) should return true")
 	}
 }
@@ -67,10 +69,10 @@ func TestWrongDatatypeValue(t *testing.T) {
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: "http://example.org/StructureDefinition/patient", Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.birthDate", Min: 0, Max: "1", Types: []model.ElementType{{Code: "date"}}},
-			{Path: "Patient.deceased", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
-			{Path: "Patient.name", Min: 0, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.birthDate", Min: 0, Max: 1, Types: []model.ElementType{{Code: "date"}}},
+			{Path: "Patient.deceased", Min: 0, Max: 1, Types: []model.ElementType{{Code: "boolean"}}},
+			{Path: "Patient.name", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
 		},
 	})
 
@@ -209,10 +211,10 @@ func TestWrongDatatypeValueAdditional(t *testing.T) {
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: "http://example.org/StructureDefinition/patient", Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 0, Max: "*", Types: []model.ElementType{{Code: "string"}}},
-			{Path: "Patient.score", Min: 0, Max: "1", Types: []model.ElementType{{Code: "integer"}}},
-			{Path: "Patient.uri", Min: 0, Max: "1", Types: []model.ElementType{{Code: "uri"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Patient.score", Min: 0, Max: 1, Types: []model.ElementType{{Code: "integer"}}},
+			{Path: "Patient.uri", Min: 0, Max: 1, Types: []model.ElementType{{Code: "uri"}}},
 		},
 	})
 	// Invalid lexical for integer.
@@ -242,8 +244,8 @@ func TestElementDefinitionOfAndTypeOf(t *testing.T) {
 	reg.AddStructureDefinition(&model.StructureDefinition{
 		URL: "http://example.org/StructureDefinition/patient", Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.active", Min: 0, Max: "1", Types: []model.ElementType{{Code: "boolean"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.active", Min: 0, Max: 1, Types: []model.ElementType{{Code: "boolean"}}},
 		},
 	})
 	if got := elementTypeOf(reg, "http://example.org/StructureDefinition/patient", "Patient.active"); got != "boolean" {

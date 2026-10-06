@@ -1,14 +1,18 @@
 package model
 
-import "testing"
+import (
+	"testing"
+
+	fhir "github.com/jlcoulter/fhir-registry"
+)
 
 func TestElementNodeRepresentsDeeplyNestedPaths(t *testing.T) {
 	defs := []ElementDefinition{
-		{Path: "Observation", Name: "Observation"},
-		{Path: "Observation.component", Name: "component"},
-		{Path: "Observation.component.code", Name: "code"},
-		{Path: "Observation.component.code.coding", Name: "coding"},
-		{Path: "Observation.component.code.coding.code", Name: "code"},
+		{Path: "Observation"},
+		{Path: "Observation.component"},
+		{Path: "Observation.component.code"},
+		{Path: "Observation.component.code.coding"},
+		{Path: "Observation.component.code.coding.code"},
 	}
 
 	root, _ := BuildElementTree(defs)
@@ -41,11 +45,11 @@ func TestResolvedProfilePathLookup(t *testing.T) {
 		"http://hl7.org/fhir/StructureDefinition/Observation",
 		"Observation",
 		[]ElementDefinition{
-			{Path: "Observation", Name: "Observation"},
-			{Path: "Observation.component", Name: "component"},
-			{Path: "Observation.component.code", Name: "code"},
-			{Path: "Observation.component.code.coding", Name: "coding"},
-			{Path: "Observation.component.code.coding.code", Name: "code"},
+			{Path: "Observation"},
+			{Path: "Observation.component"},
+			{Path: "Observation.component.code"},
+			{Path: "Observation.component.code.coding"},
+			{Path: "Observation.component.code.coding.code"},
 		},
 	)
 
@@ -60,9 +64,9 @@ func TestResolvedProfilePathLookup(t *testing.T) {
 
 func TestBuildElementTreeAttachesSlicesToSlicedNode(t *testing.T) {
 	defs := []ElementDefinition{
-		{Path: "Location", Name: "Location"},
-		{Path: "Location.identifier", Name: "identifier", Min: 2, Max: "*"},
-		{Path: "Location.identifier", Name: "identifier", SliceName: "source", Min: 1, Max: "1"},
+		{Path: "Location"},
+		{Path: "Location.identifier", Min: 2, Max: fhir.MaxUnbounded},
+		{Path: "Location.identifier", SliceName: "source", Min: 1, Max: 1},
 	}
 
 	root, _ := BuildElementTree(defs)
@@ -83,10 +87,10 @@ func TestBuildElementTreeAttachesSlicesToSlicedNode(t *testing.T) {
 
 func TestBuildElementTreeAttachesSliceChildDefinitions(t *testing.T) {
 	defs := []ElementDefinition{
-		{Path: "Organization", Name: "Organization"},
-		{Path: "Organization.address", Name: "address", Min: 1, Max: "1"},
-		{Path: "Organization.address", Name: "address", SliceName: "physical", Min: 1, Max: "1"},
-		{ID: "Organization.address:physical.type", Path: "Organization.address.type", Name: "type", Min: 1, Max: "1"},
+		{Path: "Organization"},
+		{Path: "Organization.address", Min: 1, Max: 1},
+		{Path: "Organization.address", SliceName: "physical", Min: 1, Max: 1},
+		{ID: "Organization.address:physical.type", Path: "Organization.address.type", Min: 1, Max: 1},
 	}
 
 	root, _ := BuildElementTree(defs)
@@ -117,10 +121,10 @@ func TestBuildElementTreeAttachesSliceChildDefinitions(t *testing.T) {
 func TestBuildElementTreeSliceResolutionIsOrderIndependent(t *testing.T) {
 	defs := []ElementDefinition{
 		// Slice child before the slice declaration and before the base element.
-		{ID: "Location.identifier:phone.value", Path: "Location.identifier.value", Min: 1, Max: "1"},
-		{ID: "Location.identifier:phone", Path: "Location.identifier", SliceName: "phone", Min: 1, Max: "1"},
-		{Path: "Location", Name: "Location"},
-		{Path: "Location.identifier", Name: "identifier", Min: 2, Max: "*"},
+		{ID: "Location.identifier:phone.value", Path: "Location.identifier.value", Min: 1, Max: 1},
+		{ID: "Location.identifier:phone", Path: "Location.identifier", SliceName: "phone", Min: 1, Max: 1},
+		{Path: "Location"},
+		{Path: "Location.identifier", Min: 2, Max: fhir.MaxUnbounded},
 	}
 
 	root, _ := BuildElementTree(defs)
@@ -156,14 +160,14 @@ func TestBuildElementTreeSliceResolutionIsOrderIndependent(t *testing.T) {
 // suppressed extension (Organization.extension:suppressed.extension:suppressedBy).
 func TestBuildElementTreeNestedSliceResolution(t *testing.T) {
 	defs := []ElementDefinition{
-		{Path: "Organization", Name: "Organization"},
-		{Path: "Organization.extension", Name: "extension", Min: 0, Max: "*"},
-		{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 0, Max: "1"},
-		{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: "1", Fixed: "http://example.org/suppressed"},
-		{ID: "Organization.extension:suppressed.extension", Path: "Organization.extension.extension", Min: 1, Max: "*"},
-		{ID: "Organization.extension:suppressed.extension:suppressedBy", Path: "Organization.extension.extension", SliceName: "suppressedBy", Min: 1, Max: "1"},
-		{ID: "Organization.extension:suppressed.extension:suppressedBy.url", Path: "Organization.extension.extension.url", Min: 1, Max: "1", Fixed: "suppressedBy"},
-		{ID: "Organization.extension:suppressed.extension:includeSelf", Path: "Organization.extension.extension", SliceName: "includeSelf", Min: 0, Max: "1"},
+		{Path: "Organization"},
+		{Path: "Organization.extension", Min: 0, Max: fhir.MaxUnbounded},
+		{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 0, Max: 1},
+		{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: 1, Fixed: "http://example.org/suppressed"},
+		{ID: "Organization.extension:suppressed.extension", Path: "Organization.extension.extension", Min: 1, Max: fhir.MaxUnbounded},
+		{ID: "Organization.extension:suppressed.extension:suppressedBy", Path: "Organization.extension.extension", SliceName: "suppressedBy", Min: 1, Max: 1},
+		{ID: "Organization.extension:suppressed.extension:suppressedBy.url", Path: "Organization.extension.extension.url", Min: 1, Max: 1, Fixed: "suppressedBy"},
+		{ID: "Organization.extension:suppressed.extension:includeSelf", Path: "Organization.extension.extension", SliceName: "includeSelf", Min: 0, Max: 1},
 	}
 
 	root, _ := BuildElementTree(defs)
@@ -210,9 +214,9 @@ func TestBuildElementTreeNestedSliceResolution(t *testing.T) {
 // slice, rather than being dropped by an empty-tail early return.
 func TestBuildElementTreeLeafIDSliceKeepsDefinition(t *testing.T) {
 	defs := []ElementDefinition{
-		{Path: "Address", Name: "Address"},
-		{ID: "Address:foo", Path: "Address", SliceName: "foo", Min: 1, Max: "1"},
-		{ID: "Address:foo.line", Path: "Address.line", Min: 1, Max: "*"},
+		{Path: "Address"},
+		{ID: "Address:foo", Path: "Address", SliceName: "foo", Min: 1, Max: 1},
+		{ID: "Address:foo.line", Path: "Address.line", Min: 1, Max: fhir.MaxUnbounded},
 	}
 
 	root, _ := BuildElementTree(defs)
@@ -237,8 +241,8 @@ func TestNewResolvedProfileNilRootGuard(t *testing.T) {
 		"http://example.org/StructureDefinition/Empty",
 		"Empty",
 		[]ElementDefinition{
-			{Path: "", Name: "Empty"},
-			{Path: "", Name: "child"},
+			{Path: ""},
+			{Path: ""},
 		},
 	)
 	if profile != nil {
@@ -272,10 +276,10 @@ func TestElementSliceKeyPreservesIDSliceContext(t *testing.T) {
 func TestStampProfileStampsSlicesAndChildren(t *testing.T) {
 	canonical := "http://example.org/StructureDefinition/org"
 	profile := NewResolvedProfile(canonical, "Organization", []ElementDefinition{
-		{Path: "Organization", Name: "Organization"},
-		{Path: "Organization.extension", Name: "extension", Min: 0, Max: "*"},
-		{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 0, Max: "1"},
-		{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: "1"},
+		{Path: "Organization"},
+		{Path: "Organization.extension", Min: 0, Max: fhir.MaxUnbounded},
+		{ID: "Organization.extension:suppressed", Path: "Organization.extension", SliceName: "suppressed", Min: 0, Max: 1},
+		{ID: "Organization.extension:suppressed.url", Path: "Organization.extension.url", Min: 1, Max: 1},
 	})
 	if profile == nil || profile.Root == nil {
 		t.Fatal("expected a resolved profile with a root")

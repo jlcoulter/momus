@@ -2,10 +2,11 @@ package validate
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/jlcoulter/momus/internal/fhir/fhirpath"
 	"github.com/jlcoulter/momus/internal/fhir/model"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 // checkProfile runs every structural check against the resource and collects
@@ -130,7 +131,7 @@ func (v *ProfileValidator) checkMaxCardinality(node *model.ElementNode, def *mod
 		return []Issue{{
 			Path:    node.Path,
 			Kind:    "cardinality",
-			Message: "element " + node.Path + " exceeds maximum cardinality of " + def.Max,
+			Message: "element " + node.Path + " exceeds maximum cardinality of " + def.Max.String(),
 		}}
 	}
 	return nil
@@ -199,15 +200,14 @@ func maxLeafCount(resource map[string]any, path string) int {
 	return maxCount
 }
 
-// parseMax interprets an ElementDefinition.Max cardinality string. It returns
-// the integer upper bound and whether that bound is finite. "*" is unbounded;
-// a non-numeric value is treated as unbounded (best-effort, never over-reject).
-func parseMax(max string) (int, bool) {
-	if max == "" || max == "*" {
+// parseMax interprets an ElementDefinition.Max cardinality. It returns
+// the integer upper bound and whether that bound is finite. "*" is unbounded.
+func parseMax(max fhir.Max) (int, bool) {
+	if max == fhir.MaxUnbounded {
 		return 0, false
 	}
-	n, err := strconv.Atoi(max)
-	if err != nil || n < 0 {
+	n := int(max)
+	if n < 0 {
 		return 0, false
 	}
 	return n, true

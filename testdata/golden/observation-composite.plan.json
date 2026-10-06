@@ -617,12 +617,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "epsilon",
+                        "display": "Epsilon",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "dolor ipsum consectetur sit consectetur amet ipsum"
                   },
                   "id": "momus-observation-operation-delete-1224694867",
                   "meta": {
@@ -631,7 +631,11 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active",
+                  "valueQuantity": {
+                    "unit": "mg",
+                    "value": 21.66
+                  }
                 }
               },
               {
@@ -694,12 +698,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "iota",
+                        "display": "Iota",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "sit dolor adipiscing"
                   },
                   "id": "momus-observation-operation-history-1985385168",
                   "meta": {
@@ -708,12 +712,10 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status",
+                  "status": "active",
                   "valueQuantity": {
-                    "code": "mmol",
-                    "system": "http://unitsofmeasure.org",
-                    "unit": "mmol",
-                    "value": 123.45
+                    "unit": "mg",
+                    "value": 72.31
                   }
                 }
               },
@@ -777,12 +779,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "beta",
+                        "display": "Beta",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "amet adipiscing elit"
                   },
                   "id": "momus-observation-operation-patch-1196719590",
                   "meta": {
@@ -791,7 +793,11 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active",
+                  "valueQuantity": {
+                    "unit": "mg",
+                    "value": 9.01
+                  }
                 }
               },
               {
@@ -824,7 +830,7 @@
                     "op": "add",
                     "path": "/",
                     "value": {
-                      "status": "status"
+                      "status": "active"
                     }
                   }
                 ]
@@ -862,12 +868,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "iota",
+                        "display": "Iota",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "dolor ipsum dolor"
                   },
                   "id": "momus-observation-operation-read-1830018108",
                   "meta": {
@@ -876,12 +882,10 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status",
+                  "status": "active",
                   "valueQuantity": {
-                    "code": "mmol",
-                    "system": "http://unitsofmeasure.org",
-                    "unit": "mmol",
-                    "value": 123.45
+                    "unit": "mg",
+                    "value": 59.26
                   }
                 }
               },
@@ -945,12 +949,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "epsilon",
+                        "display": "Epsilon",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "sit consectetur elit"
                   },
                   "id": "momus-observation-operation-update-479677577",
                   "meta": {
@@ -959,7 +963,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -991,12 +995,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "epsilon",
+                        "display": "Epsilon",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "sit consectetur elit"
                   },
                   "id": "momus-observation-operation-update-479677577",
                   "meta": {
@@ -1005,7 +1009,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1041,12 +1045,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "delta",
+                        "display": "Delta",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "sit consectetur consectetur"
                   },
                   "id": "momus-crud-observation",
                   "meta": {
@@ -1055,12 +1059,10 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status",
+                  "status": "active",
                   "valueQuantity": {
-                    "code": "mmol",
-                    "system": "http://unitsofmeasure.org",
-                    "unit": "mmol",
-                    "value": 123.45
+                    "unit": "mg",
+                    "value": 77.66
                   }
                 }
               },
@@ -1120,12 +1122,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "delta",
+                        "display": "Delta",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "sit consectetur consectetur"
                   },
                   "id": "momus-crud-observation",
                   "meta": {
@@ -1134,12 +1136,10 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status",
+                  "status": "active",
                   "valueQuantity": {
-                    "code": "mmol",
-                    "system": "http://unitsofmeasure.org",
-                    "unit": "mmol",
-                    "value": 123.45
+                    "unit": "mg",
+                    "value": 77.66
                   }
                 }
               },
@@ -1324,7 +1324,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1365,7 +1365,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1401,12 +1401,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "kappa",
+                        "display": "Kappa",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "lorem consectetur amet ipsum dolor elit ipsum"
                   },
                   "id": "momus-observation-datatype-valid-613036452",
                   "meta": {
@@ -1415,7 +1415,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1456,7 +1456,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1496,7 +1496,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1532,12 +1532,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "epsilon",
+                        "display": "Epsilon",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "dolor lorem sit lorem adipiscing adipiscing"
                   },
                   "id": "momus-observation-valid-min-955606021",
                   "meta": {
@@ -1546,7 +1546,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1582,12 +1582,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "beta",
+                        "display": "Beta",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "ipsum consectetur consectetur sit consectetur amet dolor"
                   },
                   "id": "momus-observation-datatype-invalid-lexical-2141746177",
                   "meta": {
@@ -1632,12 +1632,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "zeta",
+                        "display": "Zeta",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "dolor consectetur adipiscing adipiscing elit sit lorem"
                   },
                   "id": "momus-observation-datatype-null-1667718716",
                   "meta": {
@@ -1682,12 +1682,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "alpha",
+                        "display": "Alpha",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "sit lorem elit sit dolor lorem"
                   },
                   "id": "momus-observation-datatype-valid-977319817",
                   "meta": {
@@ -1696,7 +1696,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {
@@ -1732,12 +1732,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "alpha",
+                        "display": "Alpha",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "sit amet sit consectetur consectetur dolor"
                   },
                   "id": "momus-observation-datatype-wrong-json-type-105074910",
                   "meta": {
@@ -1782,12 +1782,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "beta",
+                        "display": "Beta",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "sit elit elit ipsum"
                   },
                   "id": "momus-observation-missing-required-521654573",
                   "meta": {
@@ -1831,12 +1831,12 @@
                   "code": {
                     "coding": [
                       {
-                        "code": "code",
-                        "display": "Code",
-                        "system": "http://example.org/fhir/code-system"
+                        "code": "gamma",
+                        "display": "Gamma",
+                        "system": "http://example.org/codes"
                       }
                     ],
-                    "text": "Code"
+                    "text": "elit consectetur consectetur elit ipsum"
                   },
                   "id": "momus-observation-valid-min-492593826",
                   "meta": {
@@ -1845,7 +1845,7 @@
                     ]
                   },
                   "resourceType": "Observation",
-                  "status": "status"
+                  "status": "active"
                 }
               },
               {

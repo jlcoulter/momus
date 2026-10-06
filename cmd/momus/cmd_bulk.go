@@ -53,7 +53,7 @@ func newBulkCmd(cfg *config) *cobra.Command {
 			if len(resourceTypes) == 0 {
 				seen := make(map[string]bool)
 				for _, sd := range reg.ScopedStructureDefinitions() {
-					if sd.Type == "" || sd.Kind != "resource" || abstractResourceTypes[sd.Type] {
+					if sd.Type == "" || sd.Kind != "resource" || reg.IsAbstractType(sd.Type) {
 						continue
 					}
 					if !seen[sd.Type] {

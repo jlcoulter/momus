@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"hash/fnv"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/jlcoulter/momus/internal/fhir/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 // CorpusGenerator produces a realistic corpus of random resources for bulk
@@ -47,18 +48,6 @@ type refFieldInfo struct {
 	// to its element node, so wiring creates an absent repeatable BackboneElement
 	// as an array and populates its required child fields (e.g. entity.role).
 	intermediates map[string]*model.ElementNode
-}
-
-var abstractResourceTypes = map[string]bool{
-	"Resource":          true,
-	"DomainResource":    true,
-	"CanonicalResource": true,
-	"MetadataResource":  true,
-	// Parameters is an operational type (operation request/response payloads),
-	// not a resource that is provisioned to a server as seed data. A package may
-	// ship a StructureDefinition for it (e.g. HCPD's hcpd-export-request-parameters),
-	// but it must never be generated into the corpus.
-	"Parameters": true,
 }
 
 // NewCorpusGenerator returns a CorpusGenerator backed by reg.
@@ -124,18 +113,20 @@ func elementAllowsMultiple(def *model.ElementDefinition) bool {
 	if def == nil {
 		return false
 	}
-	return allowsMultiple(def.Max) || allowsMultiple(def.BaseMax)
-}
-
-func allowsMultiple(maxValue string) bool {
-	if maxValue == "*" {
+	if allowsMultiple(def.Max) {
 		return true
 	}
-	n, err := strconv.Atoi(maxValue)
-	if err != nil {
-		return false
+	if def.BaseMax != nil {
+		return allowsMultiple(*def.BaseMax)
 	}
-	return n > 1
+	return false
+}
+
+func allowsMultiple(maxValue fhir.Max) bool {
+	if maxValue == fhir.MaxUnbounded {
+		return true
+	}
+	return maxValue > 1
 }
 
 // elementRequired reports whether an element must appear at least once (Min >= 1).
@@ -698,11 +689,7 @@ func topologicalTypeOrder(resourceTypes []string, g *CorpusGenerator) []string {
 }
 
 func (g *CorpusGenerator) hasResourceType(resourceType string) bool {
-	return isConcreteResourceType(resourceType) && g.reg != nil && len(g.reg.ProfilesForResource(resourceType)) > 0
-}
-
-func isConcreteResourceType(resourceType string) bool {
-	return strings.TrimSpace(resourceType) != "" && !abstractResourceTypes[resourceType]
+	return resourceType != "" && !g.reg.IsAbstractType(resourceType) && len(g.reg.ProfilesForResource(resourceType)) > 0
 }
 
 // referenceFields derives the reference element paths of a resource type and
@@ -891,13 +878,13 @@ func elementNodeByPath(root *model.ElementNode, segments []string) *model.Elemen
 // targets abstract Resource, but a real example references Organization).
 func referenceTargetType(def *model.ElementDefinition, reg *registry.Registry) string {
 	for _, profileURL := range def.TargetProfile {
-		if rt := resourceTypeOfProfile(reg, profileURL); rt != "" && isConcreteResourceType(rt) {
+		if rt := resourceTypeOfProfile(reg, profileURL); rt != "" && !reg.IsAbstractType(rt) {
 			return rt
 		}
 	}
 	for _, et := range def.Types {
 		for _, profileURL := range et.TargetProfile {
-			if rt := resourceTypeOfProfile(reg, profileURL); rt != "" && isConcreteResourceType(rt) {
+			if rt := resourceTypeOfProfile(reg, profileURL); rt != "" && !reg.IsAbstractType(rt) {
 				return rt
 			}
 		}
@@ -1069,7 +1056,7 @@ func populateRequiredSiblings(m map[string]any, node *model.ElementNode) {
 			continue
 		}
 		def := child.Definition
-		if def.Min < 1 || def.Max == "0" {
+		if def.Min < 1 || def.Max == 0 {
 			continue
 		}
 		if _, exists := m[name]; exists {

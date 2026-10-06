@@ -84,6 +84,165 @@ func TestDescribeCoverageRequirement(t *testing.T) {
 	}
 }
 
+func TestDescribeCoverageRequirementRemainingVariants(t *testing.T) {
+	cases := []struct {
+		name string
+		req  CoverageRequirement
+		want string
+	}{
+		{
+			name: "cardinality multiple values",
+			req:  CoverageRequirement{ResourceType: "Patient", ElementPath: "Patient.name", Domain: CoverageDomainCardinality, Variant: CoverageVariantMultipleValues, Max: "*"},
+			want: "Patient.name: accept a resource with multiple values (max=*)",
+		},
+		{
+			name: "datatype invalid lexical",
+			req:  CoverageRequirement{ResourceType: "Patient", ElementPath: "Patient.birthDate", Datatype: "date", Domain: CoverageDomainDatatype, Variant: CoverageVariantDatatypeInvalidLexical},
+			want: "Patient.birthDate (date): reject a lexically invalid value",
+		},
+		{
+			name: "datatype wrong json type",
+			req:  CoverageRequirement{ResourceType: "Patient", ElementPath: "Patient.birthDate", Datatype: "date", Domain: CoverageDomainDatatype, Variant: CoverageVariantDatatypeWrongJSONType},
+			want: "Patient.birthDate (date): reject a value with the wrong JSON type",
+		},
+		{
+			name: "datatype null",
+			req:  CoverageRequirement{ResourceType: "Patient", ElementPath: "Patient.birthDate", Datatype: "date", Domain: CoverageDomainDatatype, Variant: CoverageVariantDatatypeNull},
+			want: "Patient.birthDate (date): reject a null value for a non-null element",
+		},
+		{
+			name: "terminology valid",
+			req:  CoverageRequirement{ResourceType: "Patient", ElementPath: "Patient.gender", Domain: CoverageDomainTerminology, Variant: CoverageVariantTerminologyValid},
+			want: "Patient.gender: accept a valid code from the bound value set",
+		},
+		{
+			name: "terminology absent",
+			req:  CoverageRequirement{ResourceType: "Patient", ElementPath: "Patient.gender", Domain: CoverageDomainTerminology, Variant: CoverageVariantTerminologyAbsent},
+			want: "Patient.gender: reject a missing required bound code",
+		},
+		{
+			name: "structure slice present",
+			req:  CoverageRequirement{ResourceType: "Observation", ElementPath: "Observation.component", Domain: CoverageDomainStructure, Variant: CoverageVariantStructureSlicePresent},
+			want: "Observation.component: accept a resource with the required slice present",
+		},
+		{
+			name: "invariant violates",
+			req:  CoverageRequirement{ResourceType: "Observation", ElementPath: "Observation.value", Domain: CoverageDomainInvariant, Variant: CoverageVariantInvariantViolates},
+			want: "Observation.value: reject a resource violating the invariant",
+		},
+		{
+			name: "reference valid",
+			req:  CoverageRequirement{ResourceType: "Observation", ElementPath: "Observation.subject", Domain: CoverageDomainReference, Variant: CoverageVariantReferenceValid},
+			want: "Observation.subject: accept a valid reference to a permitted target",
+		},
+		{
+			name: "reference wrong target",
+			req:  CoverageRequirement{ResourceType: "Observation", ElementPath: "Observation.subject", Domain: CoverageDomainReference, Variant: CoverageVariantReferenceWrongTarget},
+			want: "Observation.subject: reject a reference to the wrong target type",
+		},
+		{
+			name: "search no results",
+			req:  CoverageRequirement{ResourceType: "Patient", Domain: CoverageDomainSearch, Variant: CoverageVariantSearchNoResults, SearchCode: "name"},
+			want: "Patient?name: accept a valid search returning no results",
+		},
+		{
+			name: "search invalid value",
+			req:  CoverageRequirement{ResourceType: "Patient", Domain: CoverageDomainSearch, Variant: CoverageVariantSearchInvalidValue, SearchCode: "name"},
+			want: "Patient?name: handle an invalid search value",
+		},
+		{
+			name: "search multiple results",
+			req:  CoverageRequirement{ResourceType: "Patient", Domain: CoverageDomainSearch, Variant: CoverageVariantSearchMultipleResults, SearchCode: "name"},
+			want: "Patient?name: return multiple results for a valid search",
+		},
+		{
+			name: "search invalid modifier",
+			req:  CoverageRequirement{ResourceType: "Patient", Domain: CoverageDomainSearch, Variant: CoverageVariantSearchInvalidModifier, SearchCode: "name"},
+			want: "Patient?name: reject an invalid search modifier",
+		},
+		{
+			name: "operation update",
+			req:  CoverageRequirement{ResourceType: "Patient", Domain: CoverageDomainOperation, Variant: CoverageVariantOperationUpdate},
+			want: "Patient: update (PUT) modifies the resource",
+		},
+		{
+			name: "operation patch",
+			req:  CoverageRequirement{ResourceType: "Patient", Domain: CoverageDomainOperation, Variant: CoverageVariantOperationPatch},
+			want: "Patient: patch (PATCH) partially modifies the resource",
+		},
+		{
+			name: "operation delete",
+			req:  CoverageRequirement{ResourceType: "Patient", Domain: CoverageDomainOperation, Variant: CoverageVariantOperationDelete},
+			want: "Patient: delete removes the resource",
+		},
+		{
+			name: "operation history",
+			req:  CoverageRequirement{ResourceType: "Patient", Domain: CoverageDomainOperation, Variant: CoverageVariantOperationHistory},
+			want: "Patient: history returns the version chain",
+		},
+		{
+			name: "state read nonexistent",
+			req:  CoverageRequirement{ResourceType: "Patient", Domain: CoverageDomainState, Variant: CoverageVariantStateReadNonexistent},
+			want: "Patient: read a nonexistent resource returns 404",
+		},
+		{
+			name: "state delete nonexistent",
+			req:  CoverageRequirement{ResourceType: "Patient", Domain: CoverageDomainState, Variant: CoverageVariantStateDeleteNonexistent},
+			want: "Patient: delete a nonexistent resource returns 404/200",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := DescribeCoverageRequirement(tc.req); got != tc.want {
+				t.Fatalf("DescribeCoverageRequirement() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDescribeAPIOperationEdgeCases(t *testing.T) {
+	cases := []struct {
+		method, path, want string
+	}{
+		{"  post ", "/Observation/$validate", "POST /Observation/$validate: respond correctly"},
+		{"", "/Patient", "request /Patient: respond correctly"},
+	}
+	for _, c := range cases {
+		if got := DescribeAPIOperation(c.method, c.path); got != c.want {
+			t.Errorf("DescribeAPIOperation(%q, %q) = %q, want %q", c.method, c.path, got, c.want)
+		}
+	}
+}
+
+func TestDescribeAPIParameterEdgeCases(t *testing.T) {
+	cases := []struct {
+		method, path, in, name, want string
+	}{
+		{"post", "/Patient", "", "id", "POST /Patient: request parameter id is handled"},
+		{"", "/Patient", "path", "id", "request /Patient: path parameter id is handled"},
+	}
+	for _, c := range cases {
+		if got := DescribeAPIParameter(c.method, c.path, c.in, c.name); got != c.want {
+			t.Errorf("DescribeAPIParameter = %q, want %q", got, c.want)
+		}
+	}
+}
+
+func TestAPIOperationHumanID(t *testing.T) {
+	cases := []struct {
+		method, path, want string
+	}{
+		{"get", "/Patient", "GET /Patient"},
+		{"  delete ", " /Patient/123 ", "DELETE /Patient/123"},
+		{"", "/Patient", " /Patient"},
+	}
+	for _, c := range cases {
+		if got := APIOperationHumanID(c.method, c.path); got != c.want {
+			t.Errorf("APIOperationHumanID(%q, %q) = %q, want %q", c.method, c.path, got, c.want)
+		}
+	}
+}
+
 func TestHumanID(t *testing.T) {
 	cases := []struct {
 		name string

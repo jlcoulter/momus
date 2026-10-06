@@ -7,6 +7,8 @@ import (
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 func TestDeletePathNested(t *testing.T) {
@@ -25,7 +27,7 @@ func TestDeletePathNested(t *testing.T) {
 
 func TestSetPathTopLevel(t *testing.T) {
 	body := map[string]any{"status": "final"}
-	setPath(body, "Observation.status", nil)
+	setPath(body, "Observation.status", nil, coverage.CoverageRequirement{}, nil)
 	if body["status"] != nil {
 		t.Fatalf("got %v, want nil", body["status"])
 	}
@@ -108,7 +110,7 @@ func TestApplyNegativeMutationTerminologyInvalidCodeableConcept(t *testing.T) {
 // bare "value" property that a conformant server would reject or ignore.
 func TestSetPathChoiceElementResolvesConcreteKey(t *testing.T) {
 	body := map[string]any{"valueString": "abc", "status": "final"}
-	setPath(body, "Observation.value", nil)
+	setPath(body, "Observation.value", nil, coverage.CoverageRequirement{}, nil)
 	if body["valueString"] != nil {
 		t.Fatalf("valueString = %v, want nil", body["valueString"])
 	}
@@ -200,8 +202,8 @@ func TestNegativeMutationSkippedWhenElementAbsent(t *testing.T) {
 		URL:  "http://example.org/StructureDefinition/observation",
 		Type: "Observation",
 		Elements: []model.ElementDefinition{
-			{Path: "Observation", Min: 0, Max: "*"},
-			{Path: "Observation.value", Min: 1, Max: "1", Types: []model.ElementType{{Code: "string"}}},
+			{Path: "Observation", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Observation.value", Min: 1, Max: 1, Types: []model.ElementType{{Code: "string"}}},
 		},
 	})
 	plan2, err := GenerateFromCoveragePlan(&coverage.CoveragePlan{
@@ -219,5 +221,51 @@ func TestNegativeMutationSkippedWhenElementAbsent(t *testing.T) {
 	collectAssertExpressions(plan2.Root, expressions2)
 	if !expressions2["status in [400,412,422]"] {
 		t.Fatal("expected a negative (reject) assertion when the element is present")
+	}
+}
+
+// TestNegativeMutationRepeatableKeepsArrayShape verifies that datatype
+// mutations on a repeatable element (max > 1) place the violating value inside
+// a single-element array rather than collapsing the element to a scalar. A
+// repeatable element must remain an array in JSON regardless of cardinality, so
+// the mutation must violate only the intended datatype constraint.
+func TestNegativeMutationRepeatableKeepsArrayShape(t *testing.T) {
+	reg := registry.New()
+	reg.AddStructureDefinition(&model.StructureDefinition{
+		URL: "http://example.org/StructureDefinition/practitioner", Type: "Practitioner",
+		Elements: []model.ElementDefinition{
+			{Path: "Practitioner", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Practitioner.name", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Practitioner.name.given", Min: 0, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "string"}}},
+		},
+	})
+
+	for _, tc := range []struct {
+		name    string
+		variant coverage.CoverageVariant
+		want    any
+	}{
+		{"invalid-lexical", coverage.CoverageVariantDatatypeInvalidLexical, "not-a-string"},
+		{"wrong-json-type", coverage.CoverageVariantDatatypeWrongJSONType, 42},
+		{"null", coverage.CoverageVariantDatatypeNull, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := map[string]any{"name": []any{map[string]any{"given": []any{"Test"}}}}
+			if !applyNegativeMutation(body, coverage.CoverageRequirement{
+				Variant:     tc.variant,
+				ProfileURL:  "http://example.org/StructureDefinition/practitioner",
+				ElementPath: "Practitioner.name.given",
+			}, reg) {
+				t.Fatal("mutation should succeed")
+			}
+			name := body["name"].([]any)[0].(map[string]any)
+			got, ok := name["given"].([]any)
+			if !ok {
+				t.Fatalf("given = %#v, want []any preserving array shape", name["given"])
+			}
+			if len(got) != 1 || got[0] != tc.want {
+				t.Fatalf("given = %#v, want [%v]", got, tc.want)
+			}
+		})
 	}
 }

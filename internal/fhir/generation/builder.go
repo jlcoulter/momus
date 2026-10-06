@@ -3,6 +3,7 @@ package generation
 import (
 	"strings"
 
+	fhirgen "github.com/jlcoulter/fhir-generator"
 	"github.com/jlcoulter/momus/internal/core/ast"
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	coregen "github.com/jlcoulter/momus/internal/core/generation"
@@ -16,6 +17,77 @@ import (
 type fhirBuilder struct {
 	reg        *registry.Registry
 	exhaustive bool
+}
+
+// validIdentifierSearchValue returns a conformant identifier value for an
+// accept token search on an Identifier element whose type profile fixes a
+// format-checked AU system (e.g. au-hpii fixes HPI-I, which must be a Luhn-valid
+// 16-digit "800361" number). Writing a placeholder like "momus-search" onto such
+// an identifier makes the provisioned seed fail its invariants. Returns "" when
+// the system is not a known format-checked AU identifier, so the caller can fall
+// back to a generic value.
+func validIdentifierSearchValue(def *model.ElementDefinition, reg *registry.Registry) string {
+	if def == nil || reg == nil {
+		return ""
+	}
+	for _, et := range def.Types {
+		for _, profileURL := range et.Profiles {
+			if system := fixedIdentifierSystem(profileURL, reg); system != "" {
+				// Derive the value deterministically from the element path so it is
+				// reproducible regardless of generation order (the global Fake*
+				// constructors advance a shared RNG whose sequence varies with call
+				// order). This is the same seed source the body generator uses.
+				seed := def.Path
+				switch system {
+				case "http://ns.electronichealth.net.au/id/hi/hpii/1.0":
+					return fhirgen.FakeHPIIFromSeed(seed)
+				case "http://ns.electronichealth.net.au/id/hi/hpio/1.0":
+					return fhirgen.FakeHPIOFromSeed(seed)
+				case "http://hl7.org.au/id/abn":
+					return fhirgen.FakeABNFromSeed(seed)
+				case "http://hl7.org.au/id/acn":
+					return fhirgen.FakeACNFromSeed(seed)
+				case "http://hl7.org.au/id/ahpra-registration-number":
+					return fhirgen.FakeAHPRAFromSeed(seed)
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// fixedIdentifierSystem returns the fixed "system" URI of an Identifier type
+// profile (e.g. au-hpii fixes system to the HPI-I namespace), or "" when the
+// profile cannot be resolved or does not fix a system.
+func fixedIdentifierSystem(profileURL string, reg *registry.Registry) string {
+	if profileURL == "" || reg == nil {
+		return ""
+	}
+	resolved, err := reg.ResolveProfile(normalizeCanonical(profileURL))
+	if err != nil || resolved == nil || resolved.Root == nil {
+		return ""
+	}
+	var find func(node *model.ElementNode) string
+	find = func(node *model.ElementNode) string {
+		if node == nil {
+			return ""
+		}
+		for _, child := range node.Children {
+			if child == nil || child.Definition == nil {
+				continue
+			}
+			if strings.HasSuffix(child.Definition.Path, ".system") {
+				if u, ok := child.Definition.Fixed.(string); ok && u != "" {
+					return u
+				}
+			}
+			if s := find(child); s != "" {
+				return s
+			}
+		}
+		return ""
+	}
+	return find(resolved.Root)
 }
 
 // NewBuilder returns a PayloadBuilder that synthesizes FHIR payloads and search
@@ -81,8 +153,22 @@ func (b *fhirBuilder) SearchAcceptValue(req coverage.CoverageRequirement, code s
 	}
 	switch primaryTypeCode(def) {
 	case "code", "Coding", "CodeableConcept":
+		// An address-use/contact-point-use search must not place 'home' on a
+		// seed: Organization telecom/address forbid it (org-2/org-3), and 'work'
+		// is in the value set and universally valid.
+		if strings.HasSuffix(def.Path, ".use") {
+			return "work"
+		}
 		if bound, ok := resolveBoundCoding(def, b.reg); ok && bound.Code != "" {
 			return bound.Code
+		}
+		return "momus-search"
+	case "Identifier":
+		// An identifier token search matches the identifier's value. A format-
+		// checked AU identifier (e.g. HPI-I, ABN) must carry a valid value or the
+		// provisioned seed fails its invariants, so synthesise a conformant one.
+		if v := validIdentifierSearchValue(def, b.reg); v != "" {
+			return v
 		}
 		return "momus-search"
 	case "boolean":
@@ -224,6 +310,60 @@ func searchElementDefinition(resourceType, elementPath string, reg *registry.Reg
 		for _, key := range keys {
 			if node, ok := resolved.Elements[key]; ok && node != nil && node.Definition != nil {
 				return node.Definition, true
+			}
+		}
+		// A dotted path whose container is a complex datatype (e.g. the
+		// address-use search targets Practitioner.address.use): the leaf's
+		// definition lives in the datatype's own StructureDefinition, not in the
+		// profile's element map. Walk the datatype to find it so the search value
+		// can honour the leaf's value-set binding.
+		if def, ok := resolveNestedElementDefinition(resolved, resourceType, elementPath, reg); ok {
+			return def, true
+		}
+	}
+	return nil, false
+}
+
+// resolveNestedElementDefinition walks a dotted element path whose container is
+// a complex datatype, returning the leaf's ElementDefinition from the datatype's
+// own StructureDefinition. It mirrors resolveNestedLeafType but returns the full
+// definition (with its binding) rather than only the type code.
+func resolveNestedElementDefinition(
+	resolved *model.ResolvedProfile,
+	resourceType, elementPath string,
+	reg *registry.Registry,
+) (*model.ElementDefinition, bool) {
+	segments := strings.Split(elementPath, ".")
+	if len(segments) < 2 {
+		return nil, false
+	}
+	container, ok := resolved.Elements[resourceType+"."+segments[0]]
+	if !ok || container == nil || container.Definition == nil ||
+		len(container.Definition.Types) == 0 {
+		return nil, false
+	}
+	containerType := container.Definition.Types[0].Code
+	sub, err := reg.ResolveProfile("http://hl7.org/fhir/StructureDefinition/" + containerType)
+	if err != nil || sub == nil {
+		return nil, false
+	}
+	cur := sub
+	for i := 1; i < len(segments); i++ {
+		key := containerType + "." + strings.Join(segments[1:i+1], ".")
+		node, ok := cur.Elements[key]
+		if !ok || node == nil || node.Definition == nil {
+			return nil, false
+		}
+		if i == len(segments)-1 {
+			return node.Definition, true
+		}
+		if len(node.Definition.Types) > 0 {
+			containerType = node.Definition.Types[0].Code
+			cur, err = reg.ResolveProfile(
+				"http://hl7.org/fhir/StructureDefinition/" + containerType,
+			)
+			if err != nil || cur == nil {
+				return nil, false
 			}
 		}
 	}

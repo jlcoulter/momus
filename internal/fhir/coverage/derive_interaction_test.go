@@ -6,6 +6,8 @@ import (
 	"github.com/jlcoulter/momus/internal/core/coverage"
 	"github.com/jlcoulter/momus/internal/fhir/model"
 	"github.com/jlcoulter/momus/internal/fhir/registry"
+
+	fhir "github.com/jlcoulter/fhir-registry"
 )
 
 // interactionFixture returns a registry with a profile whose elements yield
@@ -16,13 +18,13 @@ func interactionFixture() *registry.Registry {
 		URL:  "http://example.org/StructureDefinition/patient",
 		Type: "Patient",
 		Elements: []model.ElementDefinition{
-			{Path: "Patient", Min: 0, Max: "*"},
-			{Path: "Patient.name", Min: 1, Max: "*", Types: []model.ElementType{{Code: "HumanName"}}},
-			{Path: "Patient.birthDate", Min: 1, Max: "1", Types: []model.ElementType{{Code: "date"}}},
+			{Path: "Patient", Min: 0, Max: fhir.MaxUnbounded},
+			{Path: "Patient.name", Min: 1, Max: fhir.MaxUnbounded, Types: []model.ElementType{{Code: "HumanName"}}},
+			{Path: "Patient.birthDate", Min: 1, Max: 1, Types: []model.ElementType{{Code: "date"}}},
 			{
 				Path:  "Patient.gender",
 				Min:   0,
-				Max:   "1",
+				Max:   1,
 				Types: []model.ElementType{{Code: "code"}},
 				Binding: &model.Binding{
 					Strength: "required",
